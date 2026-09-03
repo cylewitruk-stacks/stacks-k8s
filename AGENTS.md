@@ -7,8 +7,26 @@ and consistent with the architecture documented under [`docs/`](docs/).
 
 - Treat each operator as an independently deployable and versioned product.
 - The network operator owns desired topology and its Kubernetes workloads.
-- The observability operator is read-only and must not mutate network topology
-  or import the network operator's runtime implementation.
+- The observability operator is read-only with respect to the environment it
+  observes. It must not mutate network topology, action resources, or actor
+  workloads, or import the network operator's runtime implementation. It may
+  write its own resources and configured journal or evidence sinks.
+- The agent is the orchestration and reasoning layer. Operators expose small,
+  safe, composable capabilities; they must not become an in-cluster scenario
+  planner, deterministic replay engine, reducer, or root-cause classifier.
+- Observability records and exposes facts by collecting, correlating,
+  retaining, querying, and exporting topology changes, action lifecycles,
+  telemetry, capture gaps, and identity metadata. It must not replay journals
+  or direct an experiment.
+- Each action resource represents one small, bounded, independently
+  observable action. Do not introduce an in-cluster scenario or playbook
+  resource containing an ordered execution plan.
+- Deterministic distributed-system outcomes are not a product goal. Preserve
+  identity and evidence integrity so an agent can attempt best-effort replay,
+  verify an issue semantically, and derive a confirmed reduced reproducer
+  without claiming causal minimality or identical execution. Deterministic
+  compilation and content digests remain required where they define API or
+  evidence identity; they do not promise deterministic runtime behavior.
 - Keep controllers small and resource-focused. Compose behavior through
   Kubernetes APIs and explicit interfaces rather than monolithic reconcilers.
 - Put shared wire-contract fixtures in `contracts/`. Every consumer must decode

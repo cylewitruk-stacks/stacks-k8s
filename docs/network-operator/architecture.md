@@ -115,4 +115,5 @@ in one kind. A new kind requires:
 6. Helm RBAC and operator documentation.
 
 Faults, protocol observations, evidence, and adaptive sessions do not belong
-in this manager.
+in this manager. Their ownership boundaries are defined in the repository
+[architecture](../architecture.md#agent-and-operator-boundary).

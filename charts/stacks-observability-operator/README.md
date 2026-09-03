@@ -63,8 +63,9 @@ For a pre-bound workflow, set `spec.expectedInventoryDigest` to the digest the
 caller admitted. The observation fails closed when it differs.
 
 An observation is one-shot per resource generation. Create another resource
-for another point in time. A future policy layer may schedule these resources;
-that scheduling is deliberately absent from this trust-boundary slice.
+for another point in time. An external agent may create observations whenever
+its investigation needs them; this operator does not schedule observations or
+direct an experiment.
 
 Pending observations are event-driven from their referenced `StacksNetwork`
 and also receive a 30-second safety reconciliation. They become `Inconclusive`
