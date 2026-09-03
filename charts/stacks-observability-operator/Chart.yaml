@@ -1,0 +1,16 @@
+apiVersion: v2
+name: stacks-observability-operator
+description: Identity-bound trusted observations for Stacks Kubernetes networks
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+kubeVersion: ">=1.27.0-0"
+home: https://github.com/cylewitruk-stacks/stacks-k8s
+sources:
+  - https://github.com/cylewitruk-stacks/stacks-k8s
+keywords:
+  - stacks
+  - observability
+  - operator
+annotations:
+  artifacthub.io/license: MIT
