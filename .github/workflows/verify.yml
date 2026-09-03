@@ -1,0 +1,59 @@
+name: Verify
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  network:
+    name: Network operator
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: operators/network/go.mod
+          cache-dependency-path: |
+            operators/network/go.sum
+            operators/network/tools/go.sum
+      - uses: azure/setup-helm@v5
+      - run: make verify-network
+
+  observability:
+    name: Observability operator
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: operators/observability/go.mod
+          cache-dependency-path: |
+            operators/observability/go.sum
+            operators/observability/tools/go.sum
+      - uses: azure/setup-helm@v5
+      - run: make verify-observability
+
+  modules:
+    name: Module integrity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: operators/network/go.mod
+          cache-dependency-path: |
+            operators/network/go.sum
+            operators/network/tools/go.sum
+            operators/observability/go.sum
+            operators/observability/tools/go.sum
+      - run: make modules-verify

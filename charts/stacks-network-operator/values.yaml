@@ -1,0 +1,36 @@
+replicaCount: 1
+
+image:
+  repository: ghcr.io/cylewitruk-stacks/stacks-network-operator
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+  pullSecrets: []
+
+controller:
+  maxConcurrentReconciles: 2
+  leaderElection: true
+  logLevel: info
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+metrics:
+  service:
+    enabled: true
+    port: 8080
+    annotations: {}
+
+podAnnotations: {}
+podLabels: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+resources:
+  requests:
+    cpu: 25m
+    memory: 64Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi

@@ -1,0 +1,41 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: gomod
+    directory: /operators/network
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: gomod
+    directory: /operators/network/tools
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: gomod
+    directory: /operators/observability
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: gomod
+    directory: /operators/observability/tools
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: gomod
+    directory: /tools/chart-policy
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: docker
+    directory: /operators/network
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: docker
+    directory: /operators/observability
+    schedule:
+      interval: weekly

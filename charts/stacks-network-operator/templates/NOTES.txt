@@ -1,0 +1,7 @@
+The Stacks network operator is installed in {{ .Release.Namespace }}.
+
+Create a network:
+  kubectl --namespace {{ .Release.Namespace }} apply -f examples/network/minimal.yaml
+
+Inspect topology and compiled actors:
+  kubectl --namespace {{ .Release.Namespace }} get stacksnetworks,bitcoinnodes,stacksnodes,stackssigners
