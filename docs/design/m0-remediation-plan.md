@@ -250,39 +250,47 @@ coordination layer over otherwise independent actions.
 
 ## 9. Consolidated Bitcoin generation API
 
-Replace `BitcoinMiningWindow` and `BitcoinBlockRequest` with one bounded action,
-provisionally named `BitcoinBlockGeneration`.
+**Design status:** completed by M0.3 and pinned by
+[`bitcoin-actions-v1.json`](../../contracts/bitcoin-actions-v1.json) plus the
+[Bitcoin lifecycle design](bitcoin-lifecycle.md).
 
-Its spec covers:
+Replace `BitcoinMiningWindow` and `BitcoinBlockRequest` with one bounded action,
+named `BitcoinBlockGeneration`.
+
+Its immutable spec covers:
 
 - Bitcoin node reference;
 - block count;
 - interval;
-- bounded batch size;
-- destination;
+- batch size, fixed to one when cadence is present;
+- an explicit regtest destination address;
 - timeout; and
 - administrator-selected safety-policy identity in status when that policy
   exists.
 
-Its status records admitted identity, progress, attribution, and terminal
-outcome. Bounded `generatetoaddress` batches may run between status checkpoints;
-one API-server write per block cannot support fast intervals efficiently.
+Its status records admitted identity, persisted RPC intents, returned or
+candidate block hashes, progress, attribution, and terminal outcome. Bounded
+`generatetoaddress` batches may run between status checkpoints; one API-server
+write per block cannot support immediate generation efficiently.
 
 ## 10. Attributable Bitcoin generation
 
 Do not infer action ownership solely from the observed chain tip in a
-multi-miner network. Bind generation to a per-action destination or equivalent
-durable marker so concurrently propagated blocks remain distinguishable.
+multi-miner network. Only block hashes returned by a successful mutation RPC
+support completed attribution. A dedicated destination improves diagnosis but
+is not a correctness or admission invariant.
 
-After an ambiguous RPC result, re-read chain state and inspect attributable
-results. Never retry the mutation blindly. Report `Inconclusive` when
-attribution cannot be established.
+After a lost mutation response, wait for its recorded deadline and inspect
+every known tip. Proven absence may retry within the original bounds; any
+observed or uncertain effect is `Ambiguous` and the action is `Inconclusive`.
+Never promote reconstructed hashes to acknowledged success or retry the
+mutation blindly.
 
 ## 11. Bitcoin action serialization
 
 V1 runs every Bitcoin action controller in one leader-elected process, but
 leader election is not a per-target fencing mechanism. Each target therefore
-uses an API-server-persisted reservation, provisionally a node-scoped Lease
+uses an API-server-persisted node-scoped Lease
 whose holder identity binds the action UID to a unique controller acquisition
 token. The token distinguishes an old leader from a replacement reconciling
 the same action.
@@ -300,6 +308,17 @@ Use:
 - mandatory chain-state revalidation after restart, reservation loss, or
   ambiguity.
 
+A shared leader-gated `ReservationManager` Runnable owns every active handle
+across Bitcoin action kinds. It renews independently of reconcile workqueues,
+cancels handle-derived RPC contexts on reservation or leader loss, and routes
+every Lease renewal, RPC-deadline update, and release through the handle's
+serialized writer. Worker count and queue latency are not safety properties.
+
+Expiry follows client-go's observed-record pattern: another holder is eligible
+for replacement only after the same Lease record remains unchanged for a full
+local Lease duration. Holder-written timestamps never permit an earlier
+takeover.
+
 The reservation spans requeues while an action remains active. Its renewal,
 duration, loss, recovery, and administrative-release rules must ensure a new
 holder cannot begin before the prior holder's bounded RPC context has been
@@ -313,9 +332,9 @@ Restart and loss behavior is explicit:
   no RPC call;
 - with no durable intent or side effect, an action may remain `Pending` with
   `TargetBusy` and reacquire before its expiry;
-- after recorded intent, the controller first proves whether an effect
-  occurred; proven absence may return to bounded admission, while ambiguity
-  becomes `Inconclusive`;
+- after recorded intent, the controller inspects every known tip; proven
+  absence may return to bounded admission, while any observed or uncertain
+  effect becomes `Inconclusive`;
 - if another holder acquired the reservation after this action produced a side
   effect, this action never resumes mutation and ends `Inconclusive` after
   recording attributable state; and
@@ -324,10 +343,11 @@ Restart and loss behavior is explicit:
   revalidated.
 
 The protocol is shared across action kinds and remains valid if controllers
-later split into independent processes. M0.3 freezes its naming and timing
-constants, status representation, and release preconditions, and adds
-leader-turnover, same-action/new-token, stale-holder, and competing-action
-tests.
+later split into independent processes. M0.3 freezes its naming, 30-second
+lease, 10-second renewal and RPC limits, status representation, and release
+preconditions. The implementation must add leader-turnover,
+same-action/new-token, stale-holder, saturated-workqueue, handle-write
+serialization, and competing-action tests.
 
 ## 12. Bitcoin credential and configuration identity
 
@@ -336,6 +356,8 @@ tests.
 Use one fixed-name credential Secret in each network namespace. A helper:
 
 - generates high-entropy credentials;
+- derives a salted Bitcoin Core `rpcauth` verifier so plaintext credentials
+  never enter `bitcoin.conf`;
 - creates the Secret with `immutable: true`;
 - computes the canonical content digest;
 - prints only the digest; and
@@ -351,8 +373,24 @@ path. Actor startup:
 
 1. mounts the Secret;
 2. verifies its bytes against `expectedDigest`;
-3. renders Stacks configuration into an ephemeral volume; and
+3. renders only the `rpcauth` verifier into Bitcoin configuration and the
+   matching client values into Stacks configuration in ephemeral volumes; and
 4. refuses to start after any mismatch or render failure.
+
+The centralized action and observation controllers use those client values.
+Bitcoin Core cookie authentication remains preferable for same-Pod clients,
+but sharing its restart-scoped file with separate controller Pods would require
+a broader filesystem or helper trust boundary and is not the v1 design.
+
+The topology prerequisite adds optional `StacksNetwork.spec.bitcoinRPCAuth`
+and compiled `BitcoinNode.spec.bitcoinRPCAuth` and
+`StacksNode.spec.bitcoinRPCAuth` fields using the constrained
+`ConfigObjectRef`. Managed action RPC requires the fixed name and key plus a
+non-empty expected digest. New `bitcoin-regtest/v2` and
+`nakamoto-regtest-node/v2` profiles consume the input; v1 profiles remain
+available but are not eligible for managed action RPC. The change updates
+`leaf-spec-v1.json` and `inventory-v1.json` vectors before the first action
+controller is enabled.
 
 The network operator references the Secret but has no Secret-read permission.
 Action and observation controllers receive exact-name `get` through a
@@ -361,9 +399,9 @@ trust-boundary exception; arbitrary Secret names remain inaccessible.
 
 ### Identity and rotation
 
-Inventory records configuration-input identity: template, credential
-reference, expected digest, and renderer contract. It does not claim to attest
-the final rendered TOML bytes.
+Inventory records configuration-input identity through the compiled leaf
+`specDigest`: template, credential reference, expected digest, and renderer
+contract. It does not claim to attest the final rendered TOML bytes.
 
 Rotation replaces the immutable fixed-name Secret, updates `expectedDigest`,
 and causes a controlled actor rollout. Controllers fail closed during the
@@ -637,10 +675,10 @@ to complicate the first local vertical slices.
       specification rules.
 - [x] The shared fixture and repository test pin forbidden orchestration fields;
       generated-schema tests are explicitly required with the first action CRD.
-- [ ] Bitcoin generation is one attributable, bounded action API.
-- [ ] V1 serialization uses the durable per-node reservation and uncached
+- [x] Bitcoin generation is one attributable, bounded action API.
+- [x] V1 serialization uses the durable per-node reservation and uncached
       holder validation.
-- [ ] Credential provisioning, digest verification, trust exceptions, and
+- [x] Credential provisioning, digest verification, trust exceptions, and
       rotation are specified consistently.
 - [ ] Static Chaos Mesh admission has no mandatory webhook dependency.
 - [ ] Bootstrap and actor testing-capability documents exist.

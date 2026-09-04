@@ -22,3 +22,8 @@ custom-action API group, lifecycle phases, common conditions, correlation
 label, cleanup finalizer, core fields, timestamps, stable reasons, spec
 immutability rule, timeout wire/validation contract, and forbidden
 orchestration fields before the first action CRD is introduced.
+
+[`bitcoin-actions-v1.json`](bitcoin-actions-v1.json) pins the two initial
+Bitcoin action kinds, their exact mechanism fields and typed RPC surfaces,
+hard safety limits, fail-closed ambiguity vocabulary, topology credential
+dependency, and leader-gated per-node reservation protocol.

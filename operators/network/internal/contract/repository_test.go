@@ -153,6 +153,7 @@ func TestRepositoryLayout(t *testing.T) {
 		"charts/stacks-observability-operator/Chart.yaml",
 		"contracts/action-lifecycle-v1.json",
 		"contracts/actor-ports-v1.json",
+		"contracts/bitcoin-actions-v1.json",
 		"contracts/image-id-v1.json",
 		"contracts/inventory-v1.json",
 		"contracts/leaf-spec-v1.json",
@@ -287,6 +288,251 @@ func TestActionLifecycleDesignContract(t *testing.T) {
 			t.Errorf("bitcoin action design retains superseded text %q", stale)
 		}
 	}
+}
+
+func TestBitcoinActionDesignContract(t *testing.T) {
+	root := repositoryRoot(t)
+	content, err := os.ReadFile(filepath.Join(root, "contracts", "bitcoin-actions-v1.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	type kindContract struct {
+		Kind         string   `json:"kind"`
+		RPCMethods   []string `json:"rpcMethods"`
+		SpecFields   []string `json:"specFields"`
+		StatusFields []string `json:"statusFields"`
+	}
+	var contract struct {
+		AmbiguousMutationOutcome   string   `json:"ambiguousMutationOutcome"`
+		APIGroup                   string   `json:"apiGroup"`
+		APIVersion                 string   `json:"apiVersion"`
+		AttributionValues          []string `json:"attributionValues"`
+		AttemptOutcomes            []string `json:"attemptOutcomeValues"`
+		BoundaryRange              string   `json:"boundaryAssessmentRange"`
+		BoundaryFields             []string `json:"boundaryPolicyFields"`
+		ChainFields                []string `json:"chainIdentityFields"`
+		CompletedAttributionSource string   `json:"completedAttributionSource"`
+		Contract                   string   `json:"contract"`
+		Credential                 struct {
+			AuthenticationMode      string   `json:"authenticationMode"`
+			ExpectedDigestAlgorithm string   `json:"expectedDigestAlgorithm"`
+			ExpectedDigestFormat    string   `json:"expectedDigestFormat"`
+			Key                     string   `json:"key"`
+			PasswordRandomBytes     int      `json:"passwordRandomBytes"`
+			RPCAuthSaltRandomBytes  int      `json:"rpcauthSaltRandomBytes"`
+			SecretName              string   `json:"secretName"`
+			ServerConfigFields      []string `json:"serverConfigFields"`
+			SecretRequiredImmutable bool     `json:"secretRequiredImmutable"`
+			ValueEncoding           string   `json:"valueEncoding"`
+			UsernameRandomBytes     int      `json:"usernameRandomBytes"`
+		} `json:"credential"`
+		DestinationUniqueness string         `json:"destinationUniqueness"`
+		GetBlockVerbosity     int            `json:"getBlockVerbosity"`
+		Kinds                 []kindContract `json:"kinds"`
+		Limits                struct {
+			BatchSizeMaximum                int    `json:"batchSizeMaximum"`
+			BlockGenerationMaximum          int    `json:"blockGenerationMaximum"`
+			DestinationAddressMaximumLength int    `json:"destinationAddressMaximumLength"`
+			DestinationAddressMinimumLength int    `json:"destinationAddressMinimumLength"`
+			IntervalMaximum                 string `json:"intervalMaximum"`
+			IntervalMinimum                 string `json:"intervalMinimum"`
+			ReorganizationDepthMaximum      int    `json:"reorganizationDepthMaximum"`
+			ReplacementBlocksMaximum        int    `json:"replacementBlocksMaximum"`
+			RPCAttemptsMaximum              int    `json:"rpcAttemptsMaximum"`
+			TimeoutMaximum                  string `json:"timeoutMaximum"`
+		} `json:"limits"`
+		Reservation struct {
+			AcquisitionTokenBytes int      `json:"acquisitionTokenBytes"`
+			Annotations           []string `json:"annotations"`
+			APIVersion            string   `json:"apiVersion"`
+			HolderIdentity        string   `json:"holderIdentity"`
+			Kind                  string   `json:"kind"`
+			LeaseDurationSeconds  int      `json:"leaseDurationSeconds"`
+			ManagerLifecycle      string   `json:"managerLifecycle"`
+			ManagedByLabel        string   `json:"managedByLabel"`
+			MaximumRPCSeconds     int      `json:"maximumRPCSeconds"`
+			NameAlgorithm         string   `json:"nameAlgorithm"`
+			ObservedExpiry        string   `json:"observedExpiry"`
+			OwnerReference        string   `json:"ownerReference"`
+			RPCContextParent      string   `json:"rpcContextParent"`
+			WriteOwner            string   `json:"writeOwner"`
+			RenewEverySeconds     int      `json:"renewEverySeconds"`
+		} `json:"reservation"`
+		ProvenAbsentScope string `json:"provenAbsentScope"`
+		ProtocolSchedule  struct {
+			UnknownRequiresAllBoundaryOptIns bool   `json:"unknownRequiresAllBoundaryOptIns"`
+			V1Source                         string `json:"v1Source"`
+		} `json:"protocolSchedule"`
+		ReservationStatusFields []string `json:"reservationStatusFields"`
+		RPCAttemptScope         string   `json:"rpcAttemptScope"`
+		RPCAttemptFields        []string `json:"rpcAttemptFields"`
+		SpecImmutabilityRule    string   `json:"specImmutabilityRule"`
+		TopologyDependency      struct {
+			AffectedContracts      []string `json:"affectedContracts"`
+			AggregateField         string   `json:"aggregateField"`
+			CompiledLeafField      string   `json:"compiledLeafField"`
+			FieldType              string   `json:"fieldType"`
+			GeneratedProfiles      []string `json:"generatedProfiles"`
+			Key                    string   `json:"key"`
+			Name                   string   `json:"name"`
+			RequiredExpectedDigest bool     `json:"requiredExpectedDigest"`
+		} `json:"topologyDependency"`
+	}
+	if err := json.Unmarshal(content, &contract); err != nil {
+		t.Fatal(err)
+	}
+	var rawFields map[string]json.RawMessage
+	if err := json.Unmarshal(content, &rawFields); err != nil {
+		t.Fatal(err)
+	}
+	fieldNames := make([]string, 0, len(rawFields))
+	for name := range rawFields {
+		fieldNames = append(fieldNames, name)
+	}
+	sort.Strings(fieldNames)
+	assertStringsEqual(t, "Bitcoin contract fields", fieldNames, []string{"ambiguousMutationOutcome", "apiGroup", "apiVersion", "attemptOutcomeValues", "attributionValues", "boundaryAssessmentRange", "boundaryPolicyFields", "chainIdentityFields", "completedAttributionSource", "contract", "credential", "destinationUniqueness", "getBlockVerbosity", "kinds", "limits", "protocolSchedule", "provenAbsentScope", "reservation", "reservationStatusFields", "rpcAttemptFields", "rpcAttemptScope", "specImmutabilityRule", "topologyDependency"})
+	if contract.Contract != "actions.stacks.org/bitcoin-actions/v1alpha1" || contract.APIGroup != "actions.stacks.org" || contract.APIVersion != "v1alpha1" || contract.SpecImmutabilityRule != "self == oldSelf" {
+		t.Fatalf("unexpected Bitcoin action contract identity: %#v", contract)
+	}
+	assertStringsEqual(t, "attribution values", contract.AttributionValues, []string{"RPCResponse", "Uncertain"})
+	assertStringsEqual(t, "attempt outcomes", contract.AttemptOutcomes, []string{"IntentRecorded", "Acknowledged", "ProvenAbsent", "Ambiguous"})
+	assertStringsEqual(t, "boundary fields", contract.BoundaryFields, []string{"allowEpochBoundaryCrossing", "allowRewardCycleBoundaryCrossing", "allowPreparePhaseBoundaryCrossing"})
+	assertStringsEqual(t, "chain fields", contract.ChainFields, []string{"height", "bestBlockHash", "chainwork"})
+	if contract.BoundaryRange != "inclusive:[originalHeight-depth+1,originalHeight-depth+replacementBlocks]" || contract.RPCAttemptScope != "mutation-methods-only" {
+		t.Fatalf("unexpected Bitcoin action boundary or RPC attempt scope: %#v", contract)
+	}
+	if contract.AmbiguousMutationOutcome != "Inconclusive" || contract.ProvenAbsentScope != "all-known-tips" ||
+		contract.CompletedAttributionSource != "rpc-response-block-hashes-only" ||
+		contract.DestinationUniqueness != "advisory" || contract.GetBlockVerbosity != 2 {
+		t.Fatalf("unexpected ambiguous-effect contract: %#v", contract)
+	}
+	if contract.ProtocolSchedule.V1Source != "none" || !contract.ProtocolSchedule.UnknownRequiresAllBoundaryOptIns {
+		t.Fatalf("unexpected protocol schedule contract: %#v", contract.ProtocolSchedule)
+	}
+	assertStringsEqual(t, "reservation status fields", contract.ReservationStatusFields, []string{"leaseName", "holderIdentity", "acquisitionToken", "acquiredAt", "renewedAt", "rpcNotAfter", "releasedAt"})
+	assertStringsEqual(t, "RPC attempt fields", contract.RPCAttemptFields, []string{"sequence", "method", "expectedHeight", "expectedTip", "requestedBlocks", "destinationAddress", "acquisitionToken", "startedAt", "deadline", "outcome", "blockHashes"})
+	if len(contract.Kinds) != 2 {
+		t.Fatalf("Bitcoin action kind count = %d, want 2", len(contract.Kinds))
+	}
+	assertBitcoinKindContract(t, contract.Kinds[0], "BitcoinBlockGeneration",
+		[]string{"networkRef", "bitcoinNodeRef", "blocks", "interval", "batchSize", "destinationAddress", "timeout"},
+		[]string{"requestedBlocks", "generatedBlocks", "generatedBlockHashes", "startingChain", "observedChain", "reservation", "rpcAttempts", "attribution"},
+		[]string{"getblockchaininfo", "validateaddress", "generatetoaddress", "getblockhash", "getblockheader", "getblock", "getchaintips"})
+	assertBitcoinKindContract(t, contract.Kinds[1], "BitcoinReorganization",
+		[]string{"networkRef", "bitcoinNodeRef", "depth", "replacementBlocks", "replacementInterval", "destinationAddress", "boundaryPolicy", "timeout"},
+		[]string{"originalChain", "forkParent", "originalBlockHashes", "replacementBlockHashes", "finalChain", "boundaryAssessment", "reservation", "rpcAttempts", "attribution"},
+		[]string{"getblockchaininfo", "validateaddress", "getblockhash", "getblockheader", "getblock", "getchaintips", "invalidateblock", "generatetoaddress", "reconsiderblock"})
+	if contract.Limits.BatchSizeMaximum != 16 || contract.Limits.BlockGenerationMaximum != 288 ||
+		contract.Limits.DestinationAddressMinimumLength != 14 || contract.Limits.DestinationAddressMaximumLength != 90 ||
+		contract.Limits.IntervalMinimum != "100ms" || contract.Limits.IntervalMaximum != "5m" ||
+		contract.Limits.ReorganizationDepthMaximum != 144 || contract.Limits.ReplacementBlocksMaximum != 288 ||
+		contract.Limits.RPCAttemptsMaximum != 320 || contract.Limits.TimeoutMaximum != "24h" {
+		t.Fatalf("unexpected Bitcoin action limits: %#v", contract.Limits)
+	}
+	if contract.Reservation.APIVersion != "coordination.k8s.io/v1" || contract.Reservation.Kind != "Lease" ||
+		contract.Reservation.AcquisitionTokenBytes != 16 || contract.Reservation.LeaseDurationSeconds != 30 ||
+		contract.Reservation.RenewEverySeconds != 10 || contract.Reservation.MaximumRPCSeconds != 10 ||
+		contract.Reservation.HolderIdentity != "<action-uid>/<32-lowercase-hex-acquisition-token>" ||
+		contract.Reservation.NameAlgorithm != "bitcoin-action-<first-32-hex-sha256(namespace-NUL-targetUID)>" ||
+		contract.Reservation.ManagerLifecycle != "leader-gated-manager-runnable" ||
+		contract.Reservation.ObservedExpiry != "local-observation-of-unchanged-record" ||
+		contract.Reservation.RPCContextParent != "reservation-handle" || contract.Reservation.WriteOwner != "reservation-handle" ||
+		contract.Reservation.ManagedByLabel != "app.kubernetes.io/managed-by=stacks-action-operator" ||
+		contract.Reservation.OwnerReference != "BitcoinNode UID, controller=false, blockOwnerDeletion=false" {
+		t.Fatalf("unexpected Bitcoin reservation contract: %#v", contract.Reservation)
+	}
+	assertStringsEqual(t, "reservation annotations", contract.Reservation.Annotations, []string{"actions.stacks.org/action-kind", "actions.stacks.org/action-uid", "actions.stacks.org/acquisition-token", "actions.stacks.org/rpc-not-after", "actions.stacks.org/target-uid"})
+	if contract.Credential.AuthenticationMode != "rpcauth" || contract.Credential.SecretName != "stacks-bitcoin-rpc" ||
+		contract.Credential.Key != "bitcoin-rpc.conf" || contract.Credential.ExpectedDigestAlgorithm != "sha256" ||
+		contract.Credential.ExpectedDigestFormat != "sha256:<64-lowercase-hex>" ||
+		contract.Credential.UsernameRandomBytes != 24 || contract.Credential.PasswordRandomBytes != 32 ||
+		contract.Credential.RPCAuthSaltRandomBytes != 16 || contract.Credential.ValueEncoding != "base64url-without-padding" ||
+		!contract.Credential.SecretRequiredImmutable {
+		t.Fatalf("unexpected Bitcoin credential contract: %#v", contract.Credential)
+	}
+	assertStringsEqual(t, "server config fields", contract.Credential.ServerConfigFields, []string{"rpcauth"})
+	if contract.TopologyDependency.AggregateField != "spec.bitcoinRPCAuth" ||
+		contract.TopologyDependency.CompiledLeafField != "spec.bitcoinRPCAuth" ||
+		contract.TopologyDependency.FieldType != "ConfigObjectRef" ||
+		contract.TopologyDependency.Name != "stacks-bitcoin-rpc" ||
+		contract.TopologyDependency.Key != "bitcoin-rpc.conf" ||
+		!contract.TopologyDependency.RequiredExpectedDigest {
+		t.Fatalf("unexpected Bitcoin topology dependency: %#v", contract.TopologyDependency)
+	}
+	assertStringsEqual(t, "generated profiles", contract.TopologyDependency.GeneratedProfiles, []string{"bitcoin-regtest/v2", "nakamoto-regtest-node/v2"})
+	assertStringsEqual(t, "affected contracts", contract.TopologyDependency.AffectedContracts, []string{"leaf-spec-v1.json", "inventory-v1.json"})
+
+	documentBytes, err := os.ReadFile(filepath.Join(root, "docs", "design", "bitcoin-lifecycle.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	document := string(documentBytes)
+	for _, value := range []string{
+		contract.Contract, contract.Credential.AuthenticationMode, contract.Credential.SecretName, contract.Credential.Key,
+		contract.Reservation.NameAlgorithm, contract.Reservation.HolderIdentity,
+		contract.Reservation.ManagerLifecycle, contract.Reservation.ObservedExpiry, contract.Reservation.RPCContextParent,
+		contract.Reservation.WriteOwner, contract.TopologyDependency.AggregateField, contract.TopologyDependency.CompiledLeafField,
+		contract.TopologyDependency.FieldType,
+		contract.TopologyDependency.GeneratedProfiles[0], contract.TopologyDependency.GeneratedProfiles[1],
+		contract.TopologyDependency.AffectedContracts[0], contract.TopologyDependency.AffectedContracts[1],
+		strconv.Itoa(contract.Reservation.LeaseDurationSeconds) + " seconds",
+		strconv.Itoa(contract.Reservation.RenewEverySeconds) + " seconds",
+		strconv.Itoa(contract.Reservation.MaximumRPCSeconds) + " seconds",
+	} {
+		if !strings.Contains(document, value) {
+			t.Errorf("Bitcoin lifecycle document does not represent %q", value)
+		}
+	}
+	for _, kind := range contract.Kinds {
+		values := append(append(append([]string{kind.Kind}, kind.SpecFields...), kind.StatusFields...), kind.RPCMethods...)
+		for _, value := range values {
+			if !strings.Contains(document, "`"+value+"`") {
+				t.Errorf("Bitcoin lifecycle document does not represent %s value %q", kind.Kind, value)
+			}
+		}
+	}
+	for _, value := range contract.AttributionValues {
+		if !strings.Contains(document, "`"+value+"`") {
+			t.Errorf("Bitcoin lifecycle document does not represent attribution %q", value)
+		}
+	}
+	for _, values := range [][]string{contract.AttemptOutcomes, contract.BoundaryFields, contract.ChainFields, contract.ReservationStatusFields, contract.RPCAttemptFields} {
+		for _, value := range values {
+			if !strings.Contains(document, "`"+value+"`") {
+				t.Errorf("Bitcoin lifecycle document does not represent contract value %q", value)
+			}
+		}
+	}
+	for _, value := range []string{"`DestinationRecovered`", "| `Recovered` | A lost response"} {
+		if strings.Contains(document, value) {
+			t.Errorf("Bitcoin lifecycle document retains removed recovery contract %q", value)
+		}
+	}
+	for _, value := range []string{
+		"V1 has no trusted protocol-schedule source",
+		"NeedLeaderElection",
+		"every known tip",
+		"verbosity `2`",
+	} {
+		if !strings.Contains(document, value) {
+			t.Errorf("Bitcoin lifecycle document does not represent remediated invariant %q", value)
+		}
+	}
+}
+
+func assertBitcoinKindContract(t *testing.T, actual struct {
+	Kind         string   `json:"kind"`
+	RPCMethods   []string `json:"rpcMethods"`
+	SpecFields   []string `json:"specFields"`
+	StatusFields []string `json:"statusFields"`
+}, kind string, specFields, statusFields, rpcMethods []string) {
+	t.Helper()
+	if actual.Kind != kind {
+		t.Fatalf("Bitcoin action kind = %q, want %q", actual.Kind, kind)
+	}
+	assertStringsEqual(t, kind+" spec fields", actual.SpecFields, specFields)
+	assertStringsEqual(t, kind+" status fields", actual.StatusFields, statusFields)
+	assertStringsEqual(t, kind+" RPC methods", actual.RPCMethods, rpcMethods)
 }
 
 func assertStringsEqual(t *testing.T, name string, actual, expected []string) {

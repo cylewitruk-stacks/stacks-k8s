@@ -326,6 +326,12 @@ external side effect. Shared libraries may provide:
 - typed RPC clients; and
 - action event/correlation metadata.
 
+Serialization is mechanism-specific rather than a generic scheduler. The
+initial Bitcoin controllers share the exact target-UID Lease protocol in
+[Bitcoin lifecycle design](bitcoin-lifecycle.md), with one leader-gated
+reservation manager owning renewal and writes; other action families adopt it
+only when they share the same side effect and fencing constraints.
+
 Shared code must not accept arbitrary action payloads, enumerate a runtime
 mechanism registry, or advance from one action resource to another. Each
 controller operates when every other action controller is disabled.

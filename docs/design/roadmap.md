@@ -7,7 +7,7 @@
 | Current inventory and boundaries | Complete | Existing operators only |
 | Atomic action API conventions | Complete | Contract fixture only; no action CRDs |
 | Mutable topology | Ready for API review | Partially implemented |
-| Bitcoin lifecycle actions | Ready for API review | Not implemented |
+| Bitcoin lifecycle actions | M0.3 contract complete | Not implemented |
 | Native Chaos Mesh profile | Ready for implementation planning | Not packaged here |
 | Protocol-specific actions | Ready for API review, with stated open decisions | Not implemented |
 | Passive telemetry and evidence | Ready for backend/API decision | Identity snapshot only |
@@ -64,8 +64,9 @@ inputs to be reconciled during M0.
   policy from the normative action contract.
 - Freeze exact structural schemas, defaults, condition/reason tables,
   finalizer names, terminal-generation behavior, and reference semantics.
-- Approve `ActionSafetyPolicy` per-resource bounds and document the initial
-  absence of a cross-kind atomic aggregate guarantee.
+- Freeze conservative per-kind bounds, defer `ActionSafetyPolicy` elevation
+  until a concrete override is required, and document the initial absence of
+  a cross-kind atomic aggregate guarantee.
 - Choose initial observation journal/storage and query protocol.
 - Define supported version/skew posture and the first compatibility matrix.
 - Add architecture decision records for unresolved choices that become final.
@@ -81,6 +82,9 @@ regtest networks and upgrades.
 - Qualify multiple Bitcoin miners/followers and multiple Stacks miners.
 - Implement dependency-aware add/remove/roll/suspend semantics.
 - Add watched ConfigMap updates and documented immutable Secret references.
+- Add `spec.bitcoinRPCAuth`, compile it into Bitcoin and Stacks leaves, publish
+  both v2 generated profiles, and update leaf/inventory contract vectors before
+  enabling managed Bitcoin actions.
 - Qualify persistent database retention across independent actor upgrades.
 - Publish editor/viewer Roles that prevent ordinary direct leaf mutation.
 - Decide and, if needed, implement `SbtcSigner` as a distinct lifecycle kind.
@@ -112,11 +116,15 @@ state transitions.
 
 - Add shared action identity/status/finalizer/Lease helpers without a generic
   action engine.
-- Implement `ActionSafetyPolicy`, fail-closed per-resource admission, and exact
-  RBAC.
-- Implement `BitcoinMiningWindow`, then `BitcoinBlockRequest`, then
-  `BitcoinReorganization`.
-- Expose only typed regtest RPC methods and ambiguous-effect handling.
+- Apply the absolute per-kind limits frozen by M0.3 and exact RBAC. Defer
+  policy elevation until a concrete administrator override is required.
+- Implement `BitcoinBlockGeneration`, then `BitcoinReorganization`.
+- Expose only typed regtest RPC methods; any lost mutation response is
+  inconclusive unless every known tip proves absence.
+- Run the shared per-target Lease protocol through a leader-gated reservation
+  manager that owns every Lease write independently of reconcile workqueues.
+- Treat the v1 protocol schedule as unknown and require every boundary opt-in
+  until a trusted schedule source is designed.
 - Correlate resource, policy, identity, and RPC lifecycle through the M2
   journal without making observation a mutation dependency.
 
@@ -236,9 +244,10 @@ maintainers should resolve at least:
 
 1. observation API names and query protocol;
 2. exact action per-resource impact vocabulary and policy defaults;
-3. Bitcoin mining destination model;
-4. actor testing-capability protocol;
-5. initial Chaos Mesh/platform matrix;
-6. observation journal, audit integration, query protocol, and retention;
-7. evidence destination/encryption model; and
+3. actor testing-capability protocol;
+4. initial Chaos Mesh/platform matrix;
+5. observation journal, audit integration, query protocol, and retention;
+6. evidence destination/encryption model; and
+7. trusted protocol-schedule publication for selective Bitcoin reorganization
+   boundary admission; and
 8. product release and compatibility policy.

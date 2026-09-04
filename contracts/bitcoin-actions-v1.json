@@ -1,0 +1,193 @@
+{
+  "apiGroup": "actions.stacks.org",
+  "apiVersion": "v1alpha1",
+  "attributionValues": [
+    "RPCResponse",
+    "Uncertain"
+  ],
+  "attemptOutcomeValues": [
+    "IntentRecorded",
+    "Acknowledged",
+    "ProvenAbsent",
+    "Ambiguous"
+  ],
+  "ambiguousMutationOutcome": "Inconclusive",
+  "boundaryPolicyFields": [
+    "allowEpochBoundaryCrossing",
+    "allowRewardCycleBoundaryCrossing",
+    "allowPreparePhaseBoundaryCrossing"
+  ],
+  "boundaryAssessmentRange": "inclusive:[originalHeight-depth+1,originalHeight-depth+replacementBlocks]",
+  "chainIdentityFields": [
+    "height",
+    "bestBlockHash",
+    "chainwork"
+  ],
+  "completedAttributionSource": "rpc-response-block-hashes-only",
+  "contract": "actions.stacks.org/bitcoin-actions/v1alpha1",
+  "credential": {
+    "authenticationMode": "rpcauth",
+    "expectedDigestAlgorithm": "sha256",
+    "expectedDigestFormat": "sha256:<64-lowercase-hex>",
+    "key": "bitcoin-rpc.conf",
+    "passwordRandomBytes": 32,
+    "rpcauthSaltRandomBytes": 16,
+    "secretName": "stacks-bitcoin-rpc",
+    "serverConfigFields": [
+      "rpcauth"
+    ],
+    "secretRequiredImmutable": true,
+    "valueEncoding": "base64url-without-padding",
+    "usernameRandomBytes": 24
+  },
+  "destinationUniqueness": "advisory",
+  "getBlockVerbosity": 2,
+  "kinds": [
+    {
+      "kind": "BitcoinBlockGeneration",
+      "rpcMethods": [
+        "getblockchaininfo",
+        "validateaddress",
+        "generatetoaddress",
+        "getblockhash",
+        "getblockheader",
+        "getblock",
+        "getchaintips"
+      ],
+      "specFields": [
+        "networkRef",
+        "bitcoinNodeRef",
+        "blocks",
+        "interval",
+        "batchSize",
+        "destinationAddress",
+        "timeout"
+      ],
+      "statusFields": [
+        "requestedBlocks",
+        "generatedBlocks",
+        "generatedBlockHashes",
+        "startingChain",
+        "observedChain",
+        "reservation",
+        "rpcAttempts",
+        "attribution"
+      ]
+    },
+    {
+      "kind": "BitcoinReorganization",
+      "rpcMethods": [
+        "getblockchaininfo",
+        "validateaddress",
+        "getblockhash",
+        "getblockheader",
+        "getblock",
+        "getchaintips",
+        "invalidateblock",
+        "generatetoaddress",
+        "reconsiderblock"
+      ],
+      "specFields": [
+        "networkRef",
+        "bitcoinNodeRef",
+        "depth",
+        "replacementBlocks",
+        "replacementInterval",
+        "destinationAddress",
+        "boundaryPolicy",
+        "timeout"
+      ],
+      "statusFields": [
+        "originalChain",
+        "forkParent",
+        "originalBlockHashes",
+        "replacementBlockHashes",
+        "finalChain",
+        "boundaryAssessment",
+        "reservation",
+        "rpcAttempts",
+        "attribution"
+      ]
+    }
+  ],
+  "limits": {
+    "batchSizeMaximum": 16,
+    "blockGenerationMaximum": 288,
+    "destinationAddressMaximumLength": 90,
+    "destinationAddressMinimumLength": 14,
+    "intervalMaximum": "5m",
+    "intervalMinimum": "100ms",
+    "reorganizationDepthMaximum": 144,
+    "replacementBlocksMaximum": 288,
+    "rpcAttemptsMaximum": 320,
+    "timeoutMaximum": "24h"
+  },
+  "reservationStatusFields": [
+    "leaseName",
+    "holderIdentity",
+    "acquisitionToken",
+    "acquiredAt",
+    "renewedAt",
+    "rpcNotAfter",
+    "releasedAt"
+  ],
+  "rpcAttemptScope": "mutation-methods-only",
+  "rpcAttemptFields": [
+    "sequence",
+    "method",
+    "expectedHeight",
+    "expectedTip",
+    "requestedBlocks",
+    "destinationAddress",
+    "acquisitionToken",
+    "startedAt",
+    "deadline",
+    "outcome",
+    "blockHashes"
+  ],
+  "reservation": {
+    "acquisitionTokenBytes": 16,
+    "annotations": [
+      "actions.stacks.org/action-kind",
+      "actions.stacks.org/action-uid",
+      "actions.stacks.org/acquisition-token",
+      "actions.stacks.org/rpc-not-after",
+      "actions.stacks.org/target-uid"
+    ],
+    "apiVersion": "coordination.k8s.io/v1",
+    "holderIdentity": "<action-uid>/<32-lowercase-hex-acquisition-token>",
+    "kind": "Lease",
+    "leaseDurationSeconds": 30,
+    "managerLifecycle": "leader-gated-manager-runnable",
+    "managedByLabel": "app.kubernetes.io/managed-by=stacks-action-operator",
+    "maximumRPCSeconds": 10,
+    "nameAlgorithm": "bitcoin-action-<first-32-hex-sha256(namespace-NUL-targetUID)>",
+    "observedExpiry": "local-observation-of-unchanged-record",
+    "ownerReference": "BitcoinNode UID, controller=false, blockOwnerDeletion=false",
+    "rpcContextParent": "reservation-handle",
+    "writeOwner": "reservation-handle",
+    "renewEverySeconds": 10
+  },
+  "provenAbsentScope": "all-known-tips",
+  "protocolSchedule": {
+    "unknownRequiresAllBoundaryOptIns": true,
+    "v1Source": "none"
+  },
+  "specImmutabilityRule": "self == oldSelf",
+  "topologyDependency": {
+    "affectedContracts": [
+      "leaf-spec-v1.json",
+      "inventory-v1.json"
+    ],
+    "aggregateField": "spec.bitcoinRPCAuth",
+    "compiledLeafField": "spec.bitcoinRPCAuth",
+    "fieldType": "ConfigObjectRef",
+    "generatedProfiles": [
+      "bitcoin-regtest/v2",
+      "nakamoto-regtest-node/v2"
+    ],
+    "key": "bitcoin-rpc.conf",
+    "name": "stacks-bitcoin-rpc",
+    "requiredExpectedDigest": true
+  }
+}

@@ -85,10 +85,11 @@ Deletion stops future work but does not pretend to undo prior chain history.
 - Prefer short-lived projected credentials or immutable Secret references.
 - Never copy credentials into status, logs, events, journal payloads, or
   evidence manifests.
-- Action and observation operators read only chart-configured Secret
-  `resourceNames`; public specs select approved profiles, not arbitrary Secret
-  names. Dynamic topology configuration Secrets are a separately documented
-  namespace trust boundary and should contain only that network's material.
+- Action and observation operators read only administrator-configured Secret
+  `resourceNames`; public action specs never select Secret names. The initial
+  Bitcoin controllers use the fixed `stacks-bitcoin-rpc` Secret in enrolled
+  namespaces as the explicit exception. The network operator mounts and
+  content-verifies that input without Secret-read RBAC.
 - Actor Pods use non-root, no privilege escalation, dropped capabilities,
   runtime-default seccomp, read-only root filesystem where compatible, and no
   ServiceAccount token unless justified.
@@ -153,8 +154,9 @@ documented exception and negative test.
 - Agent and observer credentials cannot mutate compiled workloads.
 - Every custom action is exact-identity-pinned; native Chaos actions pin their
   immutable request and logical targets and explicitly record Pod divergence.
-  Every custom action is policy-bound; every action is independently bounded
-  and safe under retry.
+  Every custom action is independently bounded and safe under retry. It is
+  policy-bound only when that kind implements administrator elevation;
+  otherwise its schema bounds are absolute.
 - Irreversible ambiguity cannot become automatic success or blind repetition.
 - Evidence preserves provenance and incompleteness without exposing secrets.
 
@@ -162,6 +164,7 @@ documented exception and negative test.
 
 1. Admission webhook availability and failure policy for enrolled native
    targets.
-2. Credential model for Bitcoin RPC and actor testing interfaces.
+2. Credential model for actor testing interfaces; Bitcoin RPC is resolved by
+   M0.3.
 3. Initial supported NetworkPolicy/CNI matrix.
 4. Evidence encryption, signing, and retention defaults.

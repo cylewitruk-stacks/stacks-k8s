@@ -84,7 +84,7 @@ when permissions, dependencies, or failure domains materially differ.
 | `StacksNetwork`, `BitcoinNode`, `StacksNode`, `StacksSigner` | Implemented; extend | [Topology](topology.md) |
 | `NetworkObservation` | Implemented compatibility API | [Current state](current-state.md) |
 | `ActionSafetyPolicy` | Recommended for custom actions | [Atomic actions](actions.md) |
-| `BitcoinMiningWindow`, `BitcoinBlockRequest`, `BitcoinReorganization` | Recommended | [Bitcoin lifecycle](bitcoin-lifecycle.md) |
+| `BitcoinBlockGeneration`, `BitcoinReorganization` | M0.3 contract complete; not implemented | [Bitcoin lifecycle](bitcoin-lifecycle.md) |
 | `ApplicationClockOffset`, `SignerBehavior`, `MinerBehavior` | Recommended | [Protocol actions](protocol-actions.md) |
 | `ProtocolInputInjection` | Recommended after endpoint decision | [Protocol actions](protocol-actions.md) |
 | `ActorDiskPressure` | Conditional fallback | [Protocol actions](protocol-actions.md) |
@@ -100,8 +100,7 @@ when permissions, dependencies, or failure domains materially differ.
 | Generic faults | Direction | Use native Chaos Mesh CRDs directly. |
 | Forced Bitcoin reorganization | Recommended | Bounded action resource, not `StacksNetwork` state. |
 | Natural Bitcoin reorganization | Direction | Emergent behavior to observe; no action resource required. |
-| Cadenced Bitcoin mining | Recommended | Bounded `BitcoinMiningWindow`. |
-| Bounded block generation | Recommended | One `BitcoinBlockRequest` per request. |
+| Cadenced and immediate Bitcoin generation | Direction | One bounded `BitcoinBlockGeneration` per request. |
 | Observation storage | Direction | External telemetry/evidence store; never bulk data in CRD status. |
 | Replay and reduction | Direction | Agent responsibility outside operators. |
 | Build from Git revision | Direction | External build tooling produces an OCI image. |
@@ -110,6 +109,8 @@ when permissions, dependencies, or failure domains materially differ.
 | Action correlation | Direction | `actions.stacks.org/correlation-id` is a search hint; object UID is authoritative. |
 | Observation API names | Open | `NetworkTelemetry` and `EvidenceExport` are working names. |
 | Aggregate action admission | Open | Not claimed initially; preserve direct native CRDs and avoid side-effecting admission. |
+| Bitcoin action serialization | Direction | One target-UID-derived Lease across all Bitcoin action kinds, renewed by a leader-gated manager; ambiguity remains fail-closed. |
+| Bitcoin RPC credentials | Direction | `spec.bitcoinRPCAuth`, v2 profiles, fixed immutable Secret, and expected digest; never selected by an action spec. |
 
 ## Design acceptance
 

@@ -142,6 +142,35 @@ rolls only affected actors. For Secrets, prefer immutable/versioned Secret
 names and patch the reference. An optional declared content digest may enforce
 strict byte identity, but it is not required for normal operation.
 
+### Bitcoin RPC credential input
+
+M0.3 defines one narrower exception for generated Bitcoin and Stacks
+configuration. Each enrolled namespace has a fixed immutable
+`stacks-bitcoin-rpc` Secret with key `bitcoin-rpc.conf`. The topology
+declaration adds optional `StacksNetwork.spec.bitcoinRPCAuth` using
+`ConfigObjectRef`. Managed action RPC pins that field's name and key, requires
+`expectedDigest`, and forbids `mountPath`.
+
+The aggregate compiler copies the same input to
+`BitcoinNode.spec.bitcoinRPCAuth` and `StacksNode.spec.bitcoinRPCAuth`.
+`bitcoin-regtest/v2` and `nakamoto-regtest-node/v2` consume it through actor
+init. Existing v1 profiles remain compatible topology options but cannot
+report managed-RPC readiness. Custom configurations remain supported and must
+opt into the reserved renderer inputs before becoming action-eligible.
+
+This prerequisite changes the generated-profile enum, API schemas, aggregate
+compiler, both workload renderers, and leaf `specDigest`. It adds vectors to
+`leaf-spec-v1.json` and `inventory-v1.json` and lands before the first Bitcoin
+action controller. Actor init containers verify the mounted bytes before use;
+the network controller never reads Secret content.
+
+The inventory's leaf `specDigest` records the reference, expected digest,
+template digest, and renderer contract as configuration-input identity. It
+does not attest Secret content or rendered TOML. Rotation replaces the
+immutable Secret and changes the declared digest, intentionally withdrawing
+admitted identity while affected actors roll. The exact contract and operator
+trust exceptions are in [Bitcoin lifecycle design](bitcoin-lifecycle.md).
+
 ## Persistent state
 
 Persistent storage is the default recommendation for meaningful upgrade and
@@ -207,7 +236,8 @@ write that history.
 - Compile multi-Bitcoin and multi-Stacks-miner topologies.
 - Add, remove, suspend, resume, and independently roll each actor kind.
 - Verify only dependency-affected actors roll.
-- Exercise ConfigMap content update and versioned Secret reference update.
+- Exercise ConfigMap content updates, versioned general configuration Secrets,
+  and fixed-name Bitcoin credential rotation.
 - Prove immutable storage changes preserve existing PVCs and become Degraded.
 - Prove editor RBAC cannot patch aggregate-owned leaves.
 - Run envtest generation/readiness and ownership transitions.
@@ -228,8 +258,8 @@ write that history.
 - Multi-Bitcoin and multi-Stacks-miner examples converge with complete admitted
   identity.
 - Independent image/configuration updates preserve requested persistent data.
-- ConfigMap and versioned Secret changes have documented, tested rollout
-  behavior.
+- ConfigMap, versioned configuration Secret, and fixed-name Bitcoin credential
+  changes have documented, tested rollout behavior.
 - Aggregate-owned leaf edits are denied by the supported editor Role.
 - No topology API performs mining, faults, replay, or upgrade sequencing.
 - Real-image qualification states exactly which combinations were exercised.
