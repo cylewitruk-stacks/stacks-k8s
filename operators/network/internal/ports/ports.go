@@ -1,7 +1,7 @@
 // Package ports defines the network operator's actor Service interfaces.
 package ports
 
-import networkv1alpha1 "github.com/cylewitruk-stacks/stacks-k8s/operators/network/api/v1alpha1"
+import networkv1alpha1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha1"
 
 // Bitcoin returns the configured Bitcoin RPC and P2P ports.
 func Bitcoin(rpc, p2p int32) []networkv1alpha1.PortSpec {

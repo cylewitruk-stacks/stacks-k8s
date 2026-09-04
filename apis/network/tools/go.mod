@@ -1,4 +1,4 @@
-module github.com/cylewitruk-stacks/stacks-k8s/operators/network/tools
+module github.com/cylewitruk-stacks/stacks-k8s/apis/network/tools
 
 go 1.27.1
 

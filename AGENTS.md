@@ -29,10 +29,12 @@ and consistent with the architecture documented under [`docs/`](docs/).
   evidence identity; they do not promise deterministic runtime behavior.
 - Keep controllers small and resource-focused. Compose behavior through
   Kubernetes APIs and explicit interfaces rather than monolithic reconcilers.
-- Put shared wire-contract fixtures in `contracts/`. Every consumer must decode
-  and verify a shared contract using its own production implementation.
-- Preserve independent runtime and `tools` Go modules. Do not add a committed
-  root `go.work` or otherwise unify their Kubernetes dependency graphs.
+- Put shared, versioned Kubernetes API types in `apis/`; never put controller
+  runtime code there. Keep wire-contract fixtures in `contracts/`. Consumers
+  that verify byte-level contracts must continue to use their own production
+  decoding and digest implementations.
+- Preserve independent API, runtime, and `tools` Go modules. Do not add a
+  committed root `go.work` or otherwise unify their dependency graphs.
 - Keep repository-wide verification logic under top-level `tools/` rather than
   duplicating it across independent operator runtime modules.
 - Prefer structural OpenAPI schemas and CEL for static admission rules. Add a
@@ -56,8 +58,10 @@ and consistent with the architecture documented under [`docs/`](docs/).
 ## Generated files
 
 - Do not edit generated deepcopy files or chart CRDs by hand.
-- Run `make generate` after changing API types or kubebuilder markers. CRDs are
-  generated directly into their owning chart.
+- Run `make generate` after changing API types or kubebuilder markers.
+  Extracted shared APIs keep generators in the corresponding `apis/*/tools`
+  module; operator-owned APIs may keep them under the operator module. CRDs
+  are generated directly into their owning chart.
 - Commit generated outputs with the source change that produced them.
 
 ## Validation

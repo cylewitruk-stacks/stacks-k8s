@@ -24,8 +24,9 @@ jobs:
         with:
           go-version-file: operators/network/go.mod
           cache-dependency-path: |
+            apis/network/go.sum
+            apis/network/tools/go.sum
             operators/network/go.sum
-            operators/network/tools/go.sum
       - uses: azure/setup-helm@v5
       - run: make verify-network
 
@@ -52,8 +53,18 @@ jobs:
         with:
           go-version-file: operators/network/go.mod
           cache-dependency-path: |
+            apis/network/go.sum
+            apis/network/tools/go.sum
             operators/network/go.sum
-            operators/network/tools/go.sum
             operators/observability/go.sum
             operators/observability/tools/go.sum
       - run: make modules-verify
+      - run: make module-policy-verify
+
+  containers:
+    name: Container builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: make docker-check
+      - run: make docker-build

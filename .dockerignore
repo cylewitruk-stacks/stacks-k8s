@@ -1,0 +1,28 @@
+# Root-context builds are default-deny so ignored local credentials, editor
+# state, worktrees, and unrelated products are never sent to a builder.
+**
+!.dockerignore
+!apis/
+!apis/network/
+!apis/network/**
+!operators/
+!operators/network/
+!operators/network/**
+!operators/observability/
+!operators/observability/**
+
+# The selected module trees still exclude development-only content.
+**/.cache
+**/.claude
+**/.docs
+**/.env
+**/.env.*
+**/.git
+**/.idea
+**/.vscode
+**/coverage
+**/testdata
+**/tools
+**/*_test.go
+**/*.md
+**/Makefile

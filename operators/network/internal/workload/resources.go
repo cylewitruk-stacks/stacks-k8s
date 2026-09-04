@@ -11,7 +11,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	networkv1alpha1 "github.com/cylewitruk-stacks/stacks-k8s/operators/network/api/v1alpha1"
+	networkv1alpha1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha1"
 	operatorlabels "github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/labels"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/naming"
 )

@@ -6,12 +6,17 @@ updates:
       interval: weekly
 
   - package-ecosystem: gomod
-    directory: /operators/network
+    directory: /apis/network
     schedule:
       interval: weekly
 
   - package-ecosystem: gomod
-    directory: /operators/network/tools
+    directory: /apis/network/tools
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: gomod
+    directory: /operators/network
     schedule:
       interval: weekly
 
@@ -27,6 +32,11 @@ updates:
 
   - package-ecosystem: gomod
     directory: /tools/chart-policy
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: gomod
+    directory: /tools/module-policy
     schedule:
       interval: weekly
 

@@ -9,7 +9,7 @@
 
 No committed `go.work` is required. The modules are intentionally verified in
 isolation so local workspace state cannot hide a missing dependency or combine
-the runtime Kubernetes 0.36 graph with controller-tools' Kubernetes 0.37
+the API/runtime Kubernetes 0.36 graphs with controller-tools' Kubernetes 0.37
 graph.
 
 ## Common commands
@@ -26,15 +26,26 @@ make modules-verify
 make verify
 ```
 
-`make generate` updates generated deepcopy code and writes CRDs directly to
-the owning chart. Generated code and CRDs must be committed with their API
-source changes; CI rejects drift.
+`make generate` runs the isolated generator under `apis/network/tools`, updates
+generated deepcopy code, and writes network CRDs directly to the owning chart.
+Generated code and CRDs must be committed with their API source changes; CI
+rejects drift.
 
 `make helm-verify` validates values schemas, renders supported configurations,
 and structurally checks the manager Deployment's security posture. It also
 executes negative renders for unsafe replica settings and malformed image-pull
 secret or service-account names. The shared structural validator lives under
 `tools/chart-policy` and is not part of either operator binary.
+
+`make docker-check` validates both Dockerfiles, while `make docker-build`
+compiles both operator images from the repository's default-deny root build
+context. CI runs both so sibling-module changes cannot silently break image
+builds.
+
+The network runtime consumes the types-only `apis/network` module through a
+repository-local replacement. Published releases tag the API module first so
+that the runtime module's declared version remains resolvable without that
+replacement.
 
 Changes to admitted inventory, leaf specifications, actor Service ports, or
 kubelet image-ID parsing must update the relevant fixture under

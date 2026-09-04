@@ -8,7 +8,7 @@ import (
 	"runtime"
 	"testing"
 
-	networkv1alpha1 "github.com/cylewitruk-stacks/stacks-k8s/operators/network/api/v1alpha1"
+	networkv1alpha1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha1"
 )
 
 func TestProductionPortsMatchSharedContract(t *testing.T) {

@@ -31,8 +31,9 @@ For a local image, build and load it before installing:
 
 ```bash
 docker build \
+  --file operators/network/Dockerfile \
   -t stacks-network-operator:local \
-  operators/network
+  .
 
 kind load docker-image stacks-network-operator:local --name attacknet
 

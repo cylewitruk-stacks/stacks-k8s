@@ -17,8 +17,9 @@ published. For an unpublished checkout, build and load a local image first:
 
 ```bash
 docker build \
+  --file operators/observability/Dockerfile \
   -t stacks-observability-operator:local \
-  operators/observability
+  .
 
 kind load docker-image stacks-observability-operator:local --name YOUR_CLUSTER
 

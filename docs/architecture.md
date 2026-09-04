@@ -4,6 +4,10 @@ The repository is a monorepo of independently deployable operators. Each
 runtime remains an independent Go module, container image, Helm chart, and
 release unit.
 
+The versioned network API is a separate types-only module under
+`apis/network`. Operator runtimes may import that API contract without pulling
+in the network controller implementation or controller-runtime dependency.
+
 ```text
 StacksNetwork
   -> network aggregate controller
@@ -42,7 +46,9 @@ does not replace the agent with an in-cluster experiment engine.
 | Observability operator | Passively collect, correlate, retain, query, and export facts and telemetry. |
 | Agent | Orchestrate, adapt, investigate, attempt replay, reduce, diagnose, and construct regression cases. |
 
-The network and initial observability controllers exist today. Action
+The network and initial observability controllers exist today. The observer's
+inventory verifier intentionally continues to decode the raw wire shape rather
+than round-trip it through shared typed structs. Action
 controllers and the external agent are target-architecture participants, not
 implementations currently provided by this repository. Defining their
 boundaries now prevents future action APIs from growing into an in-cluster
@@ -82,10 +88,12 @@ minimality.
 ## Dependency boundaries
 
 - Runtime modules use controller-runtime's supported Kubernetes minor.
+- Types-only API modules use Kubernetes API machinery without importing
+  controller-runtime or client-go; repository policy checks this boundary.
 - Generator dependencies remain in isolated `tools` modules because
   controller-tools may use a newer Kubernetes dependency family.
-- Repository-wide chart policy is implemented once under `tools/chart-policy`;
-  it is verification tooling and is not linked into either operator runtime.
+- Repository-wide chart and module policies live under top-level `tools/` and
+  are not linked into operator runtimes.
 - Generation runs with `GOWORK=off`; no workspace may silently unify runtime
   and generator dependency graphs.
 - CRDs are generated directly into their owning chart. There is no second

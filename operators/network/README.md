@@ -3,8 +3,8 @@
 The Go module contains one aggregate controller, three leaf controllers, and a
 shared workload collaborator. See the chart's
 [architecture document](../../docs/network-operator/architecture.md).
-Development requires Go 1.27.1; the matching generator toolchain is pinned in
-`tools/go.mod`.
+Development requires Go 1.27.1. Network API types and the matching isolated
+generator toolchain live under `../../apis/network`.
 
 Run development commands from the repository root:
 

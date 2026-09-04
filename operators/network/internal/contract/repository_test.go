@@ -14,7 +14,7 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"sigs.k8s.io/yaml"
 
-	networkv1alpha1 "github.com/cylewitruk-stacks/stacks-k8s/operators/network/api/v1alpha1"
+	networkv1alpha1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha1"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/network"
 )
 
@@ -146,6 +146,8 @@ func assertNoSchemaDefault(t *testing.T, value any, path string) {
 func TestRepositoryLayout(t *testing.T) {
 	root := repositoryRoot(t)
 	required := []string{
+		"apis/network/go.mod",
+		"apis/network/tools/go.mod",
 		"charts/stacks-network-operator/Chart.yaml",
 		"charts/stacks-observability-operator/Chart.yaml",
 		"contracts/actor-ports-v1.json",
@@ -160,10 +162,59 @@ func TestRepositoryLayout(t *testing.T) {
 			t.Errorf("required repository path %s: %v", name, err)
 		}
 	}
-	retired := []string{"stacks-network-operator", "stacks-observability-operator"}
+	retired := []string{
+		"operators/network/api",
+		"operators/network/tools",
+		"stacks-network-operator",
+		"stacks-observability-operator",
+	}
 	for _, name := range retired {
 		if _, err := os.Stat(filepath.Join(root, name)); !os.IsNotExist(err) {
 			t.Errorf("retired root-level component path still exists: %s", name)
+		}
+	}
+}
+
+func TestDockerContextIsDefaultDeny(t *testing.T) {
+	content, err := os.ReadFile(filepath.Join(repositoryRoot(t), ".dockerignore"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rules := make([]string, 0)
+	for _, line := range strings.Split(string(content), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		rules = append(rules, line)
+	}
+	if len(rules) == 0 || rules[0] != "**" {
+		t.Fatal("root Docker context must begin with a default-deny ** rule")
+	}
+	required := []string{
+		"!apis/network/**",
+		"!operators/network/**",
+		"!operators/observability/**",
+		"**/.claude",
+		"**/.env",
+		"**/.env.*",
+	}
+	lastNegation := -1
+	positions := make(map[string]int, len(rules))
+	for index, rule := range rules {
+		positions[rule] = index
+		if strings.HasPrefix(rule, "!") {
+			lastNegation = index
+		}
+	}
+	for _, expected := range required {
+		if _, found := positions[expected]; !found {
+			t.Errorf("root .dockerignore is missing required rule %q", expected)
+		}
+	}
+	for _, sensitive := range []string{"**/.claude", "**/.env", "**/.env.*"} {
+		if position, found := positions[sensitive]; found && position <= lastNegation {
+			t.Errorf("sensitive exclusion %q must follow every allow rule", sensitive)
 		}
 	}
 }

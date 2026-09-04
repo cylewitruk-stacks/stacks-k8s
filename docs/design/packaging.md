@@ -4,6 +4,7 @@
 
 | Package | Responsibility | Dependency direction |
 | --- | --- | --- |
+| `apis/network` | Versioned network Kubernetes API types | Kubernetes API machinery only |
 | `stacks-network-operator` | Reusable Stacks regtest topology | Kubernetes only |
 | `stacks-observability-operator` | Passive identity and telemetry collection | Reads network/action/Chaos APIs; does not import their runtime code |
 | `stacks-action-operator` | Protocol-specific atomic actions and safety policy | Uses versioned network wire APIs |
@@ -32,11 +33,16 @@ charts/
   stacks-action-operator/
   stacks-k8s-dev/                 # optional dependency bundle
 operators/
-  stacks-network-operator/
-  stacks-observability-operator/
-  stacks-action-operator/
+  network/
+  observability/
+  action/
+apis/
+  network/
 contracts/
+  actor-ports-v1.json
+  image-id-v1.json
   inventory-v1.json
+  leaf-spec-v1.json
   action-correlation-v1.json
 docs/
   design/
@@ -45,9 +51,11 @@ tools/
 ```
 
 Each operator retains its own runtime Go module and release version. Shared
-wire fixtures live under `contracts/` and are decoded by each consumer's own
-production implementation. Avoid a shared internal Go library that forces all
-operators onto one Kubernetes dependency graph or release cadence.
+network API types live in a separately versioned, types-only module. Wire
+fixtures remain under `contracts/`; byte-sensitive consumers continue to
+verify them through their own production implementations. Avoid a shared
+runtime library that forces operators onto one controller-runtime dependency
+graph or release cadence.
 
 ## CRD ownership and installation
 
@@ -127,7 +135,7 @@ Integration profiles:
 | One chart/operator binary | Rejected; combines privileges, failures, and release cadences. |
 | Fork/vendor Chaos Mesh | Rejected initially; use upstream APIs and chart. |
 | Build Git revisions in a controller | Rejected; executes untrusted source inside the control plane. |
-| Shared runtime Go module | Avoid; prefer stable wire contracts and small duplicated adapters. |
+| Shared controller/runtime Go module | Rejected; share only the versioned API types. |
 | Public external-controller compatibility immediately | Deferred until a second consumer and skew policy exist. |
 
 ## Definition of done

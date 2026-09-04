@@ -15,13 +15,25 @@ If a Go module is published for external import, its semantic-version tag must
 match its repository subdirectory instead:
 
 ```text
+apis/network/v0.1.0
 operators/network/v0.1.0
 operators/observability/v0.1.0
 ```
 
+Release the API module before an operator module that requires its version.
+Repository builds use a local `replace`, but published consumers ignore that
+directive and must be able to resolve the declared API tag. The API module
+depends only on Kubernetes API machinery and follows the network API's
+compatibility lifecycle; it never includes controller implementations.
+
+Operator binaries are distributed as signed container images through their
+Helm charts. Version-qualified `go install` is not a supported distribution
+path because repository builds intentionally use a local API-module
+replacement.
+
 Before tagging:
 
-1. run `make verify`, `make vuln`, and `make docker-check`;
+1. run `make verify`, `make vuln`, `make docker-check`, and `make docker-build`;
 2. build and publish an immutable multi-architecture image;
 3. set the chart image tag to the released image version;
 4. install the packaged chart in a clean cluster and exercise its examples;

@@ -54,6 +54,9 @@ M0 proceeds in this order:
 
 ## 1. Shared network API-module spike
 
+**Implementation status:** implemented, locally verified, and independently
+reviewed in the current M0 spike candidate.
+
 ### Decision
 
 Run the spike before implementing action APIs. A shared, types-only module is
@@ -117,6 +120,18 @@ Document:
 
 If an exit criterion cannot be met cleanly, retain independent wire adapters
 and record the concrete reason. Do not leave a partially shared contract.
+
+### Spike outcome
+
+- The API and generator modules build independently with `GOWORK=off`.
+- Module policy rejects controller-runtime or client-go in the API graph.
+- Generated CRDs and shared contract fixtures are byte-identical to the
+  pre-spike versions.
+- The relocated generated deepcopy file has one formatting-only import-alias
+  change caused by the API package importing apimachinery runtime directly.
+- Root-context builds for both operator images pass with the repository's
+  default-deny `.dockerignore` applied and are enforced in CI.
+- `make verify`, `make docker-check`, and `make vuln` pass.
 
 ## 2. Typed shared action lifecycle
 

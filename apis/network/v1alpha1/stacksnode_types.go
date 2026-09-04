@@ -66,7 +66,3 @@ type StacksNodeSpec struct {
 	Container       *ContainerOverride `json:"container,omitempty"`
 	Suspended       bool               `json:"suspended,omitempty"`
 }
-
-func init() {
-	SchemeBuilder.Register(&StacksNode{}, &StacksNodeList{})
-}

@@ -2,11 +2,13 @@ HELM ?= helm
 GO ?= go
 GO_ISOLATED ?= GOWORK=off $(GO)
 OPERATOR_DIR ?= ../../operators/network
+API_DIR ?= ../../apis/network
 CHART_POLICY_DIR ?= ../../tools/chart-policy
 
 .PHONY: verify helm-verify rbac-verify workload-verify
 
 verify:
+	$(MAKE) -C $(API_DIR) verify
 	$(MAKE) -C $(OPERATOR_DIR) verify
 	$(MAKE) helm-verify
 	$(MAKE) rbac-verify

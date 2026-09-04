@@ -1,9 +1,10 @@
 # syntax=docker/dockerfile:1.7
 FROM golang:1.27.1 AS builder
 WORKDIR /src
-COPY go.mod go.sum ./
-RUN --mount=type=cache,target=/go/pkg/mod go mod download
-COPY . .
+COPY operators/observability/go.mod operators/observability/go.sum ./operators/observability/
+RUN --mount=type=cache,target=/go/pkg/mod cd operators/observability && go mod download
+COPY operators/observability ./operators/observability
+WORKDIR /src/operators/observability
 ARG TARGETOS=linux
 ARG TARGETARCH
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \

@@ -145,7 +145,3 @@ type StacksNetworkStatus struct {
 	Children   []ChildStatus      `json:"children,omitempty"`
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
-
-func init() {
-	SchemeBuilder.Register(&StacksNetwork{}, &StacksNetworkList{})
-}

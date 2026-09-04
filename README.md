@@ -16,11 +16,12 @@ runtime implementation.
 
 | Path | Purpose |
 | ---- | ------- |
+| [`apis/`](apis/) | Independently versioned, types-only Kubernetes API modules. |
 | [`charts/`](charts/) | Installable Helm charts and generated CRDs. |
 | [`contracts/`](contracts/) | Versioned wire-contract fixtures shared across operators. |
 | [`docs/`](docs/) | Architecture, development, operations, and release guidance. |
 | [`examples/`](examples/) | Example topology and observation resources. |
-| [`operators/`](operators/) | Independent Go modules and container build contexts. |
+| [`operators/`](operators/) | Independent controller-runtime modules and operator Dockerfiles. |
 
 ## Quick start
 
