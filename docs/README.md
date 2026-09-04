@@ -12,6 +12,7 @@
 ## Repository
 
 - [Architecture](architecture.md)
+- [Next-phase architecture design package](design/README.md)
 - [Development](development.md)
 - [Operations](operations.md)
 - [Releases](releases.md)

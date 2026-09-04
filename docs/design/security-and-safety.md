@@ -1,0 +1,163 @@
+# Security and safety model
+
+## Trust boundaries
+
+| Principal/component | Trusted for | Not trusted or permitted for |
+| --- | --- | --- |
+| External agent | Choosing and interpreting an investigation within granted policy | Cluster administration, status writes, safety-policy changes |
+| Network operator | Compiling declared topology and reporting admitted identity | Mining, faults, protocol conclusions |
+| Action controllers | One typed mechanism and its lifecycle | Cross-action sequencing, arbitrary RPC/shell, diagnosis |
+| Chaos Mesh | Its upstream injection/recovery contract | Stacks protocol correctness |
+| Observability operator | Collecting and labeling configured facts | Mutating observed resources, declaring root cause |
+| Actor | Its process behavior and self-reported telemetry | Proving its own identity or correctness |
+| Kubernetes API/audit | Admitted object state and recorded API events within configured guarantees | Complete application behavior or globally ordered time |
+
+## Identity and confused-deputy prevention
+
+- Same-namespace typed references by default.
+- Record network, leaf, workload, Pod, image, and applicable policy identity
+  before mutation.
+- Use uncached reads immediately before security-sensitive effects.
+- Refuse replacement, deletion/recreation, stale generation, duplicate target,
+  and incomplete inventory rather than silently retargeting.
+- Use UID-preconditioned deletion and owner checks; never adopt foreign
+  same-named objects.
+- Treat actor-reported identity or completion as untrusted until corroborated
+  by control-plane or external observation.
+
+Content digests protect immutable requests, configurations, images, and
+evidence objects. Timestamps and mutable resource versions do not enter stable
+identity digests. None of these controls promises repeatable distributed
+behavior.
+
+## Admission layers
+
+1. OpenAPI and CEL enforce static type, enum, branch, numeric, and immutability
+   invariants.
+2. Kubernetes RBAC limits principals to intended resources and subresources.
+3. ValidatingAdmissionPolicy enforces namespace and selector profiles where
+   expressible.
+4. A small fail-closed webhook is justified only for live cross-object or
+   aggregate constraints that cannot be expressed statically.
+5. Controllers re-evaluate identity, policy, and dynamic preconditions before
+   every material side effect.
+
+Admission success is not proof of effect. Controller status and passive
+observation record subsequent facts.
+
+## Action safety policy
+
+The proposed namespace `ActionSafetyPolicy` in [Atomic action contract](actions.md)
+provides administrator-owned per-resource limits for custom actions. Native
+Chaos Mesh resources receive equivalent RBAC/admission caps.
+
+The initial release deliberately makes no atomic aggregate-impact claim across
+independent custom and upstream resources. The external agent owns concurrency
+choices within admitted per-object limits. Adding a hard aggregate boundary is
+deferred until it can preserve direct native CRDs without side-effecting
+admission or an orchestration wrapper.
+
+Controllers use target-scoped Leases only to prevent unsafe concurrent access,
+not to impose agent workflow. Policy changes affect new admission;
+already-admitted bounded actions retain their recorded policy through cleanup.
+Missing or stale policy fails closed for new custom actions.
+
+## Irreversible actions
+
+Bitcoin block production and reorganization are irreversible at the harness
+level. Controllers must:
+
+- require explicit administrator permission and regtest verification;
+- use typed closed RPC clients;
+- cap count/depth/deadline and protocol-boundary risk;
+- persist intent before calls;
+- inspect state after uncertain calls rather than blind retry; and
+- return `Inconclusive` if effect cannot be attributed.
+
+Deletion stops future work but does not pretend to undo prior chain history.
+
+## Secrets and workload security
+
+- Prefer short-lived projected credentials or immutable Secret references.
+- Never copy credentials into status, logs, events, journal payloads, or
+  evidence manifests.
+- Action and observation operators read only chart-configured Secret
+  `resourceNames`; public specs select approved profiles, not arbitrary Secret
+  names. Dynamic topology configuration Secrets are a separately documented
+  namespace trust boundary and should contain only that network's material.
+- Actor Pods use non-root, no privilege escalation, dropped capabilities,
+  runtime-default seccomp, read-only root filesystem where compatible, and no
+  ServiceAccount token unless justified.
+- Action helpers are separately confined; privileged Chaos Mesh permissions
+  remain isolated from stacks-k8s ServiceAccounts.
+- NetworkPolicy denies unintended actor and operator egress while preserving
+  declared topology dependencies and telemetry endpoints.
+
+## Observability integrity and privacy
+
+Every record identifies source and evidence class. Capture gaps, truncation,
+redaction, sampling, clock uncertainty, backend outage, and identity changes
+are explicit. An export is complete only relative to declared sources and
+known watermarks.
+
+Rolling retention is bounded by time and bytes. Redaction occurs before
+durable storage. Export destinations and deletion policy are
+administrator-controlled. An observer compromise must not grant workload or
+action mutation privileges.
+
+## RBAC profiles
+
+| Role | Allowed | Explicitly denied/not granted |
+| --- | --- | --- |
+| Network viewer | Read aggregate/leaves/status | Writes, Secrets |
+| Network editor | Edit `StacksNetwork`; read leaves | Leaf/workload/status writes |
+| Action user | Create/read/delete approved action kinds; read policy | Policy, status, workload, arbitrary Chaos kinds |
+| Observer viewer | Read telemetry/export status and query data | Source or export writes |
+| Evidence export requester | Create/read/watch/delete `EvidenceExport` | Telemetry configuration, destination/profile, status, or storage writes |
+| Observer operator | Manage telemetry configuration and administrator-approved profiles | Observed environment mutation or agent action selection |
+| Administrator | Install/configure policies and privileged dependencies | Subject to cluster policy/audit |
+
+Rendered RBAC is verified against exact allowlists. Wildcards require a
+documented exception and negative test.
+
+## Threat-focused tests
+
+- Cached-versus-live identity replacement and stale status.
+- Same-name foreign object, owner UID replacement, and selector confusion.
+- Agent attempts to edit compiled leaves, policy, status, Secrets, and
+  unqualified Chaos kinds.
+- Controller restart before/after every irreversible call and cleanup step.
+- Forged actor telemetry and observer replacement.
+- Audit/log/metric outage, storage full, redaction failure, oversized payload,
+  and query exhaustion.
+- Compromised controller ServiceAccount blast-radius assertions.
+- Supply-chain verification for images/charts and dependency vulnerability
+  scanning.
+
+## Alternatives
+
+| Alternative | Disposition |
+| --- | --- |
+| Trust the external agent with cluster-admin | Rejected as the supported model. |
+| Rely on controller validation without RBAC/admission | Rejected; requests should fail before unsafe mutation where possible. |
+| One privileged action operator for every mechanism | Avoid; split ServiceAccounts/deployments when permissions differ materially. |
+| Treat missing telemetry as healthy | Rejected; detector health and gaps are explicit. |
+
+## Definition of done
+
+- Each component has a documented threat boundary and exact rendered RBAC.
+- Agent and observer credentials cannot mutate compiled workloads.
+- Every custom action is exact-identity-pinned; native Chaos actions pin their
+  immutable request and logical targets and explicitly record Pod divergence.
+  Every custom action is policy-bound; every action is independently bounded
+  and safe under retry.
+- Irreversible ambiguity cannot become automatic success or blind repetition.
+- Evidence preserves provenance and incompleteness without exposing secrets.
+
+## Open decisions
+
+1. Admission webhook availability and failure policy for enrolled native
+   targets.
+2. Credential model for Bitcoin RPC and actor testing interfaces.
+3. Initial supported NetworkPolicy/CNI matrix.
+4. Evidence encryption, signing, and retention defaults.
