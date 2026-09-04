@@ -57,10 +57,14 @@ choices within admitted per-object limits. Adding a hard aggregate boundary is
 deferred until it can preserve direct native CRDs without side-effecting
 admission or an orchestration wrapper.
 
-Controllers use target-scoped Leases only to prevent unsafe concurrent access,
-not to impose agent workflow. Policy changes affect new admission;
-already-admitted bounded actions retain their recorded policy through cleanup.
-Missing or stale policy fails closed for new custom actions.
+Controllers use an API-server-persisted, target-scoped serialization
+reservation only to prevent unsafe concurrent access, not to impose agent
+workflow. A process-local keyed guard may reduce contention but is never the
+source of exclusion. Policy changes affect new admission; already-admitted
+bounded actions retain their recorded policy through cleanup. Before
+`ActionSafetyPolicy` is implemented, schema bounds are absolute. For a kind
+configured to use policy-based elevation, missing or stale policy fails closed
+for new actions.
 
 ## Irreversible actions
 
@@ -69,7 +73,7 @@ level. Controllers must:
 
 - require explicit administrator permission and regtest verification;
 - use typed closed RPC clients;
-- cap count/depth/deadline and protocol-boundary risk;
+- cap count, depth, timeout, and protocol-boundary risk;
 - persist intent before calls;
 - inspect state after uncertain calls rather than blind retry; and
 - return `Inconclusive` if effect cannot be attributed.
@@ -111,7 +115,7 @@ action mutation privileges.
 | --- | --- | --- |
 | Network viewer | Read aggregate/leaves/status | Writes, Secrets |
 | Network editor | Edit `StacksNetwork`; read leaves | Leaf/workload/status writes |
-| Action user | Create/read/delete approved action kinds; read policy | Policy, status, workload, arbitrary Chaos kinds |
+| Action user | Create/read/delete approved action kinds; read policy | Action update/patch, policy, status, workload, arbitrary Chaos kinds |
 | Observer viewer | Read telemetry/export status and query data | Source or export writes |
 | Evidence export requester | Create/read/watch/delete `EvidenceExport` | Telemetry configuration, destination/profile, status, or storage writes |
 | Observer operator | Manage telemetry configuration and administrator-approved profiles | Observed environment mutation or agent action selection |

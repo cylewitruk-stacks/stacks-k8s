@@ -135,6 +135,12 @@ and record the concrete reason. Do not leave a partially shared contract.
 
 ## 2. Typed shared action lifecycle
 
+**Design status:** reconciled by M0.2 and pinned by the normative
+[atomic-action contract](actions.md) plus
+[`action-lifecycle-v1.json`](../../contracts/action-lifecycle-v1.json).
+Generated-schema enforcement activates non-vacuously with the first action
+CRD.
+
 Adopt the compositional controller structure used successfully by Chaos Mesh:
 
 - one typed CRD per bounded action;
@@ -144,7 +150,7 @@ Adopt the compositional controller structure used successfully by Chaos Mesh:
 
 The mechanism interface should expose only operations such as validation,
 application, observation, and recovery. Shared lifecycle code owns conditions,
-finalizers, deadlines, admitted identity, status transitions, and common
+finalizers, time bounds, admitted identity, status transitions, and common
 evidence correlation.
 
 This is not an untyped action multiplexer. Protocol-specific schemas, RBAC,
@@ -165,13 +171,16 @@ Freeze one convention for:
 
 - target and object references;
 - phases, terminal states, conditions, and reasons;
-- start, deadline, completion, and recovery timestamps;
+- admission, start, expiry, completion, and recovery timestamps;
 - admitted network and actor identity;
-- safety-policy references;
+- admitted safety-policy identity;
 - result summaries; and
 - observation and evidence correlation.
 
 Kinds may deviate only for a documented semantic reason.
+
+The frozen correlation label is `actions.stacks.org/correlation-id`. It is a
+search hint; Kubernetes object UID remains authoritative.
 
 ## 5. Structural anti-orchestration tests
 
@@ -180,12 +189,15 @@ with schema contracts. Atomic action CRDs must not acquire fields such as:
 
 ```text
 actions
-steps
-stages
 dependsOn
-workflow
-scenario
 executionPlan
+reduction
+replay
+scenario
+schedule
+stages
+steps
+workflow
 ```
 
 Tests must also assert that one resource continues to represent one bounded
@@ -199,7 +211,8 @@ The v1 ValidatingAdmissionPolicy enforces only static constraints:
 - request-namespace confinement;
 - enrolled namespaces;
 - bounded duration and target count; and
-- no raw Pod-name or expression selectors.
+- no raw Pod-name or expression selectors; and
+- no remote-cluster targeting.
 
 Package the policy behind an explicit, disabled-by-default chart value. Its
 installation requires Chaos Mesh to be installed or explicitly declared as an
@@ -247,8 +260,9 @@ Its spec covers:
 - interval;
 - bounded batch size;
 - destination;
-- deadline; and
-- safety-policy reference when that policy exists.
+- timeout; and
+- administrator-selected safety-policy identity in status when that policy
+  exists.
 
 Its status records admitted identity, progress, attribution, and terminal
 outcome. Bounded `generatetoaddress` batches may run between status checkpoints;
@@ -266,26 +280,54 @@ attribution cannot be established.
 
 ## 11. Bitcoin action serialization
 
-V1 runs every Bitcoin action controller in one leader-elected process and does
-not need a Kubernetes Lease per node.
+V1 runs every Bitcoin action controller in one leader-elected process, but
+leader election is not a per-target fencing mechanism. Each target therefore
+uses an API-server-persisted reservation, provisionally a node-scoped Lease
+whose holder identity binds the action UID to a unique controller acquisition
+token. The token distinguishes an old leader from a replacement reconciling
+the same action.
 
 Use:
 
-- one shared keyed mutex across all Bitcoin action kinds;
-- an uncached API lookup for active actions while holding that mutex;
-- admission, active-action validation, the bounded RPC batch, and status
-  persistence under the same lock;
+- optimistic-concurrency acquisition and release of the shared reservation;
+- an optional shared keyed mutex across all Bitcoin action kinds to reduce
+  same-process contention;
+- an uncached read confirming the reservation holder immediately before each
+  material RPC batch;
+- cancellation of the bounded RPC context on leader or reservation loss;
+- action-status intent persisted before the bounded RPC batch;
 - bounded per-RPC and per-batch deadlines; and
-- mandatory chain-state revalidation after restart or ambiguity.
+- mandatory chain-state revalidation after restart, reservation loss, or
+  ambiguity.
 
-The lock is held only for a bounded reconcile and RPC batch, not across
-requeues or the lifetime of a long-running action. A later action cannot start
-while another action remains active for the same node.
+The reservation spans requeues while an action remains active. Its renewal,
+duration, loss, recovery, and administrative-release rules must ensure a new
+holder cannot begin before the prior holder's bounded RPC context has been
+cancelled or expired. Because Bitcoin RPC has no fencing token, ambiguous
+handoff becomes `Inconclusive`; the controller never claims exactly-once
+execution.
 
-When controllers split into independent processes, replace the in-process
-coordination with a cross-process mechanism, likely a node-scoped Lease. That
-change must define naming, holder identity, renewal, duration, loss handling,
-and reacquisition rules.
+Restart and loss behavior is explicit:
+
+- while another acquisition token holds the reservation, the controller makes
+  no RPC call;
+- with no durable intent or side effect, an action may remain `Pending` with
+  `TargetBusy` and reacquire before its expiry;
+- after recorded intent, the controller first proves whether an effect
+  occurred; proven absence may return to bounded admission, while ambiguity
+  becomes `Inconclusive`;
+- if another holder acquired the reservation after this action produced a side
+  effect, this action never resumes mutation and ends `Inconclusive` after
+  recording attributable state; and
+- an expired but otherwise unclaimed reservation may be reacquired only after
+  the prior maximum RPC deadline has elapsed and live chain state is
+  revalidated.
+
+The protocol is shared across action kinds and remains valid if controllers
+later split into independent processes. M0.3 freezes its naming and timing
+constants, status representation, and release preconditions, and adds
+leader-turnover, same-action/new-token, stale-holder, and competing-action
+tests.
 
 ## 12. Bitcoin credential and configuration identity
 
@@ -327,14 +369,14 @@ Rotation replaces the immutable fixed-name Secret, updates `expectedDigest`,
 and causes a controlled actor rollout. Controllers fail closed during the
 availability interruption.
 
-## 13. Deadline semantics
+## 13. Time-bound semantics
 
-A controller cannot enforce a deadline while unavailable. On restart it must
-refuse to resume an expired action, inspect ambiguous state, and avoid blind
-retries.
+A controller cannot act while unavailable. `spec.timeout` still advances from
+the API-server creation timestamp. On restart the controller must refuse to
+resume an expired action, inspect ambiguous state, and avoid blind retries.
 
 Actor-side expiry is reserved for effects that genuinely continue without the
-controller, such as an activated testing hook with its own deadline.
+controller, such as an activated testing hook with its own absolute expiry.
 
 ## 14. Protocol-bootstrap design
 
@@ -431,7 +473,7 @@ normalized queries behind the query Service.
 
 ## 18. Authenticated protocol observation
 
-Bitcoin RPC observation uses the fixed credential profile from section 12.
+Bitcoin RPC observation uses the fixed-name credential Secret from section 12.
 The observation controller may read only that exact Secret name in enrolled
 namespaces. Unauthenticated Stacks endpoints may remain directly accessible.
 
@@ -568,9 +610,9 @@ After M0, use this dependency order:
 ### Minimal Bitcoin-generation slice
 
 The first slice includes the shared typed lifecycle, immutable action spec,
-conservative CEL bounds, in-process per-node serialization, attributable
-generation, and evidence correlation. It may defer `ActionSafetyPolicy`; until
-that policy exists, schema bounds are absolute.
+conservative CEL bounds, API-server-persisted per-node serialization,
+attributable generation, and evidence correlation. It may defer
+`ActionSafetyPolicy`; until that policy exists, schema bounds are absolute.
 
 ### Primary qualification target
 
@@ -589,13 +631,15 @@ to complicate the first local vertical slices.
 
 ## M0 acceptance checklist
 
-- [ ] API-module spike has a recorded result and all exit checks pass or the
+- [x] API-module spike has a recorded result and all exit checks pass or the
       design records why it was rejected.
-- [ ] All action documents use the shared lifecycle, vocabulary, and immutable
+- [x] All action documents use the shared lifecycle, vocabulary, and immutable
       specification rules.
-- [ ] Structural tests prohibit orchestration fields.
+- [x] The shared fixture and repository test pin forbidden orchestration fields;
+      generated-schema tests are explicitly required with the first action CRD.
 - [ ] Bitcoin generation is one attributable, bounded action API.
-- [ ] V1 serialization uses the shared lock and uncached active-action read.
+- [ ] V1 serialization uses the durable per-node reservation and uncached
+      holder validation.
 - [ ] Credential provisioning, digest verification, trust exceptions, and
       rotation are specified consistently.
 - [ ] Static Chaos Mesh admission has no mandatory webhook dependency.

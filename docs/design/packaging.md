@@ -39,11 +39,11 @@ operators/
 apis/
   network/
 contracts/
+  action-lifecycle-v1.json
   actor-ports-v1.json
   image-id-v1.json
   inventory-v1.json
   leaf-spec-v1.json
-  action-correlation-v1.json
 docs/
   design/
   ...

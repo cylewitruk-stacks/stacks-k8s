@@ -38,10 +38,8 @@ metadata:
   name: follower-to-bitcoin-delay
   namespace: stacks-regtest
   labels:
-    stacks.org/network: mixed-network
-    stacks.org/action-id: follower-to-bitcoin-delay
-  annotations:
-    stacks.org/requested-by: external-agent
+    network.stacks.org/network: mixed-network
+    actions.stacks.org/correlation-id: investigation-42
 spec:
   action: delay
   mode: all
@@ -65,15 +63,16 @@ spec:
   duration: 30s
 ```
 
-The exact correlation-label prefix is open. Actor selection uses the network
+The correlation label follows the normative
+[atomic-action contract](actions.md). Actor selection uses the network
 operator's existing labels; agents should not depend on Pod names.
 
 ## Targeting contract
 
 - Select one namespace and one `StacksNetwork` label.
 - Prefer logical actor labels over role selectors.
-- Record an agent-chosen action ID that is unique within the observation
-  retention window.
+- Record an agent-chosen correlation value. It is a search hint; resource UID
+  remains the action identity.
 - Use Chaos Mesh `target` selection for the remote side of network faults.
 - Do not use raw external IP targets in the supported profile initially.
 - Observe the exact selected Pods and UIDs from Chaos Mesh status and
@@ -87,8 +86,8 @@ separate resources created by the agent.
 
 The upstream resource controller owns injection and recovery. In the supported
 profile agents may create, inspect, and delete a resource. Admission makes its
-spec immutable even where upstream permits updates; create a new named object
-for a materially different fault.
+complete spec immutable from creation, even where upstream permits updates;
+create a new named object for a materially different fault.
 
 `duration` is required in the supported profile when the upstream kind offers
 it. An admission policy caps duration and target scope. Deletion remains the
@@ -106,24 +105,27 @@ Use upstream namespace filtering and Kubernetes RBAC:
 - install Chaos Mesh with experiments restricted to explicit namespaces;
 - grant the agent only the qualified Chaos Mesh kinds;
 - deny `Schedule` and `Workflow` creation in the supported agent Role;
-- deny unrestricted namespaces and unenrolled actor selectors;
+- deny unrestricted namespaces and selectors missing the required network and
+  logical-actor label shape;
 - cap duration, modes, percentages, and dangerous parameters with
   ValidatingAdmissionPolicy where CEL can express the contract;
-- use a small fail-closed validating webhook only for enrolled-target checks
-  that static admission cannot express; and
+- reject `spec.remoteCluster` wherever an upstream kind exposes it;
+- defer dynamic enrolled-target admission rather than requiring a webhook in
+  v1; and
 - keep the Chaos Daemon's privileged permissions isolated from stacks-k8s
   operator ServiceAccounts.
 
-Native Chaos selectors bind logical actor labels, not immutable Pod UIDs. At
-resource admission, the webhook resolves the selector against a complete
-admitted `StacksNetwork` inventory and validates enrollment of those logical
-actors. Kubernetes/Chaos may retarget a replacement Pod with the same labels
-while a fault is active; this limitation cannot be eliminated without wrapping
-the upstream mechanism.
+Native Chaos selectors bind required network and logical-actor labels, not
+immutable Pod UIDs. Static admission constrains the namespace and selector
+shape but does not claim to resolve the labels against a live
+`StacksNetwork` inventory. A selector that currently matches nothing is a
+valid no-op resource. Kubernetes/Chaos may retarget a replacement Pod with the
+same labels while a fault is active; this limitation cannot be eliminated
+without wrapping the upstream mechanism.
 
 Therefore the exact-identity guarantee is deliberately narrower for native
-faults: their spec and admitted logical target set are pinned, while passive
-observation records selected Pod UIDs and any replacement as
+faults: their immutable spec and requested logical labels are pinned, while
+passive observation records selected Pod UIDs and any replacement as
 `TargetIdentityDiverged`. Evidence after divergence is not attributed to the
 original Pod. Agents requiring exact Pod identity must cancel on divergence or
 use a purpose-built action whose mechanism supports UID pinning.
@@ -173,7 +175,8 @@ inseparable.
 - Render and validate every qualified native example against its installed
   CRD schema.
 - Verify agent RBAC permits qualified faults and denies Workflow/Schedule.
-- Negative-test cross-namespace and unenrolled selectors.
+- Negative-test cross-namespace, malformed logical selectors, and every
+  supported kind's remote-cluster escape field.
 - Live-test injection, cancellation, duration expiry, recovery, controller
   restart, and telemetry correlation per platform matrix.
 - Prove observability records a failed admission and a capture gap.
@@ -192,8 +195,8 @@ inseparable.
 
 - Agents can submit each qualified native kind directly using logical actor
   selectors.
-- Admission/RBAC prevent unsupported orchestration APIs and out-of-scope
-  targets.
+- Admission/RBAC prevent unsupported orchestration APIs, remote clusters, and
+  out-of-scope selector shapes.
 - Observability correlates request, logical target, selected Pod identities,
   divergence, lifecycle, telemetry, and cleanup without mutating the fault.
 - The compatibility matrix is backed by real-cluster evidence.
@@ -201,10 +204,9 @@ inseparable.
 
 ## Open decisions
 
-1. Stable correlation label/annotation keys.
-2. Availability/failure policy for the required enrolled-target webhook.
-3. Initial platform matrix and qualified Chaos Mesh version.
-4. Which native kinds are safe on arm64 and each supported runtime/CNI.
+1. Availability/failure policy for dynamic enrolled-target admission.
+2. Initial platform matrix and qualified Chaos Mesh version.
+3. Which native kinds are safe on arm64 and each supported runtime/CNI.
 
 ## References
 

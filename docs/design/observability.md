@@ -246,7 +246,7 @@ the locator. It owns only export metadata and objects under an export-specific
 prefix. A finalizer may clean incomplete temporary objects but must not remove
 a completed export unless retention explicitly allows it.
 
-Spec is immutable after admission. Deletion cancels pending work; completed
+Spec is immutable from creation. Deletion cancels pending work; completed
 evidence follows destination retention. The controller may read only the
 selected `NetworkTelemetry` data and write only approved destinations.
 Maximum window, bytes, concurrency, and selectors are policy bounded.
@@ -337,6 +337,11 @@ uses `(source type, instanceID, recordID)` and never correlation labels.
 Sequence discontinuity, instance replacement, disconnect, sampling,
 truncation, retention, and clock uncertainty become explicit coverage/gap
 records according to the source's capabilities.
+
+For custom actions and native Chaos Mesh objects, each resource event snapshots
+the current `actions.stacks.org/correlation-id` label when present. The label
+supports search only; event and object UIDs remain the identity and
+deduplication inputs, and metadata changes remain separate journal facts.
 
 ## Protocol facts
 

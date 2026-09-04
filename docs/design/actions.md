@@ -1,168 +1,318 @@
 # Atomic action contract
 
+## Status and authority
+
+This document is the normative lifecycle and API contract for future custom
+`actions.stacks.org/v1alpha1` resources. No custom action CRD is implemented
+yet. Each implemented kind retains its own typed spec, controller package,
+RBAC slice, example, and reference page.
+
+Native Chaos Mesh resources keep their upstream schemas and status. The
+supported stacks-k8s profile applies the correlation and immutability
+conventions from this document without wrapping those resources.
+
+The machine-readable vocabulary is pinned by
+[`action-lifecycle-v1.json`](../../contracts/action-lifecycle-v1.json).
+Its contract identifier is `actions.stacks.org/lifecycle/v1alpha1`.
+
 ## Purpose
 
-Protocol-specific controllers expose small Kubernetes resources an external
-agent can create independently. Each resource describes one bounded action and
-reports its own observed lifecycle.
-
-This contract applies to recommended `actions.stacks.org` resources. Native
-Chaos Mesh resources retain their upstream schemas and status contracts.
+An external agent creates small Kubernetes resources independently. One custom
+action resource describes one bounded mechanism against one logical target and
+reports only that mechanism's observed lifecycle. The agent chooses ordering,
+overlap, follow-up work, interpretation, reproduction attempts, and reduction.
 
 ## Non-goals
 
-- A resource containing a list, graph, stage, schedule, or scenario.
+- Lists, graphs, stages, schedules, dependencies, or scenarios.
 - Cross-resource sequencing or automatic follow-up actions.
 - Replay, reduction, diagnosis, or regression generation.
-- Declaring an action successful because its mutation call returned success.
-- Hiding incomplete or ambiguous effects behind a generic `Succeeded` phase.
+- Generic RPC, shell, fixture, or free-form mechanism dispatch.
+- Declaring protocol success because a mutation call returned successfully.
+- Hiding uncertain effects or cleanup behind a success phase.
 
 ## Common resource shape
 
-Every action CRD should use the following conceptual shape without embedding a
-generic polymorphic action payload:
+This example represents a kind whose schema fixes its target as a `StacksNode`:
 
 ```yaml
 apiVersion: actions.stacks.org/v1alpha1
 kind: ExampleAction
 metadata:
-  name: example
+  name: follower-a-example
+  labels:
+    actions.stacks.org/correlation-id: investigation-42
 spec:
   networkRef:
-    name: network
-  targetRef:
-    kind: StacksNode
-    name: follower-a
-  deadline: 2m
+    name: mixed-network
+  stacksNodeRef:
+    name: mixed-network-follower-a
+  timeout: 2m
 status:
   observedGeneration: 1
   phase: Active
+  admittedAt: "2026-09-03T12:00:01Z"
+  startedAt: "2026-09-03T12:00:02Z"
+  expiresAt: "2026-09-03T12:02:00Z"
+  correlationID: investigation-42
+  admittedNetwork:
+    name: mixed-network
+    uid: 00000000-0000-0000-0000-000000000000
+    observedGeneration: 3
+    inventoryDigest: sha256:example
   admittedTarget:
-    networkUID: example
-    actorUID: example
-    podUID: example
-  startedAt: "2026-09-03T12:00:00Z"
+    apiVersion: network.stacks.org/v1alpha1
+    kind: StacksNode
+    name: mixed-network-follower-a
+    uid: 11111111-1111-1111-1111-111111111111
   conditions: []
 ```
 
-Shared Go types may cover references, admitted identity, timestamps,
-conditions, and phase vocabulary. Mechanism parameters remain typed fields on
-their own CRD so one generic controller cannot become an action multiplexer.
+Shared Go types may cover references, admitted identity, time bounds,
+conditions, phases, and correlation metadata. Mechanism parameters remain
+typed fields on their own CRD. There is no generic action payload or runtime
+mechanism registry.
+
+## Reference conventions
+
+- `networkRef` contains only `name` and resolves a `StacksNetwork` in the
+  action namespace.
+- A kind with one target type uses a typed same-namespace object reference such as
+  `bitcoinNodeRef`, `stacksNodeRef`, `signerRef`, or `minerRef`. The reference
+  contains the compiled leaf resource name only; its schema fixes API group
+  and kind. It resolves that exact resource through an uncached API read.
+- A mechanism supporting a closed actor union may use `actorRef` with a
+  required enum-constrained leaf `kind` and resource `name`. It never accepts
+  arbitrary API groups, resources, namespaces, selectors, or expressions.
+- Public specs never accept Pod, StatefulSet, Service, or Secret names as
+  action targets. Controllers resolve them through admitted topology.
+- Safety policy and credential selection are administrator-configured, not
+  agent-selected references. Their admitted identities appear in status when
+  applicable.
+
+Cross-namespace references are excluded from v1alpha1. Missing, ambiguous,
+stale, or not-Ready references keep an action `Pending` until expiry or
+deletion; they never cause fallback target selection.
+
+The target reference is valid only when the leaf's `spec.networkRef` and
+controller owner UID match the resolved `StacksNetwork`, and the admitted
+inventory has the same leaf kind and resource name. The leaf UID comes from
+the uncached leaf read and is recorded in `status.admittedTarget`; it is not an
+inventory field. Controllers verify the complete join before admission and
+again through uncached reads before every material side effect.
+
+## Specification immutability and time bounds
+
+The complete `spec` is immutable from creation. Generated CRDs apply the CEL
+transition rule `self == oldSelf` to `spec`. Immutability does not depend on
+phase or controller availability. A materially different action requires a
+new object.
+
+Every custom action has a required, schema-bounded `timeout`. Its wire format
+is `kubernetes-duration` over a JSON/YAML `string`, represented by
+`metav1.Duration` in Go. The field-level CEL rule
+`duration(self) > duration('0s')` rejects zero and negative values; every kind
+also supplies a finite upper bound. The generated OpenAPI schema leaves
+`format` unset so CEL sees a string rather than a pre-parsed duration. The controller
+computes `status.expiresAt` from the API-server `metadata.creationTimestamp`
+plus that timeout. Pending time consumes the bound; admission or controller
+outage never resets it. Reversible mechanisms may additionally require a
+bounded `duration` that cannot exceed the remaining timeout.
+
+Whole-spec equality is safe only over bounded structural schemas. Every
+string, list, and map beneath `spec` has an explicit maximum length, item
+count, or property count. Specs do not preserve unknown fields or embed
+unbounded recursive values.
+
+A mechanism whose side effect can persist while its controller is unavailable
+must enforce an absolute expiry outside that controller, no later than
+`status.expiresAt`. A kind without such a mechanism is not supported as a
+time-bounded reversible action.
+
+Deletion is the cancellation signal. Custom `cancel`, `suspend`, and mutable
+deadline fields are not part of action specs.
+
+## Status ownership and timestamps
+
+Only the kind's controller writes status. Common fields are:
+
+| Field | Contract |
+| --- | --- |
+| `observedGeneration` | Spec generation represented by status and every condition. |
+| `phase` | One value from the common phase table. |
+| `admittedAt` | First time the exact request and identities were durably admitted. |
+| `startedAt` | First attempt to perform the external side effect. |
+| `expiresAt` | Immutable absolute bound derived from creation time and `spec.timeout`. |
+| `finishedAt` | Time the terminal outcome was first recorded. |
+| `correlationID` | Admitted snapshot of the correlation label, if supplied. |
+| `admittedNetwork` | Network UID, observed generation, and admitted inventory digest. |
+| `admittedTarget` | Target leaf GVK, resource name, UID, and mechanism-required runtime identity. |
+| `admittedPolicy` | Selected administrator policy UID, generation, and digest when used. |
+| `conditions` | Generation-aware common conditions with stable reasons. |
+
+Mechanism status may add bounded progress and observed-effect fields. Status
+does not contain credentials, unbounded logs, raw payloads, diagnoses,
+expected protocol outcomes, or instructions for another action.
+
+`phase` is a denormalized projection of conditions and mechanism state for
+printer columns and clients. Controllers update the projection and its source
+facts in the same status patch. No lifecycle fact may exist only in `phase`.
 
 ## Common lifecycle
 
+```text
+Pending -> Admitted -> Active -> Completed
+                         |
+                         +-----> Recovering -> Recovered
+                                           -> Failed
+                                           -> Inconclusive
+
+Any nonterminal phase -> Failed or Inconclusive
+```
+
 | Phase | Meaning |
 | --- | --- |
-| `Pending` | Waiting for a Ready target, safety policy, dependency, or Lease. |
-| `Admitted` | Exact request and target identity recorded; no mutation yet. |
-| `Active` | Reversible action applied or irreversible action in progress. |
-| `Completed` | Finite irreversible action reached its requested observed state. |
-| `Recovered` | Reversible action was removed and cleanup was observed. |
-| `Failed` | A definite precondition or mechanism failure occurred. |
-| `Inconclusive` | Identity, effect, completion, or cleanup could not be proven. |
+| `Pending` | Waiting for a Ready target, policy/profile, serialization guard, or another admission prerequisite. No side effect has begun. |
+| `Admitted` | Exact request, expiry, policy, and target identities are durably recorded. No side effect has begun. |
+| `Active` | A reversible action is applied, or a finite irreversible operation is in progress. |
+| `Recovering` | The controller is removing a reversible action and verifying cleanup. |
+| `Completed` | A finite irreversible action reached its requested observed endpoint. |
+| `Recovered` | A reversible action ended and cleanup was observed. |
+| `Failed` | A definite request, precondition, or mechanism failure occurred and no required cleanup remains unknown. This is not a protocol verdict. |
+| `Inconclusive` | Effect, attribution, identity, or required cleanup could not be established safely. |
 
-Not every action uses both `Completed` and `Recovered`. Status and condition
-reason names are stable machine interfaces. Human messages may change.
+`Completed`, `Recovered`, `Failed`, and `Inconclusive` are terminal outcome
+phases. A terminal outcome is never re-admitted after metadata edits. A
+controller may continue finalizer cleanup after recording an inconclusive
+outcome, but it cannot revise that outcome to success.
 
-Initial common conditions are `Admitted`, `Active`, `EffectObserved`,
-`CleanupComplete`, and `Ready`. Their `observedGeneration` always identifies
-the spec generation evaluated. Terminal phases retain their final conditions
-and admitted identity; a later metadata-only generation does not restart work.
+### Terminal outcome mapping
+
+| Trigger and prior state | Required outcome |
+| --- | --- |
+| Timeout before any side effect, including recorded intent proven not to have executed | `Failed` with `DeadlineExceeded`. |
+| Identity divergence before any side effect | `Failed` with `IdentityDiverged`. |
+| Finite irreversible action stops after attributable partial progress and no call is ambiguous | `Failed` with the triggering definite reason; retain exact progress. |
+| Irreversible call result is ambiguous, or identity diverges after a side effect | `Inconclusive` with `EffectUncertain` or `IdentityDiverged`; never retry blindly. |
+| Reversible action reaches its natural duration or timeout after application | Enter `Recovering`; proven normal cleanup ends `Recovered`. |
+| Reversible mechanism definitely fails after application | Enter `Recovering`; proven cleanup ends `Failed` with `MechanismFailed` and `CleanupComplete=True`. |
+| Reversible cleanup or attribution cannot be established | End `Inconclusive` with `CleanupUncertain` or `EffectUncertain`; retain the finalizer while safe cleanup remains possible. |
+
+Deletion while `Pending`, before a finalizer exists, removes the object without
+a terminal phase. If a safety finalizer was added during `Admitted` but no
+external intent or effect exists, the controller verifies that absence, clears
+the finalizer, and the object disappears without fabricating a terminal phase.
+Deletion after a reversible side effect enters `Recovering` under the deletion
+timestamp and follows the table above. Deletion after an irreversible side
+effect stops future calls and follows the attributable-partial-progress or
+ambiguous-effect row; it does not imply that prior state can be restored.
+
+Kubernetes may remove the object immediately after its finalizer is cleared,
+so clients must not depend on observing a durable terminal phase for
+deletion-triggered cancellation. The observation journal is the durable record
+of deletion, cleanup, and uncertainty.
+
+## Conditions and reasons
+
+| Condition | Contract |
+| --- | --- |
+| `Admitted` | Whether the immutable request and exact target/policy identities were accepted. |
+| `Progressing` | Whether the controller is applying, observing, or recovering the action. |
+| `EffectObserved` | Whether the mechanism-specific effect was observed; `Unknown` preserves ambiguity. |
+| `CleanupComplete` | Whether required reversible cleanup was observed; absent when not applicable. |
+
+Every condition carries the action's `observedGeneration`. Controllers use
+`meta.SetStatusCondition` and preserve transition times when status is
+unchanged.
+
+Common reason values are stable machine interfaces:
+
+| Reason | Meaning |
+| --- | --- |
+| `TargetNotReady` | The declared logical target cannot yet be admitted. |
+| `TargetBusy` | Another action holds the target's durable serialization reservation. |
+| `PolicyUnavailable` | Required administrator policy/profile is absent, stale, or invalid. |
+| `AdmissionSucceeded` | Immutable request and identities were admitted. |
+| `ActionApplying` | A bounded mechanism operation is in progress. |
+| `EffectConfirmed` | The requested mechanism effect was observed. |
+| `RecoveryInProgress` | Reversible cleanup is in progress. |
+| `ActionCompleted` | A finite irreversible operation completed. |
+| `ActionRecovered` | Reversible cleanup was observed. |
+| `RequestInvalid` | A dynamic invariant not expressible in schema failed. |
+| `IdentityDiverged` | Admitted network or target identity changed. |
+| `DeadlineExceeded` | The action exhausted its absolute time bound. |
+| `MechanismFailed` | The mechanism returned a definite failure. |
+| `EffectUncertain` | The effect or attribution cannot be proven. |
+| `CleanupUncertain` | Required cleanup cannot be proven. |
+
+Kinds may add mechanism-specific reasons, but cannot change common meanings or
+use a generic `Error` reason. Human messages may change.
 
 ## Admission and identity
 
-Before mutation, a controller records:
+Before mutation, a controller durably records:
 
-- action generation, UID, and canonical request identity;
-- `StacksNetwork` name, UID, and observed generation;
-- complete admitted inventory identity;
-- selected logical actor and leaf UID;
-- Pod, StatefulSet, image, and configuration identity when relevant; and
-- applicable `ActionSafetyPolicy` UID and generation.
+- action UID and generation;
+- API-server-derived expiry and admitted correlation value;
+- `StacksNetwork` name, UID, observed generation, and inventory digest;
+- logical target API version, kind, resource name, and UID from the uncached
+  leaf read;
+- the target leaf's matching network reference and controller owner UID, plus
+  the inventory entry with the same leaf kind and resource name;
+- Pod, StatefulSet, runtime image, and configuration-input identity where the
+  mechanism depends on them; and
+- selected administrator policy/profile identity where applicable.
 
-The controller uses an uncached API read immediately before mutation. Any
-identity difference fails closed. It never silently targets a replacement Pod
-or newer network generation.
-
-Action-defining fields become immutable after `Admitted`. A user creates a new
-resource for a materially different action. Mutable cancellation fields are
-avoided; deletion is the common cancellation signal.
+The controller performs an uncached read immediately before every material
+side effect. Identity drift fails closed and is never treated as a new target.
+Digests bind admitted inputs or observed artifacts; they are not predictions
+of distributed behavior or reproducibility claims.
 
 ## Apply, cleanup, and idempotency
 
-- Reconcile is level-based and re-reads actual state.
-- Reversible actions carry a finalizer until cleanup is observed.
-- Irreversible actions record a durable intent/checkpoint before each side
-  effect and never blindly repeat an ambiguous operation.
-- Ownership is limited to resources created by that action UID.
-- Deletion uses UID preconditions and never adopts a same-named foreign object.
-- Cleanup failure remains visible and retains the finalizer unless an explicit
-  administrator escape procedure is used.
-- Controller restart cannot expand targets or duration.
+- Reconciliation is level-based and derives its next step from current API and
+  mechanism state.
+- The controller adds `actions.stacks.org/action-cleanup` and persists status
+  before the first side effect that may require cleanup or ambiguity handling.
+- Reversible mechanisms retain the finalizer until cleanup is observed.
+- Irreversible mechanisms persist intent before each external call and inspect
+  state after ambiguity. They never retry a mutation blindly.
+- Child resources are action-owned, exact-spec checked, and never adopted by
+  name. Deletion uses UID preconditions.
+- A restart cannot widen target, parameters, duration, timeout, or policy.
+- An administrative finalizer escape is explicit and audited; it never
+  fabricates `Recovered`.
+
+## Correlation and events
+
+`actions.stacks.org/correlation-id` is the common label for custom actions and
+native Chaos Mesh resources. Values use Kubernetes label-value syntax and are
+at most 63 characters. The label is a user-selected search hint, not an
+attribution, authorization, deduplication, or idempotency key. Object UID
+remains authoritative.
+
+Controllers snapshot the admitted value into status and do not change action
+semantics if metadata is later edited. Observability records the submitted
+object, metadata changes, action UID, controller lifecycle, target identity,
+and surrounding telemetry separately. Bounded Kubernetes Events improve live
+ergonomics but are not durable evidence.
 
 ## Proposed `ActionSafetyPolicy`
 
-`ActionSafetyPolicy` is an administrator-owned, namespace-scoped policy—not an
-execution resource. Working API group: `actions.stacks.org/v1alpha1`.
+`ActionSafetyPolicy` is a recommended administrator-owned namespace policy,
+not an execution resource. Agents cannot create, modify, or choose among
+policies. Operator configuration selects one policy name for a namespace;
+status records its admitted identity.
 
-### Example
+Every action retains conservative OpenAPI/CEL hard bounds. Until the policy is
+implemented, those bounds are absolute. Once a kind supports policy-based
+elevation, missing, stale, or ambiguous policy selection blocks admission.
+Policy updates affect only actions not yet admitted; admitted actions retain
+their recorded limits through cleanup.
 
-```yaml
-apiVersion: actions.stacks.org/v1alpha1
-kind: ActionSafetyPolicy
-metadata:
-  name: default
-  namespace: stacks-regtest
-spec:
-  allowedActionKinds:
-    - BitcoinBlockRequest
-    - BitcoinMiningWindow
-    - BitcoinReorganization
-    - ApplicationClockOffset
-    - SignerBehavior
-  maximumDuration: 10m
-  maximumTargetsPerAction: 1
-  allowIrreversibleBitcoinActions: true
-  allowUnenrolledTargets: false
-```
-
-### Spec and status
-
-Spec contains an allowlist of custom action kinds, hard per-action duration and
-target limits, irreversible-action permissions, and target-enrollment policy.
-Status records observed generation, active policy digest, validity, and
-conditions. It contains no active-action schedule.
-
-### Ownership and mutability
-
-Cluster administrators create and update the policy. Agent Roles receive read
-but not write access. Exactly one selected policy applies to an action
-namespace; selection is fixed by chart configuration or a reserved name to
-avoid agent-controlled policy choice.
-
-Policy changes affect new admission. Already-admitted bounded actions retain
-their admitted limits through terminal cleanup; the policy controller never
-deletes or sequences them. Deletion fails closed for new custom actions until
-a replacement policy is available.
-
-### Safety, observability, and tests
-
-- Admission refuses missing, invalid, stale, or ambiguous policy selection.
-- Every action status records policy UID/generation.
-- Observability records policy mutations and action-policy bindings.
-- Envtest covers uniqueness, policy changes during active actions, agent RBAC,
-  and deletion behavior.
-- Done when an agent cannot widen or omit policy and every custom action stays
-  within its admitted per-resource limits.
-
-### Alternatives
-
-| Alternative | Disposition |
-| --- | --- |
-| Limits repeated in every action | Required as hard schema bounds and supplemented by administrator policy. |
-| Agent-supplied safety block | Rejected; the mutating principal cannot choose its own limits. |
-| One policy reference per action | Rejected by default; it permits policy shopping. |
-| Cross-kind atomic reservation controller | Deferred; wrapping native resources or admission side effects would violate the direct-resource model. |
+The initial release makes no atomic aggregate-impact guarantee across
+independent custom and native actions. That limitation never permits one
+resource to exceed its hard or admitted policy bounds.
 
 ## Controller organization
 
@@ -172,19 +322,29 @@ external side effect. Shared libraries may provide:
 - identity resolution;
 - safety-policy evaluation;
 - finalizer and condition helpers;
-- target-scoped Lease acquisition;
+- target-scoped serialization;
 - typed RPC clients; and
 - action event/correlation metadata.
 
-Shared code must not contain a registry that accepts arbitrary action payloads
-or a pipeline that advances from one resource to another. Each controller must
-be describable independently and operate if all other action controllers are
-disabled.
+Shared code must not accept arbitrary action payloads, enumerate a runtime
+mechanism registry, or advance from one action resource to another. Each
+controller operates when every other action controller is disabled.
+
+Common ownership is:
+
+| Surface | Writer |
+| --- | --- |
+| Action spec | Agent at creation; immutable afterward. |
+| Action metadata | Kubernetes and authorized clients; never execution identity. |
+| Action status/finalizer | Controller for that exact kind. |
+| Safety policy | Administrator or policy controller. |
+| Mechanism side effect | Controller for that exact kind. |
+| Observation journal/evidence | Observability operator. |
 
 ## Common RBAC
 
-- Agent: create/get/list/watch/delete approved action resources; no status
-  writes, policy writes, Secret reads, or direct workload mutation.
+- Agent: create/get/list/watch/delete approved action resources; no update,
+  patch, status, policy, Secret, workload, or arbitrary RPC permission.
 - Action controller: status/finalizer writes for its own kinds and only the
   mechanism-specific resource/RPC permissions it needs.
 - Policy administrator: write `ActionSafetyPolicy`.
@@ -194,35 +354,47 @@ Controller ServiceAccounts may be split when combining permissions would
 materially enlarge a compromise. Exact rendered-RBAC allowlists remain release
 gates.
 
-## Common tests
+## Structural contract and tests
 
-- Structural schema and CEL bounds.
-- Status phase and condition transition tables.
-- Cached-versus-uncached identity negative control.
-- Controller restart at every side-effect boundary.
-- Foreign-object and same-name collision refusal.
-- Policy changes and concurrent independent actions.
-- Deadline, cancellation, finalizer, cleanup, and ambiguous-effect paths.
-- Envtest status ownership and generation behavior.
-- Live mechanism effect and cleanup without requiring scenario orchestration.
+Action schemas must not contain orchestration fields named `actions`,
+`dependsOn`, `executionPlan`, `reduction`, `replay`, `scenario`, `schedule`,
+`stages`, `steps`, or `workflow`. They must not contain arrays of embedded
+action payloads or dependency references to other actions.
+
+Before the first action CRD merges, schema tests must consume the lifecycle
+fixture and non-vacuously assert:
+
+- the complete spec has `self == oldSelf`;
+- phase and common-condition enums match the fixture exactly;
+- every forbidden field is absent recursively under `spec`;
+- `timeout` has the fixture's duration-string wire type, no OpenAPI `format`,
+  the exact positive CEL rule, and a finite per-kind maximum;
+- every string, list, and map under `spec` has a structural size bound so CEL
+  equality remains cost-bounded;
+- reference schemas exclude namespace and arbitrary GVK/selector fields;
+- the status subresource and metadata finalizer each have one writer; and
+- one valid and one invalid server-side admission example exist per kind.
+
+Every controller then adds transition-table tests proving `phase` agrees with
+conditions and mechanism state, plus cached-versus-uncached identity, restart,
+foreign-object, timeout, deletion, cleanup, and ambiguous-effect tests. Current
+repository tests verify the fixture and its representation in this normative
+document; they do not claim to validate action schemas before those schemas
+exist.
 
 ## Definition of done
 
-- Every implemented action kind has one resource, controller, example, and
-  reference page.
-- No action spec contains multiple actions or dependency/order fields.
-- Every custom mutation is exact-identity-pinned. Native Chaos mutations pin
-  immutable logical targets and explicitly report Pod-identity divergence.
-  Every custom action is policy-bound; every action is bounded, observable,
-  and cleanup-safe for its mechanism.
-- The agent can compose resources concurrently without any controller assuming
-  their order.
-- Unknown or ambiguous outcomes are `Inconclusive`, never successful.
+- Every custom kind follows the fixture and this document or records a
+  reviewed semantic exception.
+- Every kind has one resource, controller package, example, reference page,
+  exact RBAC slice, and independent lifecycle tests.
+- One object affects only one bounded mechanism and logical target.
+- Uncertain effect, attribution, identity, or cleanup cannot become success.
+- An agent composes resources without any controller assuming their order or
+  interpreting the protocol result.
 
-## Open decisions
+## Deferred decisions
 
-1. Whether a missing safety policy rejects all custom actions or applies
-   immutable compiled chart defaults.
-2. Which conditions are common enough to share without coupling controllers.
-3. Whether a future cross-kind aggregate safety protocol can preserve direct
+1. Exact per-kind hard and policy-elevated safety bounds.
+2. Whether a future cross-kind aggregate safety protocol can preserve direct
    native-resource use without admission side effects or orchestration.

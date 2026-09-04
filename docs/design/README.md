@@ -36,7 +36,7 @@ under [`docs/`](../README.md).
 | [Current state](current-state.md) | Implemented capabilities, gaps, and historical feature inventory. |
 | [Topology](topology.md) | Mutable `StacksNetwork`, actor lifecycle, configuration, storage, and upgrades. |
 | [Bitcoin lifecycle](bitcoin-lifecycle.md) | Mining policy, bounded block generation, reorganization, and peer state. |
-| [Atomic actions](actions.md) | Shared action lifecycle, targeting, status, cleanup, and extension rules. |
+| [Atomic actions](actions.md) | Normative shared action lifecycle, targeting, status, cleanup, and extension rules. |
 | [Chaos Mesh](chaos-mesh.md) | Direct native fault usage, selection, policy, correlation, and packaging. |
 | [Protocol actions](protocol-actions.md) | Non-Chaos-Mesh signer, miner, clock, storage, and input behaviors. |
 | [Observability](observability.md) | Passive collection, audit history, telemetry, retention, queries, and export. |
@@ -106,6 +106,8 @@ when permissions, dependencies, or failure domains materially differ.
 | Replay and reduction | Direction | Agent responsibility outside operators. |
 | Build from Git revision | Direction | External build tooling produces an OCI image. |
 | Action deployment boundary | Recommended | One modular operator initially; revisit when privileges diverge. |
+| Custom-action API contract | Direction | `actions.stacks.org/v1alpha1`, immutable specs, shared lifecycle fixture, and typed same-namespace references. |
+| Action correlation | Direction | `actions.stacks.org/correlation-id` is a search hint; object UID is authoritative. |
 | Observation API names | Open | `NetworkTelemetry` and `EvidenceExport` are working names. |
 | Aggregate action admission | Open | Not claimed initially; preserve direct native CRDs and avoid side-effecting admission. |
 

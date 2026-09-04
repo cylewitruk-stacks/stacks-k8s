@@ -6,6 +6,10 @@ Bitcoin topology and Bitcoin state transitions are separate concerns.
 `StacksNetwork` declares Bitcoin nodes and peer relationships. Small action
 resources control mining and explicit regtest state transitions.
 
+All custom resources in this document follow the normative
+[atomic-action contract](actions.md). The resource consolidation, node
+serialization, credential, and attribution details are reconciled in M0.3.
+
 Natural reorganizations caused by miners and network behavior require no
 resource. They are observed facts. A controller-forced reorganization is a
 bounded action and therefore does not belong in `StacksNetwork`.
@@ -14,7 +18,7 @@ bounded action and therefore does not belong in `StacksNetwork`.
 
 | Resource | Kind | Purpose |
 | --- | --- | --- |
-| `BitcoinMiningWindow` | Bounded action | Generate blocks at a cadence up to an immutable count and deadline. |
+| `BitcoinMiningWindow` | Bounded action | Generate blocks at a cadence up to an immutable count and timeout. |
 | `BitcoinBlockRequest` | Bounded action | Generate a finite number of blocks, optionally at a short interval. |
 | `BitcoinReorganization` | Bounded action | Replace a finite regtest suffix with a higher-work branch. |
 
@@ -29,15 +33,17 @@ apiVersion: actions.stacks.org/v1alpha1
 kind: BitcoinMiningWindow
 metadata:
   name: bitcoin-a-cadence
+  labels:
+    actions.stacks.org/correlation-id: investigation-42
 spec:
   networkRef:
     name: mixed-network
   bitcoinNodeRef:
-    name: bitcoin-a
+    name: mixed-network-bitcoin-a
   interval: 60s
   blocksPerTick: 1
   maximumBlocks: 120
-  deadline: 2h30m
+  timeout: 2h30m
   destination:
     address: bcrt1qexample
 ```
@@ -46,13 +52,12 @@ spec:
 
 | Spec field | Contract |
 | --- | --- |
-| `networkRef`, `bitcoinNodeRef` | Same-namespace logical references. |
+| `networkRef`, `bitcoinNodeRef` | Same-namespace typed object references. |
 | `interval` | Positive bounded cadence, recommended `1s..24h`. |
 | `blocksPerTick` | Bounded `1..100`; values above a policy threshold require administrator permission. |
 | `maximumBlocks` | Immutable positive total cap for the action. |
-| `deadline` | Immutable runtime bound; expiry applies even if its controller is unavailable. |
+| `timeout` | Immutable creation-relative bound; pending time and controller outage consume it. |
 | `destination` | Explicit regtest address or externally managed wallet reference. |
-| `rpcProfileRef` | Administrator-configured credential profile, never copied to status. |
 
 Status records observed generation, target network/actor UID, target runtime
 image identity, admitted request/policy identity, completed block count, last
@@ -67,32 +72,33 @@ each tick it records expected tip and durable intent, then reconciles an
 ambiguous response by reading chain state. Unprovable completion becomes
 `Inconclusive` and is not retried blindly.
 
-Spec is immutable after admission. Completion count or deadline permanently
+Spec is immutable from creation. Completion count or timeout permanently
 terminates the action. Deletion stops future ticks but does not reverse blocks
 already mined. Only this controller writes its status and mining side effect.
 
-A node-scoped coordination Lease prevents overlap with block requests or a
-reorganization. The Lease protects one actor; it never orders resources for
-the agent.
+A node-scoped serialization guard prevents overlap with block requests or a
+reorganization. The guard protects one actor; it never orders resources for
+the agent. M0.3 freezes the API-server-persisted reservation protocol.
 
 ### Safety and RBAC
 
 - Regtest only.
 - One active mining action per Bitcoin actor, enforced by the node-scoped
-  Lease shared by typed Bitcoin action controllers.
+  guard shared by typed Bitcoin action controllers.
 - Hard interval and blocks-per-tick limits.
-- Secret read limited to the named credential reference.
+- Secret read limited by exact resource name to the administrator-provisioned
+  credential Secret.
 - No generic RPC method or arbitrary JSON-RPC payload.
 - Loss of target identity stops mining and reports `Inconclusive`.
 
 ### Tests and definition of done
 
-- Unit-test cadence, count/deadline expiry, deletion, identity drift, Lease
+- Unit-test cadence, count/timeout expiry, deletion, identity drift, guard
   contention, controller outage, and ambiguous typed-RPC results.
 - Envtest uniqueness and status ownership.
 - Live-test two independently controlled miners and one follower.
 - Done when block/count limits survive restarts and outages, no tick occurs
-  after deadline or while identity is unknown, and observed height/tip facts
+  after expiry or while identity is unknown, and observed height/tip facts
   are published without claiming protocol correctness.
 
 ## `BitcoinBlockRequest`
@@ -104,24 +110,26 @@ apiVersion: actions.stacks.org/v1alpha1
 kind: BitcoinBlockRequest
 metadata:
   name: flash-20
+  labels:
+    actions.stacks.org/correlation-id: investigation-42
 spec:
   networkRef:
     name: mixed-network
   bitcoinNodeRef:
-    name: bitcoin-b
+    name: mixed-network-bitcoin-b
   blocks: 20
   interval: 100ms
   destination:
     address: bcrt1qexample
-  deadline: 2m
+  timeout: 2m
 ```
 
 ### Spec and status
 
 The immutable action spec contains exact network and Bitcoin actor references,
-`blocks`, optional inter-block `interval`, destination, deadline, and optional
-administrator-approved RPC profile. Admission bounds blocks, interval, and
-total requested duration.
+`blocks`, optional inter-block `interval`, destination, and timeout. Admission
+bounds blocks, interval, and total requested duration. It contains no RPC
+endpoint, credential profile, or Secret selector.
 
 Status contains phase, observed generation, admitted target identities,
 starting height/tip, requested and completed block counts, latest observed
@@ -130,7 +138,7 @@ height/tip, timestamps, and conditions. It contains no block-signing secrets.
 ### Reconciliation, mutability, and ownership
 
 One object represents one finite request. Action-defining spec fields are
-immutable after admission. The controller obtains the same node Lease used by
+immutable from creation. The controller obtains the same node guard used by
 the mining window, rechecks target identity, and generates at most one next
 block per reconciled checkpoint.
 
@@ -140,16 +148,16 @@ transport failure it reads chain state. If it cannot prove whether the call
 completed, the action becomes `Inconclusive` and is not automatically retried.
 
 Deletion requests cancellation. The finalizer waits only for an in-flight RPC
-deadline and releases the Lease; already generated blocks remain.
+timeout and releases the guard; already generated blocks remain.
 
 ### Safety, tests, and definition of done
 
-- Regtest-only typed RPC and hard block/deadline limits.
+- Regtest-only typed RPC and hard block/timeout limits.
 - No overlap on the same node; independent nodes may run concurrently.
 - Negative tests for stale actor UID, non-regtest chain, ambiguous RPC result,
-  deadline, and retry after controller restart.
+  timeout, and retry after controller restart.
 - Live test ordinary and flash intervals while a mining window contends for
-  the same node Lease.
+  the same node guard.
 - Done when completed count and observed chain facts are attributable and a
   retry cannot silently generate an unbounded extra block.
 
@@ -162,15 +170,17 @@ apiVersion: actions.stacks.org/v1alpha1
 kind: BitcoinReorganization
 metadata:
   name: replace-two-blocks
+  labels:
+    actions.stacks.org/correlation-id: investigation-42
 spec:
   networkRef:
     name: mixed-network
   bitcoinNodeRef:
-    name: bitcoin-b
+    name: mixed-network-bitcoin-b
   depth: 2
   replacementBlocks: 3
   replacementInterval: 250ms
-  deadline: 2m
+  timeout: 2m
   boundaryPolicy:
     allowEpochBoundary: false
     allowRewardCycleBoundary: false
@@ -179,9 +189,10 @@ spec:
 ### Spec and status
 
 The immutable spec names one Ready Bitcoin actor and supplies depth,
-replacement block count, interval, deadline, destination/credentials, and
-explicit protocol-boundary permissions. `replacementBlocks` must exceed
-`depth` so the replacement branch has more work.
+replacement block count, interval, timeout, destination, and explicit
+protocol-boundary permissions. `replacementBlocks` must exceed `depth` so the
+replacement branch has more work. It contains no RPC endpoint or credential
+selector.
 
 Status records the admitted node/network identity, original height/tip,
 invalidated hashes, replacement hashes, final height/tip/chainwork, phase,
@@ -190,7 +201,7 @@ the observability operator's responsibility.
 
 ### Reconciliation, mutability, and ownership
 
-The controller obtains the node Lease, confirms regtest, checks the requested
+The controller obtains the node guard, confirms regtest, checks the requested
 suffix against current tip, and uses a closed RPC surface such as
 `getblockchaininfo`, `getblockhash`, `invalidateblock`, `reconsiderblock`, and
 bounded block generation. It does not create a network partition. The agent
@@ -233,20 +244,25 @@ guesses and repeats it.
 | Generic Bitcoin RPC resource | Rejected; expands the mutation boundary without bounded semantics. |
 | Controller-managed partition during reorg | Rejected; the agent composes a separate native fault. |
 
-## RPC and destination profiles
+## RPC credentials and destination policy
 
-`rpcProfileRef` and wallet/destination profiles name immutable entries in
-administrator-provided operator configuration. Each entry binds endpoint
-policy, Secret name, permitted network namespace, and configuration digest.
-The chart grants Secret `resourceNames` only for configured profiles; an agent
-cannot point an action at an arbitrary Secret or endpoint. Status records the
-profile name/digest but never credentials. Profile removal or digest change
-stops new admission and makes an active action `Inconclusive` before its next
-call.
+Action specs never name an RPC endpoint, credential profile, or Secret. The
+controller derives the endpoint from the admitted `BitcoinNode` Service and
+uses the fixed-name, immutable credential Secret provisioned in that network
+namespace. Exact-name RBAC makes this Secret read an explicit action-controller
+trust exception; an agent cannot select another Secret or endpoint.
 
-Unit and chart tests prove arbitrary Secret names, cross-namespace profiles,
-and unconfigured endpoints are inaccessible. Credential rotation uses a new
-profile version or a documented projected-credential reload contract.
+The controller verifies the credential input digest expected by the admitted
+actor configuration and records only that input identity in status. Credential
+bytes never enter status or logs. Rotation replaces the immutable Secret,
+updates the actor's expected digest, and performs a controlled rollout. New
+actions wait for the new admitted actor identity; an active action stops before
+its next RPC and becomes `Inconclusive` if its admitted identity changed.
+
+The destination field is limited to an explicit regtest address or a separately
+reviewed administrator destination policy; it never embeds credentials. Unit
+and chart tests prove arbitrary Secret names, cross-namespace access, and
+unadmitted endpoints are inaccessible.
 
 ## Open decisions
 

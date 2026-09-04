@@ -37,10 +37,11 @@ client: it does not hide a local scenario engine or invent a second API.
 
 ## Correlation and identity
 
-Every agent-created action should carry a user-chosen correlation label or
-annotation within a documented DNS-compatible key. It is a search hint, never
-an attribution or deduplication key. Kubernetes action UID remains the
-authoritative object identity. Observation correlates:
+Every agent-created custom or native action should carry the
+`actions.stacks.org/correlation-id` label with a user-chosen Kubernetes label
+value of at most 63 characters. It is a search hint, never an attribution,
+authorization, deduplication, or idempotency key. Kubernetes object UID remains
+the authoritative identity. Observation correlates:
 
 - API audit identity and request;
 - object UID/generation/spec;
@@ -55,9 +56,10 @@ outcomes and do not imply deterministic execution.
 ## Waiting and decisions
 
 Agents watch generation-aware status and conditions rather than sleeping for
-fixed intervals. A controller reports facts such as `Ready`, `Active`,
-`Recovered`, `Failed`, or `Inconclusive`. The agent decides whether to wait,
-cancel, investigate, or apply another resource.
+fixed intervals. Custom actions use the normative `Pending`, `Admitted`,
+`Active`, `Recovering`, `Completed`, `Recovered`, `Failed`, and `Inconclusive`
+phases. The agent decides whether to wait, delete an action to request
+cancellation, investigate, or apply another resource.
 
 `Inconclusive` is a first-class result. Clients must not translate it to
 success or failure. Protocol correctness remains a conclusion drawn by the
@@ -87,7 +89,7 @@ APIs distinguish:
 | Class | Examples | Agent response |
 | --- | --- | --- |
 | Invalid request | Schema, unsupported parameter, prohibited target | Correct or abandon the request. |
-| Pending dependency | Network rollout, Lease contention, source startup | Watch status or cancel. |
+| Pending dependency | Network rollout, target reservation held, source startup | Watch status or cancel. |
 | Definite mechanism failure | Rejected RPC, helper failure | Inspect facts; choose next action. |
 | Identity divergence | Replaced target, changed network | Treat prior attribution as invalid; reassess. |
 | Inconclusive effect | Ambiguous RPC, missing telemetry, cleanup unknown | Do not claim success; inspect gaps. |
@@ -134,6 +136,5 @@ pagination, concurrency, bytes, and time ranges.
 ## Open decisions
 
 1. HTTP versus gRPC for the initial observation query service.
-2. Standard correlation keys and maximum value sizes.
-3. Whether a maintained Go client library is justified beyond generated
+2. Whether a maintained Go client library is justified beyond generated
    Kubernetes clients and query schemas.

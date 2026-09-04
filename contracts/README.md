@@ -16,3 +16,9 @@ extraction from kubelet container-status values.
 
 [`actor-ports-v1.json`](actor-ports-v1.json) pins each actor kind's Service
 interface across workload rendering and independent observation.
+
+[`action-lifecycle-v1.json`](action-lifecycle-v1.json) pins the normative
+custom-action API group, lifecycle phases, common conditions, correlation
+label, cleanup finalizer, core fields, timestamps, stable reasons, spec
+immutability rule, timeout wire/validation contract, and forbidden
+orchestration fields before the first action CRD is introduced.

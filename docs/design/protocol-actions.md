@@ -32,21 +32,24 @@ apiVersion: actions.stacks.org/v1alpha1
 kind: ApplicationClockOffset
 metadata:
   name: signer-a-plus-90s
+  labels:
+    actions.stacks.org/correlation-id: investigation-42
 spec:
   networkRef:
     name: mixed-network
-  targetRef:
+  actorRef:
     kind: StacksSigner
-    name: signer-a
+    name: mixed-network-signer-a
   offset: 90s
   duration: 2m
+  timeout: 3m
 ```
 
 ### API and lifecycle
 
 Spec contains exact network/target references, signed offset, duration, and an
 optional explicit test-interface port. Status contains the common admitted
-identity, active/observed offset, start/deadline/recovery times, phase, and
+identity, active/observed offset, start/expiry/recovery times, phase, and
 conditions.
 
 The controller requires an image-declared clock-control capability and a
@@ -57,8 +60,8 @@ zero value is observed. The actor-side clock mechanism also enforces the
 absolute expiry recorded in the request, so controller unavailability cannot
 extend the offset.
 
-Action-defining fields are immutable after admission. Only the controller may
-write the clock policy. The target Pod and workload are never patched.
+The complete spec is immutable from creation. Only the controller may write
+the clock policy. The target Pod and workload are never patched.
 
 ### Safety, RBAC, observation, and tests
 
@@ -86,15 +89,18 @@ apiVersion: actions.stacks.org/v1alpha1
 kind: SignerBehavior
 metadata:
   name: signer-2-equivocates
+  labels:
+    actions.stacks.org/correlation-id: investigation-42
 spec:
   networkRef:
     name: mixed-network
   signerRef:
-    name: signer-2
+    name: mixed-network-signer-2
   behavior: ConflictingResponses
   activation:
     bitcoinHeight: 420
   duration: 90s
+  timeout: 2m
   maximumResponses: 4
 ```
 
@@ -118,7 +124,7 @@ identity and cannot widen behavior. Actor-side expiry restores normal behavior
 even if the response or controller is lost. The controller never fabricates
 or signs protocol messages itself. Deletion revokes by action UID, and a
 finalizer waits for the signer to report the normal profile. Spec is immutable
-after admission.
+from creation.
 
 ### Safety, RBAC, observation, and tests
 
@@ -148,16 +154,19 @@ apiVersion: actions.stacks.org/v1alpha1
 kind: MinerBehavior
 metadata:
   name: miner-b-stale-parent
+  labels:
+    actions.stacks.org/correlation-id: investigation-42
 spec:
   networkRef:
     name: mixed-network
   minerRef:
-    name: miner-b
+    name: mixed-network-miner-b
   behavior: StaleParentProposal
   activation:
     tenure: "0x0123456789abcdef"
   maximumProposals: 1
   duration: 2m
+  timeout: 3m
 ```
 
 ### API and lifecycle
@@ -191,12 +200,13 @@ apiVersion: actions.stacks.org/v1alpha1
 kind: ProtocolInputInjection
 metadata:
   name: follower-a-stale-block
+  labels:
+    actions.stacks.org/correlation-id: investigation-42
 spec:
   networkRef:
     name: mixed-network
-  targetRef:
-    kind: StacksNode
-    name: follower-a
+  stacksNodeRef:
+    name: mixed-network-follower-a
   inputKind: StaleBlock
   fixtureRef:
     configMap:
@@ -204,7 +214,7 @@ spec:
       key: input.bin
     sha256: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
   maximumBytes: 1048576
-  deadline: 30s
+  timeout: 30s
 ```
 
 ### API and lifecycle
@@ -223,7 +233,7 @@ deletion only stops delivery if it has not begun.
 
 ### Safety, RBAC, observation, and tests
 
-- Hard fixture size and deadline limits; immutable ConfigMap or read-only
+- Hard fixture size and timeout limits; immutable ConfigMap or read-only
   object-store references only.
 - No arbitrary destination, socket, RPC, command, or host path.
 - Controller reads only named fixtures and cannot write actor workloads.
@@ -245,22 +255,25 @@ apiVersion: actions.stacks.org/v1alpha1
 kind: ActorDiskPressure
 metadata:
   name: follower-a-disk-pressure
+  labels:
+    actions.stacks.org/correlation-id: investigation-42
 spec:
   networkRef:
     name: mixed-network
-  targetRef:
+  actorRef:
     kind: StacksNode
-    name: follower-a
+    name: mixed-network-follower-a
   bytes: 256Mi
   workers: 2
   duration: 3m
+  timeout: 4m
 ```
 
 This fallback is allowed only where the qualified platform matrix says native
 Chaos Mesh cannot produce actor-visible bounded pressure. A helper Job writes
 and removes files inside an explicitly enrolled scratch or data volume; it
 must not mount the host filesystem. Status records allocated bytes, helper
-identity, deadline, cleanup, and uncertainty.
+identity, expiry, cleanup, and uncertainty.
 
 The action owns its helper and files through an action-unique directory. Its
 RBAC can create only Jobs and PVC access already granted to the target
@@ -274,8 +287,9 @@ cannot run on platforms where its volume/path contract is unproven.
 
 Start with one independently versioned `stacks-action-operator` chart and one
 reconciler package per kind. Split deployments when privilege, dependency, or
-failure-isolation differences warrant it. Shared identity, policy, Lease, and
-condition libraries must not become a generic mechanism engine.
+failure-isolation differences warrant it. Shared identity, policy,
+target-serialization, and condition libraries must not become a generic
+mechanism engine.
 
 ## Alternatives
 

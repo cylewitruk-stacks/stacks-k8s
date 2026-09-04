@@ -1,0 +1,89 @@
+{
+  "apiGroup": "actions.stacks.org",
+  "apiVersion": "v1alpha1",
+  "conditionTypes": [
+    "Admitted",
+    "Progressing",
+    "EffectObserved",
+    "CleanupComplete"
+  ],
+  "contract": "actions.stacks.org/lifecycle/v1alpha1",
+  "coreSpecFields": [
+    "networkRef",
+    "timeout"
+  ],
+  "coreStatusFields": [
+    "observedGeneration",
+    "phase",
+    "admittedAt",
+    "startedAt",
+    "expiresAt",
+    "finishedAt",
+    "correlationID",
+    "admittedNetwork",
+    "admittedTarget",
+    "admittedPolicy",
+    "conditions"
+  ],
+  "correlationLabel": "actions.stacks.org/correlation-id",
+  "finalizer": "actions.stacks.org/action-cleanup",
+  "forbiddenSpecFields": [
+    "actions",
+    "dependsOn",
+    "executionPlan",
+    "reduction",
+    "replay",
+    "scenario",
+    "schedule",
+    "stages",
+    "steps",
+    "workflow"
+  ],
+  "phases": [
+    "Pending",
+    "Admitted",
+    "Active",
+    "Recovering",
+    "Completed",
+    "Recovered",
+    "Failed",
+    "Inconclusive"
+  ],
+  "reasonValues": [
+    "TargetNotReady",
+    "TargetBusy",
+    "PolicyUnavailable",
+    "AdmissionSucceeded",
+    "ActionApplying",
+    "EffectConfirmed",
+    "RecoveryInProgress",
+    "ActionCompleted",
+    "ActionRecovered",
+    "RequestInvalid",
+    "IdentityDiverged",
+    "DeadlineExceeded",
+    "MechanismFailed",
+    "EffectUncertain",
+    "CleanupUncertain"
+  ],
+  "specImmutabilityRule": "self == oldSelf",
+  "terminalPhases": [
+    "Completed",
+    "Recovered",
+    "Failed",
+    "Inconclusive"
+  ],
+  "timeoutField": {
+    "finiteMaximumRequired": true,
+    "openAPIFormatAllowed": false,
+    "positiveCEL": "duration(self) > duration('0s')",
+    "wireFormat": "kubernetes-duration",
+    "wireType": "string"
+  },
+  "timestampFields": [
+    "admittedAt",
+    "startedAt",
+    "expiresAt",
+    "finishedAt"
+  ]
+}

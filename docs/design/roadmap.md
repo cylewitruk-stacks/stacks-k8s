@@ -5,6 +5,7 @@
 | Area | Design status | Implementation status |
 | --- | --- | --- |
 | Current inventory and boundaries | Complete | Existing operators only |
+| Atomic action API conventions | Complete | Contract fixture only; no action CRDs |
 | Mutable topology | Ready for API review | Partially implemented |
 | Bitcoin lifecycle actions | Ready for API review | Not implemented |
 | Native Chaos Mesh profile | Ready for implementation planning | Not packaged here |
@@ -58,8 +59,9 @@ starting with the shared network API-module spike. The plan also replaces the
 target post-M0 milestone order; the existing M1-M8 sections remain design
 inputs to be reconciled during M0.
 
-- Decide working API groups, correlation metadata, condition/phase vocabulary,
-  reference types, and immutable-field policy.
+- Retain the frozen custom-action API group, correlation label,
+  condition/phase vocabulary, typed references, and immutable-from-creation
+  policy from the normative action contract.
 - Freeze exact structural schemas, defaults, condition/reason tables,
   finalizer names, terminal-generation behavior, and reference semantics.
 - Approve `ActionSafetyPolicy` per-resource bounds and document the initial
@@ -132,8 +134,9 @@ partition.
   supported per platform.
 - Add least-privileged agent RBAC and admission limits; deny Workflow/Schedule.
 - Standardize logical actor targeting and correlation metadata.
-- Require immutable specs and enrolled-target admission; document
-  logical-target versus Pod-UID divergence semantics.
+- Require immutable specs and static namespace/selector admission; document
+  the deferred live-enrollment check and logical-target versus Pod-UID
+  divergence semantics.
 - Verify injection, cancellation, expiry, recovery, and M2 journal gaps.
 
 **Done:** [Native Chaos Mesh integration](chaos-mesh.md) passes without a
@@ -231,9 +234,9 @@ Every milestone must include:
 The detailed documents own their domain decisions. Before implementation,
 maintainers should resolve at least:
 
-1. alpha API names/groups and correlation keys;
+1. observation API names and query protocol;
 2. exact action per-resource impact vocabulary and policy defaults;
-3. Bitcoin mining destination/credential model;
+3. Bitcoin mining destination model;
 4. actor testing-capability protocol;
 5. initial Chaos Mesh/platform matrix;
 6. observation journal, audit integration, query protocol, and retention;

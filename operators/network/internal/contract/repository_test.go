@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -150,6 +151,7 @@ func TestRepositoryLayout(t *testing.T) {
 		"apis/network/tools/go.mod",
 		"charts/stacks-network-operator/Chart.yaml",
 		"charts/stacks-observability-operator/Chart.yaml",
+		"contracts/action-lifecycle-v1.json",
 		"contracts/actor-ports-v1.json",
 		"contracts/image-id-v1.json",
 		"contracts/inventory-v1.json",
@@ -171,6 +173,130 @@ func TestRepositoryLayout(t *testing.T) {
 	for _, name := range retired {
 		if _, err := os.Stat(filepath.Join(root, name)); !os.IsNotExist(err) {
 			t.Errorf("retired root-level component path still exists: %s", name)
+		}
+	}
+}
+
+func TestActionLifecycleDesignContract(t *testing.T) {
+	root := repositoryRoot(t)
+	content, err := os.ReadFile(filepath.Join(root, "contracts", "action-lifecycle-v1.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var contract struct {
+		APIGroup             string   `json:"apiGroup"`
+		APIVersion           string   `json:"apiVersion"`
+		ConditionTypes       []string `json:"conditionTypes"`
+		Contract             string   `json:"contract"`
+		CoreSpecFields       []string `json:"coreSpecFields"`
+		CoreStatusFields     []string `json:"coreStatusFields"`
+		CorrelationLabel     string   `json:"correlationLabel"`
+		Finalizer            string   `json:"finalizer"`
+		ForbiddenSpecFields  []string `json:"forbiddenSpecFields"`
+		Phases               []string `json:"phases"`
+		ReasonValues         []string `json:"reasonValues"`
+		SpecImmutabilityRule string   `json:"specImmutabilityRule"`
+		TerminalPhases       []string `json:"terminalPhases"`
+		TimeoutField         struct {
+			FiniteMaximumRequired bool   `json:"finiteMaximumRequired"`
+			OpenAPIFormatAllowed  bool   `json:"openAPIFormatAllowed"`
+			PositiveCEL           string `json:"positiveCEL"`
+			WireFormat            string `json:"wireFormat"`
+			WireType              string `json:"wireType"`
+		} `json:"timeoutField"`
+		TimestampFields []string `json:"timestampFields"`
+	}
+	if err := json.Unmarshal(content, &contract); err != nil {
+		t.Fatal(err)
+	}
+	var rawFields map[string]json.RawMessage
+	if err := json.Unmarshal(content, &rawFields); err != nil {
+		t.Fatal(err)
+	}
+	fieldNames := make([]string, 0, len(rawFields))
+	for name := range rawFields {
+		fieldNames = append(fieldNames, name)
+	}
+	sort.Strings(fieldNames)
+	assertStringsEqual(t, "contract fields", fieldNames, []string{"apiGroup", "apiVersion", "conditionTypes", "contract", "coreSpecFields", "coreStatusFields", "correlationLabel", "finalizer", "forbiddenSpecFields", "phases", "reasonValues", "specImmutabilityRule", "terminalPhases", "timeoutField", "timestampFields"})
+	assertStringsEqual(t, "phases", contract.Phases, []string{"Pending", "Admitted", "Active", "Recovering", "Completed", "Recovered", "Failed", "Inconclusive"})
+	assertStringsEqual(t, "terminal phases", contract.TerminalPhases, []string{"Completed", "Recovered", "Failed", "Inconclusive"})
+	assertStringsEqual(t, "condition types", contract.ConditionTypes, []string{"Admitted", "Progressing", "EffectObserved", "CleanupComplete"})
+	assertStringsEqual(t, "core spec fields", contract.CoreSpecFields, []string{"networkRef", "timeout"})
+	assertStringsEqual(t, "core status fields", contract.CoreStatusFields, []string{"observedGeneration", "phase", "admittedAt", "startedAt", "expiresAt", "finishedAt", "correlationID", "admittedNetwork", "admittedTarget", "admittedPolicy", "conditions"})
+	assertStringsEqual(t, "forbidden spec fields", contract.ForbiddenSpecFields, []string{"actions", "dependsOn", "executionPlan", "reduction", "replay", "scenario", "schedule", "stages", "steps", "workflow"})
+	assertStringsEqual(t, "reason values", contract.ReasonValues, []string{"TargetNotReady", "TargetBusy", "PolicyUnavailable", "AdmissionSucceeded", "ActionApplying", "EffectConfirmed", "RecoveryInProgress", "ActionCompleted", "ActionRecovered", "RequestInvalid", "IdentityDiverged", "DeadlineExceeded", "MechanismFailed", "EffectUncertain", "CleanupUncertain"})
+	assertStringsEqual(t, "timestamp fields", contract.TimestampFields, []string{"admittedAt", "startedAt", "expiresAt", "finishedAt"})
+	if contract.Contract != "actions.stacks.org/lifecycle/v1alpha1" || contract.APIGroup != "actions.stacks.org" || contract.APIVersion != "v1alpha1" {
+		t.Fatalf("unexpected action API contract identity: %#v", contract)
+	}
+	if contract.CorrelationLabel != "actions.stacks.org/correlation-id" || contract.Finalizer != "actions.stacks.org/action-cleanup" || contract.SpecImmutabilityRule != "self == oldSelf" {
+		t.Fatalf("unexpected action lifecycle convention: %#v", contract)
+	}
+	if contract.TimeoutField.WireType != "string" || contract.TimeoutField.WireFormat != "kubernetes-duration" || contract.TimeoutField.PositiveCEL != "duration(self) > duration('0s')" || !contract.TimeoutField.FiniteMaximumRequired || contract.TimeoutField.OpenAPIFormatAllowed {
+		t.Fatalf("unexpected timeout field contract: %#v", contract.TimeoutField)
+	}
+
+	documentBytes, err := os.ReadFile(filepath.Join(root, "docs", "design", "actions.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	document := string(documentBytes)
+	documentedValues := make([]string, 0, len(contract.Phases)+len(contract.ConditionTypes)+len(contract.CoreSpecFields)+len(contract.CoreStatusFields)+len(contract.ForbiddenSpecFields)+len(contract.ReasonValues)+len(contract.TimestampFields))
+	documentedValues = append(documentedValues, contract.Phases...)
+	documentedValues = append(documentedValues, contract.ConditionTypes...)
+	documentedValues = append(documentedValues, contract.CoreSpecFields...)
+	documentedValues = append(documentedValues, contract.CoreStatusFields...)
+	documentedValues = append(documentedValues, contract.ForbiddenSpecFields...)
+	documentedValues = append(documentedValues, contract.ReasonValues...)
+	documentedValues = append(documentedValues, contract.TimestampFields...)
+	for _, value := range documentedValues {
+		if !strings.Contains(document, "`"+value+"`") {
+			t.Errorf("normative action document does not represent %q", value)
+		}
+	}
+	for _, value := range []string{contract.Contract, contract.CorrelationLabel, contract.Finalizer, contract.SpecImmutabilityRule, contract.TimeoutField.WireType, contract.TimeoutField.WireFormat, contract.TimeoutField.PositiveCEL} {
+		if !strings.Contains(document, value) {
+			t.Errorf("normative action document does not represent %q", value)
+		}
+	}
+	for _, convention := range []string{"metav1.Duration", "finite upper bound", "No lifecycle fact may exist only in `phase`"} {
+		if !strings.Contains(document, convention) {
+			t.Errorf("normative action document does not represent %q", convention)
+		}
+	}
+
+	for _, name := range []string{"actions.md", "bitcoin-lifecycle.md", "protocol-actions.md"} {
+		value, err := os.ReadFile(filepath.Join(root, "docs", "design", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, stale := range []string{"immutable after admission", "become immutable after", "becomes immutable after"} {
+			if strings.Contains(strings.ToLower(string(value)), stale) {
+				t.Errorf("%s retains superseded mutability phrase %q", name, stale)
+			}
+		}
+	}
+
+	bitcoinBytes, err := os.ReadFile(filepath.Join(root, "docs", "design", "bitcoin-lifecycle.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, stale := range []string{"rpcProfileRef", "RPC RPC"} {
+		if strings.Contains(string(bitcoinBytes), stale) {
+			t.Errorf("bitcoin action design retains superseded text %q", stale)
+		}
+	}
+}
+
+func assertStringsEqual(t *testing.T, name string, actual, expected []string) {
+	t.Helper()
+	if len(actual) != len(expected) {
+		t.Fatalf("%s = %v, want %v", name, actual, expected)
+	}
+	for index := range expected {
+		if actual[index] != expected[index] {
+			t.Fatalf("%s = %v, want %v", name, actual, expected)
 		}
 	}
 }
