@@ -55,9 +55,10 @@ consumes actions without controlling or becoming a runtime dependency of them.
 implementation.
 
 Execute the complete [M0 architecture remediation plan](m0-remediation-plan.md),
-starting with the shared network API-module spike. The plan also replaces the
-target post-M0 milestone order; the existing M1-M8 sections remain design
-inputs to be reconciled during M0.
+following its ordered M0.x delivery-slice ledger. Requirement numbers in that
+document are stable topical identifiers, not execution steps. The plan also
+replaces the target post-M0 milestone order; the existing M1-M8 sections
+remain design inputs to be reconciled during M0.
 
 - Retain the frozen custom-action API group, correlation label,
   condition/phase vocabulary, typed references, and immutable-from-creation
@@ -111,14 +112,16 @@ controller restart; high-volume data remains outside etcd.
 
 ## M3: Bitcoin lifecycle and atomic-action foundation
 
-**Outcome:** independently control normal regtest mining and bounded Bitcoin
-state transitions.
+**Outcome:** independently maintain normal regtest block production and
+control bounded Bitcoin state transitions.
 
 - Add shared action identity/status/finalizer/Lease helpers without a generic
   action engine.
 - Apply the absolute per-kind limits frozen by M0.3 and exact RBAC. Defer
   policy elevation until a concrete administrator override is required.
-- Implement `BitcoinBlockGeneration`, then `BitcoinReorganization`.
+- Implement mutable `BitcoinBlockProduction` and finite
+  `BitcoinBlockGeneration` on the shared credential and reservation paths,
+  then implement `BitcoinReorganization`.
 - Expose only typed regtest RPC methods; any lost mutation response is
   inconclusive unless every known tip proves absence.
 - Run the shared per-target Lease protocol through a leader-gated reservation

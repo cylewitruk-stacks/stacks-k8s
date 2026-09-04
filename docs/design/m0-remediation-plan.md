@@ -41,21 +41,63 @@ M0 is complete when:
 - Static admission uses OpenAPI and CEL before webhooks are considered.
 - Every field and external side effect has one logical writer.
 
-## Execution order
+## How to read this plan
 
-M0 proceeds in this order:
+M0 uses two identifiers for different purposes:
 
-1. Run the shared network API-module spike.
-2. Reconcile API vocabulary, action lifecycle, and immutable-field rules.
-3. Resolve Bitcoin generation, serialization, credentials, and attribution.
-4. Revise Chaos Mesh admission and observability access designs.
-5. Add the missing bootstrap and actor-capability designs.
-6. Align packaging, verification, examples, and the implementation roadmap.
+- **M0.x** identifies an ordered, independently reviewable delivery slice.
+- **Requirement N** identifies a stable remediation requirement below. A
+  requirement number is not a step number and may support more than one slice.
 
-## 1. Shared network API-module spike
+The slice ledger is the execution order. The requirement sections retain the
+review's original numbering so later decisions and reviews can cite a stable
+identifier. Cross-cutting requirements are completed incrementally and close
+only when M0.8 verifies the package as a whole.
 
-**Implementation status:** implemented, locally verified, and independently
-reviewed in the current M0 spike candidate.
+“Complete” in this document means the stated M0 design, contract, or repository
+foundation is complete. It does not imply that a proposed controller or CRD is
+implemented unless the slice explicitly says so.
+
+## Ordered delivery-slice ledger
+
+| Slice | State | Primary requirements | Deliverable |
+| --- | --- | --- | --- |
+| M0.1 | Complete | 1 | Extract the shared network API module and make generation, module verification, and container builds work across the module boundary. |
+| M0.2 | Complete | 2–5, 8, 13 | Freeze the typed, immutable, bounded atomic-action contract and structural anti-orchestration checks. |
+| M0.3 | Complete | 9–12 | Design finite Bitcoin block generation and reorganization, attribution, credentials, and per-node serialization. |
+| M0.4 | Next | Extends 9–11 | Add continuous `BitcoinBlockProduction`, refine finite generation cadence, and define fair reservation sharing between production and bounded actions. |
+| M0.5 | Planned | 6–8, 16 | Define and qualify the static-first native Chaos Mesh admission profile, limits, and initial platform matrix. |
+| M0.6 | Planned | 14, 15, 26 | Define protocol bootstrap and instrumented-actor capability contracts and their image support matrix. |
+| M0.7 | Planned | 17–23 | Reconcile Kubernetes-authenticated agent access, passive observation, journal, query, export, completeness, redaction, and integrity contracts. |
+| M0.8 | Planned | 24–27 | Align layout, fixtures, validation, packaging, roadmap, examples, and the final M0 acceptance record. |
+
+Supporting requirements such as safety bounds, evidence integrity, repository
+layout, and roadmap alignment may be updated by an earlier slice. Their final
+owner remains the primary slice listed above.
+
+### M0.4 scope boundary
+
+M0.4 is a focused amendment to the completed finite Bitcoin-action design. It
+must:
+
+- keep `BitcoinBlockProduction` outside the bounded-action API and lifecycle;
+- define it as mutable desired continuous operation on one Bitcoin node;
+- keep CRD status bounded while passive observability records full history;
+- avoid per-block completion claims and per-block intent journaling;
+- give waiting bounded actions priority before each short production Lease;
+- preserve ambiguity containment by retaining the reservation through the
+  recorded RPC deadline after a lost response; and
+- replace the finite generation action's flat cadence fields with a bounded,
+  CEL-enforced union for immediate, fixed, uniform-random, and explicit
+  sequence modes.
+
+Random timing choices and observed block hashes are facts to record, not a
+claim of deterministic replay. An explicit sequence is one bounded mechanism
+parameter, not an in-cluster execution plan.
+
+## Requirement 1: Shared network API-module spike
+
+**Slice:** M0.1. **Status:** Complete and committed in `0dcf5ac`.
 
 ### Decision
 
@@ -133,7 +175,9 @@ and record the concrete reason. Do not leave a partially shared contract.
   default-deny `.dockerignore` applied and are enforced in CI.
 - `make verify`, `make docker-check`, and `make vuln` pass.
 
-## 2. Typed shared action lifecycle
+## Requirement 2: Typed shared action lifecycle
+
+**Slice:** M0.2. **Status:** Complete and committed in `dcdd58c`.
 
 **Design status:** reconciled by M0.2 and pinned by the normative
 [atomic-action contract](actions.md) plus
@@ -156,7 +200,9 @@ evidence correlation.
 This is not an untyped action multiplexer. Protocol-specific schemas, RBAC,
 packages, and side effects remain independently reviewable.
 
-## 3. Immutable action specifications
+## Requirement 3: Immutable action specifications
+
+**Slice:** M0.2. **Status:** Complete and committed in `dcdd58c`.
 
 Action-defining fields are immutable from creation. Enforce this with CEL
 transition rules such as `self == oldSelf`.
@@ -165,7 +211,9 @@ Do not make mutability depend on `status.phase`; spec-scoped CEL cannot safely
 express that rule, and a webhook would add an avoidable Pending-to-Admitted
 race. A materially different action requires a new resource.
 
-## 4. Common action vocabulary
+## Requirement 4: Common action vocabulary
+
+**Slice:** M0.2. **Status:** Complete and committed in `dcdd58c`.
 
 Freeze one convention for:
 
@@ -182,7 +230,10 @@ Kinds may deviate only for a documented semantic reason.
 The frozen correlation label is `actions.stacks.org/correlation-id`. It is a
 search hint; Kubernetes object UID remains authoritative.
 
-## 5. Structural anti-orchestration tests
+## Requirement 5: Structural anti-orchestration tests
+
+**Slice:** M0.2. **Status:** Contract complete in `dcdd58c`; generated-schema
+enforcement activates with the first action CRD.
 
 Replace untestable statements that a controller "cannot become orchestration"
 with schema contracts. Atomic action CRDs must not acquire fields such as:
@@ -203,7 +254,9 @@ workflow
 Tests must also assert that one resource continues to represent one bounded
 action.
 
-## 6. Static Chaos Mesh admission first
+## Requirement 6: Static Chaos Mesh admission first
+
+**Slice:** M0.5. **Status:** Planned.
 
 The v1 ValidatingAdmissionPolicy enforces only static constraints:
 
@@ -218,7 +271,9 @@ Package the policy behind an explicit, disabled-by-default chart value. Its
 installation requires Chaos Mesh to be installed or explicitly declared as an
 external dependency. Match only namespaces enrolled for stacks-k8s use.
 
-## 7. Defer dynamic enrollment admission
+## Requirement 7: Defer dynamic enrollment admission
+
+**Slice:** M0.5. **Status:** Planned.
 
 A parameterized admission policy may later compare the requested actor with a
 `StacksNetwork` inventory. The vacuous-success form for unrelated network
@@ -234,7 +289,10 @@ A webhook is the last resort. Any future webhook requires enrolled-namespace
 scoping, certificate lifecycle, availability analysis, and an explicit failure
 policy.
 
-## 8. Action safety bounds
+## Requirement 8: Action safety bounds
+
+**Slices:** M0.2–M0.5. **Status:** Conservative action bounds are designed;
+Chaos Mesh limits remain for M0.5 and policy elevation remains deferred.
 
 Each numeric bound must be classified as either:
 
@@ -248,7 +306,10 @@ parameters. Until that policy exists, conservative CRD bounds are absolute.
 Cross-kind aggregate admission remains deferred because it would introduce a
 coordination layer over otherwise independent actions.
 
-## 9. Consolidated Bitcoin generation API
+## Requirement 9: Consolidated Bitcoin generation API
+
+**Slices:** M0.3 and M0.4. **Status:** Finite-action baseline complete in
+`ba9a666`; cadence refinement is next.
 
 **Design status:** completed by M0.3 and pinned by
 [`bitcoin-actions-v1.json`](../../contracts/bitcoin-actions-v1.json) plus the
@@ -273,7 +334,10 @@ candidate block hashes, progress, attribution, and terminal outcome. Bounded
 `generatetoaddress` batches may run between status checkpoints; one API-server
 write per block cannot support immediate generation efficiently.
 
-## 10. Attributable Bitcoin generation
+## Requirement 10: Attributable Bitcoin generation
+
+**Slices:** M0.3 and M0.4. **Status:** Finite-action attribution complete in
+`ba9a666`; continuous-production attribution remains for M0.4.
 
 Do not infer action ownership solely from the observed chain tip in a
 multi-miner network. Only block hashes returned by a successful mutation RPC
@@ -286,7 +350,10 @@ observed or uncertain effect is `Ambiguous` and the action is `Inconclusive`.
 Never promote reconstructed hashes to acknowledged success or retry the
 mutation blindly.
 
-## 11. Bitcoin action serialization
+## Requirement 11: Bitcoin action serialization
+
+**Slices:** M0.3 and M0.4. **Status:** Bounded-action protocol complete in
+`ba9a666`; short-hold production sharing and yielding remain for M0.4.
 
 V1 runs every Bitcoin action controller in one leader-elected process, but
 leader election is not a per-target fencing mechanism. Each target therefore
@@ -349,7 +416,9 @@ preconditions. The implementation must add leader-turnover,
 same-action/new-token, stale-holder, saturated-workqueue, handle-write
 serialization, and competing-action tests.
 
-## 12. Bitcoin credential and configuration identity
+## Requirement 12: Bitcoin credential and configuration identity
+
+**Slice:** M0.3. **Status:** Complete and committed in `ba9a666`.
 
 ### Provisioning
 
@@ -407,7 +476,10 @@ Rotation replaces the immutable fixed-name Secret, updates `expectedDigest`,
 and causes a controlled actor rollout. Controllers fail closed during the
 availability interruption.
 
-## 13. Time-bound semantics
+## Requirement 13: Time-bound semantics
+
+**Slice:** M0.2, specialized by each action design. **Status:** Complete for
+the shared and M0.3 Bitcoin contracts.
 
 A controller cannot act while unavailable. `spec.timeout` still advances from
 the API-server creation timestamp. On restart the controller must refuse to
@@ -416,7 +488,9 @@ resume an expired action, inspect ambiguous state, and avoid blind retries.
 Actor-side expiry is reserved for effects that genuinely continue without the
 controller, such as an activated testing hook with its own absolute expiry.
 
-## 14. Protocol-bootstrap design
+## Requirement 14: Protocol-bootstrap design
+
+**Slice:** M0.6. **Status:** Planned.
 
 Add a dedicated design for the primitives required to make a Stacks network
 productive:
@@ -432,7 +506,9 @@ productive:
 Expose bounded atomic resources or an external helper CLI. The external agent
 sequences them. Do not build an in-cluster bootstrap workflow.
 
-## 15. Actor testing-capability design
+## Requirement 15: Actor testing-capability design
+
+**Slice:** M0.6. **Status:** Planned.
 
 Add a design for instrumented Stacks images covering capability discovery,
 activation, bounded parameters, expiry, query, revocation, authentication,
@@ -442,13 +518,17 @@ behavior.
 Treat this as a cross-repository dependency. Actions that require unavailable
 hooks remain conditional and fail before mutation.
 
-## 16. Qualify native TimeChaos first
+## Requirement 16: Qualify native TimeChaos first
+
+**Slice:** M0.5. **Status:** Planned.
 
 Qualify native Chaos Mesh `TimeChaos` against the required Stacks behavior
 before designing `ApplicationClockOffset`. Build a custom action only when the
 qualification establishes a concrete semantic gap.
 
-## 17. Agent access and query authentication
+## Requirement 17: Agent access and query authentication
+
+**Slice:** M0.7. **Status:** Planned.
 
 ### Kubernetes identity
 
@@ -509,9 +589,12 @@ every GET endpoint exposed by that Service because RBAC cannot constrain proxy
 URL paths. Prefer read-only backend configurations; keep restricted or
 normalized queries behind the query Service.
 
-## 18. Authenticated protocol observation
+## Requirement 18: Authenticated protocol observation
 
-Bitcoin RPC observation uses the fixed-name credential Secret from section 12.
+**Slice:** M0.7. **Status:** Planned; reuses the M0.3 credential contract.
+
+Bitcoin RPC observation uses the fixed-name credential Secret from
+Requirement 12.
 The observation controller may read only that exact Secret name in enrolled
 namespaces. Unauthenticated Stacks endpoints may remain directly accessible.
 
@@ -519,7 +602,9 @@ Every observation distinguishes trusted Kubernetes identity, authenticated
 protocol facts, unauthenticated actor observations, and actor-self-reported
 metrics.
 
-## 19. Reduced observability v1
+## Requirement 19: Reduced observability v1
+
+**Slice:** M0.7. **Status:** Planned.
 
 Do not make the first observability milestone a custom event-storage platform.
 Start with:
@@ -534,7 +619,9 @@ Start with:
 
 Audit webhooks are optional advanced sources, not a v1 prerequisite.
 
-## 20. Export success and completeness
+## Requirement 20: Export success and completeness
+
+**Slice:** M0.7. **Status:** Planned.
 
 Keep transport outcome separate from evidence quality:
 
@@ -557,7 +644,9 @@ Completeness is `Complete` or `Incomplete`. Coverage is one of:
 Only continuously accounted evidence may be marked complete. An export can
 succeed operationally while honestly remaining incomplete.
 
-## 21. Redaction and cursor scope
+## Requirement 21: Redaction and cursor scope
+
+**Slice:** M0.7. **Status:** Planned.
 
 V1 redacts before durable storage, records the applied profile digest, and
 exports only already-redacted records. Refuse export when the requested policy
@@ -567,7 +656,10 @@ Defer export-time re-redaction, signed custom cursors, and custom tombstone
 machinery. Prefer backend-native bounded pagination. If a cursor is exposed,
 expiration must not appear as an empty, complete result.
 
-## 22. Evidence-integrity semantics
+## Requirement 22: Evidence-integrity semantics
+
+**Slice:** M0.7, with constraints applied by every earlier slice. **Status:**
+Partially complete; final observation and export contract remains.
 
 Preserve:
 
@@ -580,7 +672,9 @@ Preserve:
 - administrator-controlled credential and destination profiles; and
 - refusal to turn incomplete evidence into a successful protocol conclusion.
 
-## 23. Observation examples
+## Requirement 23: Observation examples
+
+**Slice:** M0.7. **Status:** Planned.
 
 Every observation example includes:
 
@@ -592,7 +686,9 @@ Every observation example includes:
 - expected coverage semantics; and
 - operation and completeness status examples.
 
-## 24. Repository layout documentation
+## Requirement 24: Repository layout documentation
+
+**Slice:** M0.8, maintained incrementally. **Status:** In progress.
 
 Describe actual and proposed paths accurately:
 
@@ -609,7 +705,10 @@ charts/
 List every existing contract fixture. Clearly distinguish implemented code,
 approved direction, recommendation, and unresolved decision.
 
-## 25. Markdown validation
+## Requirement 25: Markdown validation
+
+**Slice:** M0.8. **Status:** Local policy exists; repository and CI integration
+remain.
 
 Keep `.markdownlint.yaml` authoritative for the VS Code extension and CLI.
 Provide an overridable Make command:
@@ -623,7 +722,9 @@ Keep project-specific Go contract tests for repository paths, links, and
 architecture constraints. Do not create a second Markdown style ruleset that
 can drift from `.markdownlint.yaml`.
 
-## 26. Instrumented-image support matrix
+## Requirement 26: Instrumented-image support matrix
+
+**Slices:** M0.6 and M0.8. **Status:** Planned.
 
 Packaging and roadmap documents identify which capabilities require standard
 Bitcoin Core, standard Stacks images, feature-gated testing images, externally
@@ -632,11 +733,13 @@ prepared OCI images, or unavailable upstream hooks.
 Do not allow an unavailable testing hook to silently block an otherwise
 independent milestone.
 
-## 27. Revised implementation roadmap
+## Requirement 27: Revised implementation roadmap
+
+**Slice:** M0.8, maintained incrementally. **Status:** In progress.
 
 After M0, use this dependency order:
 
-1. Minimal Bitcoin block generation.
+1. Continuous and bounded Bitcoin block production.
 2. Protocol-bootstrap primitives.
 3. Multi-actor topology qualification.
 4. Passive journal foundation.
@@ -645,12 +748,15 @@ After M0, use this dependency order:
 7. Evidence export and query.
 8. Instrumented protocol actions.
 
-### Minimal Bitcoin-generation slice
+### Initial Bitcoin-production slice
 
-The first slice includes the shared typed lifecycle, immutable action spec,
-conservative CEL bounds, API-server-persisted per-node serialization,
-attributable generation, and evidence correlation. It may defer
-`ActionSafetyPolicy`; until that policy exists, schema bounds are absolute.
+The first slice implements mutable `BitcoinBlockProduction` for baseline chain
+progress alongside finite `BitcoinBlockGeneration`. Both use the same
+credential path and per-node reservation manager, while only the finite
+resource uses the shared typed action lifecycle, immutable action spec,
+conservative CEL bounds, attributable completion, and terminal outcome. It may
+defer `ActionSafetyPolicy`; until that policy exists, schema bounds are
+absolute.
 
 ### Primary qualification target
 
@@ -669,24 +775,25 @@ to complicate the first local vertical slices.
 
 ## M0 acceptance checklist
 
-- [x] API-module spike has a recorded result and all exit checks pass or the
-      design records why it was rejected.
-- [x] All action documents use the shared lifecycle, vocabulary, and immutable
-      specification rules.
-- [x] The shared fixture and repository test pin forbidden orchestration fields;
-      generated-schema tests are explicitly required with the first action CRD.
-- [x] Bitcoin generation is one attributable, bounded action API.
-- [x] V1 serialization uses the durable per-node reservation and uncached
-      holder validation.
-- [x] Credential provisioning, digest verification, trust exceptions, and
-      rotation are specified consistently.
-- [ ] Static Chaos Mesh admission has no mandatory webhook dependency.
-- [ ] Bootstrap and actor testing-capability documents exist.
-- [ ] Agent access uses Kubernetes identity and separates control traffic from
-      bulk evidence transfer.
-- [ ] Observation phases, completeness, coverage, redaction, and credentials
-      are consistent across documents and examples.
-- [ ] Layout, fixtures, verification targets, support matrix, and roadmap match
-      the repository.
-- [ ] Links, Markdown policy, repository contracts, `make verify`, and relevant
-      container checks pass.
+The slice ledger owns completion. Requirement-level details remain in the
+sections above.
+
+- [x] **M0.1:** the API-module spike is implemented, independently reviewed,
+      and passes its module, generation, container, and dependency checks.
+- [x] **M0.2:** the shared action lifecycle, vocabulary, immutability,
+      time-bound behavior, and anti-orchestration contracts are frozen.
+- [x] **M0.3:** finite Bitcoin generation and reorganization have bounded,
+      attributable, credentialed, serialized, implementation-ready designs.
+- [ ] **M0.4:** continuous block production, finite cadence modes, bounded
+      status, action priority, and shared-reservation semantics are reconciled.
+- [ ] **M0.5:** static Chaos Mesh admission and initial native-fault/platform
+      qualification require no mandatory webhook.
+- [ ] **M0.6:** protocol bootstrap, actor testing capabilities, and the
+      instrumented-image support matrix are implementation-ready.
+- [ ] **M0.7:** agent access, passive observation, journal, query, export,
+      completeness, coverage, redaction, and evidence integrity agree across
+      documents and examples.
+- [ ] **M0.8:** repository layout, fixtures, verification targets, packaging,
+      support matrix, roadmap, and design index match the repository.
+- [ ] **M0 closeout:** links, Markdown policy, repository contracts,
+      `make verify`, and relevant container checks pass on the complete package.

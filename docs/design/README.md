@@ -44,7 +44,7 @@ under [`docs/`](../README.md).
 | [Security and safety](security-and-safety.md) | Trust boundaries, RBAC, admission, identity, secrets, and blast-radius controls. |
 | [Packaging](packaging.md) | Operator/chart boundaries, optional dependencies, versioning, and qualification. |
 | [Roadmap](roadmap.md) | Ordered implementation phases and definitions of done. |
-| [M0 remediation plan](m0-remediation-plan.md) | Authoritative review remediation, API-module spike, and revised implementation order. |
+| [M0 remediation plan](m0-remediation-plan.md) | Authoritative ordered M0.x delivery ledger, stable remediation requirements, and acceptance checklist. |
 
 The M0 remediation plan takes precedence where the original design documents
 still describe a superseded proposal. Those documents will be reconciled as
