@@ -95,8 +95,9 @@ outstanding-request and exclusion contract. RPC timeout, context cancellation,
 Lease expiry, or current chain-state absence does not establish server-side
 quiescence. R2 must close before enabling retry, takeover, or resumption.
 Action deadlines, transport cancellation, and receipt collection are distinct.
-Closing a possibly dispatched request's response path leaves its target closed
-until qualified recovery. The
+Closing a possibly dispatched request's response path leaves its target closed.
+Initial production uses a fresh independently isolated environment after such
+ambiguity; restarting or recreating the target does not release exclusion. The deferred
 [reset/readmission candidate](target-admission-and-rpc-execution.md#recovery-record-loss-and-replacement)
 requires old-process termination, credential-epoch fencing, and fresh admission;
 node partition or missing termination evidence must fail closed.
@@ -109,6 +110,17 @@ work or undo prior chain history.
 
 ## Secrets and workload security
 
+The initial Bitcoin profile assumes trusted disposable networks and excludes
+compromise of test-Pod service credentials. Static per-environment credentials
+are sufficient; routine rotation and cryptographic process attestation are not
+initial delivery gates. Basic RPC authority separation and cluster/workload
+permission boundaries still apply.
+Static does not mean shared: actor clients receive only their own restricted
+credentials. Producer/action mutation passwords stay out of actor workloads;
+Bitcoin servers hold the necessary salted verifiers. The
+[RPC permission profile](bitcoin-lifecycle.md#credential-and-renderer-gate)
+uses per-user method lists and denies unlisted principals.
+
 - Prefer short-lived projected credentials or immutable Secret references.
 - Never copy credentials into status, logs, events, journal payloads, or
   evidence manifests.
@@ -116,11 +128,11 @@ work or undo prior chain history.
   public action specs never select credentials. R3 replaces the shared Bitcoin
   Secret proposal with separately restricted observation, Stacks-client, and
   mutation authority. Verify RPC permission enforcement server-side.
-- Pin mutation credentials to the admitted process epoch; an Armed request
-  cannot reload a rotated cookie/Secret or retarget a replacement. Cookie
-  rotation does not replace authenticated endpoints or restricted principals.
+- Pin Armed work to its admitted credential profile and endpoint; it cannot
+  refresh credentials or retarget after uncertainty. Per-process credential
+  epochs are required only if used to fence a later reset profile.
 - The network operator mounts and content-verifies inputs without Secret-read
-  RBAC; exact profiles and rotation remain design gates.
+  RBAC; exact initial profiles remain design gates. Rotation is deferred.
 - Transaction signing credentials have a separate M0.6 Requirement 14 gate:
   designated worker access, account ownership, rotation/revocation, and
   isolation from actors, observers, and unrelated producers.

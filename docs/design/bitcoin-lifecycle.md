@@ -54,7 +54,9 @@ replacement target-validation and endpoint-identity contract.
 
 The [R1/R2 proposal](target-admission-and-rpc-execution.md) recommends a
 health-independent declaration catalog joined to current leaf/runtime identity,
-plus instance-authenticated RPC. The concrete R3 transport remains a dependency.
+with endpoint checks under the initial trusted-network profile. Declaration
+publication is the next implementation slice and enables no RPC mutations.
+Cryptographic process authentication belongs to deferred reset-profile work.
 
 References are typed and same-namespace. Public specs do not choose arbitrary
 RPC endpoints, methods, wallets, or credentials. Destinations remain explicit,
@@ -138,9 +140,10 @@ dispatch authority and outstanding work in one protected CAS record. Ambiguity
 retains exclusion instead of granting automatic recovery. Reservation ownership
 survives individual receipts and executor replacement until explicit clean
 release. Action deadlines, transport cancellation, and receipt collection have
-separate lifetimes. An explicit reset/readmission candidate is being evaluated
-with R3 against IO/stress faults and Bitcoin/controller restarts; a full
-execution-aware adapter is not a prerequisite if that contract can be qualified.
+separate lifetimes. Initial production retains exclusion after ambiguous
+execution across restarts and replacement; preserve evidence and use a fresh
+independently isolated environment. In-place reset/readmission and an
+execution-aware adapter are deferred until operational need justifies them.
 
 Choose an enforceable execution boundary or an explicitly weaker contract with
 durable unresolved-operation handling before implementation. Do not authorize
@@ -167,6 +170,10 @@ its safety finalizer merely because generation stopped. Terminal uncertainty
 may coexist with retained cleanup obligations and explicit administrative
 recovery.
 
+Deleting the entire network/namespace is explicit abandonment, not successful
+cleanup. Apply the [teardown exception](target-admission-and-rpc-execution.md#recovery-record-loss-and-replacement)
+so unresolved RPCs alone cannot retain cleanup finalizers indefinitely.
+
 ## Credential and renderer gate
 
 Keep high-entropy credentials, immutable administrator-provisioned inputs,
@@ -178,15 +185,27 @@ Current v1 development profiles are not automatically eligible for managed RPC.
 R3 reopens the shared `stacks-bitcoin-rpc` design. Define separate observation
 and mutation authority, Secret access, actor client permissions, and
 server-enforced method restrictions. Freeze names, keys, renderer inputs,
-rotation, and profile versions together. Putting both passwords in a Secret
+and profile versions together. Static per-environment credentials are acceptable
+for the initial trusted disposable-network profile; test-service credential
+compromise and credential rotation are outside its scope. Putting both passwords in a Secret
 readable by the observer does not separate authority.
 
-For reset recovery, qualify per-process credential epochs alongside actual
+Actor clients receive only their own method-restricted credentials. Never
+mount producer/action mutation passwords into actor workloads; Bitcoin servers
+receive their salted rpcauth verifiers. Use `rpcwhitelist=<user>:<methods>` with
+rpcwhitelistdefault=1 and an explicit method list for each intended principal,
+including any local health/bootstrap client. In
+[Bitcoin Core 31.1](https://github.com/bitcoin/bitcoin/blob/v31.1/src/httprpc.cpp),
+setting rpcwhitelistdefault=0 permits authenticated users with no whitelist
+to call any method; it is not the initial deny-by-default profile. Qualify
+the actual per-role method lists before enabling managed RPC.
+
+For deferred reset recovery, qualify per-process credential epochs alongside actual
 termination evidence. Bitcoin's rotating cookie is a candidate primitive;
 static mutation credentials do not fence a former producer. Armed requests
 pin credentials and never refresh them for a replacement. Provisioning,
-restricted principals, and server identity remain R3 gates; cookie rotation
-alone does not establish them. See the
+restricted principals, and server identity gate that stronger profile; cookie
+rotation alone does not establish them. See the
 [candidate contract](target-admission-and-rpc-execution.md#candidate-credential-epoch).
 
 Authentication does not encrypt RPC transport. Qualify the private-cluster

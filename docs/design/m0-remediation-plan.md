@@ -22,7 +22,9 @@ M0 is complete when:
   recorded technical reason;
 - action APIs share one vocabulary and one typed lifecycle contract;
 - Bitcoin baseline production, finite generation, credentials, independent
-  target admission, serialization, and cleanup have implementation-ready designs;
+  target admission, and serialization have implementation-ready designs for
+  the initial scope; additional action cleanup gates apply before those actions
+  are enabled;
 - steady transaction demand, baseline ownership, temporary overrides, and
   controller packaging have reviewed contracts;
 - the local-first agent access and observability contracts are internally
@@ -114,12 +116,37 @@ for finalizers; neither is permission to silently change the shared fixture.
 The [R1/R2 decision proposal](target-admission-and-rpc-execution.md) recommends
 a compiled-declaration catalog and protected single-dispatch execution record.
 It includes local feasibility evidence and the explicit availability cost of
-retaining unresolved requests. It is a review input; R1/R2 and the R3 endpoint
-authentication dependency remain open.
-The next bounded investigation is explicit reset/readmission with per-process
-credential epochs, actual termination evidence, and preserved R4 obligations.
-Qualify against node-local IO/stress faults and Bitcoin/controller restarts;
-do not require a full execution-aware adapter if the smaller contract suffices.
+retaining unresolved requests. It is a review input; R1/R2/R3 remain open for
+their enabled capabilities, under the narrower delivery scope below.
+
+### Initial delivery scope
+
+Start with trusted, disposable regtest networks. Compromise of test-Pod service
+credentials is outside this initial profile. Keep basic access separation,
+target ownership/identity checks, and honest execution accounting. Static
+per-environment RPC credentials are acceptable; credential rotation, per-process
+credential fencing, cryptographic process attestation, and in-place recovery
+are deferred. They are not prerequisites for R1 publication or initial production.
+
+The next implementation slice is R1 declaration publication: freeze its additive
+schema and compatibility vectors, then implement generation-bound publication,
+conflict protection, and preservation through unrelated actor failures. This
+repository foundation may proceed while other M0 work remains open; it enables
+no RPC mutations and does not close the broader target-admission gate.
+
+Next, review the smallest baseline-production profile and implement a vertical
+slice with necessary RPC permissions, durable outstanding-request tracking,
+bounded work, and explicit response-loss behavior. Possible unresolved execution
+keeps the target closed across restarts and replacement. No blind retry or
+in-place reset reopens it. Preserve evidence and use a fresh independently
+isolated environment: new namespace and UIDs, fresh per-environment RPC
+credentials, and no reused data/configuration. A namespace alone does not
+fence an already-resolved request. Graceful controller drain stops new arming
+and persists outstanding receipts within the shutdown grace period; failed
+drains remain uncertain. Network/namespace teardown explicitly abandons work
+and must not wait indefinitely for RPC quiescence or an optional evidence sink.
+Use observed disruption to prioritize advanced recovery. R4 remains a gate for
+reorganization, not for declaration publication or baseline-only production.
 
 ## Requirement 1: Shared network API-module spike
 
@@ -416,17 +443,23 @@ authority for observation, Stacks clients, and mutation clients. Define
 server-enforced RPC permissions, exact namespaced Secret grants, authentication
 profiles, and supported Bitcoin versions. Observation must be unable to invoke
 mutation methods with its granted credentials.
+Actor clients get only their own restricted credentials, never the shared
+producer/action mutation password. Bitcoin servers receive salted verifiers.
+Use static rpcauth with per-user rpcwhitelist entries and rpcwhitelistdefault=1
+to deny unlisted principals; freeze the necessary method lists with each profile.
 
-Retain high-entropy credentials immutable within their admitted epoch,
+Retain high-entropy credentials immutable within their configured profile,
 salted `rpcauth` rendering for profiles that use it,
 startup digest verification, and credential-free output/status. The network
-controller references Secret inputs without reading their bytes. Profile
-rotation, mounting, leaf-spec/inventory identity, and client rollout behavior
-must be reviewed together. Exact names, keys, API fields, and generated-profile
-versions remain open.
+controller references Secret inputs without reading their bytes. Mounting,
+leaf-spec/inventory identity, and client rollout behavior must be reviewed
+together. Exact names, keys, API fields, and generated-profile versions remain
+open. Static per-environment credentials satisfy the initial scope; rotation
+is not an initial production gate.
 
-Evaluate per-process cookie or rotated mutation-profile epochs with R2's
-explicit reset/readmission candidate. Old Armed requests must never refresh
+If in-place recovery is later enabled, evaluate per-process cookie or rotated
+mutation-profile epochs with R2's deferred reset/readmission candidate.
+Old Armed requests must never refresh
 credentials or retarget. Cookie rotation does not itself authenticate the
 server, isolate observation authority, or prove old-process termination.
 Static mutation credentials cannot satisfy the reset fence. Freeze the

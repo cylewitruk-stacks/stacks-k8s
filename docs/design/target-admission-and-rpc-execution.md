@@ -8,9 +8,11 @@ proposal supplies the R1/R2 decision record for M0.3/M0.4. The parent
 credential profiles, and implementation qualification still need review.
 
 Recommend a health-independent compiled-declaration catalog for R1 and a
-durable, single-dispatch execution record for R2. Investigate a minimal explicit
-reset-and-readmission contract together with R3 before selecting the default
-recovery profile; a full execution-aware adapter is not an M1 prerequisite.
+durable, single-dispatch execution record for R2. Apply the
+[initial delivery scope](m0-remediation-plan.md#initial-delivery-scope): implement
+R1 publication first, then the smallest reviewed baseline-production profile.
+Explicit reset/readmission, credential rotation, cryptographic process
+attestation, and execution-aware adapters are deferred.
 Retain the aggregate/leaf controller structure. No in-cluster planner,
 autonomous local miner, or generic RPC dispatcher is introduced.
 
@@ -19,8 +21,28 @@ managed mutations on its target indefinitely. Other valid targets may continue
 under the declared selection policy, without redistributing the blocked
 target's weight. Automatic recovery after ambiguity is not a v1 promise.
 Evaluate this cost against node-local IO/stress faults, Bitcoin restarts, and
-producer-controller restarts. The qualified protocol-fault profile preserves
+producer-controller restarts during vertical-slice use. The qualified protocol-fault profile preserves
 the management path; that does not prevent these other causes of response loss.
+
+The initial profile trusts test-Pod services and excludes compromise of their
+credentials. Static per-environment credentials are acceptable. Keep target
+checks and observation/mutation separation, but do not require defenses against
+credential theft. Unresolved targets stay closed; preserve evidence and use a
+fresh independently isolated environment. Reusing resource names alone does
+not isolate a replacement environment from old callers.
+For the initial profile, use a new namespace, new network/resource UIDs, and
+fresh RPC credentials generated once for that environment. Requests use
+namespace-qualified endpoints and never retarget old Armed work. A namespace
+alone cannot fence an already-resolved IP or connection; distinct credentials
+make a new server reject an old request even if an address is reused. Do not
+reuse old credentials, data volumes, or mutable configuration references.
+This is environment provisioning, not ongoing credential rotation.
+
+Static credentials remain separate by principal. Actor clients receive only
+their own method-restricted credentials; producer/action mutation passwords
+are never mounted into actor workloads. Bitcoin servers receive the required
+salted authentication verifiers, not those client passwords. See the
+[RPC permission profile](bitcoin-lifecycle.md#credential-and-renderer-gate).
 
 ## Evidence
 
@@ -80,7 +102,8 @@ Before admission and each newly authorized mutation, a consumer:
 3. Verifies the selected Service, StatefulSet, Pod, revision, configuration
    identity, image identity, and running actor instance through direct reads.
    Other actors' readiness is irrelevant.
-4. Authenticates the actual RPC server instance and verifies regtest capability.
+4. Verifies the intended RPC endpoint and regtest capability under the trusted
+   environment profile; does not claim cryptographic process authentication.
 5. Rechecks the parent/catalog and target before granting dispatch authority.
    A concurrent change causes fresh validation, not silent retargeting.
 
@@ -105,20 +128,26 @@ restartCount as supporting evidence. A restart counter alone is not unique.
 Require bitcoind to be the container's lifetime-defining process; an image that
 respawns it inside the same container needs separate process enrollment.
 
-The managed mutation profile must bind its transport to an enrolled server
-instance: network/leaf/Pod identity plus process/credential epoch. A replacement
-must not accept dispatch credentials or server identity from an earlier
-instance. R3 must select and qualify the concrete transport/provisioning
-mechanism; an instance-authenticated adapter is an option, not implemented
-in this slice. Plain HTTP through a stable Service with shared credentials
-does not satisfy this boundary.
+For initial production, qualify ownership, routing, and runtime checks under
+the trusted Kubernetes/network boundary. Bind Armed work to its selected
+endpoint and request; do not retarget or retry it after uncertainty. Replacement
+does not clear outstanding work. Static credentials do not fence a stale caller,
+so this profile makes no promise that an old request cannot affect a replacement
+process; exclusion prevents authorizing competing managed work.
+Record the admitted identity separately from evidence about which process
+served the RPC. A response alone does not prove process identity across a
+replacement race. If that identity is uncertain, preserve the uncertainty
+and exclusion rather than attributing the result to the replacement.
 
-This is an explicit dependency of R1, not proof supplied by uncached reads.
-Actor-reported identity alone is insufficient. Kubernetes, the credential
-provisioner, and the qualified network/endpoint boundary remain trusted;
-arbitrary topology-author authority is addressed separately by R6.
+The stronger reset profile below requires authenticated process enrollment
+and server-side fencing of old credentials. Those mechanisms are deferred,
+not a dependency of catalog publication. Public mutation APIs still need their
+own reviewed endpoint/admission contract before enablement. Arbitrary topology
+authority and cluster/workload permissions remain separately addressed by R6.
 
 ### Candidate credential epoch
+
+**Deferred reset-profile investigation; not an initial production requirement.**
 
 [Bitcoin Core 31.1 cookie generation](https://github.com/bitcoin/bitcoin/blob/v31.1/src/rpc/request.cpp)
 uses fresh random material.
@@ -145,8 +174,10 @@ rpcauth profiles; any mutation profile used for reset must rotate per instance.
 
 Use one protected, target-scoped execution record shared by every managed
 Bitcoin mutation kind. Persist reservation owner UID, executor epoch, fresh
-process-start nonce, immutable request identity/bounds, target/credential
-instance, and execution state in the same optimistically updated object.
+process-start nonce, immutable request identity/bounds, admitted target and
+credential profile, and execution state in the same optimistically updated object.
+Per-process server credential epochs apply only to a later reset profile;
+executor epochs still distinguish controller attempts in the initial profile.
 A Lease plus a separately updated intent is not an atomic dispatch decision.
 
 This record is controller infrastructure, not an agent-created action or a
@@ -210,7 +241,7 @@ An action deadline prevents new dispatch authorization; it cannot recall an
 already-Armed request. A transport deadline/cancellation that closes the
 connection abandons its response path. No late response can subsequently be
 collected through that closed connection. Once delivery is possible, this
-leaves the target blocked until qualified explicit recovery; ordinary slowness
+leaves the target blocked; in-place recovery is deferred. Ordinary slowness
 can trigger this outcome even if the server eventually finishes successfully.
 
 Receipt collection has a separate lifetime from action waiting and reconcile
@@ -220,10 +251,27 @@ shutdown handling, and status visibility; it does not solve connection loss or
 controller restart. Freeze these choices with R3. This direct-RPC profile does
 not promise that irreversible effects cease at a wall-clock deadline.
 
+Supported controller recovery initially means graceful drain: on SIGTERM,
+stop new dispatch authorization, retain receipt collectors, and persist
+receipts/accounting within terminationGracePeriodSeconds before exiting.
+Do not cancel collectors with the ordinary reconcile shutdown context. Drain
+includes local dispatch workers; a proven-unsent Armed request must be safely
+withdrawn or remain unresolved. A clean drain leaves no outstanding Armed work
+and preserves any action reservation for its next executor. Crashes, lost
+responses, API-write failures, and exhausted shutdown grace can still strand
+a target; an ordinary rollout is not guaranteed to drain successfully.
+
 Deletion, an unchanged tip, Lease expiry, and an Inconclusive phase likewise
 do not prove quiescence or release a reservation.
 
 ### Recovery, record loss, and replacement
+
+**Initial profile: no in-place reset after ambiguous execution.** Retain the
+record and target exclusion across controller/Bitcoin restarts and Pod
+replacement. Preserve evidence and use a fresh independently isolated network.
+Do not treat object recreation, record deletion, or a restarted server as
+permission to retry. The contract below is retained as deferred design input;
+its qualification does not gate initial production.
 
 Without a terminal receipt, automatic recovery stays blocked. Reopening a
 target requires evidence that the old caller can no longer cause accepted
@@ -232,7 +280,8 @@ revocation alone does not drain an already-authorized server request; Pod
 deletion in the API alone does not prove a partitioned process has stopped.
 No time-based administrator override is presented as safe recovery.
 
-Investigate this minimal explicit recovery contract with R3:
+If operational experience justifies in-place recovery, investigate this
+candidate with R3:
 
 1. Record reset intent against the exact unresolved execution, reservation,
    old instance, and credential epoch; keep the target closed. Preserve action
@@ -290,10 +339,19 @@ execution-aware adapter only if the constrained contract cannot meet the
 required availability; its crash windows need qualification too.
 
 An execution-record UID must be pinned during managed-instance enrollment.
-Missing/recreated records fail closed; controllers must not treat lost state
-as a fresh target. Garbage collection or action deletion must not erase an
-unresolved record. Administrative removal explicitly abandons guarantees and
-cannot produce a successful cleanup claim.
+While the owning network remains active, missing/recreated records fail closed;
+controllers must not treat lost state as a fresh target. Action deletion must
+not erase an unresolved record. Tie its lifetime to the network, not the action.
+
+Network or namespace deletion explicitly abandons that environment. Stop new
+authorization, attempt bounded best-effort recording of an abandonment outcome
+in available status/Events or a configured evidence sink, and remove owned
+cleanup/exclusion finalizers without waiting for RPC quiescence. Do not add a
+record finalizer solely to retain unresolved RPCs after environment deletion.
+Optional evidence sinks must not block teardown; export evidence first when
+retention matters. If controllers or the API are unavailable, recording/removal
+may need administrative intervention and evidence may be lost. Abandonment
+never claims successful cleanup or authorizes resumption of the old target.
 
 When a receipt is durable, release additionally respects the bounded action's
 reservation and cleanup obligations. This proposal does not resolve R4 or
@@ -307,9 +365,9 @@ allow baseline production between a reorganization's dependent mutations.
 | Leaf status and ownership alone | Insufficient: they can describe an earlier parent declaration. |
 | Copy the aggregate compiler into every consumer | Avoid: runtime coupling and duplicated compilation authority. |
 | Lease expiry plus chain-tip inspection | Reject as dispatch authority: neither fences a stale caller or queued server work. |
-| Direct RPC plus sticky execution record | Conservative option; ordinary response loss can leave a target indefinitely blocked. |
-| Direct RPC plus explicit reset/readmission | Preferred next investigation with R3; requires old-process termination, credential fencing, fresh admission, and cleanup accounting. |
-| Execution-aware local adapter | Consider if automatic response recovery or stronger expiry is required; needs durable receipts, identity, fencing, crash recovery, and exclusive backend access. |
+| Direct RPC plus sticky execution record | Initial direction; ordinary response loss can leave a target indefinitely blocked, requiring a fresh isolated environment. |
+| Direct RPC plus explicit reset/readmission | Deferred; requires old-process termination, credential fencing, fresh admission, and cleanup accounting. |
+| Execution-aware local adapter | Deferred unless operational need justifies it; requires durable receipts, identity, fencing, crash recovery, and exclusive backend access. |
 
 A transport-only proxy does not make mutation execution idempotent. An adapter
 crash between backend execution and receipt persistence remains uncertain
@@ -317,14 +375,15 @@ unless its backend/recovery contract resolves that window.
 
 ## Implementation sequence and acceptance
 
-1. Resolve the explicit reset candidate and R3 instance-authentication design
-   together, against IO/stress faults and Bitcoin/controller restarts.
-2. Freeze catalog/admission wire fields and compatibility vectors; implement
-   aggregate publication and an independent consumer adapter.
-3. Freeze the protected execution-record schema, enrollment/loss behavior,
-   exact RBAC, RPC client behavior, receipt/status transfer, and recovery events.
-4. Implement baseline and finite generation against that shared protocol.
-5. Qualify with API-server and real-image tests before enabling either kind.
+1. Freeze the additive catalog fields and compatibility vectors; implement
+   aggregate publication with focused unit/API-server coverage.
+2. Review the smallest baseline-production profile: target admission, static
+   credential permissions, durable execution records, and response-loss behavior.
+3. Implement and qualify that baseline vertical slice, including record-loss
+   handling, exact RBAC, and receipt/status transfer. Add finite generation
+   against the shared protocol when its lifecycle contract is ready.
+4. Measure behavior under relevant faults before deciding whether deferred
+   reset/readmission or an adapter is needed.
 
 Acceptance must cover Stacks bootstrap, unrelated failure and rollout, stale
 catalogs, catalog preservation through unrelated status failures/retirement,
@@ -335,7 +394,8 @@ persistence, status accounting, and release. Include lost CAS responses,
 duplicate reconciles, stale caller resumption, record deletion/recreation,
 late receipts, admission races, and bounded-action cleanup. Verify that receipt
 accounting and executor takeover never release an action's reservation between
-dependent calls. Qualify cookie/static-credential configurations, old-epoch
+dependent calls when finite actions are enabled. For deferred reset support,
+qualify cookie/static-credential configurations, old-epoch
 rejection, prohibited credential refresh, lost termination evidence, partitioned
 nodes, and interrupted reset handling before claiming reset-based recovery.
 

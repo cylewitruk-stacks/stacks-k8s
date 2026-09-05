@@ -56,11 +56,21 @@ on an unresolved gate.
 
 M0 resolves designs and specifies acceptance. M1–M8 implement and validate
 those resolutions; design completion does not claim runtime qualification.
+The [initial delivery scope](m0-remediation-plan.md#initial-delivery-scope)
+permits R1 declaration publication as the next repository foundation while
+other M0 work remains open. Freeze its additive schema and test its publication
+semantics before landing it; publication alone enables no RPC execution.
 
 ## M1: baseline and bounded Bitcoin production
 
 **Outcome:** an ordinary regtest network advances Bitcoin through a declared
 baseline, with finite generation separately available.
+
+Deliver baseline production first under the trusted disposable-network profile,
+then finite generation with its additional lifecycle gates. Static credentials
+and basic authority separation suffice initially. Per-process credential
+rotation, cryptographic process attestation, reset/readmission, and an
+execution-aware adapter are deferred capabilities, not M1 prerequisites.
 
 - Implement neutral Bitcoin-node API migration and required credential/config
   profiles, including leaf/inventory identity vectors and rollout semantics.
@@ -76,9 +86,15 @@ baseline, with finite generation separately available.
   journal; do not infer acknowledged effects from observed chain tips.
 
 **Done:** baseline production runs with actions/observation/Chaos disabled,
-survives supported controller recovery, and progresses on a valid target while
+resumes after a successful [graceful controller drain](target-admission-and-rpc-execution.md#deadlines-and-receipt-collection),
+and progresses on a valid target while
 unrelated actors are unready. Ambiguous server work cannot authorize unsafe
 takeover, retry, or resumption.
+Grace-period exhaustion, crashes, and lost receipts are outside successful
+drain and may leave a target closed, including during a routine rollout.
+Unresolved targets remain closed across restarts/replacement; fresh isolated
+environments are the initial recovery option. Measure that limitation in real
+use before prioritizing in-place recovery.
 
 ## M2: bootstrap primitives and steady transaction demand
 

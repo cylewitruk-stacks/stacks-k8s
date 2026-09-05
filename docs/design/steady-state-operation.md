@@ -158,9 +158,10 @@ a correction does not close its implementation gate.
 The [R1/R2 proposal](target-admission-and-rpc-execution.md) supplies concrete
 admission and execution recommendations with local evidence. Its conservative
 profile blocks conflicting mutations while a request remains unresolved;
-explicit reset/readmission and per-process credential epochs are the next
-bounded investigation with R3. Automatic recovery is not promised; authenticated
-endpoint provisioning, actual termination evidence, and R4 cleanup remain gates.
+the [initial delivery scope](m0-remediation-plan.md#initial-delivery-scope)
+puts R1 publication next and uses fresh isolated environments after ambiguity.
+Credential rotation and explicit reset/readmission are deferred. R3 still
+defines basic RPC authority separation; R4 gates reorganization cleanup.
 
 | ID | Required resolution | Owner | State |
 | --- | --- | --- | --- |
