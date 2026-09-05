@@ -20,7 +20,13 @@ integrity. See the
 ## Architecture invariants
 
 - Treat each operator as an independently deployable and versioned product.
-- The network operator owns desired topology and its Kubernetes workloads.
+- `StacksNetwork` declares baseline topology and supported ongoing behavior.
+  The aggregate controller compiles owned resources; separate capability
+  controllers perform production. It does not execute an experiment or
+  bootstrap plan. Follow the [steady-state design](docs/design/steady-state-operation.md).
+- Target APIs keep `BitcoinNode` mining-neutral and retain mining as a
+  `StacksNode` role. Preserve the implemented Bitcoin role contract until an
+  explicit API/fixture migration.
 - The observability operator is read-only with respect to the environment it
   observes. It must not mutate network topology, action resources, or actor
   workloads, or import the network operator's runtime implementation. It may
@@ -38,6 +44,13 @@ integrity. See the
 - Long-lived desired operation, such as `BitcoinBlockProduction`, is mutable
   and separate from the bounded-action lifecycle. It maintains one ongoing
   capability without terminal completion claims or action sequencing.
+- Baseline timing and target selection are distinct. Temporary overrides
+  resume the latest baseline; they do not restore an old spec snapshot.
+- Validate each capability's required target identity independently of global
+  health. Never treat stale or partial aggregate inventory as complete.
+- Qualify protocol fault paths separately from production control access.
+  Losing RPC control does not prove that an actor stopped mining. Client
+  deadlines and Lease expiry do not establish server-side quiescence.
 - Deterministic distributed-system outcomes are not a product goal. Preserve
   identity and evidence integrity so an agent can attempt best-effort replay,
   verify an issue semantically, and derive a confirmed reduced reproducer

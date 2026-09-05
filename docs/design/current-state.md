@@ -25,6 +25,11 @@ container command overrides, storage, CPU and memory, placement, and
 suspension. Aggregate-owned leaf resources must be changed through the parent.
 Standalone leaf resources remain an advanced API.
 
+The [steady-state operation direction](steady-state-operation.md) extends the
+aggregate to owned baseline capabilities and makes future Bitcoin nodes
+mining-neutral. Existing role enums and complete-inventory APIs are unchanged;
+this documentation amendment does not implement that migration.
+
 The operator supports persistent volumes and retention, but refuses unsafe
 in-place changes to immutable StatefulSet service identity, selectors, and
 volume-claim templates. A replacement logical actor is required for those
@@ -63,7 +68,8 @@ Git, runs repository build logic, or constructs an image.
 
 | Area | Missing capability |
 | --- | --- |
-| Bitcoin lifecycle | Bootstrap mining, continuous cadence, bounded/flash block generation, controlled reorganization, and RPC-observed peer/branch state. |
+| Bitcoin lifecycle | Aggregate-owned timing/target-selection policy, continuous production, bounded generation, controlled reorganization, and RPC-observed branch state. |
+| Steady transaction demand | Ongoing producers, funding/nonce ownership, offered-rate control, backpressure, and submission evidence. |
 | Protocol bootstrap | Signer registration, stacking/reward-set activation, wallet funding, and explicit readiness beyond Kubernetes health. |
 | Generic faults | Native Chaos Mesh installation guidance, safe direct targeting, correlation, and observation. |
 | Protocol actions | Signer/miner behavior controls, application clock offset, bounded input behaviors, and portable storage pressure. |
@@ -106,9 +112,13 @@ The following historical structures must not return:
 - High-volume telemetry and evidence must not be stored in Kubernetes CRDs.
 - A forced reorganization is an action even though natural reorganizations are
   normal Bitcoin behavior.
-- Multi-miner topology and block production are separate concerns: topology
-  declares miners; `BitcoinBlockProduction` will control each baseline
-  cadence independently.
+- Bitcoin topology and block production are separate concerns: neutral nodes
+  host chain state; `BitcoinBlockProduction` declares timing and selection
+  among referenced nodes. Stacks nodes retain miner configuration.
+- Baseline production needs current target admission independent of unrelated
+  actor health; whole-network readiness can itself depend on chain progress.
+- Supported protocol faults must distinguish actor traffic from centralized
+  production control access; arbitrary isolation has no continuity guarantee.
 - Safe independent upgrades require persistent-data compatibility guidance and
   explicit identity transitions, not an in-cluster rollout plan.
 
@@ -120,5 +130,5 @@ The following historical structures must not return:
    rather than an external bootstrap tool?
 3. Is sBTC in the first actor-expansion release or a later extension?
 4. Which managed Kubernetes providers expose usable audit streams?
-5. Does the first action operator include all protocol actions or only Bitcoin
-   lifecycle controllers?
+5. Which controller/chart owns baseline production and transaction demand
+   while preserving independence from bounded actions?

@@ -43,6 +43,7 @@ must distinguish implemented behavior from proposed or unavailable features.
 | --- | --- |
 | Implemented | Present in the committed operators. |
 | Contract complete | Reviewed design and contract baseline is complete; runtime and served API availability require separate implementation. |
+| Reopened | A prior reviewed baseline needs amendment before implementation; its fixtures may be retained as superseded history. |
 | Direction | Agreed architectural constraint. |
 | Recommended | Proposed implementation awaiting API review. |
 | Open | Decision required before implementation. |
@@ -51,6 +52,8 @@ must distinguish implemented behavior from proposed or unavailable features.
 
 - The external agent is the orchestration and reasoning layer.
 - One action resource represents one bounded action.
+- `StacksNetwork` declares baseline operation through owned capability
+  resources; capability controllers do not wait for unrelated actors' health.
 - No operator plans scenarios, schedules experiments, replays journals,
   reduces failures, diagnoses root cause, or creates regression cases.
 - The observability operator is passive toward the observed environment.
@@ -69,7 +72,8 @@ must distinguish implemented behavior from proposed or unavailable features.
 | --- | --- |
 | [Current state](current-state.md) | Implemented capabilities, gaps, and historical feature inventory. |
 | [Topology](topology.md) | Mutable `StacksNetwork`, actor lifecycle, configuration, storage, and upgrades. |
-| [Bitcoin lifecycle](bitcoin-lifecycle.md) | Continuous block production, bounded generation, reorganization, and shared serialization. |
+| [Steady-state operation](steady-state-operation.md) | Agreed baseline ownership, multi-target Bitcoin production, transaction demand, fault paths, and open review gates. |
+| [Bitcoin lifecycle](bitcoin-lifecycle.md) | Revised production direction and reopened admission, credentials, execution, and cleanup contracts. |
 | [Atomic actions](actions.md) | Normative shared action lifecycle, targeting, status, cleanup, and extension rules. |
 | [Chaos Mesh](chaos-mesh.md) | Direct native fault usage, selection, policy, correlation, and packaging. |
 | [Protocol actions](protocol-actions.md) | Non-Chaos-Mesh signer, miner, clock, storage, and input behaviors. |
@@ -89,17 +93,21 @@ part of M0 rather than silently treated as implemented decisions.
 ```text
 external agent
   ├─ patches StacksNetwork or creates standalone actor resources
-  ├─ creates or updates BitcoinBlockProduction for baseline chain progress
+  ├─ changes baseline production and transaction demand through StacksNetwork
   ├─ creates native Chaos Mesh fault resources
   ├─ creates one protocol-specific action resource per action
   ├─ queries observability APIs and telemetry stores
   └─ investigates, retries, reduces, and reports issues
 
 stacks-network-operator
-  └─ desired topology and actor workloads
+  └─ compiles actor and baseline capability declarations
+
+baseline capability controllers (packaging open)
+  ├─ BitcoinBlockProduction: timing and target selection
+  └─ StacksTransactionProduction: ongoing offered traffic
 
 stacks-action-operator (recommended)
-  └─ small independent controllers for Bitcoin production and protocol actions
+  └─ small independent controllers for bounded actions and overrides
 
 Chaos Mesh
   └─ generic Pod, network, DNS, I/O, time, and stress faults
@@ -119,9 +127,11 @@ when permissions, dependencies, or failure domains materially differ.
 | `StacksNetwork`, `BitcoinNode`, `StacksNode`, `StacksSigner` | Implemented; extend | [Topology](topology.md) |
 | `NetworkObservation` | Implemented compatibility API | [Current state](current-state.md) |
 | `ActionSafetyPolicy` | Recommended for custom actions | [Atomic actions](actions.md) |
-| `BitcoinBlockProduction` | M0.4 desired-operation contract complete; not implemented | [Bitcoin lifecycle](bitcoin-lifecycle.md) |
-| `BitcoinBlockGeneration`, `BitcoinReorganization` | M0.4 action contract complete; not implemented | [Bitcoin lifecycle](bitcoin-lifecycle.md) |
-| `ApplicationClockOffset`, `SignerBehavior`, `MinerBehavior` | Recommended | [Protocol actions](protocol-actions.md) |
+| `BitcoinBlockProduction` | M0.4 reopened for multi-target baseline production; not implemented | [Bitcoin lifecycle](bitcoin-lifecycle.md) |
+| `BitcoinBlockGeneration`, `BitcoinReorganization` | M0.3/M0.4 execution, admission, credentials, and cleanup reopened; not implemented | [Bitcoin lifecycle](bitcoin-lifecycle.md) |
+| `StacksTransactionProduction` | Direction; working name and schema open | [Steady-state operation](steady-state-operation.md) |
+| `SignerBehavior`, `MinerBehavior` | Recommended | [Protocol actions](protocol-actions.md) |
+| `ApplicationClockOffset` | Conditional on a qualified native `TimeChaos` gap | [Protocol actions](protocol-actions.md) |
 | `ProtocolInputInjection` | Recommended after endpoint decision | [Protocol actions](protocol-actions.md) |
 | `ActorDiskPressure` | Conditional fallback | [Protocol actions](protocol-actions.md) |
 | `NetworkTelemetry`, `EvidenceExport` | Recommended; names open | [Observability](observability.md) |
@@ -136,7 +146,9 @@ when permissions, dependencies, or failure domains materially differ.
 | Generic faults | Direction | Use native Chaos Mesh CRDs directly. |
 | Forced Bitcoin reorganization | Recommended | Bounded action resource, not `StacksNetwork` state. |
 | Natural Bitcoin reorganization | Direction | Emergent behavior to observe; no action resource required. |
-| Baseline Bitcoin production | Direction | One mutable `BitcoinBlockProduction` per Bitcoin node, outside the bounded-action lifecycle. |
+| Baseline Bitcoin production | Direction | Aggregate-owned policy separates timing from selection among neutral Bitcoin nodes; exact schema open. |
+| Baseline transaction demand | Direction | Separate ongoing producer capability; Stacks nodes retain miner configuration. |
+| Temporary override | Direction | One effective-behavior writer; removal resumes the latest baseline. |
 | Finite Bitcoin generation | Direction | One bounded `BitcoinBlockGeneration` using immediate, fixed, uniform-random, or explicit-sequence cadence. |
 | Observation storage | Direction | External telemetry/evidence store; never bulk data in CRD status. |
 | Replay and reduction | Direction | Agent responsibility outside operators. |
@@ -146,8 +158,8 @@ when permissions, dependencies, or failure domains materially differ.
 | Action correlation | Direction | `actions.stacks.org/correlation-id` is a search hint; object UID is authoritative. |
 | Observation API names | Open | `NetworkTelemetry` and `EvidenceExport` are working names. |
 | Aggregate action admission | Open | Not claimed initially; preserve direct native CRDs and avoid side-effecting admission. |
-| Bitcoin mutation serialization | Direction | One target-UID-derived Lease across production and action kinds, renewed by a leader-gated manager; ambiguity remains explicit. |
-| Bitcoin RPC credentials | Direction | `spec.bitcoinRPCAuth`, v2 profiles, fixed immutable Secret, and expected digest; never selected by an action spec. |
+| Bitcoin mutation serialization | Reopened | Shared per-target exclusion is required; server-side quiescence and takeover semantics remain open. |
+| Bitcoin RPC credentials | Reopened | Separate observation/mutation authority with digest-verified rendering; concrete profiles and names remain open. |
 
 ## Design acceptance
 

@@ -11,7 +11,9 @@ operator contains a scenario planner or decides what an observed result means.
 An agent may independently:
 
 1. create or patch a `StacksNetwork` and wait for its observed generation;
-2. create or update `BitcoinBlockProduction` when baseline progress is needed;
+2. declare Bitcoin production and transaction demand through `StacksNetwork`;
+   standalone capability editing remains conditional on reviewed ownership,
+   overlap, and authorization contracts;
 3. inspect admitted actors and current protocol facts;
 4. create one native Chaos Mesh or protocol-specific action resource;
 5. watch that resource and surrounding telemetry;
@@ -62,17 +64,30 @@ fixed intervals. Custom actions use the normative `Pending`, `Admitted`,
 phases. The agent decides whether to wait, delete an action to request
 cancellation, investigate, or apply another resource.
 
-`BitcoinBlockProduction` is different: it uses mutable `cadence` and `paused`
-desired state with `Pending`, `Running`, `Paused`, `Degraded`, and
-`Terminating` phases. A bounded Bitcoin action receives target priority; the
-producer resumes baseline cadence after that action releases the shared
-reservation.
+`BitcoinBlockProduction` and ongoing transaction producers are mutable desired
+operation, not terminal actions. Their revised fields and status remain open.
+Watch current policy generation, target availability, acknowledged effects,
+skipped opportunities, and uncertainty as distinct facts. Whole-network
+`Ready` is not the prerequisite for an independently valid target.
+
+Temporary overrides resume the latest baseline after cleanup. A reservation
+deadline or client timeout alone does not prove that a Bitcoin mutation has
+stopped; clients must preserve any unresolved exclusion/uncertainty state.
 
 `Inconclusive` is a first-class result. Clients must not translate it to
 success or failure. Protocol correctness remains a conclusion drawn by the
 agent from trusted and self-reported evidence.
 
 ## Query API
+
+The planned v1 query service uses bounded, read-only HTTP GET requests through
+the Kubernetes API-server Service proxy. Existing kubeconfig or projected
+ServiceAccount credentials authorize that path. Bulk evidence uses its storage
+destination's native client. See M0 Requirements 17–21 for the access contract.
+
+The proxy does not authenticate direct connections to the backend. Deployment
+qualification must establish its network/actor trust boundary or add direct
+backend authentication before broader exposure.
 
 The observation query service complements Kubernetes watches for high-volume
 data. Agent clients need:
@@ -109,7 +124,10 @@ aggregate topology, use approved action resources, and create
 bounded `EvidenceExport` requests. They cannot edit compiled leaves,
 workloads, status subresources, Secrets, safety policy, telemetry/storage/
 destination profiles, or operator RBAC. Query and watch APIs apply bounded
-pagination, concurrency, bytes, and time ranges.
+pagination, concurrency, bytes, and time ranges. Allowing arbitrary actor images,
+commands, or Secret references delegates workload authority through the network
+operator; denying direct Pod/Secret API access alone does not contain it. See
+[Security and safety](security-and-safety.md).
 
 ## Client tests
 
@@ -142,6 +160,6 @@ pagination, concurrency, bytes, and time ranges.
 
 ## Open decisions
 
-1. HTTP versus gRPC for the initial observation query service.
+1. Qualification of direct-backend reachability and its trust boundary (R7).
 2. Whether a maintained Go client library is justified beyond generated
    Kubernetes clients and query schemas.

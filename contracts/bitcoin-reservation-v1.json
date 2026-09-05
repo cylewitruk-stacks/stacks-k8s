@@ -1,4 +1,7 @@
 {
+  "designStatus": "superseded-design-baseline",
+  "sourceDocument": "docs/design/history/bitcoin-lifecycle-m0.4.md",
+  "supersededBy": "contracts/steady-state-operation-v1.json",
   "acquisitionTokenBytes": 16,
   "annotations": [
     "bitcoin.stacks.org/holder-kind",

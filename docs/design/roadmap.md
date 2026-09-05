@@ -1,257 +1,223 @@
-# Architecture implementation roadmap
+# Implementation roadmap
 
-## Design-package status
+## Authority and planning rules
 
-| Area | Design status | Implementation status |
-| --- | --- | --- |
-| Current inventory and boundaries | Complete | Existing operators only |
-| Atomic action API conventions | Complete | Contract fixture only; no action CRDs |
-| Mutable topology | Ready for API review | Partially implemented |
-| Bitcoin production and lifecycle actions | M0.4 contract complete | Not implemented |
-| Native Chaos Mesh profile | Ready for implementation planning | Not packaged here |
-| Protocol-specific actions | Ready for API review, with stated open decisions | Not implemented |
-| Passive telemetry and evidence | Ready for backend/API decision | Identity snapshot only |
-| Agent, security, and packaging contracts | Ready for review | Partially implemented |
+The [M0 remediation plan](m0-remediation-plan.md) owns delivery status and
+requirements. It adopts [Steady-state operation](steady-state-operation.md);
+the R1–R8 ledger identifies review gates. This roadmap follows its revised
+post-M0 order and supersedes the earlier journal-first sequence.
 
-“Ready” means the implementation contract and unresolved decisions are
-explicit; it does not mean an API has been approved or shipped.
-
-The review-driven [M0 remediation plan](m0-remediation-plan.md) is authoritative
-where it changes an API, dependency, access model, or milestone order described
-below. Reconciliation of those sections is an explicit M0 deliverable.
-
-## Planning rules
-
-- Ship the smallest independently useful capability at each milestone.
-- The external agent remains the only orchestrator.
-- One action resource represents one bounded action.
-- Do not block topology maturity on fault or observation products.
-- Qualify facts and safety properties; never claim deterministic distributed
-  outcomes.
-- Every implementation milestone updates API, examples, operator guidance,
-  compatibility, security, and release documentation.
+- Ship independently useful capabilities with explicit dependencies.
+- Keep ordinary regtest operation available without agents, bounded actions,
+  Chaos Mesh, or observability.
+- Let external clients sequence bootstrap and investigations.
+- Qualify reliability, liveness, resilience, performance/efficiency, and
+  defensive investigation use cases; do not claim deterministic execution.
+- Update schemas, examples, permissions, operations, compatibility, and release
+  documentation with each implemented capability.
 
 ## Dependency order
 
 ```text
-API conventions
-  -> mutable topology
-       -> minimal passive journal
-            -> Bitcoin production and lifecycle actions
-            -> native Chaos Mesh profile
-            -> full passive telemetry
-                 -> evidence export and query
-            -> protocol actions
-  -> agent ergonomics and full qualification
+M0: reviewed API, identity, execution, and packaging contracts
+  -> M1: baseline and bounded Bitcoin production
+  -> M2: bootstrap primitives and steady transaction demand
+  -> M3: multi-actor and independent-upgrade qualification
+  -> M4: passive journal and initial telemetry
+  -> M5: native Chaos Mesh profile
+  -> M6: remaining Bitcoin lifecycle actions
+  -> M7: evidence export and query
+  -> M8: qualified instrumented actions and agent ergonomics
 ```
 
-Topology identity is the shared foundation. The minimal journal precedes action
-qualification so later milestones can prove correlation and gaps. Observation
-consumes actions without controlling or becoming a runtime dependency of them.
+This is a delivery order, not a controller workflow or mandatory runtime chain.
+Observation consumes lifecycle facts without becoming a mutation dependency.
+Each milestone may use a narrower reviewed capability profile, but must reject
+unsupported requests explicitly.
 
-## M0: close API decisions and conventions
+## M0: close contracts and remediation
 
-**Outcome:** review and freeze the alpha conventions required for independent
-implementation.
+**Outcome:** implementation-ready contracts without unresolved assumptions
+hidden in code.
 
-Execute the complete [M0 architecture remediation plan](m0-remediation-plan.md),
-following its ordered M0.x delivery-slice ledger. Requirement numbers in that
-document are stable topical identifiers, not execution steps. The plan also
-replaces the target post-M0 milestone order; the existing M1-M8 sections
-remain design inputs to be reconciled during M0.
+M0.1 shared APIs and M0.2 common action vocabulary remain complete. M0.3 and
+M0.4 are reopened for independent target admission, multi-target production,
+RPC quiescence, authority separation, and cleanup. Historical Bitcoin fixtures
+are marked superseded; passing their tests does not authorize implementation.
 
-- Retain the frozen custom-action API group, correlation label,
-  condition/phase vocabulary, typed references, and immutable-from-creation
-  policy from the normative action contract.
-- Freeze exact structural schemas, defaults, condition/reason tables,
-  finalizer names, terminal-generation behavior, and reference semantics.
-- Freeze conservative per-kind bounds, defer `ActionSafetyPolicy` elevation
-  until a concrete override is required, and document the initial absence of
-  a cross-kind atomic aggregate guarantee.
-- Choose initial observation journal/storage and query protocol.
-- Define supported version/skew posture and the first compatibility matrix.
-- Add architecture decision records for unresolved choices that become final.
+M0.5 covers native faults, M0.6 bootstrap/transaction demand and actor
+capabilities, M0.7 observability/access, and M0.8 packaging/release alignment.
+The final consistency/security/roadmap audit is **M0 closeout**, not M0.9.
 
-**Done:** every subsequent CRD has an approved API sketch, owner, permission
-boundary, and non-goals; no open decision blocks its first vertical slice.
+**Done:** affected schemas, ownership, bounds, status, endpoint identity,
+execution recovery, and packaging are reviewed. Each R1–R8 item is resolved or
+explicitly deferred for an unavailable capability; no enabled feature depends
+on an unresolved gate.
 
-## M1: mutable multi-actor topology
+M0 resolves designs and specifies acceptance. M1–M8 implement and validate
+those resolutions; design completion does not claim runtime qualification.
 
-**Outcome:** make `stacks-network-operator` independently useful for diverse
-regtest networks and upgrades.
+## M1: baseline and bounded Bitcoin production
 
-- Qualify multiple Bitcoin miners/followers and multiple Stacks miners.
-- Implement dependency-aware add/remove/roll/suspend semantics.
-- Add watched ConfigMap updates and documented immutable Secret references.
-- Add `spec.bitcoinRPCAuth`, compile it into Bitcoin and Stacks leaves, publish
-  both v2 generated profiles, and update leaf/inventory contract vectors before
-  enabling managed Bitcoin actions.
-- Qualify persistent database retention across independent actor upgrades.
-- Publish editor/viewer Roles that prevent ordinary direct leaf mutation.
-- Decide and, if needed, implement `SbtcSigner` as a distinct lifecycle kind.
+**Outcome:** an ordinary regtest network advances Bitcoin through a declared
+baseline, with finite generation separately available.
 
-**Done:** [Mutable topology design](topology.md) definition of done passes with
-selected real image/version pairs and no image-building behavior in-cluster.
+- Implement neutral Bitcoin-node API migration and required credential/config
+  profiles, including leaf/inventory identity vectors and rollout semantics.
+- Compile owned baseline policy from `StacksNetwork`. Standalone capability
+  support is conditional on reviewed ownership, overlap, and authorization.
+- Implement the reviewed timing/target-selection profile without silently
+  changing weights or substituting targets.
+- Implement finite `BitcoinBlockGeneration` with immutable bounded specs.
+- Implement and validate the M0 resolutions of R1–R3: independent target/endpoint
+  admission, outstanding-RPC exclusion and quiescence, and separated RPC authority.
+- Exercise primary-object finalizers through actual RBAC (R5).
+- Keep bounded status and structured mechanism facts available without a
+  journal; do not infer acknowledged effects from observed chain tips.
 
-## M2: minimal passive journal foundation
+**Done:** baseline production runs with actions/observation/Chaos disabled,
+survives supported controller recovery, and progresses on a valid target while
+unrelated actors are unready. Ambiguous server work cannot authorize unsafe
+takeover, retry, or resumption.
 
-**Outcome:** truthfully correlate topology and future action lifecycles before
-qualifying those actions.
+## M2: bootstrap primitives and steady transaction demand
 
-- Implement `NetworkTelemetry` with one storage profile, audit/watch source
-  coverage, immutable journal envelope, redaction, gaps, and bounded retention.
-- Record topology, Kubernetes Event, and generic dynamic-resource lifecycles.
-- Implement optional-CRD discovery and informer appearance/disappearance.
-- Publish source coverage classes and prove read-only observer RBAC.
-- Defer protocol polling, logs, metrics, query, and export to later vertical
-  slices.
+**Outcome:** supported Stacks images reach productive operation with explicit
+bootstrap inputs and ongoing offered traffic.
 
-**Done:** a network rollout and an arbitrary test CRD lifecycle produce a
-verifiable local journal with honest coverage/gaps through source outage and
-controller restart; high-volume data remains outside etcd.
+- Expose reviewed bounded bootstrap primitives or an external helper for
+  funding, coinbase maturity, signer authorization/registration, and reward
+  activation. The external client sequences them.
+- Implement the reviewed steady transaction producer capability, provisionally
+  `StacksTransactionProduction`, through owned baseline declarations.
+- Enforce account/nonce ownership, bounded in-flight work, funding assumptions,
+  backpressure, and explicit ambiguous submission.
+- Validate the M0.6 signing-authority contract, including credential isolation
+  and rotation/revocation for designated transaction workers.
+- Keep Stacks miner behavior in `StacksNode` configuration and qualify
+  proposal behavior against concrete image versions.
+- Define pause/update and latest-baseline restoration without stale snapshots.
 
-## M3: Bitcoin lifecycle and atomic-action foundation
+**Done:** a documented ordinary-use profile produces Bitcoin progress,
+transaction demand, and observed Stacks progress without a chaos agent or
+observation operator. Stalled bootstrap and submission failure remain
+distinguishable; no controller becomes a bootstrap workflow.
 
-**Outcome:** independently maintain normal regtest block production and
-control bounded Bitcoin state transitions.
+## M3: multi-actor topology and independent upgrades
 
-- Add shared action identity/status/finalizer/Lease helpers without a generic
-  action engine.
-- Apply the absolute per-kind limits frozen by M0.4 and exact RBAC. Defer
-  policy elevation until a concrete administrator override is required.
-- Implement mutable `BitcoinBlockProduction` and finite
-  `BitcoinBlockGeneration` on the shared credential and reservation paths,
-  then implement `BitcoinReorganization`.
-- Expose only typed regtest RPC methods. Bounded actions treat a lost mutation
-  response as inconclusive unless every known tip proves absence; production
-  records ambiguity without inferring completion or blindly retrying.
-- Run the shared per-target Lease protocol through a leader-gated reservation
-  manager that owns every Lease write independently of reconcile workqueues.
-- Treat the v1 protocol schedule as unknown and require every boundary opt-in
-  until a trusted schedule source is designed.
-- Correlate resource, policy, identity, and RPC lifecycle through the M2
-  journal without making observation a mutation dependency.
+**Outcome:** reusable heterogeneous networks preserve identity and storage
+across supported changes.
 
-**Done:** each resource satisfies its own section in
-[Bitcoin lifecycle design](bitcoin-lifecycle.md), its controller can run with
-the other Bitcoin controllers disabled, and it composes with a separately
-submitted native partition.
+- Qualify multiple Bitcoin targets, multiple Stacks miners, followers, and
+  transaction ingress through appropriate nodes.
+- Exercise add/remove/roll/suspend and baseline policy updates.
+- Add reviewed ConfigMap watching and credential rotation semantics.
+- Qualify persistent-data compatibility across selected real image pairs.
+- Publish aggregate editor/viewer Roles and constrain or explicitly trust
+  delegated workload authority (R6).
+- Decide `SbtcSigner` only from distinct executable/lifecycle requirements.
 
-## M4: native Chaos Mesh agent profile
+**Done:** [Topology](topology.md) acceptance passes, with current target
+admission distinct from complete aggregate inventory and protocol progress.
 
-**Outcome:** agents directly use qualified upstream fault resources safely.
+## M4: passive journal and initial telemetry
 
-- Pin and qualify initial Chaos Mesh/platform matrix.
-- Publish direct examples for Pod, Network, DNS, IO, Time, and Stress chaos as
-  supported per platform.
-- Add least-privileged agent RBAC and admission limits; deny Workflow/Schedule.
-- Standardize logical actor targeting and correlation metadata.
-- Require immutable specs and static namespace/selector admission; document
-  the deferred live-enrollment check and logical-target versus Pod-UID
-  divergence semantics.
-- Verify injection, cancellation, expiry, recovery, and M2 journal gaps.
+**Outcome:** retain a truthful recent record in an existing durable backend.
 
-**Done:** [Native Chaos Mesh integration](chaos-mesh.md) passes without a
-wrapper CRD or dependency from the network operator.
+- Implement the reviewed `NetworkTelemetry` surface, source metadata,
+  pre-storage redaction, bounded retention, and honest gaps.
+- Capture topology, baseline, action, Event, and configured protocol facts.
+- Support optional-CRD discovery without startup dependency on action/Chaos APIs.
+- Prove Kubernetes and RPC observation authority cannot mutate the environment.
+- Keep audit webhooks optional; watches never promise every intermediate write.
 
-## M5: full passive telemetry
+**Done:** rollout, baseline updates, and independently created resources remain
+correlated through restart/source outage, with bounded CRD status and explicit
+coverage.
 
-**Outcome:** continuously retain a bounded, truthful recent record around agent
-activity.
+## M5: native Chaos Mesh profile
 
-- Extend the M2 journal rather than create a second event path.
-- Collect typed Bitcoin, Stacks, signer, workload, log, and metric facts.
-- Add source-specific watermarks, sampling, backpressure, and backend health.
-- Keep high-volume data outside etcd and prove observer read-only RBAC.
+**Outcome:** clients directly use qualified upstream fault resources.
 
-**Done:** the `NetworkTelemetry` definition of done in
-[Passive observability](observability.md) passes through source outage,
-controller restart, network rollout, and concurrent independent actions.
+- Pin and qualify the initial platform matrix and static admission profile.
+- Bound namespace/selector/duration scope; deny Workflow/Schedule.
+- Record selected Pod identity and replacement without claiming UID-pinned
+  native targeting.
+- Qualify protocol partitions separately from production control-path failure.
+- Test injection, expiry, cancellation, recovery, and telemetry gaps.
+- Qualify native `TimeChaos` before accepting a custom clock-control fallback.
 
-## M6: evidence export and agent query
+**Done:** [Chaos Mesh](chaos-mesh.md) acceptance passes without wrapper APIs or a
+baseline dependency on Chaos Mesh. Continuity claims state their traffic and
+platform assumptions.
 
-**Outcome:** let agents efficiently inspect and preserve relevant retained
-facts.
+## M6: remaining Bitcoin lifecycle actions
 
-- Implement bounded, paginated read-only query APIs and stable cursors.
-- Implement `EvidenceExport`, content-addressed manifest, and completeness/gap
-  reporting.
-- Publish client schemas and thin CLI commands for query/follow/export.
-- Enforce namespace/network authorization and query resource limits.
+**Outcome:** bounded Bitcoin lifecycle mechanisms compose with baseline
+production under the reviewed exclusion contract.
 
-**Done:** an agent can retrieve and verify a bounded incident window, including
-mutation/action history and gaps, without any replay or diagnosis endpoint.
+Implement `BitcoinReorganization` only after R4 defines invalidation-marker
+cleanup for every exit path and R2 covers server work across takeover/recovery.
+Retain conservative bounds and fail-closed protocol-boundary handling until a
+trusted schedule source is designed. Passive observations report branch facts
+without claiming causal attribution or deterministic results.
 
-## M7: protocol-specific action families
+**Done:** lifecycle, ambiguity, deletion, timeout, restart, target replacement,
+and cleanup acceptance in [Bitcoin lifecycle](bitcoin-lifecycle.md) passes.
+A resource's successful mechanism does not assert a protocol outcome.
 
-**Outcome:** expose narrowly bounded Stacks mechanisms that generic
-infrastructure faults cannot provide.
+## M7: evidence export and agent query
 
-Recommended order:
+**Outcome:** clients inspect and preserve bounded retained facts.
 
-1. `ApplicationClockOffset`;
-2. `SignerBehavior`;
-3. `MinerBehavior`;
-4. `ProtocolInputInjection` after its fixture/endpoint design; and
-5. `ActorDiskPressure` only if native platform qualification proves a need.
+- Implement read-only HTTP GET queries through the API-server Service proxy.
+- Qualify direct backend reachability and actor trust, or require a reviewed
+  authenticated backend path (R7).
+- Prefer backend-native pagination; report expired/pruned cursors honestly.
+- Export already-redacted evidence and content-integrity manifests to approved
+  destinations; keep bulk archives off the API-server proxy.
+- Separate `Exported` operation status from evidence completeness and coverage.
 
-Each kind receives a separate controller package, schema, RBAC slice, example,
-reference page, real-image negative control, and observation correlation.
+**Done:** clients verify an evidence window and distinguish transfer failure,
+capture gaps, and source absence without a replay or diagnosis endpoint.
 
-**Done:** every implemented kind satisfies [Protocol-specific atomic actions](protocol-actions.md)
-and a normal image or unsupported platform is rejected before mutation.
+## M8: qualified instrumented actions and agent ergonomics
 
-## M8: agent ergonomics and full qualification
+**Outcome:** supported capabilities are usable for ordinary testing and
+authorized investigation with clear limits.
 
-**Outcome:** make independent capabilities efficient and safe for real agentic
-investigation.
+Enable each instrumented action only after its bounded mechanism, image
+capability, expiry, credentials, and cleanup are reviewed. Clock/storage
+fallbacks require a demonstrated native-platform gap. Unavailable hooks must
+not block independent baseline or observation releases.
 
-- Validate discovery, printer columns, status/reason stability, server-side
-  dry-run, watches, and query pagination.
-- Publish agent-oriented tasks without fixed scenarios or expected outcomes.
-- Run security/threat tests, supply-chain checks, upgrades, storage recovery,
-  telemetry failures, and concurrent action safety.
-- Publish compatibility matrices and independently versioned charts/images.
+Validate discovery, dry-run, watch recovery, stable reasons, overrides,
+concurrent capabilities, upgrades, storage recovery, and supply-chain checks.
+M0.8 defines R8's ordinary regtest, reliability/liveness/resilience,
+performance/efficiency, and reported-behavior verification acceptance tasks;
+M8 completes their cross-product qualification.
+Verification records observed behavior and evidence limits, not guaranteed
+reproduction.
 
-**Done:** a least-privileged client can adaptively alter topology, submit
-independent actions, inspect facts, and export evidence using only documented
-interfaces. No operator chooses the next action or claims root cause.
+**Done:** a supported client can change baseline policy, submit independent
+actions, inspect facts, and export evidence through documented interfaces.
+Publish independently versioned artifacts and a tested compatibility matrix.
 
-## Deferred backlog
+## Cross-cutting release checks
 
-| Item | Reason |
-| --- | --- |
-| Managed-cluster and multi-architecture matrix expansion | Qualify after local vertical slices stabilize. |
-| `SbtcSigner` | Await executable/lifecycle requirements. |
-| Advanced Chaos Mesh kinds | Require a concrete use case and platform contract. |
-| Git build/provenance service | External concern; operators consume OCI digests only. |
-| Automated replay, scenario, reduction, or diagnosis | Explicitly out of scope; external agent owns these activities. |
-| Deterministic network execution | Not realistic or necessary for the product goal. |
+Every enabled capability needs structural schemas/CEL, meaningful controller
+and envtest coverage, exact rendered RBAC, admission negative tests, and
+proportional real-cluster qualification. Cover deletion, identity drift,
+restart, ambiguity, storage/telemetry failure, and configuration migration.
+Publish API/operations documentation and signed/scanned artifacts where released.
 
-## Cross-cutting release checklist
+First qualify three-node kind on Docker Desktop, macOS arm64/Apple Silicon.
+Managed Kubernetes remains a required direction, with explicit CNI, storage,
+proxy, actor-image, and native-fault qualification before support claims.
 
-Every milestone must include:
+## Deferred capabilities
 
-- structural schemas/CEL and generated-file currency;
-- idempotent controller unit and envtest coverage;
-- live qualification proportional to side-effect risk;
-- exact rendered RBAC and admission negative controls;
-- observability and capture-gap behavior;
-- upgrade/delete/restart/identity-drift behavior;
-- API, example, operations, compatibility, and release documentation; and
-- signed/scanned independently versioned artifacts where published.
-
-## Open decision ledger
-
-The detailed documents own their domain decisions. Before implementation,
-maintainers should resolve at least:
-
-1. observation API names and query protocol;
-2. exact action per-resource impact vocabulary and policy defaults;
-3. actor testing-capability protocol;
-4. initial Chaos Mesh/platform matrix;
-5. observation journal, audit integration, query protocol, and retention;
-6. evidence destination/encryption model; and
-7. trusted protocol-schedule publication for selective Bitcoin reorganization
-   boundary admission; and
-8. product release and compatibility policy.
+Autonomous node-local Bitcoin production, hard aggregate action accounting,
+advanced native faults, and unavailable instrumented-image hooks need separate
+contracts. External image building, investigation planning, replay, reduction,
+and diagnosis remain outside operators. Runtime determinism is not a goal.

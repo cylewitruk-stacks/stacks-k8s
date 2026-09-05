@@ -1,0 +1,41 @@
+{
+  "contract": "network.stacks.org/steady-state-operation/v1",
+  "designStatus": "direction-agreed",
+  "schemaFrozen": false,
+  "implementationReady": false,
+  "designDocument": "docs/design/steady-state-operation.md",
+  "baselineOwner": "StacksNetwork",
+  "bitcoinNodeMiningRole": false,
+  "stacksNodeMiningRole": true,
+  "bitcoinProduction": {
+    "resource": "BitcoinBlockProduction",
+    "timingAndTargetSelectionSeparate": true,
+    "multipleReferencedTargets": true,
+    "silentWeightRedistribution": false,
+    "centralControlPathRequired": true,
+    "autonomousLocalFallback": false
+  },
+  "transactionProduction": {
+    "workingKind": "StacksTransactionProduction",
+    "offeredRateNotConfirmedThroughput": true,
+    "nonceOwnershipRequired": true,
+    "signingAuthorityIsolationRequired": true
+  },
+  "overridesResume": "latest-baseline",
+  "globalReadinessRequired": false,
+  "openReviewGates": [
+    "R1",
+    "R2",
+    "R3",
+    "R4",
+    "R5",
+    "R6",
+    "R7",
+    "R8"
+  ],
+  "supersededFixtures": [
+    "bitcoin-actions-v1.json",
+    "bitcoin-block-production-v1.json",
+    "bitcoin-reservation-v1.json"
+  ]
+}

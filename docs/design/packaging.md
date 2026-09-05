@@ -7,14 +7,18 @@
 | `apis/network` | Versioned network Kubernetes API types | Kubernetes API machinery only |
 | `stacks-network-operator` | Reusable Stacks regtest topology | Kubernetes only |
 | `stacks-observability-operator` | Passive identity and telemetry collection | Reads network/action/Chaos APIs; does not import their runtime code |
-| `stacks-action-operator` | Bitcoin production, protocol-specific atomic actions, and safety policy | Uses versioned network wire APIs |
+| `stacks-action-operator` | Bounded protocol actions, overrides, and safety policy | Uses versioned wire APIs |
+| Baseline capability controllers (placement open) | Bitcoin production and ongoing transaction demand | Independent of enabled action, Chaos Mesh, or observation controllers |
 | Chaos Mesh | Generic infrastructure faults | External optional dependency |
 | Telemetry backend bundle | Loki/Prometheus/OpenTelemetry/object storage profile | External optional dependencies |
 | Development bundle | Pins compatible chart versions for local use | Depends on products; does not merge their release lifecycles |
 
 The network chart must remain useful alone. Observation and action charts are
 independently installable and versioned. A bundle is convenience packaging,
-not a new monolithic controller.
+not a new monolithic controller. Baseline operation must be available without
+enabling bounded-action controllers. M0.4/M0.6/M0.8 must choose controller,
+chart, ServiceAccount, and CRD ownership for baseline capabilities; do not
+silently require the action operator to run an ordinary productive network.
 
 The observability chart treats network APIs as required only when a
 `NetworkTelemetry` targets one, and action/Chaos APIs as optional discovery
@@ -47,6 +51,7 @@ contracts/
   image-id-v1.json
   inventory-v1.json
   leaf-spec-v1.json
+  steady-state-operation-v1.json  # direction and open gates, not a served schema
 docs/
   design/
   ...
@@ -63,9 +68,12 @@ graph or release cadence.
 ## CRD ownership and installation
 
 - Each chart owns only its CRDs and namespaced/cluster-scoped RBAC.
-- The action chart may own both `actions.stacks.org` and
-  `bitcoin.stacks.org` CRDs; API lifecycle remains resource-specific even when
-  controllers share one binary and reservation manager.
+- Assign each future baseline/action CRD one owning chart. Placement remains
+  open; sharing a binary must not couple baseline availability to enabled
+  bounded actions or merge their API lifecycles.
+- CRDs are cluster-wide even for namespaced objects. Namespace isolation does
+  not permit incompatible versions of one CRD; publish installation ownership
+  and API skew rules for independent releases.
 - CRDs are generated from API types; generated files are committed.
 - Helm's CRD upgrade limitations require documented manual or release-tool
   steps before a served/storage version changes.
@@ -129,6 +137,7 @@ Integration profiles:
 | Profile | Contents |
 | --- | --- |
 | Topology | Network operator and real actor images |
+| Productive baseline | Topology, Bitcoin production, and transaction demand; action/observation/Chaos controllers disabled |
 | Observation | Topology plus observation and configured data plane |
 | Native faults | Topology, observation, and Chaos Mesh |
 | Protocol actions | Topology, observation, and action operator |
@@ -148,7 +157,10 @@ Integration profiles:
 
 - Every chart installs, upgrades within its supported alpha contract, and
   verifies independently.
-- The network operator has no action, Chaos Mesh, or telemetry dependency.
+- Ordinary baseline operation has no enabled bounded-action, Chaos Mesh, or
+  telemetry dependency; capability packaging and CRD prerequisites are explicit.
+- Qualification includes ordinary regtest use, reliability/liveness and
+  performance investigations, and evidence-based verification workflows.
 - No operator clones or builds Git source.
 - Bundle installation proves compatible pins without coupling releases.
 - Published artifacts are signed, scanned, documented, and reproducible as

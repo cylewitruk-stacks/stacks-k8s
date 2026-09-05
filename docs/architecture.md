@@ -20,7 +20,7 @@ NetworkObservation
   -> identity-bound observation status
 ```
 
-The network operator owns desired topology and workloads. The observability
+The implemented network operator owns topology and workloads. The observability
 operator is read-only with respect to the environment it observes and consumes
 published Kubernetes resources through their wire format. It may write its own
 resources and configured journal or evidence sinks, but never topology,
@@ -41,8 +41,8 @@ does not replace the agent with an in-cluster experiment engine.
 
 | Component | Responsibility |
 | --- | --- |
-| Network operator | Reconcile declarative topology and actor workloads. |
-| Desired-operation controllers | Maintain one mutable, ongoing operational capability, such as baseline Bitcoin block production, without sequencing actions. |
+| Network operator | Reconcile topology and actor workloads; target architecture also compiles owned baseline capabilities. |
+| Desired-operation controllers | Maintain aggregate-declared Bitcoin production and transaction demand with separate capability controllers. |
 | Action controllers | Execute one small, bounded, independently observable action represented by one resource. |
 | Observability operator | Passively collect, correlate, retain, query, and export facts and telemetry. |
 | Agent | Orchestrate, adapt, investigate, attempt replay, reduce, diagnose, and construct regression cases. |
@@ -87,6 +87,15 @@ found by the agent within its chosen trial budget, not a claim of causal
 minimality.
 
 ## Dependency boundaries
+
+The [steady-state amendment](design/steady-state-operation.md) extends the
+target `StacksNetwork` declaration to baseline operation. Its controller
+compiles owned production resources; separately permissioned controllers
+perform effects. Bitcoin nodes become mining-neutral, while Stacks nodes keep
+their miner role. Timing, weighted Bitcoin target selection, transaction
+demand, and temporary overrides have separate contracts. Capability admission
+must not depend on unrelated actors being healthy. These changes are not yet
+implemented; the current inventory and role APIs remain unchanged.
 
 - Runtime modules use controller-runtime's supported Kubernetes minor.
 - Types-only API modules use Kubernetes API machinery without importing

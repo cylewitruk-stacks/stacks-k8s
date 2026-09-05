@@ -5,9 +5,10 @@
 | Principal/component | Trusted for | Not trusted or permitted for |
 | --- | --- | --- |
 | External agent | Choosing and interpreting an investigation within granted policy | Cluster administration, status writes, safety-policy changes |
-| Network operator | Compiling declared topology and reporting admitted identity | Mining, faults, protocol conclusions |
+| Network aggregate/actor controllers | Compiling topology/baseline declarations and reporting admitted identity | Mining RPC, traffic generation, faults, protocol conclusions |
 | Action controllers | One typed mechanism and its lifecycle | Cross-action sequencing, arbitrary RPC/shell, diagnosis |
-| Bitcoin production controller | Maintaining one admitted node's bounded-rate baseline production | Action sequencing, topology mutation, completion claims |
+| Bitcoin production controller | Maintaining bounded-rate policy across admitted Bitcoin targets | Action sequencing, topology mutation, completion claims |
+| Transaction producer controller/workers | Offering bounded traffic under declared account and ingress policy | Bootstrap sequencing, protocol correctness or throughput claims |
 | Chaos Mesh | Its upstream injection/recovery contract | Stacks protocol correctness |
 | Observability operator | Collecting and labeling configured facts | Mutating observed resources, declaring root cause |
 | Actor | Its process behavior and self-reported telemetry | Proving its own identity or correctness |
@@ -19,8 +20,9 @@
 - Record network, leaf, workload, Pod, image, and applicable policy identity
   before mutation.
 - Use uncached reads immediately before security-sensitive effects.
-- Refuse replacement, deletion/recreation, stale generation, duplicate target,
-  and incomplete inventory rather than silently retargeting.
+- Refuse replacement, deletion/recreation, stale generation, and ambiguous
+  target identity rather than silently retargeting. Independent target
+  admission under R1 must not require unrelated actors to be healthy.
 - Use UID-preconditioned deletion and owner checks; never adopt foreign
   same-named objects.
 - Treat actor-reported identity or completion as untrusted until corroborated
@@ -67,10 +69,12 @@ bounded actions retain their recorded policy through cleanup. Before
 configured to use policy-based elevation, missing or stale policy fails closed
 for new actions.
 
-Mutable `BitcoinBlockProduction` is not governed by the action lifecycle or
-selected by `ActionSafetyPolicy`. Its schema enforces an absolute minimum
-interval, it acquires the same target reservation for only one block at a
-time, and it yields to waiting bounded Bitcoin actions.
+Mutable `BitcoinBlockProduction` and steady transaction demand are baseline
+capabilities, separate from the bounded-action lifecycle and
+`ActionSafetyPolicy`. Their schemas need absolute rate/work bounds,
+target-selection rules, and explicit coordination with bounded overrides.
+The revised production/exclusion contract remains open; see
+[Bitcoin lifecycle](bitcoin-lifecycle.md).
 
 ## Irreversible actions
 
@@ -86,10 +90,13 @@ Bounded actions additionally cap count, depth, timeout, and protocol-boundary
 risk, persist intent before mutation, and return `Inconclusive` when effect or
 attribution cannot be established.
 
-Continuous production makes no completion claim and therefore does not write
-per-block intent records. It keeps the target reservation through every RPC
-deadline, counts only acknowledged responses, records uncertainty separately,
-and never retries a lost call as the same requested effect.
+Continuous production makes no completion claim, but it still needs a reviewed
+outstanding-request and exclusion contract. RPC timeout, context cancellation,
+Lease expiry, or current chain-state absence does not establish server-side
+quiescence. R2 must close before enabling retry, takeover, or resumption.
+
+Reorganization cleanup must address temporary invalidation markers on every
+exit path (R4). Their removal is distinct from undoing irreversible history.
 
 Deletion stops future work but does not pretend to undo prior chain history.
 
@@ -98,11 +105,15 @@ Deletion stops future work but does not pretend to undo prior chain history.
 - Prefer short-lived projected credentials or immutable Secret references.
 - Never copy credentials into status, logs, events, journal payloads, or
   evidence manifests.
-- Action and observation operators read only administrator-configured Secret
-  `resourceNames`; public action specs never select Secret names. The initial
-  Bitcoin controllers use the fixed `stacks-bitcoin-rpc` Secret in enrolled
-  namespaces as the explicit exception. The network operator mounts and
-  content-verifies that input without Secret-read RBAC.
+- Controllers read only administrator-configured Secret `resourceNames`;
+  public action specs never select credentials. R3 replaces the shared Bitcoin
+  Secret proposal with separately restricted observation, Stacks-client, and
+  mutation authority. Verify RPC permission enforcement server-side.
+- The network operator mounts and content-verifies inputs without Secret-read
+  RBAC; exact profiles and rotation remain design gates.
+- Transaction signing credentials have a separate M0.6 Requirement 14 gate:
+  designated worker access, account ownership, rotation/revocation, and
+  isolation from actors, observers, and unrelated producers.
 - Actor Pods use non-root, no privilege escalation, dropped capabilities,
   runtime-default seccomp, read-only root filesystem where compatible, and no
   ServiceAccount token unless justified.
@@ -110,6 +121,15 @@ Deletion stops future work but does not pretend to undo prior chain history.
   remain isolated from stacks-k8s ServiceAccounts.
 - NetworkPolicy denies unintended actor and operator egress while preserving
   declared topology dependencies and telemetry endpoints.
+
+Topology editing delegates workload authority: an editor allowed arbitrary
+images, commands, environment, or configuration references can influence code
+that runs with mounted credentials. Denying direct workload/Secret API writes
+does not contain that indirect authority. The supported trust profile must
+either trust those authors for the exposed actor authority or constrain images,
+templates, mounts, and Secret references through admission and rendering.
+Keep observation credentials and unrelated controller credentials outside
+actor-controlled workloads; document residual trust explicitly (R6).
 
 ## Observability integrity and privacy
 
@@ -123,6 +143,12 @@ durable storage. Export destinations and deletion policy are
 administrator-controlled. An observer compromise must not grant workload or
 action mutation privileges.
 
+The planned query Service relies on API-server proxy authentication only for
+requests traversing that proxy. Direct backend connections bypass it.
+NetworkPolicy/CNI and actor trust qualification must establish the supported
+boundary; otherwise require a reviewed authenticated backend deployment (R7).
+ClusterIP alone is not an authentication boundary.
+
 ## RBAC profiles
 
 | Role | Allowed | Explicitly denied/not granted |
@@ -130,14 +156,22 @@ action mutation privileges.
 | Network viewer | Read aggregate/leaves/status | Writes, Secrets |
 | Network editor | Edit `StacksNetwork`; read leaves | Leaf/workload/status writes |
 | Action user | Create/read/delete approved action kinds; read policy | Action update/patch, policy, status, workload, arbitrary Chaos kinds |
-| Bitcoin production editor | Create/read/update/patch/delete `BitcoinBlockProduction` | Status, topology, credential, or arbitrary RPC writes |
+| Standalone baseline editor | Edit separately authorized unowned production resources | Aggregate-owned child specs, status, credentials, arbitrary RPC |
 | Observer viewer | Read telemetry/export status and query data | Source or export writes |
 | Evidence export requester | Create/read/watch/delete `EvidenceExport` | Telemetry configuration, destination/profile, status, or storage writes |
 | Observer operator | Manage telemetry configuration and administrator-approved profiles | Observed environment mutation or agent action selection |
 | Administrator | Install/configure policies and privileged dependencies | Subject to cluster policy/audit |
 
 Rendered RBAC is verified against exact allowlists. Wildcards require a
-documented exception and negative test.
+documented exception and negative test. Finalizer updates require update/patch
+on the primary resource, in addition to separate status permission. RBAC does
+not restrict such patches to metadata; admission and ownership checks provide
+complementary constraints. Test actual finalizer add/remove operations (R5).
+
+Standalone and aggregate-owned resources share kinds. RBAC cannot select them
+by owner reference; standalone editing needs an explicit namespace/name grant
+or reviewed admission constraint before that Role is supported. Controller
+reconciliation alone is not authorization.
 
 ## Threat-focused tests
 
@@ -165,7 +199,9 @@ documented exception and negative test.
 ## Definition of done
 
 - Each component has a documented threat boundary and exact rendered RBAC.
-- Agent and observer credentials cannot mutate compiled workloads.
+- Supported Roles deny direct compiled-workload mutation; topology authors'
+  delegated workload authority is explicitly constrained or trusted.
+- Observer credentials cannot mutate workloads or protocol state.
 - Every custom action is exact-identity-pinned; native Chaos actions pin their
   immutable request and logical targets and explicitly record Pod divergence.
   Every custom action is independently bounded and safe under retry. It is
@@ -178,7 +214,6 @@ documented exception and negative test.
 
 1. Admission webhook availability and failure policy for enrolled native
    targets.
-2. Credential model for actor testing interfaces; Bitcoin RPC is resolved by
-   M0.3.
+2. Separate Bitcoin RPC authority and actor testing-interface credentials (R3).
 3. Initial supported NetworkPolicy/CNI matrix.
 4. Evidence encryption, signing, and retention defaults.

@@ -82,6 +82,27 @@ Chaos Mesh resources may select several Pods because one native fault is still
 one independently observable action. Cross-kind or ordered behavior requires
 separate resources created by the agent.
 
+## Protocol faults and production control
+
+The qualified profile distinguishes Bitcoin P2P traffic, Stacks-to-Bitcoin RPC,
+and producer-to-Bitcoin RPC. A partial protocol partition should preserve the
+central producer's management path when continued block production is part of
+the declared experiment. Source/target selection and direction matter: Stacks
+clients and the producer can use the same Bitcoin RPC port. A separate Service
+name alone does not isolate traffic reaching the same Pod.
+
+Qualification must verify both the intended disruption and continued control
+access on the selected CNI/runtime. Pod-wide isolation, process failure, or
+node loss may remove that path; the centralized design makes no continuity
+promise then. Record control unavailability and ambiguous RPC effects rather
+than inferring that the Bitcoin process stopped or no block was produced.
+
+A disconnected real miner may continue working on locally available work,
+depending on its implementation and dependencies. The centralized regtest
+profile models protocol partitions with available management access; autonomous
+node-local production is deferred and cannot be enabled as an implicit fallback.
+See [Steady-state operation](steady-state-operation.md).
+
 ## Lifecycle and mutability
 
 The upstream resource controller owns injection and recovery. In the supported
@@ -177,6 +198,8 @@ inseparable.
 - Verify agent RBAC permits qualified faults and denies Workflow/Schedule.
 - Negative-test cross-namespace, malformed logical selectors, and every
   supported kind's remote-cluster escape field.
+- Verify each protocol partition's traffic direction and preserved management
+  path, then separately test control-path loss and honest uncertainty.
 - Live-test injection, cancellation, duration expiry, recovery, controller
   restart, and telemetry correlation per platform matrix.
 - Prove observability records a failed admission and a capture gap.

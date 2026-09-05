@@ -1,4 +1,7 @@
 {
+  "designStatus": "superseded-design-baseline",
+  "sourceDocument": "docs/design/history/bitcoin-lifecycle-m0.4.md",
+  "supersededBy": "contracts/steady-state-operation-v1.json",
   "apiGroup": "actions.stacks.org",
   "apiVersion": "v1alpha1",
   "attributionValues": [

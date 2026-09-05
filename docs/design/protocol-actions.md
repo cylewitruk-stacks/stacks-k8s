@@ -10,11 +10,24 @@ in [Atomic action contract](actions.md).
 All names and schemas below are recommendations, not current implementation.
 Working API group: `actions.stacks.org/v1alpha1`.
 
+## Baseline and temporary behavior
+
+Permanent mining/configuration changes belong to the actor's desired state in
+`StacksNetwork`. Ongoing transaction demand is a separate baseline producer
+capability, provisionally named `StacksTransactionProduction`; it is not a
+bounded action. These contracts are described in
+[Steady-state operation](steady-state-operation.md).
+
+Temporary behavior resources leave baseline specs intact. Their integration
+must identify one effective-behavior writer, conflict rules, actor-enforced
+expiry, and restoration of the latest baseline. The examples below illustrate
+mechanisms, not finalized override precedence or schemas.
+
 ## Resource summary
 
 | Resource | Purpose | Initial disposition |
 | --- | --- | --- |
-| `ApplicationClockOffset` | Apply a bounded clock offset through an actor's explicit test interface. | Recommended |
+| `ApplicationClockOffset` | Apply a bounded clock offset through an actor's explicit test interface. | Conditional on a demonstrated native `TimeChaos` gap |
 | `SignerBehavior` | Activate one bounded signer testing behavior on one signer. | Recommended |
 | `MinerBehavior` | Activate one bounded miner testing behavior on one Stacks miner. | Recommended |
 | `ProtocolInputInjection` | Submit one bounded malformed, stale, or oversized protocol input. | Recommended after endpoint design |
@@ -55,8 +68,10 @@ conditions.
 The controller requires an image-declared clock-control capability and a
 mounted clock-policy object owned by the selected network. It verifies that
 all offsets are zero before admission, applies only the selected actor's
-offset, and restores zero on deletion or expiry. A finalizer remains until the
-zero value is observed. The actor-side clock mechanism also enforces the
+offset, and restores the latest declared baseline on deletion or expiry. The example
+assumes a zero-offset baseline; nonzero baseline support requires an explicit
+composition contract. A finalizer remains until
+restoration is observed. The actor-side clock mechanism also enforces the
 absolute expiry recorded in the request, so controller unavailability cannot
 extend the offset.
 
@@ -69,8 +84,9 @@ the clock policy. The target Pod and workload are never patched.
   administrator policy permission.
 - Refuse images without the declared testing capability and policies not
   owned by the target network.
-- RBAC permits this controller to update only clock-policy resources and its
-  own status/finalizers.
+- RBAC grants update/patch on its own primary resources for metadata
+  finalizers, its status subresource, and clock-policy resources. Primary
+  resource permissions are not field-scoped; see [Common RBAC](actions.md#common-rbac).
 - Observation records requested/observed offsets, target identity, expiry,
   restoration, and all incomplete reads.
 - Unit tests cover every capability failure; envtest covers finalizers and
@@ -78,7 +94,7 @@ the clock policy. The target Pod and workload are never patched.
   including controller unavailability beyond expiry.
 
 Done means the action cannot alter system time, cannot target an unenrolled
-actor, and cannot report recovery until zero is observed.
+actor, and cannot report recovery until the effective baseline is observed.
 
 ## `SignerBehavior`
 
@@ -276,8 +292,11 @@ must not mount the host filesystem. Status records allocated bytes, helper
 identity, expiry, cleanup, and uncertainty.
 
 The action owns its helper and files through an action-unique directory. Its
-RBAC can create only Jobs and PVC access already granted to the target
-namespace. Tests enforce path confinement, bounded numeric inputs, partial
+Role grants helper Job creation; Kubernetes RBAC does not constrain which PVC
+a Job mounts. Admission, renderer confinement, and ownership checks must enforce
+the volume/path boundary. Cleanup during controller/helper failure and absolute
+expiry remain implementation gates; a Job timeout alone does not remove files.
+Tests enforce path confinement, bounded numeric inputs, partial
 allocation, restart, cleanup, and foreign-file preservation.
 
 Done means the fallback is separately named, documented as non-native, and
@@ -297,7 +316,7 @@ mechanism engine.
 | --- | --- |
 | Add protocol mechanisms to a Chaos Mesh fork | Rejected initially; it couples protocol code to a privileged generic daemon. |
 | Generic `Fault` CRD with `type` and free-form parameters | Rejected; obscures schema, RBAC, and controller ownership. |
-| Put behavior controls in `StacksNetwork` | Rejected; topology is desired process state, not an experiment action. |
+| Put temporary experiment overrides in `StacksNetwork` | Rejected; baseline behavior belongs there, while bounded overrides use separate resources. |
 | Let the agent call testing endpoints directly | Possible for prototypes, but loses bounded admission, status, cleanup, and audit correlation. |
 
 ## Open decisions

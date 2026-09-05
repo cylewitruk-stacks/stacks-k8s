@@ -39,7 +39,10 @@ surface is proven. Do not overload it with session or export behavior.
 | Journal/object store | External data plane | Store event streams, logs, snapshots, indexes, and exported bundles. |
 
 Working API group remains `observation.stacks.org/v1alpha1`. Names are open
-until API review.
+until API review. M0.7 owns the implementation contract; examples below are
+illustrative and not served schemas. V1 uses one existing durable backend,
+backend-native pagination, and a small query/export surface. Audit webhooks
+are optional advanced sources.
 
 ## `NetworkTelemetry`
 
@@ -67,9 +70,18 @@ spec:
       bitcoinTips: true
       stacksTips: true
       signerParticipation: true
+  redactionProfileRef:
+    name: local-redaction-v1
+  sampling:
+    maximumRecordsPerSecond: 100
+    maximumRecordBytes: 65536
   storageRef:
     name: local-observation-store
 ```
+
+This example retains a six-hour window in the configured storage profile.
+Watch/event collection has at most `NoKnownGap` coverage without a stronger
+loss-detecting source. Sampling and source outages lower the evidence available.
 
 ### Spec and status
 
@@ -97,12 +109,18 @@ watches topology/action/Chaos resources, consumes the configured audit and
 telemetry sources, and writes journal segments outside the Kubernetes API.
 It never patches observed resources.
 
-For `BitcoinBlockProduction`, it records spec-generation and pause changes,
-phase and identity transitions, bounded status summaries, and captured
-structured producer logs. The producer's recent hashes and counters are not a
-complete ledger. Bitcoin polling independently records observed tips and
-blocks; selected random intervals are retained only when their structured log
-source is captured, with any gap represented honestly.
+For baseline production, record policy-generation changes, effective target
+selection/timing when captured, overrides, availability, acknowledged effects,
+and uncertainty. Transaction producers distinguish offered, accepted, rejected,
+and ambiguous submissions from independently observed inclusion. Revised
+bounded status fields remain open; status summaries are not a complete ledger.
+Bitcoin polling records observed tips and branches independently. Logs and
+random choices are retained only when their configured source is captured,
+with gaps represented honestly.
+
+Do not gate collection or interpret protocol health solely through aggregate
+`Ready`. Preserve the implemented snapshot contract while qualifying sources
+against independently current identity.
 
 Spec is mutable except for network name/UID. Source or retention changes
 affect future collection and may prune data according to the newly admitted
@@ -120,13 +138,16 @@ the CRD.
 
 - Read-only access to enrolled topology, action, Chaos Mesh, Pod, Event, and
   approved ConfigMap/status resources.
-- Log/metric access is backend-scoped; no actor Secret reads.
+- Log/metric access is backend-scoped; no actor Secret reads. Bitcoin polling
+  uses a separately restricted observation credential profile under R3, with
+  server-side mutation refusal tested.
 - Audit ingestion uses an explicit cluster-admin integration and documents
   whether the source can drop records.
 - Redact authorization headers, credentials, keys, and configured patterns
   before durable storage; record that redaction occurred.
-- Backpressure drops only according to declared priority and emits a durable
-  capture-gap record. It never silently claims completeness.
+- Backpressure drops only according to declared priority. Record a gap when
+  storage is available; if the gap itself cannot be persisted, downgrade
+  continuity after recovery. Never claim lossless gap capture during outage.
 - Resource limits and storage quotas prevent telemetry from exhausting the
   observed namespace or control plane.
 
@@ -172,10 +193,10 @@ actually saw and its weaker coverage class.
 
 ### Retention semantics
 
-Journal segments and payload objects are immutable. Pruning closes the current
-segment, then removes the oldest closed segments by end time until both the
-time and byte limits hold. Ties use segment digest byte order. Index tombstones
-retain interval, reason, source watermarks, and removed-object digest summary.
+The chosen backend enforces time and byte retention limits and exposes retained
+watermarks and known pruning intervals. V1 does not require a custom segment
+store or tombstone system. Report the backend's actual coverage; inability to
+identify every removed record must not become a completeness claim.
 
 Queries distinguish `Expired` (outside rolling window), `PolicyPruned`
 (removed by a changed/stricter policy), `CaptureGap` (never collected), and
@@ -218,9 +239,20 @@ spec:
     - Logs
     - Metrics
     - ProtocolFacts
+  redactionProfileRef:
+    name: local-redaction-v1
   destinationRef:
     name: investigation-bucket
+status:
+  phase: Exported
+  completeness: Incomplete
+  coverage: NoKnownGap
+  redactionProfileDigest: sha256:example
 ```
+
+The export inherits source sampling limits and records them in its manifest.
+This example succeeds operationally while its source cannot prove complete
+capture. Its redaction profile must match the processing already applied.
 
 ### Spec and status
 
@@ -233,19 +265,20 @@ environment mutation and not a replay plan.
 Status records source watermarks, export object URI or opaque key, manifest
 digest, byte/object counts, completeness by source, known gaps, start/end
 times, phase, and conditions. Credentials and payloads never enter status.
-Phases are `Pending`, `Exporting`, `Complete`, `Incomplete`, and `Failed`.
+Operation phases are `Pending`, `Exporting`, `Exported`, and `Failed`.
+`completeness` is separately `Complete` or `Incomplete`, and `coverage` uses
+the source coverage vocabulary.
 Conditions are `SourceResolved`, `DestinationReady`, `ManifestVerified`, and
 `Ready`, with stable reasons for expiry, pruning, gaps, and backend failure.
 
 ### Reconciliation, ownership, mutability, and safety
 
 Every retained object records the redaction-profile version/digest that
-produced its bytes. An export uses the currently admitted profile and
-re-redacts objects produced under older profiles; it never copies weaker old
-bytes directly. If stronger processing cannot safely decode an object, that
-object is quarantined/omitted and the export is `Incomplete`. An administrator
-may mark older profile digests quarantined or policy-pruned; tombstones and
-affected intervals remain visible. Requesters cannot weaken redaction.
+produced its bytes. V1 exports only already-redacted records. Refuse an export
+whose requested policy requires different or stronger processing; requesters
+cannot weaken redaction. Export-time re-redaction and custom tombstone
+machinery are deferred under M0 Requirement 21.
+
 `destinationRef` names a chart-configured immutable destination profile with
 backend, restricted credential Secret, namespace allowlist, retention, and
 configuration digest. The controller takes a consistent best-effort snapshot at known watermarks,
@@ -263,13 +296,13 @@ cannot change telemetry, profile, destination, status, or storage resources.
 
 The controller rechecks telemetry UID and configuration digest before reading,
 at every frozen watermark, and before publishing status. Replacement or drift
-makes the export `Incomplete` with reason `SourceIdentityChanged`; it never
-combines two telemetry configurations under one request.
+fails the operation with reason `SourceIdentityChanged` and marks evidence
+`Incomplete`; it never combines two telemetry configurations under one request.
 
 `Complete` requires successful transfer plus `ContinuouslyAccounted` coverage
 for every requested source and interval, with no capture gap, truncation,
 quarantine, policy pruning, or missing object. `NoKnownGap` is still exported
-and described in the manifest, but the phase is `Incomplete` because capture
+and described in the manifest, but completeness is `Incomplete` because capture
 completeness is unprovable. Backend failure is `Failed`. No export is called
 complete solely because an upload finished.
 
@@ -368,7 +401,7 @@ protocol truth or diagnose root cause.
 
 ## Query service
 
-Provide a read-only HTTP or gRPC API over retained data. Initial operations:
+Provide read-only HTTP GET endpoints over retained data. Initial operations:
 
 - list mutations/actions over a time range;
 - stream journal entries from a cursor;
@@ -377,24 +410,26 @@ Provide a read-only HTTP or gRPC API over retained data. Initial operations:
 - enumerate capture gaps and source health; and
 - resolve an export manifest and objects.
 
-Queries are bounded, paginated, time-limited, and authorized by namespace and
-network. The API returns stable machine-readable schemas and opaque cursors.
-It never creates Kubernetes resources or recommends the next action.
+Queries are bounded, paginated, and time-limited. V1 uses the Kubernetes
+API-server Service proxy with existing kubeconfig or projected ServiceAccount
+credentials and exact Service `get` permission on `services/proxy`. Permission
+covers every GET endpoint on that Service; there is no per-query or per-network
+authorization claim within it. Isolate data/Service scope accordingly.
 
-In-cluster authentication uses projected ServiceAccount tokens. The service
-performs TokenReview and SubjectAccessReview, requiring `get` permission on
-the referenced `NetworkTelemetry` in its namespace for data reads and on the
-specific `EvidenceExport` for export objects. External deployments terminate
-OIDC/mTLS at a documented authenticating proxy before the same authorization
-check.
+The backend is ClusterIP-only and has no application authentication in the
+proposed local profile. Direct connections bypass proxy authentication. R7
+requires network/actor trust qualification or a reviewed authenticated backend
+before supporting broader exposure. TokenReview, SubjectAccessReview, and
+direct OIDC/mTLS remain deferred until that deployment need is established.
+The service never creates resources or recommends actions.
 
-A cursor is signed/opaque and binds query schema version, authenticated
-principal scope, normalized filters, snapshot upper watermark, last returned
-sort key, and expiry. Resume is exclusive of the last record and may repeat
-only a documented boundary record after failover; clients deduplicate by
-event ID. New appends beyond the snapshot watermark appear only in a new/follow
-query. Pruned cursor state returns `410 Gone` with `Expired` or
-`PolicyPruned`, never an apparently complete empty page.
+Prefer backend-native bounded pagination. Document snapshot/follow semantics,
+duplicate boundaries, and cursor expiry. Expired or pruned state must not appear
+as an empty complete result. Signed custom cursors are deferred. Follow clients
+must reconnect because intermediaries can interrupt streams.
+
+Bulk evidence archives use their destination's native client rather than the
+API-server proxy; the proxy serves bounded queries, manifests, and previews.
 
 ## Optional API discovery
 
@@ -423,12 +458,11 @@ Chaos Mesh or the action operator cannot stop topology observation.
 
 ## Open decisions
 
-1. Initial journal backend: object segments, an embedded durable log, or a
-   dedicated event store.
+1. Initial existing durable backend and its supported retention/query profile.
 2. Loki/Prometheus query integration versus OpenTelemetry-first collection.
 3. Whether the initial local profile can support loss-detecting audit spooling
    or must honestly use `NoKnownGap`.
-4. Stable fact schema and HTTP versus gRPC query transport.
+4. Stable fact schema and direct-backend trust qualification for HTTP GET queries.
 5. Default rolling time/byte windows for local and managed clusters.
 
 ## References

@@ -3,8 +3,11 @@
 ## Purpose
 
 `StacksNetwork` remains the supported aggregate API for declaring a reusable
-Stacks regtest topology. It compiles to the smallest actor resources with
-materially different executables and lifecycle contracts.
+Stacks regtest network's desired topology and steady-state operation. It
+compiles actor declarations and owned baseline capability resources; their
+controllers independently maintain the declared behavior. See
+[Steady-state operation](steady-state-operation.md) for the agreed direction
+and open API decisions.
 
 This design extends safe live mutation without turning topology into an action
 or upgrade scheduler.
@@ -12,8 +15,8 @@ or upgrade scheduler.
 ## Non-goals
 
 - Building OCI images from Git.
-- Producing Bitcoin blocks or forcing Bitcoin state transitions.
-- Registering signers or submitting protocol transactions.
+- Performing Bitcoin RPC or transaction submission in the aggregate reconciler.
+- Sequencing bootstrap actions or forced protocol state transitions.
 - Sequencing actor upgrades.
 - Applying network or process faults.
 - Determining whether a protocol outcome is correct.
@@ -32,7 +35,17 @@ Role variation using the same binary and workload contract remains a field,
 not another CRD. New leaf kinds require a different executable, configuration
 contract, ports, dependencies, readiness, or persistent-state lifecycle.
 
-## Target topology example
+`StacksNode` retains miner role/configuration. The target `BitcoinNode` API is
+mining-neutral: `BitcoinBlockProduction` references nodes and owns production
+policy. Current Bitcoin miner/follower role fields remain implemented until an
+explicit API migration; they are not the future production-policy boundary.
+
+## Illustrative topology example
+
+This example combines existing role fields with proposed topology extensions;
+it is not an installable steady-state API example. The future Bitcoin shape
+removes mining roles and declares a separate owned production policy. Exact
+baseline fields, defaults, and transaction producer names remain open.
 
 ```yaml
 apiVersion: network.stacks.org/v1alpha1
@@ -144,33 +157,19 @@ strict byte identity, but it is not required for normal operation.
 
 ### Bitcoin RPC credential input
 
-M0.3 defines one narrower exception for generated Bitcoin and Stacks
-configuration. Each enrolled namespace has a fixed immutable
-`stacks-bitcoin-rpc` Secret with key `bitcoin-rpc.conf`. The topology
-declaration adds optional `StacksNetwork.spec.bitcoinRPCAuth` using
-`ConfigObjectRef`. Managed Bitcoin RPC pins that field's name and key, requires
-`expectedDigest`, and forbids `mountPath`.
+The earlier single shared credential design is reopened under R3 in
+[Bitcoin lifecycle](bitcoin-lifecycle.md). Observation, Stacks clients, and
+mutation clients need separately reviewed authority, with server-enforced
+method restrictions where supported. Exact Secret names, profiles, and API
+fields are not frozen.
 
-The aggregate compiler copies the same input to
-`BitcoinNode.spec.bitcoinRPCAuth` and `StacksNode.spec.bitcoinRPCAuth`.
-`bitcoin-regtest/v2` and `nakamoto-regtest-node/v2` consume it through actor
-init. Existing v1 profiles remain compatible topology options but cannot
-report managed-RPC readiness. Custom configurations remain supported and must
-opt into the reserved renderer inputs before becoming eligible for continuous
-production or bounded actions.
-
-This prerequisite changes the generated-profile enum, API schemas, aggregate
-compiler, both workload renderers, and leaf `specDigest`. It adds vectors to
-`leaf-spec-v1.json` and `inventory-v1.json` and lands before the first Bitcoin
-production or action controller. Actor init containers verify the mounted
-bytes before use; the network controller never reads Secret content.
-
-The inventory's leaf `specDigest` records the reference, expected digest,
-template digest, and renderer contract as configuration-input identity. It
-does not attest Secret content or rendered TOML. Rotation replaces the
-immutable Secret and changes the declared digest, intentionally withdrawing
-admitted identity while affected actors roll. The exact contract and operator
-trust exceptions are in [Bitcoin lifecycle design](bitcoin-lifecycle.md).
+Retain high-entropy immutable credentials, digest verification at actor
+startup, and credential-free logs/status. The network controller references
+inputs without reading Secret contents. The revised profile must define
+rendering, rotation, image compatibility, rollout, and leaf-spec/inventory
+identity vectors before managed RPC is enabled. A configuration-input digest
+does not attest the final rendered configuration or protect credentials from
+a workload author allowed to select arbitrary images and configuration.
 
 ## Persistent state
 
@@ -191,7 +190,11 @@ operator must not delete data to satisfy such a patch.
 
 ## Direct leaf access
 
-Aggregate-owned leaf resources are implementation state. Recommended Roles:
+Aggregate-owned leaves and baseline capability specs are implementation
+state. Permanent policy changes go through `StacksNetwork`. Standalone
+baseline capability support remains open until ownership, overlap, and
+authorization contracts are reviewed. Existing standalone actor leaves are
+a separate implemented API. Recommended aggregate Roles:
 
 - `stacks-network-viewer`: read all network and leaf resources;
 - `stacks-network-editor`: write `StacksNetwork`, read leaves; and
@@ -207,13 +210,19 @@ aggregate inventory unless owned by that `StacksNetwork` UID.
 
 ## Status and observability
 
-The existing status contract remains authoritative:
+The existing complete-inventory status contract remains authoritative:
 
 - aggregate and leaf observed generations;
 - desired and ready counts;
 - `Progressing`, `Ready`, `Suspended`, or `Degraded` phase;
 - complete admitted actor identities; and
 - inventory digest only when every identity is current.
+
+Baseline production and bounded actions need separate, current target
+admission rather than whole-network `Ready`. Preserve the complete-inventory
+wire contract while defining this independent path under R1. Protocol
+progress, workload readiness, and capability readiness are distinct facts;
+mining must not depend on readiness that itself requires mining.
 
 The observer should record every topology generation change when its audit
 source provides continuity. When a source cannot prove loss absence, it
@@ -238,10 +247,12 @@ write that history.
 - Add, remove, suspend, resume, and independently roll each actor kind.
 - Verify only dependency-affected actors roll.
 - Exercise ConfigMap content updates, versioned general configuration Secrets,
-  and fixed-name Bitcoin credential rotation.
+  and revised Bitcoin credential-profile rotation.
 - Prove immutable storage changes preserve existing PVCs and become Degraded.
 - Prove editor RBAC cannot patch aggregate-owned leaves.
 - Run envtest generation/readiness and ownership transitions.
+- Prove a healthy target can progress while an unrelated actor is unavailable.
+- Verify baseline child ownership, policy updates, and API migration.
 - Qualify persistent-data upgrades with selected real image pairs.
 
 ## Alternatives
@@ -259,10 +270,11 @@ write that history.
 - Multi-Bitcoin and multi-Stacks-miner examples converge with complete admitted
   identity.
 - Independent image/configuration updates preserve requested persistent data.
-- ConfigMap, versioned configuration Secret, and fixed-name Bitcoin credential
+- ConfigMap, versioned configuration Secret, and Bitcoin credential-profile
   changes have documented, tested rollout behavior.
 - Aggregate-owned leaf edits are denied by the supported editor Role.
-- No topology API performs mining, faults, replay, or upgrade sequencing.
+- The aggregate declares baseline behavior through owned capabilities; its
+  reconciler performs no mining RPC, traffic generation, or action sequencing.
 - Real-image qualification states exactly which combinations were exercised.
 
 ## Open decisions

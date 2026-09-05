@@ -96,15 +96,23 @@ mechanism registry.
   applicable.
 
 Cross-namespace references are excluded from v1alpha1. Missing, ambiguous,
-stale, or not-Ready references keep an action `Pending` until expiry or
+stale, or mechanism-unready references keep an action `Pending` until expiry or
 deletion; they never cause fallback target selection.
 
 The target reference is valid only when the leaf's `spec.networkRef` and
-controller owner UID match the resolved `StacksNetwork`, and the admitted
-inventory has the same leaf kind and resource name. The leaf UID comes from
-the uncached leaf read and is recorded in `status.admittedTarget`; it is not an
-inventory field. Controllers verify the complete join before admission and
-again through uncached reads before every material side effect.
+controller owner UID match the resolved `StacksNetwork`. The leaf UID comes
+from an uncached read, not an inventory field. Controllers verify the current
+target's identity before admission and before every material side effect.
+
+The former requirement to join every action through a complete Ready network
+inventory is reopened under R1 in
+[Steady-state operation](steady-state-operation.md). Preserve the existing
+inventory contract, but define an independent target-admission contract that
+does not wait for unrelated actors or progress the action itself supplies.
+The exact runtime endpoint binding and admitted identity extension must be
+reviewed before the first affected action API is served. The example above
+illustrates an admission with a complete inventory; it does not mandate global
+readiness for every mechanism.
 
 ## Specification immutability and time bounds
 
@@ -150,7 +158,7 @@ Only the kind's controller writes status. Common fields are:
 | `expiresAt` | Immutable absolute bound derived from creation time and `spec.timeout`. |
 | `finishedAt` | Time the terminal outcome was first recorded. |
 | `correlationID` | Admitted snapshot of the correlation label, if supplied. |
-| `admittedNetwork` | Network UID, observed generation, and admitted inventory digest. |
+| `admittedNetwork` | Network UID and generation; inventory binding and independent target-admission representation require the R1 amendment. |
 | `admittedTarget` | Target leaf GVK, resource name, UID, and mechanism-required runtime identity. |
 | `admittedPolicy` | Selected administrator policy UID, generation, and digest when used. |
 | `conditions` | Generation-aware common conditions with stable reasons. |
@@ -214,8 +222,8 @@ ambiguous-effect row; it does not imply that prior state can be restored.
 
 Kubernetes may remove the object immediately after its finalizer is cleared,
 so clients must not depend on observing a durable terminal phase for
-deletion-triggered cancellation. The observation journal is the durable record
-of deletion, cleanup, and uncertainty.
+deletion-triggered cancellation. A configured observation journal may retain
+deletion, cleanup, and uncertainty, subject to its source coverage.
 
 ## Conditions and reasons
 
@@ -259,11 +267,12 @@ Before mutation, a controller durably records:
 
 - action UID and generation;
 - API-server-derived expiry and admitted correlation value;
-- `StacksNetwork` name, UID, observed generation, and inventory digest;
+- `StacksNetwork` name, UID, and generation under the reviewed admission
+  contract, with inventory identity when applicable;
 - logical target API version, kind, resource name, and UID from the uncached
   leaf read;
-- the target leaf's matching network reference and controller owner UID, plus
-  the inventory entry with the same leaf kind and resource name;
+- the target leaf's matching network reference and controller owner UID,
+  independently validated through the R1 target-admission contract;
 - Pod, StatefulSet, runtime image, and configuration-input identity where the
   mechanism depends on them; and
 - selected administrator policy/profile identity where applicable.
@@ -331,12 +340,12 @@ external side effect. Shared libraries may provide:
 - typed RPC clients; and
 - action event/correlation metadata.
 
-Serialization is mechanism-specific rather than a generic scheduler. The
-initial Bitcoin action and production controllers share the exact target-UID
-Lease protocol in [Bitcoin lifecycle design](bitcoin-lifecycle.md), with one
-leader-gated reservation manager owning renewal and writes; other action
-families adopt it only when they share the same side effect and fencing
-constraints.
+Serialization is mechanism-specific rather than a generic scheduler. Bitcoin
+actions and production require shared target exclusion, whose execution and
+recovery guarantees are reopened in [Bitcoin lifecycle](bitcoin-lifecycle.md).
+If Leases are retained, one leader-gated manager owns their serialized writes;
+this does not fence server-side RPC work. Other action families share exclusion
+only when their side effects and execution constraints require it.
 
 Shared code must not accept arbitrary action payloads, enumerate a runtime
 mechanism registry, or advance from one action resource to another. Each
@@ -353,11 +362,22 @@ Common ownership is:
 | Mechanism side effect | Controller for that exact kind. |
 | Observation journal/evidence | Observability operator. |
 
+## Temporary overrides
+
+A bounded override is distinct from baseline desired state. It must coordinate
+with the baseline capability's single effective-behavior writer, refuse
+unsupported overlaps, and expire without relying solely on its controller.
+Removal resumes the latest baseline, including edits made during the override;
+it must not restore a stale snapshot. Exact override kinds, precedence, and
+identity contracts remain open in
+[Steady-state operation](steady-state-operation.md).
+
 ## Common RBAC
 
 - Agent: create/get/list/watch/delete approved action resources; no update,
   patch, status, policy, Secret, workload, or arbitrary RPC permission.
-- Action controller: status/finalizer writes for its own kinds and only the
+- Action controller: status writes and primary-resource update/patch for
+  metadata finalizers on its own kinds, and only the
   mechanism-specific resource/RPC permissions it needs.
 - Policy administrator: write `ActionSafetyPolicy`.
 - Observer: read action and policy resources; no mutation.
@@ -365,6 +385,12 @@ Common ownership is:
 Controller ServiceAccounts may be split when combining permissions would
 materially enlarge a compromise. Exact rendered-RBAC allowlists remain release
 gates.
+
+Finalizers live in primary-object metadata. Granting only `/status` or a
+`/finalizers` rule does not authorize ordinary metadata patches. RBAC cannot
+restrict a primary-resource patch to one metadata field; immutable-spec
+admission and controller ownership checks complement the exact Role. Envtest
+and rendered-RBAC tests must exercise adding and removing real finalizers.
 
 ## Structural contract and tests
 

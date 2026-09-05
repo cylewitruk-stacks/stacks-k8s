@@ -5,7 +5,10 @@
 This document consolidates the approved remediation decisions from the first
 review of the architecture design package. It is the authoritative M0 plan.
 Where it conflicts with another document under `docs/design/`, this plan takes
-precedence until that document is revised.
+precedence until that document is revised. This plan adopts the
+[steady-state operation amendment](steady-state-operation.md), including its
+R1–R8 review ledger. M0.3 and M0.4 are reopened; prior Bitcoin fixture payloads
+are explicitly superseded history, not implementation authority.
 
 M0 changes design, packaging, and repository foundations. It does not add an
 in-cluster experiment planner. The external agent remains the sole
@@ -18,8 +21,10 @@ M0 is complete when:
 - the shared network API-module spike has passed or has been rejected with a
   recorded technical reason;
 - action APIs share one vocabulary and one typed lifecycle contract;
-- Bitcoin generation, credentials, admission, and serialization have
-  implementation-ready designs;
+- Bitcoin baseline production, finite generation, credentials, independent
+  target admission, serialization, and cleanup have implementation-ready designs;
+- steady transaction demand, baseline ownership, temporary overrides, and
+  controller packaging have reviewed contracts;
 - the local-first agent access and observability contracts are internally
   consistent;
 - the design index, roadmap, examples, repository layout, and verification
@@ -58,43 +63,53 @@ only when M0.8 verifies the package as a whole.
 foundation is complete. It does not imply that a proposed controller or CRD is
 implemented unless the slice explicitly says so.
 
+For R1–R8, M0 resolves the design and defines acceptance evidence. Later M1–M8
+milestones implement and validate those resolutions before enabling the
+affected capabilities. A reviewed design does not satisfy a runtime gate.
+In particular, M0.8 defines R8 exercises; M8 completes their cross-product
+qualification, with relevant cases exercised in earlier vertical slices.
+
 ## Ordered delivery-slice ledger
 
 | Slice | State | Primary requirements | Deliverable |
 | --- | --- | --- | --- |
 | M0.1 | Complete | 1 | Extract the shared network API module and make generation, module verification, and container builds work across the module boundary. |
 | M0.2 | Complete | 2–5, 8, 13 | Freeze the typed, immutable, bounded atomic-action contract and structural anti-orchestration checks. |
-| M0.3 | Complete | 9–12 | Design finite Bitcoin block generation and reorganization, attribution, credentials, and per-node serialization. |
-| M0.4 | Complete | Extends 9–11 | Add continuous `BitcoinBlockProduction`, refine finite generation cadence, and define fair reservation sharing between production and bounded actions. |
-| M0.5 | Planned | 6–8, 16 | Define and qualify the static-first native Chaos Mesh admission profile, limits, and initial platform matrix. |
-| M0.6 | Planned | 14, 15, 26 | Define protocol bootstrap and instrumented-actor capability contracts and their image support matrix. |
-| M0.7 | Planned | 17–23 | Reconcile Kubernetes-authenticated agent access, passive observation, journal, query, export, completeness, redaction, and integrity contracts. |
+| M0.3 | Reopened | 9–12; R1–R4 | Amend finite actions, independent target admission, credentials, quiescence, attribution, and cleanup. |
+| M0.4 | Reopened | Extends 9–11; R1–R3 | Define Bitcoin role migration, aggregate-owned multi-target production, policy updates, bounded status, and safe action coexistence. |
+| M0.5 | Planned | 6–8, 16 | Define and qualify native admission, protocol/control traffic separation, limits, and the initial platform matrix. |
+| M0.6 | Planned | 14, 15, 26 | Define bootstrap, steady transaction demand, baseline/override composition, and instrumented-actor support. |
+| M0.7 | Planned | 12, 17–23 | Reconcile RPC observation authority, Kubernetes-authenticated agent access, passive observation, journal, query, export, and evidence contracts. |
 | M0.8 | Planned | 24–27 | Align layout, fixtures, validation, packaging, roadmap, examples, and the final M0 acceptance record. |
 
 Supporting requirements such as safety bounds, evidence integrity, repository
 layout, and roadmap alignment may be updated by an earlier slice. Their final
 owner remains the primary slice listed above.
 
-### M0.4 scope boundary
+### Reopened Bitcoin scope
 
-M0.4 is a focused amendment to the completed finite Bitcoin-action design. It
-must:
+M0.3 and M0.4 retain the separation between mutable desired production and
+bounded immutable actions. Replace their superseded single-target/global-Ready
+contracts with the direction in [Bitcoin lifecycle](bitcoin-lifecycle.md):
 
-- keep `BitcoinBlockProduction` outside the bounded-action API and lifecycle;
-- define it as mutable desired continuous operation on one Bitcoin node;
-- keep CRD status bounded while passive observability owns retained history
-  and explicit capture gaps;
-- avoid per-block completion claims and per-block intent journaling;
-- give waiting bounded actions priority before each short production Lease;
-- preserve ambiguity containment by retaining the reservation through the
-  recorded RPC deadline after a lost response; and
-- replace the finite generation action's flat cadence fields with a bounded,
-  CEL-enforced union for immediate, fixed, uniform-random, and explicit
-  sequence modes.
+- neutral Bitcoin nodes; production policy separately declares timing and
+  selection among referenced nodes;
+- aggregate-owned policy with reviewed standalone and update semantics;
+- target readiness independent of unrelated network health;
+- explicit unavailable/reserved-target handling without silent weight changes;
+- bounded summaries and honest uncertainty, with passive retained history;
+- one effective mutation writer and reviewed server-side quiescence before
+  retry, takeover, or baseline resumption; and
+- separate observation/mutation authority and complete reorganization cleanup.
 
-Random timing choices and observed block hashes are facts to record, not a
-claim of deterministic replay. An explicit sequence is one bounded mechanism
-parameter, not an in-cluster execution plan.
+Exact schemas, target limits, destinations, precedence, and execution protocol
+remain open. Central production requires a qualified management path under
+supported protocol faults; autonomous local fallback is deferred. Random
+choices are recorded facts, not deterministic replay.
+
+M0.2's shared lifecycle vocabulary remains reviewed. R1 may require an explicit
+admitted-identity extension, and R5 requires primary-resource metadata permission
+for finalizers; neither is permission to silently change the shared fixture.
 
 ## Requirement 1: Shared network API-module spike
 
@@ -268,6 +283,11 @@ The v1 ValidatingAdmissionPolicy enforces only static constraints:
 - no raw Pod-name or expression selectors; and
 - no remote-cluster targeting.
 
+Qualify source/target/direction semantics separately for Bitcoin P2P,
+Stacks-to-Bitcoin RPC, and producer control RPC. Prove the supported protocol
+fault preserves the intended management path; separately test loss of that
+path. Separate Service names or port-only rules are not proof of isolation.
+
 Package the policy behind an explicit, disabled-by-default chart value. Its
 installation requires Chaos Mesh to be installed or explicitly declared as an
 external dependency. Match only namespaces enrolled for stacks-k8s use.
@@ -309,192 +329,95 @@ coordination layer over otherwise independent actions.
 
 ## Requirement 9: Consolidated Bitcoin generation API
 
-**Slices:** M0.3 and M0.4. **Status:** Complete; the finite-action baseline is
-in `ba9a666` and M0.4 adds continuous production and cadence unions.
+**Slices:** M0.3 and M0.4. **Status:** Reopened.
 
-The design is pinned by
-[`bitcoin-actions-v1.json`](../../contracts/bitcoin-actions-v1.json),
-[`bitcoin-block-production-v1.json`](../../contracts/bitcoin-block-production-v1.json),
-[`bitcoin-reservation-v1.json`](../../contracts/bitcoin-reservation-v1.json),
-and the [Bitcoin lifecycle design](bitcoin-lifecycle.md).
+The earlier finite-action baseline in `ba9a666` and M0.4 production amendment
+remain available in [historical Bitcoin lifecycle](history/bitcoin-lifecycle-m0.4.md).
+Their three Bitcoin fixtures are marked superseded. Current direction is
+[Bitcoin lifecycle](bitcoin-lifecycle.md) and
+[Steady-state operation](steady-state-operation.md).
 
-Finite generation is one bounded action named `BitcoinBlockGeneration`.
-Baseline chain progress is a separate mutable desired-state resource named
-`BitcoinBlockProduction` in `bitcoin.stacks.org`; it does not use the bounded
-action lifecycle.
+Keep `BitcoinBlockGeneration` finite and immutable, with immediate, fixed,
+uniform-random, or explicit-sequence cadence. Keep `BitcoinBlockProduction`
+mutable and outside the action lifecycle. Its revised policy separates timing
+from selection among neutral `BitcoinNode` references. Freeze list bounds,
+destination mapping, cadence bounds, weights, update/pause behavior, conflict
+rules, and status before implementation; do not infer those fields from the
+historical fixture.
 
-Its immutable spec covers:
+### Bitcoin role migration
 
-- Bitcoin node reference;
-- block count;
-- exactly one immediate, fixed, uniform-random, or explicit-sequence cadence;
-- an explicit regtest destination address;
-- timeout; and
-- administrator-selected safety-policy identity in status when that policy
-  exists.
-
-Its status records admitted identity, persisted RPC intents, returned or
-candidate block hashes, progress, attribution, and terminal outcome. Bounded
-`generatetoaddress` batches may run between status checkpoints; one API-server
-write per block cannot support immediate generation efficiently.
-
-Continuous production accepts fixed or uniform-random cadence and mutable
-pause. It performs one block per short reservation, keeps only bounded summary
-status, and makes no completion or deterministic-replay claim.
+M0.4 owns this part of Requirement 9. Define removal of Bitcoin miner/follower
+roles, compatibility for existing declarations, defaults, generated profiles,
+and compiler/leaf/inventory fixture changes. M1 implements and validates the
+reviewed migration before enabling the revised production API. The role
+contract remains unchanged until then.
 
 ## Requirement 10: Attributable Bitcoin generation
 
-**Slices:** M0.3 and M0.4. **Status:** Complete.
+**Slices:** M0.3 and M0.4. **Status:** Reopened; R2.
 
-Do not infer action ownership solely from the observed chain tip in a
-multi-miner network. Only block hashes returned by a successful mutation RPC
-support completed attribution. A dedicated destination improves diagnosis but
-is not a correctness or admission invariant.
+Only successful mutation RPC responses support acknowledged attribution.
+Observed chain tips alone do not establish which producer caused an effect.
+Lost responses remain uncertain. Current absence at every known tip and an
+elapsed client deadline do not prove that a server operation cannot complete
+later; neither is sufficient authority to retry.
 
-After a lost mutation response, wait for its recorded deadline and inspect
-every known tip. Proven absence may retry within the original bounds; any
-observed or uncertain effect is `Ambiguous` and the action is `Inconclusive`.
-Never promote reconstructed hashes to acknowledged success or retry the
-mutation blindly.
-
-Continuous production counts only hashes returned successfully by its own RPC
-client. A lost response increments bounded ambiguity status after its deadline,
-but neither stops desired production permanently nor becomes a completion
-claim. Passive observation owns retained history and independently observed
-chain facts.
+Continuous production has no terminal completion claim, but unresolved work
+still matters for exclusion and bounds. Review outstanding-request persistence,
+server-side quiescence, restart, and resumption together. The earlier omission
+of per-request production intent is not a frozen requirement. Passive
+observation owns retained history and independently collected chain facts.
 
 ## Requirement 11: Bitcoin action serialization
 
-**Slices:** M0.3 and M0.4. **Status:** Complete.
+**Slices:** M0.3 and M0.4. **Status:** Reopened; R1, R2, R4.
 
-V1 runs the Bitcoin controllers in one leader-elected process, but leader
-election is not a per-target fencing mechanism. Each target therefore uses an
-API-server-persisted node-scoped Lease whose holder identity binds the holder
-UID to a unique controller acquisition token. The token distinguishes an old
-leader from a replacement reconciling the same resource.
+Require shared target-scoped exclusion across production and finite actions,
+one serialized owner of reservation writes, uncached admitted-identity checks,
+and bounded client work. Kubernetes leader election, Lease ownership, and
+context cancellation do not fence Bitcoin RPC execution.
 
-Use:
+Before enabling a mutation kind, define how outstanding server work is known
+to be quiescent across response loss, process restart, leader/Lease loss, and
+endpoint replacement. State the limits of any execution mechanism or deployment
+assumption. Do not implement the old elapsed-deadline takeover rule as proof.
 
-- optimistic-concurrency acquisition and release of the shared reservation;
-- an optional shared keyed mutex across all Bitcoin action kinds to reduce
-  same-process contention;
-- an uncached read confirming the reservation holder immediately before each
-  material RPC batch;
-- cancellation of the bounded RPC context on leader or reservation loss;
-- action-status intent persisted before each bounded-action RPC batch;
-- bounded per-RPC and per-batch deadlines; and
-- mandatory chain-state revalidation after restart, reservation loss, or
-  ambiguity.
+Bounded actions receive priority only when they can actually use the target.
+The starvation suite must prove that valid waiting actions progress while
+malformed, not-Ready, or otherwise stuck `Pending` actions do not stall baseline production.
+Exact eligibility, fair sharing, and overlap rules remain part of M0.4.
 
-A shared leader-gated `ReservationManager` Runnable owns every active handle
-across continuous production and Bitcoin action kinds. It renews independently
-of reconcile workqueues, cancels handle-derived RPC contexts on reservation or
-leader loss, and routes every Lease renewal, RPC-deadline update, and release
-through the handle's serialized writer. Worker count and queue latency are not
-safety properties.
-
-Expiry follows client-go's observed-record pattern: another holder is eligible
-for replacement only after the same Lease record remains unchanged for a full
-local Lease duration. Holder-written timestamps never permit an earlier
-takeover.
-
-The reservation spans requeues while a bounded action remains active.
-Continuous production holds it for one block RPC and any ambiguity deadline,
-never for cadence waiting. Before acquiring, production yields to any
-uncached, non-terminal bounded action targeting the same node. Bitcoin RPC has
-no fencing token: action ambiguity becomes `Inconclusive`, while production
-records uncertainty without claiming completion or blindly retrying.
-
-Restart and loss behavior is explicit:
-
-- while another acquisition token holds the reservation, the controller makes
-  no RPC call;
-- with no durable intent or side effect, an action may remain `Pending` with
-  `TargetBusy` and reacquire before its expiry;
-- after recorded intent, the controller inspects every known tip; proven
-  absence may return to bounded admission, while any observed or uncertain
-  effect becomes `Inconclusive`;
-- if another holder acquired the reservation after this action produced a side
-  effect, this action never resumes mutation and ends `Inconclusive` after
-  recording attributable state; and
-- an expired but otherwise unclaimed reservation may be reacquired only after
-  the prior maximum RPC deadline has elapsed and live chain state is
-  revalidated.
-
-The protocol is shared across all three kinds and remains valid if controllers
-later split into independent processes. M0.4 freezes its neutral naming,
-30-second lease, 10-second renewal and RPC limits, holder representation, and
-release preconditions. The implementation must add leader-turnover,
-same-action/new-token, stale-holder, saturated-workqueue, handle-write
-serialization, competing-action, producer-yield, and action-starvation tests.
-The starvation suite must prove that `Admitted`, `Active`, `Recovering`, and
-`Pending/TargetBusy` actions receive priority while malformed, not-Ready, or
-otherwise stuck `Pending` actions do not stall baseline production.
+For reorganization, specify invalidation-marker cleanup for success, definite
+failure, timeout, cancellation, divergence, and restart. Removing a temporary
+invalidity marker is distinct from undoing chain history. Unsafe or uncertain
+cleanup must retain honest status and exclusion under the reviewed protocol.
 
 ## Requirement 12: Bitcoin credential and configuration identity
 
-**Slice:** M0.3. **Status:** Complete and committed in `ba9a666`.
+**Slices:** M0.3 and M0.7. **Status:** Reopened; R3.
 
-### Provisioning
+Replace the single shared mutation-capable Secret with separately reviewed
+authority for observation, Stacks clients, and mutation clients. Define
+server-enforced RPC permissions, exact namespaced Secret grants, authentication
+profiles, and supported Bitcoin versions. Observation must be unable to invoke
+mutation methods with its granted credentials.
 
-Use one fixed-name credential Secret in each network namespace. A helper:
+Retain high-entropy immutable credentials, salted `rpcauth` rendering,
+startup digest verification, and credential-free output/status. The network
+controller references Secret inputs without reading their bytes. Profile
+rotation, mounting, leaf-spec/inventory identity, and client rollout behavior
+must be reviewed together. Exact names, keys, API fields, and generated-profile
+versions remain open.
 
-- generates high-entropy credentials;
-- derives a salted Bitcoin Core `rpcauth` verifier so plaintext credentials
-  never enter `bitcoin.conf`;
-- creates the Secret with `immutable: true`;
-- computes the canonical content digest;
-- prints only the digest; and
-- never passes credentials through stdout, logs, or Helm values.
-
-The digest is public metadata and therefore must not commit to guessable
-credentials.
-
-### Actor startup
-
-Reference the Secret through the existing `ConfigObjectRef.expectedDigest`
-path. Actor startup:
-
-1. mounts the Secret;
-2. verifies its bytes against `expectedDigest`;
-3. renders only the `rpcauth` verifier into Bitcoin configuration and the
-   matching client values into Stacks configuration in ephemeral volumes; and
-4. refuses to start after any mismatch or render failure.
-
-The centralized action and observation controllers use those client values.
-Bitcoin Core cookie authentication remains preferable for same-Pod clients,
-but sharing its restart-scoped file with separate controller Pods would require
-a broader filesystem or helper trust boundary and is not the v1 design.
-
-The topology prerequisite adds optional `StacksNetwork.spec.bitcoinRPCAuth`
-and compiled `BitcoinNode.spec.bitcoinRPCAuth` and
-`StacksNode.spec.bitcoinRPCAuth` fields using the constrained
-`ConfigObjectRef`. Managed action RPC requires the fixed name and key plus a
-non-empty expected digest. New `bitcoin-regtest/v2` and
-`nakamoto-regtest-node/v2` profiles consume the input; v1 profiles remain
-available but are not eligible for managed action RPC. The change updates
-`leaf-spec-v1.json` and `inventory-v1.json` vectors before the first action
-controller is enabled.
-
-The network operator references the Secret but has no Secret-read permission.
-Action and observation controllers receive exact-name `get` through a
-RoleBinding in each enrolled network namespace. This is a narrow, documented
-trust-boundary exception; arbitrary Secret names remain inaccessible.
-
-### Identity and rotation
-
-Inventory records configuration-input identity through the compiled leaf
-`specDigest`: template, credential reference, expected digest, and renderer
-contract. It does not claim to attest the final rendered TOML bytes.
-
-Rotation replaces the immutable fixed-name Secret, updates `expectedDigest`,
-and causes a controlled actor rollout. Controllers fail closed during the
-availability interruption.
+Configuration-input identity is not rendered-byte attestation. Arbitrary actor
+image/command/configuration authority can expose mounted credentials; document
+and constrain that delegated workload authority under R6.
 
 ## Requirement 13: Time-bound semantics
 
 **Slice:** M0.2, specialized by each action design. **Status:** Complete for
-the shared and M0.3 Bitcoin contracts.
+the shared lifecycle; Bitcoin execution guarantees are reopened under R2.
 
 A controller cannot act while unavailable. `spec.timeout` still advances from
 the API-server creation timestamp. On restart the controller must refuse to
@@ -519,7 +442,23 @@ productive:
 - Nakamoto readiness verification.
 
 Expose bounded atomic resources or an external helper CLI. The external agent
-sequences them. Do not build an in-cluster bootstrap workflow.
+sequences one-time bootstrap operations. Do not build an in-cluster bootstrap
+workflow.
+
+Also define steady transaction demand as an independently reconciled baseline
+capability, provisionally `StacksTransactionProduction`. Cover versioned
+workload profiles, funding/signing, ingress, per-account nonce ownership,
+offered rate, bounded in-flight work, backpressure, pause/update, and ambiguous
+submission. It must work without action or observation controllers. Define
+single-writer composition with temporary overrides and latest-baseline
+restoration; one-time bootstrap remains distinct from ongoing demand.
+
+Transaction signing authority is an implementation gate for this capability.
+Before M0.6 closes, define administrator-selected account/credential profiles,
+designated worker access, rotation/revocation, and isolation from observer,
+actor, and unrelated producer workloads. Public specs must not select arbitrary
+Secrets or disclose signing material. M2 validates credential isolation and
+account/nonce ownership before enabling producers.
 
 ## Requirement 15: Actor testing-capability design
 
@@ -573,6 +512,11 @@ the environment exposes a stable way to express it. NetworkPolicy is defense
 in depth, not a portable proof that only the API server can connect. Do not
 create a NodePort, LoadBalancer, or Ingress by default.
 
+R7 remains open: direct connections bypass proxy authentication. Qualify
+reachability from actor and other untrusted Pods and document the supported
+trust boundary. If it cannot be enforced on a platform, require a reviewed
+authenticated backend path or mark that deployment profile unsupported.
+
 ### Follow and streaming queries
 
 The Service proxy supports long-running follow requests, so journal-follow and
@@ -606,12 +550,12 @@ normalized queries behind the query Service.
 
 ## Requirement 18: Authenticated protocol observation
 
-**Slice:** M0.7. **Status:** Planned; reuses the M0.3 credential contract.
+**Slice:** M0.7. **Status:** Planned; depends on reopened R3.
 
-Bitcoin RPC observation uses the fixed-name credential Secret from
-Requirement 12.
-The observation controller may read only that exact Secret name in enrolled
-namespaces. Unauthenticated Stacks endpoints may remain directly accessible.
+Bitcoin RPC observation uses separately restricted observation credentials from
+Requirement 12, with exact-name Secret access in enrolled namespaces. Verify
+server-side refusal of mutation RPCs. Unauthenticated Stacks endpoints may
+remain directly accessible, with that evidence class explicitly recorded.
 
 Every observation distinguishes trusted Kubernetes identity, authenticated
 protocol facts, unauthenticated actor observations, and actor-self-reported
@@ -743,7 +687,8 @@ can drift from `.markdownlint.yaml`.
 
 Packaging and roadmap documents identify which capabilities require standard
 Bitcoin Core, standard Stacks images, feature-gated testing images, externally
-prepared OCI images, or unavailable upstream hooks.
+prepared OCI images, or unavailable upstream hooks. Include transaction-worker
+profiles and their funding, nonce, and supported-image assumptions.
 
 Do not allow an unavailable testing hook to silently block an otherwise
 independent milestone.
@@ -755,23 +700,25 @@ independent milestone.
 After M0, use this dependency order:
 
 1. Continuous and bounded Bitcoin block production.
-2. Protocol-bootstrap primitives.
+2. Protocol-bootstrap primitives and steady transaction demand.
 3. Multi-actor topology qualification.
 4. Passive journal foundation.
 5. Native Chaos Mesh policy integration.
 6. Bitcoin lifecycle actions.
 7. Evidence export and query.
-8. Instrumented protocol actions.
+8. Qualified instrumented protocol actions and agent ergonomics.
 
 ### Initial Bitcoin-production slice
 
 The first slice implements mutable `BitcoinBlockProduction` for baseline chain
-progress alongside finite `BitcoinBlockGeneration`. Both use the same
-credential path and per-node reservation manager, while only the finite
+progress alongside finite `BitcoinBlockGeneration`. Both use the reviewed
+credential profiles and target-exclusion contract, while only the finite
 resource uses the shared typed action lifecycle, immutable action spec,
 conservative CEL bounds, attributable completion, and terminal outcome. It may
 defer `ActionSafetyPolicy`; until that policy exists, schema bounds are
-absolute.
+absolute. The slice includes the smallest reviewed target-selection profile;
+it must not silently collapse a declared multi-target policy to one node.
+Baseline packaging must remain useful without enabling bounded actions.
 
 ### Primary qualification target
 
@@ -797,18 +744,20 @@ sections above.
       and passes its module, generation, container, and dependency checks.
 - [x] **M0.2:** the shared action lifecycle, vocabulary, immutability,
       time-bound behavior, and anti-orchestration contracts are frozen.
-- [x] **M0.3:** finite Bitcoin generation and reorganization have bounded,
+- [ ] **M0.3:** finite Bitcoin generation and reorganization have bounded,
       attributable, credentialed, serialized, implementation-ready designs.
-- [x] **M0.4:** continuous block production, finite cadence modes, bounded
-      status, action priority, and shared-reservation semantics are reconciled.
+- [ ] **M0.4:** multi-target baseline production, policy updates, finite cadence,
+      bounded status, action priority, and safe exclusion are reconciled.
 - [ ] **M0.5:** static Chaos Mesh admission and initial native-fault/platform
       qualification require no mandatory webhook.
-- [ ] **M0.6:** protocol bootstrap, actor testing capabilities, and the
+- [ ] **M0.6:** protocol bootstrap, steady transaction demand, overrides, and the
       instrumented-image support matrix are implementation-ready.
 - [ ] **M0.7:** agent access, passive observation, journal, query, export,
       completeness, coverage, redaction, and evidence integrity agree across
       documents and examples.
 - [ ] **M0.8:** repository layout, fixtures, verification targets, packaging,
       support matrix, roadmap, and design index match the repository.
-- [ ] **M0 closeout:** links, Markdown policy, repository contracts,
-      `make verify`, and relevant container checks pass on the complete package.
+- [ ] **M0 closeout:** R1–R8 have reviewed resolutions or explicit per-capability
+      deferrals, with implementation acceptance defined for supported
+      capabilities; links, Markdown policy, repository contracts, `make verify`,
+      and relevant container checks pass on the complete package.

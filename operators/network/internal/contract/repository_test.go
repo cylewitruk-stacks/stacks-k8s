@@ -159,6 +159,9 @@ func TestRepositoryLayout(t *testing.T) {
 		"contracts/image-id-v1.json",
 		"contracts/inventory-v1.json",
 		"contracts/leaf-spec-v1.json",
+		"contracts/steady-state-operation-v1.json",
+		"docs/design/steady-state-operation.md",
+		"docs/design/history/bitcoin-lifecycle-m0.4.md",
 		"operators/network/go.mod",
 		"operators/observability/go.mod",
 	}
@@ -269,7 +272,7 @@ func TestActionLifecycleDesignContract(t *testing.T) {
 		}
 	}
 
-	for _, name := range []string{"actions.md", "bitcoin-lifecycle.md", "protocol-actions.md"} {
+	for _, name := range []string{"actions.md", "bitcoin-lifecycle.md", "protocol-actions.md", "steady-state-operation.md"} {
 		value, err := os.ReadFile(filepath.Join(root, "docs", "design", name))
 		if err != nil {
 			t.Fatal(err)
@@ -285,14 +288,19 @@ func TestActionLifecycleDesignContract(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, stale := range []string{"rpcProfileRef", "RPC RPC"} {
-		if strings.Contains(string(bitcoinBytes), stale) {
+	bitcoinDocument := strings.Join(strings.Fields(string(bitcoinBytes)), " ")
+	for _, stale := range []string{
+		"rpcProfileRef", "RPC RPC",
+		"require a complete, current admitted inventory and a Ready `BitcoinNode`",
+		"require the leaf role to be `miner`",
+	} {
+		if strings.Contains(bitcoinDocument, stale) {
 			t.Errorf("bitcoin action design retains superseded text %q", stale)
 		}
 	}
 }
 
-func TestBitcoinActionDesignContract(t *testing.T) {
+func TestHistoricalBitcoinActionDesignContract(t *testing.T) {
 	root := repositoryRoot(t)
 	content, err := os.ReadFile(filepath.Join(root, "contracts", "bitcoin-actions-v1.json"))
 	if err != nil {
@@ -388,6 +396,7 @@ func TestBitcoinActionDesignContract(t *testing.T) {
 	if err := json.Unmarshal(content, &rawFields); err != nil {
 		t.Fatal(err)
 	}
+	assertSupersededBitcoinMetadata(t, rawFields)
 	fieldNames := make([]string, 0, len(rawFields))
 	for name := range rawFields {
 		fieldNames = append(fieldNames, name)
@@ -474,7 +483,7 @@ func TestBitcoinActionDesignContract(t *testing.T) {
 		t.Fatalf("action reservation contract = %q, want %q", contract.ReservationContract, reservation.Contract)
 	}
 
-	documentBytes, err := os.ReadFile(filepath.Join(root, "docs", "design", "bitcoin-lifecycle.md"))
+	documentBytes, err := os.ReadFile(filepath.Join(root, "docs", "design", "history", "bitcoin-lifecycle-m0.4.md"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -574,6 +583,7 @@ func loadBitcoinReservationContract(t *testing.T, root string) bitcoinReservatio
 	if err := json.Unmarshal(content, &rawFields); err != nil {
 		t.Fatal(err)
 	}
+	assertSupersededBitcoinMetadata(t, rawFields)
 	fieldNames := make([]string, 0, len(rawFields))
 	for name := range rawFields {
 		fieldNames = append(fieldNames, name)
@@ -599,7 +609,7 @@ func loadBitcoinReservationContract(t *testing.T, root string) bitcoinReservatio
 	return contract
 }
 
-func TestBitcoinBlockProductionDesignContract(t *testing.T) {
+func TestHistoricalBitcoinBlockProductionDesignContract(t *testing.T) {
 	root := repositoryRoot(t)
 	content, err := os.ReadFile(filepath.Join(root, "contracts", "bitcoin-block-production-v1.json"))
 	if err != nil {
@@ -676,6 +686,7 @@ func TestBitcoinBlockProductionDesignContract(t *testing.T) {
 	if err := json.Unmarshal(content, &rawFields); err != nil {
 		t.Fatal(err)
 	}
+	assertSupersededBitcoinMetadata(t, rawFields)
 	fieldNames := make([]string, 0, len(rawFields))
 	for name := range rawFields {
 		fieldNames = append(fieldNames, name)
@@ -742,7 +753,7 @@ func TestBitcoinBlockProductionDesignContract(t *testing.T) {
 	if contract.ReservationContract != reservation.Contract {
 		t.Fatalf("production reservation contract = %q, want %q", contract.ReservationContract, reservation.Contract)
 	}
-	documentBytes, err := os.ReadFile(filepath.Join(root, "docs", "design", "bitcoin-lifecycle.md"))
+	documentBytes, err := os.ReadFile(filepath.Join(root, "docs", "design", "history", "bitcoin-lifecycle-m0.4.md"))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -20,6 +20,12 @@ expanded passive, identity-bound evidence so the agent can investigate and
 verify suspected issues. See the
 [product goals](docs/design/README.md#product-goals) for the intended direction.
 
+The [steady-state design](docs/design/steady-state-operation.md) makes
+`StacksNetwork` the declaration of baseline topology and operation: neutral
+Bitcoin nodes, a separate block-production policy with timing and target
+selection, Stacks miner configuration, and ongoing transaction demand.
+These capabilities are design direction, not implemented functionality.
+
 The repository currently provides:
 
 - `stacks-network-operator`, which compiles a declarative `StacksNetwork` into

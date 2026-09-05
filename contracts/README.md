@@ -1,8 +1,10 @@
 # Shared contracts
 
-This directory contains versioned wire-contract fixtures shared by independent
-operators. A fixture is an interoperability boundary, not a shared runtime
-implementation.
+This directory contains implemented wire-contract fixtures, reviewed but
+unimplemented design baselines, open design amendments, and superseded
+historical baselines. Each fixture's authority is identified below. A fixture
+is not a shared runtime implementation; a reviewed design does not imply a
+served API or controller.
 
 [`inventory-v1.json`](inventory-v1.json) pins the canonical admitted-inventory
 payload and digest. Both operators decode the same bytes into their own native
@@ -17,23 +19,32 @@ extraction from kubelet container-status values.
 [`actor-ports-v1.json`](actor-ports-v1.json) pins each actor kind's Service
 interface across workload rendering and independent observation.
 
-[`action-lifecycle-v1.json`](action-lifecycle-v1.json) pins the normative
+[`action-lifecycle-v1.json`](action-lifecycle-v1.json) is a reviewed,
+unimplemented design baseline. It pins the normative
 custom-action API group, lifecycle phases, common conditions, correlation
 label, cleanup finalizer, core fields, timestamps, stable reasons, spec
 immutability rule, timeout wire/validation contract, and forbidden
 orchestration fields before the first action CRD is introduced.
 
-[`bitcoin-actions-v1.json`](bitcoin-actions-v1.json) pins the two initial
-Bitcoin action kinds, their exact mechanism fields and typed RPC surfaces,
-hard safety limits, fail-closed ambiguity vocabulary, topology credential
-dependency, and finite cadence modes.
+[`steady-state-operation-v1.json`](steady-state-operation-v1.json) records
+agreed ownership and capability boundaries plus open review gates. It is
+explicitly **not an implementation-ready schema**. Its authority is
+[Steady-state operation](../docs/design/steady-state-operation.md), adopted by
+the [M0 remediation plan](../docs/design/m0-remediation-plan.md).
 
-[`bitcoin-block-production-v1.json`](bitcoin-block-production-v1.json) pins
-mutable continuous block production, its bounded status, fixed and
-uniform-random cadence modes, ambiguity behavior, and bounded-action yield
-rule. It intentionally does not use the atomic-action lifecycle.
+The following fixtures retain the superseded M0.3/M0.4 design payloads:
 
-[`bitcoin-reservation-v1.json`](bitcoin-reservation-v1.json) is the shared
-per-Bitcoin-node Lease contract used by continuous production and both bounded
-action kinds. Keeping its constants neutral and separate prevents the two API
-groups from defining conflicting exclusion protocols.
+- [`bitcoin-actions-v1.json`](bitcoin-actions-v1.json): finite actions,
+  attribution, credentials, and cadence;
+- [`bitcoin-block-production-v1.json`](bitcoin-block-production-v1.json):
+  single-target production, status, and action priority; and
+- [`bitcoin-reservation-v1.json`](bitcoin-reservation-v1.json): shared
+  per-target Lease protocol.
+
+Each carries `designStatus`, `sourceDocument`, and `supersededBy` metadata.
+Their exact historical payload checks continue against the
+[archived document](../docs/design/history/bitcoin-lifecycle-m0.4.md); passing
+them does not validate the reopened execution or API design. Do not implement
+their global-readiness, shared-credential, single-target, or deadline-recovery
+rules as current authority. Replacement schemas need a fresh reviewed contract
+and explicit migration before APIs or controllers are enabled.
