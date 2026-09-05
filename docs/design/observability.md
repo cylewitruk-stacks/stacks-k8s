@@ -3,9 +3,10 @@
 ## Purpose and boundary
 
 The observability layer is the agent's passive recorder and query surface. It
-collects topology mutations, action lifecycles, Kubernetes events, protocol
-facts, logs, metrics, and capture gaps so an external agent can investigate an
-issue and attempt a careful replay or reduction itself.
+collects topology mutations, desired-operation and action lifecycles,
+Kubernetes events, protocol facts, logs, metrics, and capture gaps so an
+external agent can investigate an issue and attempt a careful replay or
+reduction itself.
 
 It is read-only with respect to observed networks, actions, and workloads. It
 may write its own CRDs, status, journal, object-store artifacts, and telemetry
@@ -95,6 +96,13 @@ The controller resolves the network and configures its own collectors. It
 watches topology/action/Chaos resources, consumes the configured audit and
 telemetry sources, and writes journal segments outside the Kubernetes API.
 It never patches observed resources.
+
+For `BitcoinBlockProduction`, it records spec-generation and pause changes,
+phase and identity transitions, bounded status summaries, and captured
+structured producer logs. The producer's recent hashes and counters are not a
+complete ledger. Bitcoin polling independently records observed tips and
+blocks; selected random intervals are retained only when their structured log
+source is captured, with any gap represented honestly.
 
 Spec is mutable except for network name/UID. Source or retention changes
 affect future collection and may prune data according to the newly admitted

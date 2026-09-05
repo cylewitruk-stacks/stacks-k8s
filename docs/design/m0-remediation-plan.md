@@ -65,7 +65,7 @@ implemented unless the slice explicitly says so.
 | M0.1 | Complete | 1 | Extract the shared network API module and make generation, module verification, and container builds work across the module boundary. |
 | M0.2 | Complete | 2–5, 8, 13 | Freeze the typed, immutable, bounded atomic-action contract and structural anti-orchestration checks. |
 | M0.3 | Complete | 9–12 | Design finite Bitcoin block generation and reorganization, attribution, credentials, and per-node serialization. |
-| M0.4 | Next | Extends 9–11 | Add continuous `BitcoinBlockProduction`, refine finite generation cadence, and define fair reservation sharing between production and bounded actions. |
+| M0.4 | Complete | Extends 9–11 | Add continuous `BitcoinBlockProduction`, refine finite generation cadence, and define fair reservation sharing between production and bounded actions. |
 | M0.5 | Planned | 6–8, 16 | Define and qualify the static-first native Chaos Mesh admission profile, limits, and initial platform matrix. |
 | M0.6 | Planned | 14, 15, 26 | Define protocol bootstrap and instrumented-actor capability contracts and their image support matrix. |
 | M0.7 | Planned | 17–23 | Reconcile Kubernetes-authenticated agent access, passive observation, journal, query, export, completeness, redaction, and integrity contracts. |
@@ -82,7 +82,8 @@ must:
 
 - keep `BitcoinBlockProduction` outside the bounded-action API and lifecycle;
 - define it as mutable desired continuous operation on one Bitcoin node;
-- keep CRD status bounded while passive observability records full history;
+- keep CRD status bounded while passive observability owns retained history
+  and explicit capture gaps;
 - avoid per-block completion claims and per-block intent journaling;
 - give waiting bounded actions priority before each short production Lease;
 - preserve ambiguity containment by retaining the reservation through the
@@ -308,22 +309,25 @@ coordination layer over otherwise independent actions.
 
 ## Requirement 9: Consolidated Bitcoin generation API
 
-**Slices:** M0.3 and M0.4. **Status:** Finite-action baseline complete in
-`ba9a666`; cadence refinement is next.
+**Slices:** M0.3 and M0.4. **Status:** Complete; the finite-action baseline is
+in `ba9a666` and M0.4 adds continuous production and cadence unions.
 
-**Design status:** completed by M0.3 and pinned by
-[`bitcoin-actions-v1.json`](../../contracts/bitcoin-actions-v1.json) plus the
-[Bitcoin lifecycle design](bitcoin-lifecycle.md).
+The design is pinned by
+[`bitcoin-actions-v1.json`](../../contracts/bitcoin-actions-v1.json),
+[`bitcoin-block-production-v1.json`](../../contracts/bitcoin-block-production-v1.json),
+[`bitcoin-reservation-v1.json`](../../contracts/bitcoin-reservation-v1.json),
+and the [Bitcoin lifecycle design](bitcoin-lifecycle.md).
 
-Replace `BitcoinMiningWindow` and `BitcoinBlockRequest` with one bounded action,
-named `BitcoinBlockGeneration`.
+Finite generation is one bounded action named `BitcoinBlockGeneration`.
+Baseline chain progress is a separate mutable desired-state resource named
+`BitcoinBlockProduction` in `bitcoin.stacks.org`; it does not use the bounded
+action lifecycle.
 
 Its immutable spec covers:
 
 - Bitcoin node reference;
 - block count;
-- interval;
-- batch size, fixed to one when cadence is present;
+- exactly one immediate, fixed, uniform-random, or explicit-sequence cadence;
 - an explicit regtest destination address;
 - timeout; and
 - administrator-selected safety-policy identity in status when that policy
@@ -334,10 +338,13 @@ candidate block hashes, progress, attribution, and terminal outcome. Bounded
 `generatetoaddress` batches may run between status checkpoints; one API-server
 write per block cannot support immediate generation efficiently.
 
+Continuous production accepts fixed or uniform-random cadence and mutable
+pause. It performs one block per short reservation, keeps only bounded summary
+status, and makes no completion or deterministic-replay claim.
+
 ## Requirement 10: Attributable Bitcoin generation
 
-**Slices:** M0.3 and M0.4. **Status:** Finite-action attribution complete in
-`ba9a666`; continuous-production attribution remains for M0.4.
+**Slices:** M0.3 and M0.4. **Status:** Complete.
 
 Do not infer action ownership solely from the observed chain tip in a
 multi-miner network. Only block hashes returned by a successful mutation RPC
@@ -350,17 +357,21 @@ observed or uncertain effect is `Ambiguous` and the action is `Inconclusive`.
 Never promote reconstructed hashes to acknowledged success or retry the
 mutation blindly.
 
+Continuous production counts only hashes returned successfully by its own RPC
+client. A lost response increments bounded ambiguity status after its deadline,
+but neither stops desired production permanently nor becomes a completion
+claim. Passive observation owns retained history and independently observed
+chain facts.
+
 ## Requirement 11: Bitcoin action serialization
 
-**Slices:** M0.3 and M0.4. **Status:** Bounded-action protocol complete in
-`ba9a666`; short-hold production sharing and yielding remain for M0.4.
+**Slices:** M0.3 and M0.4. **Status:** Complete.
 
-V1 runs every Bitcoin action controller in one leader-elected process, but
-leader election is not a per-target fencing mechanism. Each target therefore
-uses an API-server-persisted node-scoped Lease
-whose holder identity binds the action UID to a unique controller acquisition
-token. The token distinguishes an old leader from a replacement reconciling
-the same action.
+V1 runs the Bitcoin controllers in one leader-elected process, but leader
+election is not a per-target fencing mechanism. Each target therefore uses an
+API-server-persisted node-scoped Lease whose holder identity binds the holder
+UID to a unique controller acquisition token. The token distinguishes an old
+leader from a replacement reconciling the same resource.
 
 Use:
 
@@ -370,28 +381,29 @@ Use:
 - an uncached read confirming the reservation holder immediately before each
   material RPC batch;
 - cancellation of the bounded RPC context on leader or reservation loss;
-- action-status intent persisted before the bounded RPC batch;
+- action-status intent persisted before each bounded-action RPC batch;
 - bounded per-RPC and per-batch deadlines; and
 - mandatory chain-state revalidation after restart, reservation loss, or
   ambiguity.
 
 A shared leader-gated `ReservationManager` Runnable owns every active handle
-across Bitcoin action kinds. It renews independently of reconcile workqueues,
-cancels handle-derived RPC contexts on reservation or leader loss, and routes
-every Lease renewal, RPC-deadline update, and release through the handle's
-serialized writer. Worker count and queue latency are not safety properties.
+across continuous production and Bitcoin action kinds. It renews independently
+of reconcile workqueues, cancels handle-derived RPC contexts on reservation or
+leader loss, and routes every Lease renewal, RPC-deadline update, and release
+through the handle's serialized writer. Worker count and queue latency are not
+safety properties.
 
 Expiry follows client-go's observed-record pattern: another holder is eligible
 for replacement only after the same Lease record remains unchanged for a full
 local Lease duration. Holder-written timestamps never permit an earlier
 takeover.
 
-The reservation spans requeues while an action remains active. Its renewal,
-duration, loss, recovery, and administrative-release rules must ensure a new
-holder cannot begin before the prior holder's bounded RPC context has been
-cancelled or expired. Because Bitcoin RPC has no fencing token, ambiguous
-handoff becomes `Inconclusive`; the controller never claims exactly-once
-execution.
+The reservation spans requeues while a bounded action remains active.
+Continuous production holds it for one block RPC and any ambiguity deadline,
+never for cadence waiting. Before acquiring, production yields to any
+uncached, non-terminal bounded action targeting the same node. Bitcoin RPC has
+no fencing token: action ambiguity becomes `Inconclusive`, while production
+records uncertainty without claiming completion or blindly retrying.
 
 Restart and loss behavior is explicit:
 
@@ -409,12 +421,15 @@ Restart and loss behavior is explicit:
   the prior maximum RPC deadline has elapsed and live chain state is
   revalidated.
 
-The protocol is shared across action kinds and remains valid if controllers
-later split into independent processes. M0.3 freezes its naming, 30-second
-lease, 10-second renewal and RPC limits, status representation, and release
-preconditions. The implementation must add leader-turnover,
+The protocol is shared across all three kinds and remains valid if controllers
+later split into independent processes. M0.4 freezes its neutral naming,
+30-second lease, 10-second renewal and RPC limits, holder representation, and
+release preconditions. The implementation must add leader-turnover,
 same-action/new-token, stale-holder, saturated-workqueue, handle-write
-serialization, and competing-action tests.
+serialization, competing-action, producer-yield, and action-starvation tests.
+The starvation suite must prove that `Admitted`, `Active`, `Recovering`, and
+`Pending/TargetBusy` actions receive priority while malformed, not-Ready, or
+otherwise stuck `Pending` actions do not stall baseline production.
 
 ## Requirement 12: Bitcoin credential and configuration identity
 
@@ -784,7 +799,7 @@ sections above.
       time-bound behavior, and anti-orchestration contracts are frozen.
 - [x] **M0.3:** finite Bitcoin generation and reorganization have bounded,
       attributable, credentialed, serialized, implementation-ready designs.
-- [ ] **M0.4:** continuous block production, finite cadence modes, bounded
+- [x] **M0.4:** continuous block production, finite cadence modes, bounded
       status, action priority, and shared-reservation semantics are reconciled.
 - [ ] **M0.5:** static Chaos Mesh admission and initial native-fault/platform
       qualification require no mandatory webhook.

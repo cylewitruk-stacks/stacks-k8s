@@ -7,6 +7,7 @@
 | External agent | Choosing and interpreting an investigation within granted policy | Cluster administration, status writes, safety-policy changes |
 | Network operator | Compiling declared topology and reporting admitted identity | Mining, faults, protocol conclusions |
 | Action controllers | One typed mechanism and its lifecycle | Cross-action sequencing, arbitrary RPC/shell, diagnosis |
+| Bitcoin production controller | Maintaining one admitted node's bounded-rate baseline production | Action sequencing, topology mutation, completion claims |
 | Chaos Mesh | Its upstream injection/recovery contract | Stacks protocol correctness |
 | Observability operator | Collecting and labeling configured facts | Mutating observed resources, declaring root cause |
 | Actor | Its process behavior and self-reported telemetry | Proving its own identity or correctness |
@@ -66,17 +67,29 @@ bounded actions retain their recorded policy through cleanup. Before
 configured to use policy-based elevation, missing or stale policy fails closed
 for new actions.
 
+Mutable `BitcoinBlockProduction` is not governed by the action lifecycle or
+selected by `ActionSafetyPolicy`. Its schema enforces an absolute minimum
+interval, it acquires the same target reservation for only one block at a
+time, and it yields to waiting bounded Bitcoin actions.
+
 ## Irreversible actions
 
 Bitcoin block production and reorganization are irreversible at the harness
-level. Controllers must:
+level. Every Bitcoin mutation controller must:
 
 - require explicit administrator permission and regtest verification;
 - use typed closed RPC clients;
-- cap count, depth, timeout, and protocol-boundary risk;
-- persist intent before calls;
-- inspect state after uncertain calls rather than blind retry; and
-- return `Inconclusive` if effect cannot be attributed.
+- use the target reservation and bounded RPC deadline; and
+- avoid blind retry after an uncertain call.
+
+Bounded actions additionally cap count, depth, timeout, and protocol-boundary
+risk, persist intent before mutation, and return `Inconclusive` when effect or
+attribution cannot be established.
+
+Continuous production makes no completion claim and therefore does not write
+per-block intent records. It keeps the target reservation through every RPC
+deadline, counts only acknowledged responses, records uncertainty separately,
+and never retries a lost call as the same requested effect.
 
 Deletion stops future work but does not pretend to undo prior chain history.
 
@@ -117,6 +130,7 @@ action mutation privileges.
 | Network viewer | Read aggregate/leaves/status | Writes, Secrets |
 | Network editor | Edit `StacksNetwork`; read leaves | Leaf/workload/status writes |
 | Action user | Create/read/delete approved action kinds; read policy | Action update/patch, policy, status, workload, arbitrary Chaos kinds |
+| Bitcoin production editor | Create/read/update/patch/delete `BitcoinBlockProduction` | Status, topology, credential, or arbitrary RPC writes |
 | Observer viewer | Read telemetry/export status and query data | Source or export writes |
 | Evidence export requester | Create/read/watch/delete `EvidenceExport` | Telemetry configuration, destination/profile, status, or storage writes |
 | Observer operator | Manage telemetry configuration and administrator-approved profiles | Observed environment mutation or agent action selection |

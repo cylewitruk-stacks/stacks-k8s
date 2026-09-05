@@ -106,8 +106,9 @@ The following historical structures must not return:
 - High-volume telemetry and evidence must not be stored in Kubernetes CRDs.
 - A forced reorganization is an action even though natural reorganizations are
   normal Bitcoin behavior.
-- Multi-miner topology and mining control are separate concerns: topology
-  declares miners; mining policy decides when each mines.
+- Multi-miner topology and block production are separate concerns: topology
+  declares miners; `BitcoinBlockProduction` will control each baseline
+  cadence independently.
 - Safe independent upgrades require persistent-data compatibility guidance and
   explicit identity transitions, not an in-cluster rollout plan.
 

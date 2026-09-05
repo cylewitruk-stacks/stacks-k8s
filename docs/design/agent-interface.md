@@ -11,12 +11,13 @@ operator contains a scenario planner or decides what an observed result means.
 An agent may independently:
 
 1. create or patch a `StacksNetwork` and wait for its observed generation;
-2. inspect admitted actors and current protocol facts;
-3. create one native Chaos Mesh or protocol-specific action resource;
-4. watch that resource and surrounding telemetry;
-5. create, overlap, update, or remove further resources within safety policy;
-6. request an `EvidenceExport` for a useful time window; and
-7. use the record and its own context to attempt reproduction and reduction.
+2. create or update `BitcoinBlockProduction` when baseline progress is needed;
+3. inspect admitted actors and current protocol facts;
+4. create one native Chaos Mesh or protocol-specific action resource;
+5. watch that resource and surrounding telemetry;
+6. create, overlap, update, or remove further resources within safety policy;
+7. request an `EvidenceExport` for a useful time window; and
+8. use the record and its own context to attempt reproduction and reduction.
 
 These are client choices, not an in-cluster workflow.
 
@@ -60,6 +61,12 @@ fixed intervals. Custom actions use the normative `Pending`, `Admitted`,
 `Active`, `Recovering`, `Completed`, `Recovered`, `Failed`, and `Inconclusive`
 phases. The agent decides whether to wait, delete an action to request
 cancellation, investigate, or apply another resource.
+
+`BitcoinBlockProduction` is different: it uses mutable `cadence` and `paused`
+desired state with `Pending`, `Running`, `Paused`, `Degraded`, and
+`Terminating` phases. A bounded Bitcoin action receives target priority; the
+producer resumes baseline cadence after that action releases the shared
+reservation.
 
 `Inconclusive` is a first-class result. Clients must not translate it to
 success or failure. Protocol correctness remains a conclusion drawn by the

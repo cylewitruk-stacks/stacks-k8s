@@ -11,6 +11,11 @@ Native Chaos Mesh resources keep their upstream schemas and status. The
 supported stacks-k8s profile applies the correlation and immutability
 conventions from this document without wrapping those resources.
 
+Long-lived desired-operation resources also remain outside this contract.
+In particular, mutable `BitcoinBlockProduction` has its own API group,
+lifecycle, and contract. Sharing a typed RPC client or target reservation with
+a Bitcoin action does not make production an action.
+
 The machine-readable vocabulary is pinned by
 [`action-lifecycle-v1.json`](../../contracts/action-lifecycle-v1.json).
 Its contract identifier is `actions.stacks.org/lifecycle/v1alpha1`.
@@ -327,10 +332,11 @@ external side effect. Shared libraries may provide:
 - action event/correlation metadata.
 
 Serialization is mechanism-specific rather than a generic scheduler. The
-initial Bitcoin controllers share the exact target-UID Lease protocol in
-[Bitcoin lifecycle design](bitcoin-lifecycle.md), with one leader-gated
-reservation manager owning renewal and writes; other action families adopt it
-only when they share the same side effect and fencing constraints.
+initial Bitcoin action and production controllers share the exact target-UID
+Lease protocol in [Bitcoin lifecycle design](bitcoin-lifecycle.md), with one
+leader-gated reservation manager owning renewal and writes; other action
+families adopt it only when they share the same side effect and fencing
+constraints.
 
 Shared code must not accept arbitrary action payloads, enumerate a runtime
 mechanism registry, or advance from one action resource to another. Each

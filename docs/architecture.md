@@ -42,13 +42,14 @@ does not replace the agent with an in-cluster experiment engine.
 | Component | Responsibility |
 | --- | --- |
 | Network operator | Reconcile declarative topology and actor workloads. |
+| Desired-operation controllers | Maintain one mutable, ongoing operational capability, such as baseline Bitcoin block production, without sequencing actions. |
 | Action controllers | Execute one small, bounded, independently observable action represented by one resource. |
 | Observability operator | Passively collect, correlate, retain, query, and export facts and telemetry. |
 | Agent | Orchestrate, adapt, investigate, attempt replay, reduce, diagnose, and construct regression cases. |
 
 The network and initial observability controllers exist today. The observer's
 inventory verifier intentionally continues to decode the raw wire shape rather
-than round-trip it through shared typed structs. Action
+than round-trip it through shared typed structs. Desired-operation and action
 controllers and the external agent are target-architecture participants, not
 implementations currently provided by this repository. Defining their
 boundaries now prevents future action APIs from growing into an in-cluster

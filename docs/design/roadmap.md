@@ -7,7 +7,7 @@
 | Current inventory and boundaries | Complete | Existing operators only |
 | Atomic action API conventions | Complete | Contract fixture only; no action CRDs |
 | Mutable topology | Ready for API review | Partially implemented |
-| Bitcoin lifecycle actions | M0.3 contract complete | Not implemented |
+| Bitcoin production and lifecycle actions | M0.4 contract complete | Not implemented |
 | Native Chaos Mesh profile | Ready for implementation planning | Not packaged here |
 | Protocol-specific actions | Ready for API review, with stated open decisions | Not implemented |
 | Passive telemetry and evidence | Ready for backend/API decision | Identity snapshot only |
@@ -37,7 +37,7 @@ below. Reconciliation of those sections is an explicit M0 deliverable.
 API conventions
   -> mutable topology
        -> minimal passive journal
-            -> Bitcoin lifecycle actions
+            -> Bitcoin production and lifecycle actions
             -> native Chaos Mesh profile
             -> full passive telemetry
                  -> evidence export and query
@@ -117,13 +117,14 @@ control bounded Bitcoin state transitions.
 
 - Add shared action identity/status/finalizer/Lease helpers without a generic
   action engine.
-- Apply the absolute per-kind limits frozen by M0.3 and exact RBAC. Defer
+- Apply the absolute per-kind limits frozen by M0.4 and exact RBAC. Defer
   policy elevation until a concrete administrator override is required.
 - Implement mutable `BitcoinBlockProduction` and finite
   `BitcoinBlockGeneration` on the shared credential and reservation paths,
   then implement `BitcoinReorganization`.
-- Expose only typed regtest RPC methods; any lost mutation response is
-  inconclusive unless every known tip proves absence.
+- Expose only typed regtest RPC methods. Bounded actions treat a lost mutation
+  response as inconclusive unless every known tip proves absence; production
+  records ambiguity without inferring completion or blindly retrying.
 - Run the shared per-target Lease protocol through a leader-gated reservation
   manager that owns every Lease write independently of reconcile workqueues.
 - Treat the v1 protocol schedule as unknown and require every boundary opt-in
@@ -132,9 +133,9 @@ control bounded Bitcoin state transitions.
   journal without making observation a mutation dependency.
 
 **Done:** each resource satisfies its own section in
-[Bitcoin lifecycle design](bitcoin-lifecycle.md), can run with other action
-controllers disabled, and composes with a separately submitted native
-partition.
+[Bitcoin lifecycle design](bitcoin-lifecycle.md), its controller can run with
+the other Bitcoin controllers disabled, and it composes with a separately
+submitted native partition.
 
 ## M4: native Chaos Mesh agent profile
 

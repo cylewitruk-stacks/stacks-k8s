@@ -42,6 +42,43 @@
   },
   "destinationUniqueness": "advisory",
   "getBlockVerbosity": 2,
+  "generationCadence": {
+    "delayAppliesBefore": "every-block-including-first",
+    "fixedFields": [
+      "interval"
+    ],
+    "immediateBatchWithinBlocksCEL": "!has(self.cadence.immediate) || self.cadence.immediate.batchSize <= self.blocks",
+    "immediateFields": [
+      "batchSize"
+    ],
+    "intervalCEL": "duration(self) >= duration('100ms') && duration(self) <= duration('5m')",
+    "modes": [
+      "immediate",
+      "fixed",
+      "uniform",
+      "sequence"
+    ],
+    "oneOfCEL": "[has(self.immediate), has(self.fixed), has(self.uniform), has(self.sequence)].filter(x, x).size() == 1",
+    "scheduledBatchSize": 1,
+    "sequenceFields": [
+      "delays"
+    ],
+    "sequenceLengthCEL": "!has(self.cadence.sequence) || self.cadence.sequence.delays.size() == self.blocks",
+    "sequenceItemsMaximum": 288,
+    "statusFields": [
+      "mode",
+      "selectedInterval",
+      "scheduledForBlock",
+      "dueAt"
+    ],
+    "uniformFields": [
+      "minimumInterval",
+      "maximumInterval"
+    ],
+    "uniformOrderCEL": "duration(self.minimumInterval) <= duration(self.maximumInterval)",
+    "uniformReplayClaim": false,
+    "uniformSelection": "crypto-rand-unbiased-inclusive-integer-nanoseconds"
+  },
   "kinds": [
     {
       "kind": "BitcoinBlockGeneration",
@@ -58,8 +95,7 @@
         "networkRef",
         "bitcoinNodeRef",
         "blocks",
-        "interval",
-        "batchSize",
+        "cadence",
         "destinationAddress",
         "timeout"
       ],
@@ -67,6 +103,7 @@
         "requestedBlocks",
         "generatedBlocks",
         "generatedBlockHashes",
+        "cadence",
         "startingChain",
         "observedChain",
         "reservation",
@@ -122,15 +159,7 @@
     "rpcAttemptsMaximum": 320,
     "timeoutMaximum": "24h"
   },
-  "reservationStatusFields": [
-    "leaseName",
-    "holderIdentity",
-    "acquisitionToken",
-    "acquiredAt",
-    "renewedAt",
-    "rpcNotAfter",
-    "releasedAt"
-  ],
+  "reservationContract": "bitcoin.stacks.org/reservation/v1alpha1",
   "rpcAttemptScope": "mutation-methods-only",
   "rpcAttemptFields": [
     "sequence",
@@ -145,29 +174,6 @@
     "outcome",
     "blockHashes"
   ],
-  "reservation": {
-    "acquisitionTokenBytes": 16,
-    "annotations": [
-      "actions.stacks.org/action-kind",
-      "actions.stacks.org/action-uid",
-      "actions.stacks.org/acquisition-token",
-      "actions.stacks.org/rpc-not-after",
-      "actions.stacks.org/target-uid"
-    ],
-    "apiVersion": "coordination.k8s.io/v1",
-    "holderIdentity": "<action-uid>/<32-lowercase-hex-acquisition-token>",
-    "kind": "Lease",
-    "leaseDurationSeconds": 30,
-    "managerLifecycle": "leader-gated-manager-runnable",
-    "managedByLabel": "app.kubernetes.io/managed-by=stacks-action-operator",
-    "maximumRPCSeconds": 10,
-    "nameAlgorithm": "bitcoin-action-<first-32-hex-sha256(namespace-NUL-targetUID)>",
-    "observedExpiry": "local-observation-of-unchanged-record",
-    "ownerReference": "BitcoinNode UID, controller=false, blockOwnerDeletion=false",
-    "rpcContextParent": "reservation-handle",
-    "writeOwner": "reservation-handle",
-    "renewEverySeconds": 10
-  },
   "provenAbsentScope": "all-known-tips",
   "protocolSchedule": {
     "unknownRequiresAllBoundaryOptIns": true,

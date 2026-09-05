@@ -26,4 +26,14 @@ orchestration fields before the first action CRD is introduced.
 [`bitcoin-actions-v1.json`](bitcoin-actions-v1.json) pins the two initial
 Bitcoin action kinds, their exact mechanism fields and typed RPC surfaces,
 hard safety limits, fail-closed ambiguity vocabulary, topology credential
-dependency, and leader-gated per-node reservation protocol.
+dependency, and finite cadence modes.
+
+[`bitcoin-block-production-v1.json`](bitcoin-block-production-v1.json) pins
+mutable continuous block production, its bounded status, fixed and
+uniform-random cadence modes, ambiguity behavior, and bounded-action yield
+rule. It intentionally does not use the atomic-action lifecycle.
+
+[`bitcoin-reservation-v1.json`](bitcoin-reservation-v1.json) is the shared
+per-Bitcoin-node Lease contract used by continuous production and both bounded
+action kinds. Keeping its constants neutral and separate prevents the two API
+groups from defining conflicting exclusion protocols.

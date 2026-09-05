@@ -22,8 +22,10 @@ kubectl logs NETWORK-ACTOR-0 --all-containers
 ```
 
 A generated Stacks node may need the external regtest client to advance its
-Bitcoin chain before its RPC listener becomes ready. Mining policy is
-deliberately outside this topology operator.
+Bitcoin chain before its RPC listener becomes ready. Block production is
+deliberately outside this topology operator. Until the separately designed
+`BitcoinBlockProduction` controller is implemented, an external client must
+advance Bitcoin.
 
 ## Safe changes
 

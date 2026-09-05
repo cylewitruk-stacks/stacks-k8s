@@ -7,7 +7,7 @@
 | `apis/network` | Versioned network Kubernetes API types | Kubernetes API machinery only |
 | `stacks-network-operator` | Reusable Stacks regtest topology | Kubernetes only |
 | `stacks-observability-operator` | Passive identity and telemetry collection | Reads network/action/Chaos APIs; does not import their runtime code |
-| `stacks-action-operator` | Protocol-specific atomic actions and safety policy | Uses versioned network wire APIs |
+| `stacks-action-operator` | Bitcoin production, protocol-specific atomic actions, and safety policy | Uses versioned network wire APIs |
 | Chaos Mesh | Generic infrastructure faults | External optional dependency |
 | Telemetry backend bundle | Loki/Prometheus/OpenTelemetry/object storage profile | External optional dependencies |
 | Development bundle | Pins compatible chart versions for local use | Depends on products; does not merge their release lifecycles |
@@ -41,6 +41,9 @@ apis/
 contracts/
   action-lifecycle-v1.json
   actor-ports-v1.json
+  bitcoin-actions-v1.json
+  bitcoin-block-production-v1.json
+  bitcoin-reservation-v1.json
   image-id-v1.json
   inventory-v1.json
   leaf-spec-v1.json
@@ -60,6 +63,9 @@ graph or release cadence.
 ## CRD ownership and installation
 
 - Each chart owns only its CRDs and namespaced/cluster-scoped RBAC.
+- The action chart may own both `actions.stacks.org` and
+  `bitcoin.stacks.org` CRDs; API lifecycle remains resource-specific even when
+  controllers share one binary and reservation manager.
 - CRDs are generated from API types; generated files are committed.
 - Helm's CRD upgrade limitations require documented manual or release-tool
   steps before a served/storage version changes.

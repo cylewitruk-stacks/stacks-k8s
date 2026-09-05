@@ -148,7 +148,7 @@ M0.3 defines one narrower exception for generated Bitcoin and Stacks
 configuration. Each enrolled namespace has a fixed immutable
 `stacks-bitcoin-rpc` Secret with key `bitcoin-rpc.conf`. The topology
 declaration adds optional `StacksNetwork.spec.bitcoinRPCAuth` using
-`ConfigObjectRef`. Managed action RPC pins that field's name and key, requires
+`ConfigObjectRef`. Managed Bitcoin RPC pins that field's name and key, requires
 `expectedDigest`, and forbids `mountPath`.
 
 The aggregate compiler copies the same input to
@@ -156,13 +156,14 @@ The aggregate compiler copies the same input to
 `bitcoin-regtest/v2` and `nakamoto-regtest-node/v2` consume it through actor
 init. Existing v1 profiles remain compatible topology options but cannot
 report managed-RPC readiness. Custom configurations remain supported and must
-opt into the reserved renderer inputs before becoming action-eligible.
+opt into the reserved renderer inputs before becoming eligible for continuous
+production or bounded actions.
 
 This prerequisite changes the generated-profile enum, API schemas, aggregate
 compiler, both workload renderers, and leaf `specDigest`. It adds vectors to
 `leaf-spec-v1.json` and `inventory-v1.json` and lands before the first Bitcoin
-action controller. Actor init containers verify the mounted bytes before use;
-the network controller never reads Secret content.
+production or action controller. Actor init containers verify the mounted
+bytes before use; the network controller never reads Secret content.
 
 The inventory's leaf `specDigest` records the reference, expected digest,
 template digest, and renderer contract as configuration-input identity. It

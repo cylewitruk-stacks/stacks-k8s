@@ -1,0 +1,38 @@
+{
+  "acquisitionTokenBytes": 16,
+  "annotations": [
+    "bitcoin.stacks.org/holder-kind",
+    "bitcoin.stacks.org/holder-uid",
+    "bitcoin.stacks.org/acquisition-token",
+    "bitcoin.stacks.org/rpc-not-after",
+    "bitcoin.stacks.org/target-uid"
+  ],
+  "apiVersion": "coordination.k8s.io/v1",
+  "contract": "bitcoin.stacks.org/reservation/v1alpha1",
+  "holderIdentity": "<holder-uid>/<32-lowercase-hex-acquisition-token>",
+  "holderKinds": [
+    "BitcoinBlockGeneration",
+    "BitcoinBlockProduction",
+    "BitcoinReorganization"
+  ],
+  "kind": "Lease",
+  "leaseDurationSeconds": 30,
+  "managerLifecycle": "leader-gated-manager-runnable",
+  "managedByLabel": "app.kubernetes.io/managed-by=stacks-action-operator",
+  "maximumRPCSeconds": 10,
+  "nameAlgorithm": "bitcoin-mutation-<first-32-hex-sha256(namespace-NUL-targetUID)>",
+  "observedExpiry": "local-observation-of-unchanged-record",
+  "ownerReference": "BitcoinNode UID, controller=false, blockOwnerDeletion=false",
+  "rpcContextParent": "reservation-handle",
+  "statusFields": [
+    "leaseName",
+    "holderIdentity",
+    "acquisitionToken",
+    "acquiredAt",
+    "renewedAt",
+    "rpcNotAfter",
+    "releasedAt"
+  ],
+  "writeOwner": "reservation-handle",
+  "renewEverySeconds": 10
+}
