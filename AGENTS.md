@@ -3,6 +3,20 @@
 This file applies to the entire repository. Keep changes focused, idiomatic,
 and consistent with the architecture documented under [`docs/`](docs/).
 
+## Product purpose
+
+Keep components modular and independently useful: `StacksNetwork` must support
+ordinary regtest development and testing without requiring an agent, action
+controllers, or observability tooling. Design for network reliability,
+liveness, resilience, performance, and efficiency investigations alongside
+defensive security testing. A primary use is investigation by trusted
+cybersecurity agents in disposable, reasonably realistic networks, including
+discovery of critical issues beyond conventional tests and static analysis and
+verification of behavior from responsibly reported vulnerability reports.
+Preserve bounded permissions, external-agent orchestration, and evidence
+integrity. See the
+[product goals](docs/design/README.md#product-goals).
+
 ## Architecture invariants
 
 - Treat each operator as an independently deployable and versioned product.
@@ -21,6 +35,9 @@ and consistent with the architecture documented under [`docs/`](docs/).
 - Each action resource represents one small, bounded, independently
   observable action. Do not introduce an in-cluster scenario or playbook
   resource containing an ordered execution plan.
+- Long-lived desired operation, such as `BitcoinBlockProduction`, is mutable
+  and separate from the bounded-action lifecycle. It maintains one ongoing
+  capability without terminal completion claims or action sequencing.
 - Deterministic distributed-system outcomes are not a product goal. Preserve
   identity and evidence integrity so an agent can attempt best-effort replay,
   verify an issue semantically, and derive a confirmed reduced reproducer

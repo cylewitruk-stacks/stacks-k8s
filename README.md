@@ -1,7 +1,26 @@
 # Stacks Kubernetes operators
 
 `stacks-k8s` contains independently deployable Kubernetes operators and Helm
-charts for Stacks networks. The repository currently provides:
+charts for Stacks networks. Intended uses include general regtest development
+and testing; network reliability, liveness, resilience, performance, and
+efficiency investigations; defensive security testing; and attempts to verify
+behavior described in responsibly reported vulnerability reports.
+`StacksNetwork` is usable independently of agents, action controllers, and
+observability tooling.
+
+A primary product goal is defensive security testing: enable trusted
+cybersecurity agents to simulate adversarial conditions in
+disposable, reasonably realistic `StacksNetwork`s and identify critical issues
+that are difficult to expose through unit tests, integration tests, or static
+analysis alone.
+
+In the target architecture, the external agent directs investigations within
+granted permissions. Operators will provide bounded action controls and
+expanded passive, identity-bound evidence so the agent can investigate and
+verify suspected issues. See the
+[product goals](docs/design/README.md#product-goals) for the intended direction.
+
+The repository currently provides:
 
 - `stacks-network-operator`, which compiles a declarative `StacksNetwork` into
   small actor resources and Kubernetes workloads; and
@@ -40,6 +59,11 @@ helm upgrade --install stacks-network-operator \
 
 kubectl --namespace stacks-regtest apply --filename examples/network/minimal.yaml
 ```
+
+Bitcoin block production currently requires an external mining client; the
+network operator does not generate blocks. Stacks RPC readiness may depend on
+advancing the Bitcoin chain. See the
+[readiness guidance](docs/network-operator/operations.md#readiness).
 
 Install the observer after the network operator when trusted topology identity
 is required:

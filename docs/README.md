@@ -13,6 +13,8 @@
 
 - [Architecture](architecture.md)
 - [Next-phase architecture design package](design/README.md)
+- [Current capabilities and gaps](design/current-state.md)
+- [Authoritative M0 remediation plan](design/m0-remediation-plan.md)
 - [Development](development.md)
 - [Operations](operations.md)
 - [Releases](releases.md)

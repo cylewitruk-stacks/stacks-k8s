@@ -1,14 +1,48 @@
 # Architecture design package
 
-This package defines the next `stacks-k8s` architecture phase. It is a design
-input, not an implemented API contract. Existing behavior remains documented
-under [`docs/`](../README.md).
+This package defines the next `stacks-k8s` architecture phase, including
+reviewed contracts and proposed capabilities. Reviewed contracts define an
+implementation baseline; they do not imply an installed CRD, served API, or
+implemented controller. Existing behavior remains documented under
+[`docs/`](../README.md).
+
+## Product goals
+
+Intended uses include ordinary regtest development and testing; network
+reliability, liveness, resilience, performance, and efficiency investigations;
+defensive security testing; and attempts to verify behavior described in
+responsibly reported vulnerability reports. Components must remain modular
+and independently useful: running a `StacksNetwork` must not require an agent,
+action controllers, or observability tooling. Users compose those capabilities
+as their testing or investigation needs grow.
+
+A primary use is defensive security investigation by trusted cybersecurity
+agents with authorized access to disposable `StacksNetwork`s. These networks
+provide reasonably realistic multi-actor environments for simulating
+adversarial conditions and identifying potentially critical issues that unit
+tests, integration tests, and static analysis may not expose.
+
+In the target architecture, the agent combines topology changes, bounded
+protocol actions, native infrastructure faults, and available instrumented-actor
+capabilities within administrator-granted permissions. Operators expose
+composable controls and passive evidence; the agent selects experiments,
+interprets results, and
+verifies suspected issues. Trust in the agent does not replace the
+[RBAC, admission, and identity boundaries](security-and-safety.md).
+
+For investigations, success means evidence-backed conclusions and, where
+feasible, semantically verified reduced reproducers. Reported behavior is a
+claim to assess; an unsuccessful reproduction attempt is not proof that an
+issue is absent. Verification does not require identical distributed
+execution or proof of causal minimality. Capability and platform qualification
+must distinguish implemented behavior from proposed or unavailable features.
 
 ## Status vocabulary
 
 | Label | Meaning |
 | --- | --- |
 | Implemented | Present in the committed operators. |
+| Contract complete | Reviewed design and contract baseline is complete; runtime and served API availability require separate implementation. |
 | Direction | Agreed architectural constraint. |
 | Recommended | Proposed implementation awaiting API review. |
 | Open | Decision required before implementation. |
