@@ -155,6 +155,13 @@ semantics. Never silently switch from central selection to local policies.
 These are design findings, not claims of implemented vulnerabilities. Recording
 a correction does not close its implementation gate.
 
+The [R1/R2 proposal](target-admission-and-rpc-execution.md) supplies concrete
+admission and execution recommendations with local evidence. Its conservative
+profile blocks conflicting mutations while a request remains unresolved;
+explicit reset/readmission and per-process credential epochs are the next
+bounded investigation with R3. Automatic recovery is not promised; authenticated
+endpoint provisioning, actual termination evidence, and R4 cleanup remain gates.
+
 | ID | Required resolution | Owner | State |
 | --- | --- | --- | --- |
 | R1 | Target admission independent of whole-network health, including endpoint identity and bootstrap/fault cases. | M0.3/M0.4 amendment; M0.6 | Open |

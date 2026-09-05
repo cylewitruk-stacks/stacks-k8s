@@ -111,6 +111,16 @@ M0.2's shared lifecycle vocabulary remains reviewed. R1 may require an explicit
 admitted-identity extension, and R5 requires primary-resource metadata permission
 for finalizers; neither is permission to silently change the shared fixture.
 
+The [R1/R2 decision proposal](target-admission-and-rpc-execution.md) recommends
+a compiled-declaration catalog and protected single-dispatch execution record.
+It includes local feasibility evidence and the explicit availability cost of
+retaining unresolved requests. It is a review input; R1/R2 and the R3 endpoint
+authentication dependency remain open.
+The next bounded investigation is explicit reset/readmission with per-process
+credential epochs, actual termination evidence, and preserved R4 obligations.
+Qualify against node-local IO/stress faults and Bitcoin/controller restarts;
+do not require a full execution-aware adapter if the smaller contract suffices.
+
 ## Requirement 1: Shared network API-module spike
 
 **Slice:** M0.1. **Status:** Complete and committed in `0dcf5ac`.
@@ -375,7 +385,11 @@ observation owns retained history and independently collected chain facts.
 
 Require shared target-scoped exclusion across production and finite actions,
 one serialized owner of reservation writes, uncached admitted-identity checks,
-and bounded client work. Kubernetes leader election, Lease ownership, and
+and bounded client resources. Separate action deadlines, transport cancellation,
+and receipt collection. A closed response path cannot supply a late receipt.
+Reservation ownership persists across dependent RPCs, durable accounting, and
+cleanup; executor takeover is not reservation release.
+Kubernetes leader election, Lease ownership, and
 context cancellation do not fence Bitcoin RPC execution.
 
 Before enabling a mutation kind, define how outstanding server work is known
@@ -403,12 +417,20 @@ server-enforced RPC permissions, exact namespaced Secret grants, authentication
 profiles, and supported Bitcoin versions. Observation must be unable to invoke
 mutation methods with its granted credentials.
 
-Retain high-entropy immutable credentials, salted `rpcauth` rendering,
+Retain high-entropy credentials immutable within their admitted epoch,
+salted `rpcauth` rendering for profiles that use it,
 startup digest verification, and credential-free output/status. The network
 controller references Secret inputs without reading their bytes. Profile
 rotation, mounting, leaf-spec/inventory identity, and client rollout behavior
 must be reviewed together. Exact names, keys, API fields, and generated-profile
 versions remain open.
+
+Evaluate per-process cookie or rotated mutation-profile epochs with R2's
+explicit reset/readmission candidate. Old Armed requests must never refresh
+credentials or retarget. Cookie rotation does not itself authenticate the
+server, isolate observation authority, or prove old-process termination.
+Static mutation credentials cannot satisfy the reset fence. Freeze the
+provisioning and termination-evidence contract before claiming recovery.
 
 Configuration-input identity is not rendered-byte attestation. Arbitrary actor
 image/command/configuration authority can expose mounted credentials; document

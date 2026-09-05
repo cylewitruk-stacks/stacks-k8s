@@ -83,7 +83,7 @@ level. Every Bitcoin mutation controller must:
 
 - require explicit administrator permission and regtest verification;
 - use typed closed RPC clients;
-- use the target reservation and bounded RPC deadline; and
+- retain the target reservation and bound dispatch work and client resources; and
 - avoid blind retry after an uncertain call.
 
 Bounded actions additionally cap count, depth, timeout, and protocol-boundary
@@ -94,11 +94,18 @@ Continuous production makes no completion claim, but it still needs a reviewed
 outstanding-request and exclusion contract. RPC timeout, context cancellation,
 Lease expiry, or current chain-state absence does not establish server-side
 quiescence. R2 must close before enabling retry, takeover, or resumption.
+Action deadlines, transport cancellation, and receipt collection are distinct.
+Closing a possibly dispatched request's response path leaves its target closed
+until qualified recovery. The
+[reset/readmission candidate](target-admission-and-rpc-execution.md#recovery-record-loss-and-replacement)
+requires old-process termination, credential-epoch fencing, and fresh admission;
+node partition or missing termination evidence must fail closed.
 
 Reorganization cleanup must address temporary invalidation markers on every
 exit path (R4). Their removal is distinct from undoing irreversible history.
 
-Deletion stops future work but does not pretend to undo prior chain history.
+Deletion prevents new dispatch authorization; it cannot recall already-Armed
+work or undo prior chain history.
 
 ## Secrets and workload security
 
@@ -109,6 +116,9 @@ Deletion stops future work but does not pretend to undo prior chain history.
   public action specs never select credentials. R3 replaces the shared Bitcoin
   Secret proposal with separately restricted observation, Stacks-client, and
   mutation authority. Verify RPC permission enforcement server-side.
+- Pin mutation credentials to the admitted process epoch; an Armed request
+  cannot reload a rotated cookie/Secret or retarget a replacement. Cookie
+  rotation does not replace authenticated endpoints or restricted principals.
 - The network operator mounts and content-verifies inputs without Secret-read
   RBAC; exact profiles and rotation remain design gates.
 - Transaction signing credentials have a separate M0.6 Requirement 14 gate:

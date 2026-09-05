@@ -34,6 +34,16 @@ controller issues typed regtest RPC requests. Permanent baseline changes go
 through the aggregate. Baseline operation does not require enabling bounded
 action controllers. Standalone policy ownership and packaging remain open.
 
+### Bitcoin image basis
+
+Use the Debian-based [bitcoin/bitcoin image](https://hub.docker.com/r/bitcoin/bitcoin)
+as the planned standard regtest image, with 31.1 as the current qualification
+baseline. The publisher describes these as unofficial Bitcoin Core testing
+images. Record version, platform, and immutable digest for qualification;
+avoid floating latest tags. Existing 25.2 examples remain pending workload
+qualification and an explicit example update. Custom images remain subject
+to the same capability and identity checks.
+
 ## Target admission
 
 Admission establishes current declaration, network membership and ownership,
@@ -41,6 +51,10 @@ UID, generation, runtime/configuration identity, credential profile, and
 reachable regtest capability. It must not require unrelated actors to be
 Ready or accept stale aggregate inventory. R1 in the amendment owns the
 replacement target-validation and endpoint-identity contract.
+
+The [R1/R2 proposal](target-admission-and-rpc-execution.md) recommends a
+health-independent declaration catalog joined to current leaf/runtime identity,
+plus instance-authenticated RPC. The concrete R3 transport remains a dependency.
 
 References are typed and same-namespace. Public specs do not choose arbitrary
 RPC endpoints, methods, wallets, or credentials. Destinations remain explicit,
@@ -119,6 +133,15 @@ point, but its recovery guarantees are reopened under R2:
   execute later.
 - A fixed grace interval does not establish server-side quiescence.
 
+The [R1/R2 proposal](target-admission-and-rpc-execution.md) recommends persisting
+dispatch authority and outstanding work in one protected CAS record. Ambiguity
+retains exclusion instead of granting automatic recovery. Reservation ownership
+survives individual receipts and executor replacement until explicit clean
+release. Action deadlines, transport cancellation, and receipt collection have
+separate lifetimes. An explicit reset/readmission candidate is being evaluated
+with R3 against IO/stress faults and Bitcoin/controller restarts; a full
+execution-aware adapter is not a prerequisite if that contract can be qualified.
+
 Choose an enforceable execution boundary or an explicitly weaker contract with
 durable unresolved-operation handling before implementation. Do not authorize
 retry, takeover, or resumption solely because `rpc-not-after` elapsed.
@@ -146,7 +169,8 @@ recovery.
 
 ## Credential and renderer gate
 
-Keep high-entropy `rpcauth`, immutable administrator-provisioned inputs,
+Keep high-entropy credentials, immutable administrator-provisioned inputs,
+salted `rpcauth` rendering for profiles that use it,
 digest-verified actor rendering, and no credential output in logs, status,
 arguments, or Helm values. The topology controller does not read Secret bytes.
 Current v1 development profiles are not automatically eligible for managed RPC.
@@ -156,6 +180,14 @@ and mutation authority, Secret access, actor client permissions, and
 server-enforced method restrictions. Freeze names, keys, renderer inputs,
 rotation, and profile versions together. Putting both passwords in a Secret
 readable by the observer does not separate authority.
+
+For reset recovery, qualify per-process credential epochs alongside actual
+termination evidence. Bitcoin's rotating cookie is a candidate primitive;
+static mutation credentials do not fence a former producer. Armed requests
+pin credentials and never refresh them for a replacement. Provisioning,
+restricted principals, and server identity remain R3 gates; cookie rotation
+alone does not establish them. See the
+[candidate contract](target-admission-and-rpc-execution.md#candidate-credential-epoch).
 
 Authentication does not encrypt RPC transport. Qualify the private-cluster
 management path and endpoint identity. Updated API, leaf-specification, and

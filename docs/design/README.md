@@ -74,6 +74,7 @@ must distinguish implemented behavior from proposed or unavailable features.
 | [Topology](topology.md) | Mutable `StacksNetwork`, actor lifecycle, configuration, storage, and upgrades. |
 | [Steady-state operation](steady-state-operation.md) | Agreed baseline ownership, multi-target Bitcoin production, transaction demand, fault paths, and open review gates. |
 | [Bitcoin lifecycle](bitcoin-lifecycle.md) | Revised production direction and reopened admission, credentials, execution, and cleanup contracts. |
+| [R1/R2 decision proposal](target-admission-and-rpc-execution.md) | Current-code analysis, independent declaration admission, conservative RPC exclusion, and local feasibility evidence. |
 | [Atomic actions](actions.md) | Normative shared action lifecycle, targeting, status, cleanup, and extension rules. |
 | [Chaos Mesh](chaos-mesh.md) | Direct native fault usage, selection, policy, correlation, and packaging. |
 | [Protocol actions](protocol-actions.md) | Non-Chaos-Mesh signer, miner, clock, storage, and input behaviors. |
