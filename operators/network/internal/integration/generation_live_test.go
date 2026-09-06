@@ -21,7 +21,7 @@ import (
 func createGeneration(t *testing.T, c client.Client, key types.NamespacedName, name string, count, interval int32, timeout time.Duration) *actionv1.BitcoinBlockGeneration {
 	t.Helper()
 	waitActionQuota(t, c, key.Namespace, "bitcoinblockgenerations")
-	a := &actionv1.BitcoinBlockGeneration{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: key.Namespace}, Spec: actionv1.BitcoinBlockGenerationSpec{NetworkRef: actionv1.LocalReference{Name: key.Name}, BitcoinNodeRef: actionv1.LocalReference{Name: key.Name + "-bitcoin"}, Count: count, IntervalSeconds: interval, Address: "mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn", Timeout: metav1.Duration{Duration: timeout}}}
+	a := &actionv1.BitcoinBlockGeneration{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: key.Namespace}, Spec: actionv1.BitcoinBlockGenerationSpec{NetworkRef: actionv1.LocalReference{Name: key.Name}, BitcoinNodeRef: actionv1.LocalReference{Name: key.Name + "-bitcoin"}, Count: count, Cadence: actionv1.GenerationCadence{Mode: "Fixed", IntervalSeconds: interval}, Address: "mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn", Timeout: metav1.Duration{Duration: timeout}}}
 	liveMust(t, c.Create(context.Background(), a))
 	return a
 }

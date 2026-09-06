@@ -10,6 +10,7 @@ import (
 
 	bitcoinv1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/bitcoin/v1alpha1"
 	networkv1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha1"
+	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/cadence"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/naming"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -104,26 +105,33 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return r.report(ctx, p, "Paused", "New opportunities are paused", time.Second)
 	}
 	now := r.Now()
-	interval := time.Duration(p.Spec.Policy.IntervalSeconds) * time.Second
-	if interval < time.Second || interval > 24*time.Hour || len(p.Spec.Policy.Targets) == 0 || len(p.Spec.Policy.Targets) > 8 {
+	policy := p.Spec.Policy
+	if policy.IntervalSeconds < 1 || policy.IntervalSeconds > 86400 || policy.JitterSeconds < 0 || policy.JitterSeconds >= policy.IntervalSeconds || policy.IntervalSeconds+policy.JitterSeconds > 86400 || len(policy.Targets) == 0 || len(policy.Targets) > 8 {
 		return r.report(ctx, p, "Blocked", "Unsupported policy bounds", time.Second)
 	}
-	if p.Status.ObservedGeneration != p.Generation || p.Status.NextOpportunityAt == nil {
-		next := metav1.NewMicroTime(now.Add(interval))
-		p.Status.NextOpportunityAt = &next
-		p.Status.ObservedGeneration = p.Generation
-		return r.report(ctx, p, "Running", message, interval)
-	}
-	if now.Before(p.Status.NextOpportunityAt.Time) {
+	initial := p.Status.ObservedGeneration != p.Generation || p.Status.NextOpportunityAt == nil
+	if !initial && now.Before(p.Status.NextOpportunityAt.Time) {
 		return r.report(ctx, p, "Running", message, p.Status.NextOpportunityAt.Sub(now))
+	}
+	ordinal := p.Status.Opportunities + 1
+	if !initial {
+		ordinal++
+	}
+	interval, err := cadence.Seconds(policy.IntervalSeconds-policy.JitterSeconds, policy.IntervalSeconds+policy.JitterSeconds, fmt.Sprintf("baseline/%s/%d/%d", p.UID, p.Generation, ordinal))
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	next := metav1.NewMicroTime(cadence.Due(now, interval))
+	p.Status.NextOpportunityAt = &next
+	if initial {
+		p.Status.ObservedGeneration = p.Generation
+		return r.report(ctx, p, "Running", message, next.Sub(now))
 	}
 	index, err := choose(p.Spec.Policy.Targets, r.Draw)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	next := metav1.NewMicroTime(now.Add(interval))
 	p.Status.Opportunities++
-	p.Status.NextOpportunityAt = &next
 	if record := p.Ledger(p.Spec.Policy.Targets[index].Name); record != nil {
 		record.Offered++
 		record.Opportunity = &bitcoinv1.ProductionOpportunity{Number: record.Offered, PolicyGeneration: p.Generation, ExpiresAt: next}
@@ -131,7 +139,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		p.Status.UnassignedOpportunities++
 		p.Status.LastUnassignedTarget = p.Spec.Policy.Targets[index].Name
 	}
-	return r.report(ctx, p, "Running", message, interval)
+	return r.report(ctx, p, "Running", message, next.Sub(now))
 }
 
 // choose samples declarations without renormalizing for target availability.

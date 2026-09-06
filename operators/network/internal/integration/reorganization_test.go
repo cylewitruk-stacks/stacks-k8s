@@ -66,7 +66,7 @@ func verifyReorganizationAdmission(t *testing.T, ctx context.Context, c client.C
 	ledger.Status.Reorganization = &bitcoinv1.ReorganizationReservation{ActionReservation: common, Spec: a.Spec}
 	must(t, c.Status().Update(ctx, ledger))
 	must(t, c.Get(ctx, client.ObjectKeyFromObject(ledger), ledger))
-	ledger.Status.Action = &bitcoinv1.GenerationReservation{ActionReservation: common, Spec: actionv1.BitcoinBlockGenerationSpec{NetworkRef: a.Spec.NetworkRef, BitcoinNodeRef: a.Spec.BitcoinNodeRef, Count: 1, IntervalSeconds: 1, Address: a.Spec.Address, Timeout: a.Spec.Timeout}}
+	ledger.Status.Action = &bitcoinv1.GenerationReservation{ActionReservation: common, Spec: actionv1.BitcoinBlockGenerationSpec{NetworkRef: a.Spec.NetworkRef, BitcoinNodeRef: a.Spec.BitcoinNodeRef, Count: 1, Cadence: actionv1.GenerationCadence{Mode: "Fixed", IntervalSeconds: 1}, Address: a.Spec.Address, Timeout: a.Spec.Timeout}}
 	if err := c.Status().Update(ctx, ledger); !apierrors.IsInvalid(err) {
 		t.Fatalf("competing action reservations admitted: %v", err)
 	}

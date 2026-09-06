@@ -23,7 +23,8 @@ The `network.stacks.org/v1alpha1` API provides:
 | `StacksSigner` | Runs one signer bound to one signer-node with index and weight. | Registration and reward-cycle participation are external. |
 
 The separate `bitcoin.stacks.org/v1alpha1` `BitcoinBlockProduction` API now
-supports an aggregate-owned, weighted multi-target baseline at a fixed policy cadence. Its
+supports an aggregate-owned, weighted multi-target baseline at fixed or bounded
+jittered cadence. Its
 [implemented profile](../network-operator/bitcoin-production.md) defines static
 credential separation, admission, durable dispatch accounting, and the
 fail-closed availability limit after a lost receipt. Per-target ledgers retain ambiguous work independently.
@@ -93,7 +94,7 @@ Git, runs repository build logic, or constructs an image.
 
 | Area | Missing capability |
 | --- | --- |
-| Bitcoin lifecycle | Timing jitter and broader branch observation. Weighted multi-target baseline, finite generation, and constrained local reorganization are implemented. |
+| Bitcoin lifecycle | Broader branch observation and recovery. Weighted baseline with jitter, all four finite generation cadence modes, and constrained local reorganization are implemented. |
 | Steady transaction demand | Multi-account/ingress profiles, overrides and wider signing lifecycle support. One-account fixed-interval demand is implemented. |
 | Protocol bootstrap | General image/epoch compatibility, PoX-5 transitions and reusable bounded APIs. External PoX-4 bootstrap and renewal are implemented for one local profile. |
 | Generic faults | Native Chaos Mesh installation guidance, safe direct targeting, correlation, and observation. |

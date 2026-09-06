@@ -25,11 +25,12 @@ The [steady-state design](docs/design/steady-state-operation.md) makes
 Bitcoin nodes, a separate block-production policy with timing and target
 selection, Stacks miner configuration, and ongoing transaction demand.
 The first [Bitcoin baseline profile](docs/network-operator/bitcoin-production.md)
-is implemented: weighted targets, a fixed policy cadence, pause, and independent
+is implemented: weighted targets, fixed or jittered cadence, pause, and independent
 durable execution ledgers.
 The initial [Stacks transfer profile](docs/network-operator/stacks-production.md)
 adds isolated, fixed-interval STX demand and external bootstrap/signing helpers.
-Timing jitter and broader production profiles remain design work.
+Finite generation supports immediate, fixed, uniform, and explicit-delay cadence.
+Broader recovery and compatibility profiles remain design work.
 
 The repository currently provides:
 

@@ -77,8 +77,8 @@ qualification, with relevant cases exercised in earlier vertical slices.
 | --- | --- | --- | --- |
 | M0.1 | Complete | 1 | Extract the shared network API module and make generation, module verification, and container builds work across the module boundary. |
 | M0.2 | Complete | 2–5, 8, 13 | Freeze the typed, immutable, bounded atomic-action contract and structural anti-orchestration checks. |
-| M0.3 | Reopened | 9–12; R1–R4 | Amend finite actions, independent target admission, credentials, quiescence, attribution, and cleanup. |
-| M0.4 | Reopened | Extends 9–11; R1–R3 | Define aggregate-owned multi-target production, policy updates, bounded status, and safe action coexistence. |
+| M0.3 | Reopened | 9–12; R1–R4 | Initial finite cadence and reorganization contracts implemented; scope closure awaits cadence review. |
+| M0.4 | Reopened | Extends 9–11; R1–R3 | Weighted/jittered baseline, policy updates, bounded status, and exclusion implemented; scope closure awaits cadence review. |
 | M0.5 | Planned | 6–8, 16 | Define and qualify native admission, protocol/control traffic separation, limits, and the initial platform matrix. |
 | M0.6 | In progress | 14, 15, 26 | Define bootstrap, steady transaction demand, baseline/override composition, and instrumented-actor support. |
 | M0.7 | Planned | 12, 17–23 | Reconcile RPC observation authority, Kubernetes-authenticated agent access, passive observation, journal, query, export, and evidence contracts. |
@@ -99,7 +99,8 @@ bounded immutable actions. Use the direction in [Bitcoin lifecycle](bitcoin-life
 
 - neutral Bitcoin nodes; production policy separately declares timing and
   selection among referenced nodes;
-- aggregate-owned policy with reviewed standalone and update semantics;
+- aggregate-owned policy with explicit update semantics; standalone support
+  remains deferred;
 - target readiness independent of unrelated network health;
 - explicit unavailable/reserved-target handling without silent weight changes;
 - bounded summaries and honest uncertainty, with passive retained history;
@@ -107,10 +108,13 @@ bounded immutable actions. Use the direction in [Bitcoin lifecycle](bitcoin-life
   retry, takeover, or baseline resumption; and
 - separate observation/mutation authority and complete reorganization cleanup.
 
-Exact schemas, target limits, destinations, precedence, and execution protocol
-remain open. Central production requires a qualified management path under
-supported protocol faults; autonomous local fallback is deferred. Random
-choices are recorded facts, not deterministic replay.
+The initial profiles now define schemas, limits, destinations, precedence,
+and execution. M0.3/M0.4 closure awaits review of the
+[cadence delivery](../reviews/bitcoin-cadence-review.md). Standalone policies,
+temporary override CRDs, per-target credential profiles, and in-place recovery
+are explicitly deferred; no served feature depends on them. M0.5 owns
+management-path qualification under protocol faults. Autonomous local fallback
+is deferred. Random choices are recorded facts, not deterministic replay.
 
 M0.2's shared lifecycle vocabulary remains reviewed. R1 may require an explicit
 admitted-identity extension, and R5 requires primary-resource metadata permission
@@ -138,7 +142,7 @@ preservation through unrelated actor failures. Complete inventory semantics
 remain unchanged. This does not close admission for every future capability.
 
 The [initial Bitcoin baseline](../network-operator/bitcoin-production.md) now
-implements weighted multi-target production at one fixed policy cadence with
+implements weighted multi-target production at fixed or bounded jittered cadence with
 separated static RPC permissions, UID-pinned target ledgers, bounded work, and
 explicit response-loss behavior. Each target ledger provides exclusion for its
 sole mutation executor. The [finite generation profile](../network-operator/bitcoin-generation.md)
@@ -390,9 +394,12 @@ mutable and outside the action lifecycle. Its revised policy separates timing
 from selection among neutral `BitcoinNode` references. The implemented
 [weighted baseline profile](../network-operator/bitcoin-production.md) bounds
 active targets to eight, retained identities to sixteen, and weights to 1–1000.
-It uses one fixed policy cadence with per-target destinations, durable selection,
-explicit skips, mutable membership, and retained action exclusion. Jitter,
-additional finite cadence modes, and broader qualification remain open.
+It uses fixed or symmetric uniform-jitter intervals with per-target destinations,
+durable selection, explicit skips, mutable membership, and retained action
+exclusion. All four finite cadence modes are implemented with receipt-relative
+durable timing. See the [cadence contract](../network-operator/bitcoin-generation.md#cadence).
+The implementation and M0.3/M0.4 scope reconciliation await independent review;
+broader recovery and compatibility qualification remain open.
 
 ## Requirement 10: Attributable Bitcoin generation
 
@@ -431,7 +438,10 @@ assumption. Do not implement the old elapsed-deadline takeover rule as proof.
 Bounded actions receive priority only when they can actually use the target.
 The starvation suite must prove that valid waiting actions progress while
 malformed, not-Ready, or otherwise stuck `Pending` actions do not stall baseline production.
-Exact eligibility, fair sharing, and overlap rules remain part of M0.4.
+The initial profile selects the oldest eligible action per target, breaking
+creation-time ties by UID. One reservation excludes baseline work throughout
+its delays. Continuous eligible actions may starve baseline; fair-share
+arbitration and overlapping temporary override kinds are deferred.
 
 For reorganization, specify invalidation-marker cleanup for success, definite
 failure, timeout, cancellation, divergence, and restart. Removing a temporary
@@ -814,8 +824,10 @@ sections above.
       time-bound behavior, and anti-orchestration contracts are frozen.
 - [ ] **M0.3:** finite Bitcoin generation and reorganization have bounded,
       attributable, credentialed, serialized, implementation-ready designs.
+      Initial profiles implemented; cadence closure review pending.
 - [ ] **M0.4:** multi-target baseline production, policy updates, finite cadence,
       bounded status, action priority, and safe exclusion are reconciled.
+      Initial profiles implemented; cadence closure review pending.
 - [ ] **M0.5:** static Chaos Mesh admission and initial native-fault/platform
       qualification require no mandatory webhook.
 - [ ] **M0.6:** protocol bootstrap, steady transaction demand, overrides, and the

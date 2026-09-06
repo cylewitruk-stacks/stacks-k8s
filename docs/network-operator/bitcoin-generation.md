@@ -31,7 +31,7 @@ kubectl --kubeconfig "$STACKS_KUBECONFIG" --context "$STACKS_CONTEXT" \
 | `networkRef.name` | Same-namespace owning `StacksNetwork`. |
 | `bitcoinNodeRef.name` | Exact compiled `BitcoinNode` name, matching the retained baseline target. |
 | `count` | 1–100 acknowledged single-block requests. |
-| `intervalSeconds` | 1–60 seconds after each receipt, without catch-up. |
+| `cadence` | Required timing mode; see the cadence table below. |
 | `address` | Explicit valid regtest coinbase destination, 14–128 characters. |
 | `timeout` | Positive Kubernetes duration, at most 10 minutes from object creation, including pending time. |
 
@@ -43,6 +43,52 @@ and populates `status.used`; wait for that initialization before submitting.
 Export and delete finished records when capacity is needed.
 The executor rejects truncated or oversized queue inventories rather than
 silently choosing from a partial list; baseline work remains available.
+
+## Cadence
+
+| `cadence.mode` | Additional fields | Delay before each subsequent block |
+| --- | --- | --- |
+| `Immediate` | None. | No intentional delay. |
+| `Fixed` | `intervalSeconds`: 1–60. | The specified interval. |
+| `Uniform` | `minSeconds`, `maxSeconds`: 1–60, minimum ≤ maximum. | An independent inclusive integer-second uniform sample. |
+| `Explicit` | `delaysSeconds`: exactly `count − 1` values in 0–60. Omit for count 1. | The next entry in order. |
+
+Fields belonging to other modes are rejected. The executor also validates the
+complete decoded cadence and count before reservation and before arming.
+Unsupported requests remain pending without reserving a target or blocking
+eligible work; an incompatible existing idle reservation stops as
+`MechanismFailed`. This guard does not provide schema-skew compatibility.
+
+The first block is immediately
+eligible after admission in every mode. Immediate generation still uses one
+single-block RPC at a time, with authorization and accounting between calls;
+controller, API, and RPC latency set its achievable rate.
+
+The executor writes `status.action.nextDispatchAt` on the target ledger in the
+same optimistic-lock write as each non-final receipt. The timestamp retains
+microsecond precision, rounded upward. Uniform sampling uses the action UID
+and receipt ordinal as a stable decision key, so accounting retries do not
+redraw a delay or move its anchor from receipt time to accounting time. This
+is internal sampling, not a user-facing replay seed or a deterministic outcome
+promise. The next due time is cleared with the final receipt.
+
+If subsequent scheduling fails after a successful RPC, accounting still commits
+the known receipt and an explicit `MechanismFailed` stop, preserving any earlier
+stop reason. API write failures retain the receipt for the existing accounting
+retry path. The action must acknowledge terminal progress before release.
+An idle partial reservation missing its due time also stops explicitly; the
+executor does not reconstruct that timer. Unknown `Armed` work remains excluded.
+The due time is exposed on the target ledger, not copied into action status.
+
+Restart during an accounted gap preserves the due time. A late reconcile can
+issue only the next single-block request; the following delay anchors to its
+receipt, without catch-up. Temporary preflight failures keep the same due time.
+A due time grants no authority after cancellation, expiry, suspension, identity
+change, or an unresolved call. The target stays reserved during all gaps.
+
+Choose a timeout allowing pending time, delays, and RPC overhead. Admission
+does not promise that every requested schedule can complete within its timeout;
+the existing deadline can stop a long sequence with known partial progress.
 
 ## Admission and shared execution
 
@@ -138,6 +184,7 @@ environment is abandoned. Disabling the flag retains existing reservations as
 Do not reuse an active environment across incompatible executor versions.
 
 The separately enabled [reorganization profile](bitcoin-reorganization.md)
-uses the same exclusion boundary. Multi-target scheduling, jitter, credential epochs,
-server fencing, and in-place recovery remain separate work.
-See the [qualification and review ledger](../reviews/bitcoin-actions-review.md).
+uses the same exclusion boundary. Credential epochs, server fencing, and
+in-place recovery remain deferred.
+See the [action qualification](../reviews/bitcoin-actions-review.md) and
+[cadence review ledger](../reviews/bitcoin-cadence-review.md).

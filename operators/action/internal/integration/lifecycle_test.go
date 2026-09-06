@@ -84,7 +84,7 @@ func TestChartAuthorizedLifecycleRestart(t *testing.T) {
 	must(t, admin.Create(ctx, p))
 	policyRoot.Status.Targets = []bitcoinv1.TargetLedger{{Name: "bitcoin", ResourceName: p.Name, UID: string(p.UID)}}
 	must(t, admin.Status().Update(ctx, policyRoot))
-	a := &actionv1.BitcoinBlockGeneration{ObjectMeta: metav1.ObjectMeta{Name: "finite", Namespace: namespace}, Spec: actionv1.BitcoinBlockGenerationSpec{NetworkRef: actionv1.LocalReference{Name: n.Name}, BitcoinNodeRef: actionv1.LocalReference{Name: "network-bitcoin"}, Count: 1, IntervalSeconds: 1, Address: p.Spec.Policy.Address, Timeout: metav1.Duration{Duration: time.Minute}}}
+	a := &actionv1.BitcoinBlockGeneration{ObjectMeta: metav1.ObjectMeta{Name: "finite", Namespace: namespace}, Spec: actionv1.BitcoinBlockGenerationSpec{NetworkRef: actionv1.LocalReference{Name: n.Name}, BitcoinNodeRef: actionv1.LocalReference{Name: "network-bitcoin"}, Count: 1, Cadence: actionv1.GenerationCadence{Mode: "Fixed", IntervalSeconds: 1}, Address: p.Spec.Policy.Address, Timeout: metav1.Duration{Duration: time.Minute}}}
 	must(t, admin.Create(ctx, a))
 	p.Status.DispatchState = "Armed"
 	p.Status.Action = &bitcoinv1.GenerationReservation{Spec: a.Spec, ActionReservation: bitcoinv1.ActionReservation{Name: a.Name, UID: string(a.UID), Generation: a.Generation, AdmittedAt: metav1.Now(), ExpiresAt: metav1.NewTime(a.CreationTimestamp.Add(time.Minute)), Network: actionv1.NetworkIdentity{Name: n.Name, UID: string(n.UID), ObservedGeneration: n.Generation}, Policy: actionv1.PolicyIdentity{UID: string(p.UID)}}}

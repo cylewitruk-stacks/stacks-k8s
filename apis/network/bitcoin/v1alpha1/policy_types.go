@@ -3,6 +3,7 @@ package v1alpha1
 import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 // ProductionPolicy offers one opportunity per interval across a bounded weighted target set.
+// +kubebuilder:validation:XValidation:rule="!has(self.jitterSeconds) || (self.jitterSeconds < self.intervalSeconds && self.intervalSeconds + self.jitterSeconds <= 86400)",message="jitter must keep intervals within 1 to 86400 seconds"
 type ProductionPolicy struct {
 	// Targets names declared actors; weights distribute the policy's total offered rate.
 	// +kubebuilder:validation:MinItems=1
@@ -10,10 +11,14 @@ type ProductionPolicy struct {
 	// +listType=map
 	// +listMapKey=name
 	Targets []ProductionTarget `json:"targets"`
-	// IntervalSeconds bounds the fixed policy cadence, independently of receipt time.
+	// IntervalSeconds is the central policy interval, independently of receipt time.
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=86400
 	IntervalSeconds int32 `json:"intervalSeconds"`
+	// JitterSeconds samples integer delays uniformly in intervalSeconds plus or minus this bound.
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=43199
+	JitterSeconds int32 `json:"jitterSeconds,omitempty"`
 	// Paused stops new opportunities; already authorized work may still complete.
 	Paused bool `json:"paused,omitempty"`
 }

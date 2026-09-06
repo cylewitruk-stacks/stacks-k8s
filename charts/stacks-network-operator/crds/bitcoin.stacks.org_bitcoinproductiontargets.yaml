@@ -171,6 +171,11 @@ spec:
                     - observedGeneration
                     - uid
                     type: object
+                  nextDispatchAt:
+                    description: NextDispatchAt is persisted with the preceding receipt;
+                      it never authorizes replay.
+                    format: date-time
+                    type: string
                   policy:
                     description: Policy records the ledger and static configuration
                       profile.
@@ -210,17 +215,70 @@ spec:
                         required:
                         - name
                         type: object
+                      cadence:
+                        description: Cadence controls delays between receipts and
+                          subsequent single-block requests.
+                        properties:
+                          delaysSeconds:
+                            description: DelaysSeconds contains count minus one ordered
+                              delays; zero adds no intentional wait.
+                            items:
+                              format: int32
+                              maximum: 60
+                              minimum: 0
+                              type: integer
+                            maxItems: 99
+                            type: array
+                            x-kubernetes-list-type: atomic
+                          intervalSeconds:
+                            description: IntervalSeconds is the fixed receipt-relative
+                              delay.
+                            format: int32
+                            maximum: 60
+                            minimum: 1
+                            type: integer
+                          maxSeconds:
+                            description: MaxSeconds is the inclusive upper uniform
+                              bound.
+                            format: int32
+                            maximum: 60
+                            minimum: 1
+                            type: integer
+                          minSeconds:
+                            description: MinSeconds is the inclusive lower uniform
+                              bound.
+                            format: int32
+                            maximum: 60
+                            minimum: 1
+                            type: integer
+                          mode:
+                            description: Mode selects immediate, fixed, inclusive
+                              uniform, or explicit inter-block delays.
+                            enum:
+                            - Immediate
+                            - Fixed
+                            - Uniform
+                            - Explicit
+                            maxLength: 9
+                            type: string
+                        required:
+                        - mode
+                        type: object
+                        x-kubernetes-validations:
+                        - message: intervalSeconds is required only for Fixed
+                          rule: has(self.intervalSeconds) == (self.mode == 'Fixed')
+                        - message: minSeconds and maxSeconds are required only for
+                            Uniform
+                          rule: has(self.minSeconds) == (self.mode == 'Uniform') &&
+                            has(self.maxSeconds) == (self.mode == 'Uniform')
+                        - message: uniform bounds must be ordered
+                          rule: self.mode != 'Uniform' || self.minSeconds <= self.maxSeconds
+                        - message: delaysSeconds is allowed only for Explicit
+                          rule: '!has(self.delaysSeconds) || self.mode == ''Explicit'''
                       count:
                         description: Count bounds acknowledged single-block RPCs.
                         format: int32
                         maximum: 100
-                        minimum: 1
-                        type: integer
-                      intervalSeconds:
-                        description: IntervalSeconds is the minimum delay after each
-                          receipt; no catch-up occurs.
-                        format: int32
-                        maximum: 60
                         minimum: 1
                         type: integer
                       networkRef:
@@ -248,14 +306,17 @@ spec:
                     required:
                     - address
                     - bitcoinNodeRef
+                    - cadence
                     - count
-                    - intervalSeconds
                     - networkRef
                     - timeout
                     type: object
                     x-kubernetes-validations:
                     - message: action spec is immutable
                       rule: self == oldSelf
+                    - message: explicit cadence requires count minus one delays
+                      rule: 'self.cadence.mode != ''Explicit'' || (has(self.cadence.delaysSeconds)
+                        ? size(self.cadence.delaysSeconds) : 0) == self.count - 1'
                   startedAt:
                     description: StartedAt records the first durable authorization.
                     format: date-time

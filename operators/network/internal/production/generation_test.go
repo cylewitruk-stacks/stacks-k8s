@@ -19,7 +19,7 @@ import (
 func actionFixture(t *testing.T, f *productionFixture, name string, count int32) *actionv1.BitcoinBlockGeneration {
 	t.Helper()
 	f.r.ActionsEnabled = true
-	a := &actionv1.BitcoinBlockGeneration{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: f.parent.Namespace, UID: types.UID(name), Generation: 1, CreationTimestamp: metav1.NewTime(f.now)}, Spec: actionv1.BitcoinBlockGenerationSpec{NetworkRef: actionv1.LocalReference{Name: f.parent.Name}, BitcoinNodeRef: actionv1.LocalReference{Name: f.actor.Name}, Count: count, IntervalSeconds: 1, Address: f.policy.Spec.Policy.Address, Timeout: metav1.Duration{Duration: time.Minute}}}
+	a := &actionv1.BitcoinBlockGeneration{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: f.parent.Namespace, UID: types.UID(name), Generation: 1, CreationTimestamp: metav1.NewTime(f.now)}, Spec: actionv1.BitcoinBlockGenerationSpec{NetworkRef: actionv1.LocalReference{Name: f.parent.Name}, BitcoinNodeRef: actionv1.LocalReference{Name: f.actor.Name}, Count: count, Cadence: actionv1.GenerationCadence{Mode: "Fixed", IntervalSeconds: 1}, Address: f.policy.Spec.Policy.Address, Timeout: metav1.Duration{Duration: time.Minute}}}
 	if err := f.r.Create(context.Background(), a); err != nil {
 		t.Fatal(err)
 	}

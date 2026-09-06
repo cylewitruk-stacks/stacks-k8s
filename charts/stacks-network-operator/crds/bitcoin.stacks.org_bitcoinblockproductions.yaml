@@ -63,11 +63,18 @@ spec:
                   weights.
                 properties:
                   intervalSeconds:
-                    description: IntervalSeconds bounds the fixed policy cadence,
-                      independently of receipt time.
+                    description: IntervalSeconds is the central policy interval, independently
+                      of receipt time.
                     format: int32
                     maximum: 86400
                     minimum: 1
+                    type: integer
+                  jitterSeconds:
+                    description: JitterSeconds samples integer delays uniformly in
+                      intervalSeconds plus or minus this bound.
+                    format: int32
+                    maximum: 43199
+                    minimum: 0
                     type: integer
                   paused:
                     description: Paused stops new opportunities; already authorized
@@ -114,6 +121,10 @@ spec:
                 - intervalSeconds
                 - targets
                 type: object
+                x-kubernetes-validations:
+                - message: jitter must keep intervals within 1 to 86400 seconds
+                  rule: '!has(self.jitterSeconds) || (self.jitterSeconds < self.intervalSeconds
+                    && self.intervalSeconds + self.jitterSeconds <= 86400)'
             required:
             - networkName
             - networkUID

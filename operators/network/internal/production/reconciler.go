@@ -12,7 +12,9 @@ import (
 	actionv1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/actions/v1alpha1"
 	bitcoinv1alpha1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/bitcoin/v1alpha1"
 	networkv1alpha1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha1"
+	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/cadence"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -283,6 +285,20 @@ func (r *Reconciler) account(ctx context.Context, armed *bitcoinv1alpha1.Bitcoin
 		current.Status.Action.BlocksGenerated++
 		current.Status.Action.LastBlockHash, current.Status.Action.LastCompletedAt = receipt.hash, receipt.completed.DeepCopy()
 		current.Status.Action.LastDispatchID = current.Status.DispatchID
+		record := current.Status.Action
+		record.NextDispatchAt = nil
+		if record.BlocksGenerated < record.Spec.Count {
+			delay, err := cadence.Generation(record.Spec.Cadence, record.Spec.Count, record.BlocksGenerated, fmt.Sprintf("generation/%s/%d", record.UID, record.BlocksGenerated))
+			if err != nil {
+				// A future scheduling failure cannot discard this known receipt.
+				if record.StopReason == "" {
+					record.StopReason = "MechanismFailed"
+				}
+			} else {
+				next := metav1.NewMicroTime(cadence.Due(receipt.completed.Time, delay))
+				record.NextDispatchAt = &next
+			}
+		}
 	} else {
 		current.Status.BlocksProduced++
 	}

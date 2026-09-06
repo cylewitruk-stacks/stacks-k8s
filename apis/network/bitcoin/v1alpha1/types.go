@@ -122,6 +122,8 @@ type GenerationReservation struct {
 	ActionReservation `json:",inline"`
 	// Spec snapshots the admitted typed operation.
 	Spec actionv1alpha1.BitcoinBlockGenerationSpec `json:"spec"`
+	// NextDispatchAt is persisted with the preceding receipt; it never authorizes replay.
+	NextDispatchAt *metav1.MicroTime `json:"nextDispatchAt,omitempty"`
 }
 
 // ActionReservation retains shared identity and receipt accounting facts.

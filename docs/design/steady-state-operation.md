@@ -54,15 +54,17 @@ distribute those opportunities; they are not measured hash power or a promise
 about canonical chain growth. Repeatable inputs do not imply repeatable
 execution.
 
-One aggregate-owned policy per network with a bounded target set is the
-recommended initial shape. Exact schema, jitter distribution, weight bounds,
-destination mapping, mutability, and uniqueness enforcement remain open.
+The [implemented baseline profile](../network-operator/bitcoin-production.md)
+has one aggregate-owned policy, 1–8 weighted targets with explicit destinations,
+and fixed or bounded uniform-jitter timing. Parent intent controls mutable
+policy; UID-pinned ledgers retain execution identity. Standalone policies and
+per-target credential profiles remain deferred.
 Overlapping policies must not silently multiply baseline rates; a per-target
 Lease alone cannot enforce this property.
 
 Unavailable or reserved targets must not cause silent redistribution of their
-weight. Skip-and-report is the recommended initial behavior; API review must
-freeze it with backpressure and timing semantics. Restart must not cause
+weight. The initial profile skips and counts unavailable opportunities, with
+no redistribution. Restart must not cause
 catch-up bursts. Production remains mutable desired operation with bounded
 status, not a terminal action. The [Bitcoin design](bitcoin-lifecycle.md)
 owns its execution and recovery gates.
@@ -114,7 +116,9 @@ latest baseline, including edits made during the intervention.
 
 Status binds baseline generation and override identity. Override kinds,
 precedence, expiry enforcement, and the boundary with finite generation remain
-M0.4/M0.6 decisions. No generic action list or mechanism registry is introduced.
+deferred M0.4/M0.6 decisions; no temporary override kind is served. Finite
+generation instead reserves one target and releases to the latest baseline.
+No generic action list or mechanism registry is introduced.
 
 ## Identity, readiness, and progress
 

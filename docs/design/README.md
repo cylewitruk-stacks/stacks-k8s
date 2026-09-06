@@ -127,7 +127,7 @@ when permissions, dependencies, or failure domains materially differ.
 | `StacksNetwork`, `BitcoinNode`, `StacksNode`, `StacksSigner` | Implemented; extend | [Topology](topology.md) |
 | `NetworkObservation` | Implemented compatibility API | [Current state](current-state.md) |
 | `ActionSafetyPolicy` | Recommended for custom actions | [Atomic actions](actions.md) |
-| `BitcoinBlockProduction` | Weighted multi-target fixed-cadence profile implemented; broader M0.4 contract reopened | [Bitcoin baseline](../network-operator/bitcoin-production.md) |
+| `BitcoinBlockProduction` | Weighted multi-target fixed/jittered profile implemented; M0.4 closure review pending | [Bitcoin baseline](../network-operator/bitcoin-production.md) |
 | `BitcoinBlockGeneration`, `BitcoinReorganization` | Initial bounded profiles implemented; broader execution and recovery contracts open | [Bitcoin lifecycle](bitcoin-lifecycle.md) |
 | `StacksTransactionProduction` | Direction; working name and schema open | [Steady-state operation](steady-state-operation.md) |
 | `SignerBehavior`, `MinerBehavior` | Recommended | [Protocol actions](protocol-actions.md) |
@@ -149,7 +149,7 @@ when permissions, dependencies, or failure domains materially differ.
 | Baseline Bitcoin production | Direction | Aggregate-owned policy separates timing from selection among neutral Bitcoin nodes; exact schema open. |
 | Baseline transaction demand | Direction | Separate ongoing producer capability; Stacks nodes retain miner configuration. |
 | Temporary override | Direction | One effective-behavior writer; removal resumes the latest baseline. |
-| Finite Bitcoin generation | Direction | One bounded `BitcoinBlockGeneration` using immediate, fixed, uniform-random, or explicit-sequence cadence. |
+| Finite Bitcoin generation | Implemented | One bounded `BitcoinBlockGeneration` using immediate, fixed, uniform-random, or explicit-sequence cadence. |
 | Observation storage | Direction | External telemetry/evidence store; never bulk data in CRD status. |
 | Replay and reduction | Direction | Agent responsibility outside operators. |
 | Build from Git revision | Direction | External build tooling produces an OCI image. |

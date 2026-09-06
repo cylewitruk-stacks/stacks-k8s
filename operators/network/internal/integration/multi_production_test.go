@@ -26,10 +26,17 @@ func verifyMultiProduction(t *testing.T, ctx context.Context, c client.Client) {
 	other.Name = "other"
 	n.Spec.BitcoinNodes = append(n.Spec.BitcoinNodes, other)
 	n.Spec.BitcoinBlockProduction = &bitcoinv1.ProductionPolicy{IntervalSeconds: 5, Targets: []bitcoinv1.ProductionTarget{{Name: "bitcoin", Weight: 1, Address: "mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn"}, {Name: "other", Weight: 3, Address: "mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn"}}}
-	for _, mode := range []string{"duplicate", "zero-weight", "too-many", "missing"} {
+	for _, mode := range []string{"duplicate", "zero-weight", "too-many", "missing", "negative-jitter", "zero-gap", "long-gap"} {
 		invalid := n.DeepCopy()
 		invalid.Name = mode
 		switch mode {
+		case "negative-jitter":
+			invalid.Spec.BitcoinBlockProduction.JitterSeconds = -1
+		case "zero-gap":
+			invalid.Spec.BitcoinBlockProduction.JitterSeconds = 5
+		case "long-gap":
+			invalid.Spec.BitcoinBlockProduction.IntervalSeconds = 86400
+			invalid.Spec.BitcoinBlockProduction.JitterSeconds = 1
 		case "duplicate":
 			invalid.Spec.BitcoinBlockProduction.Targets[1].Name = "bitcoin"
 		case "zero-weight":
@@ -85,6 +92,21 @@ func verifyMultiProduction(t *testing.T, ctx context.Context, c client.Client) {
 		t.Fatalf("invalid target name admitted: %v", err)
 	}
 
+	invalidJitter := p.DeepCopy()
+	invalidJitter.Spec.Policy.JitterSeconds = 5
+	if err := c.Update(ctx, invalidJitter); !apierrors.IsInvalid(err) {
+		t.Fatalf("root zero-gap jitter admitted: %v", err)
+	}
+	jittered := n.DeepCopy()
+	jittered.Name = "jitter-admission"
+	jittered.ResourceVersion = ""
+	jittered.UID = ""
+	jittered.Spec.BitcoinBlockProduction.JitterSeconds = 4
+	must(t, c.Create(ctx, jittered))
+	must(t, c.Get(ctx, client.ObjectKeyFromObject(jittered), jittered))
+	if jittered.Spec.BitcoinBlockProduction.JitterSeconds != 4 {
+		t.Fatal("parent jitter pruned")
+	}
 	first := &bitcoinv1.BitcoinProductionTarget{}
 	must(t, c.Get(ctx, client.ObjectKey{Namespace: namespace, Name: "multi-bitcoin"}, first))
 	uid := first.UID

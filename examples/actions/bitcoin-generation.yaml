@@ -10,6 +10,8 @@ spec:
   bitcoinNodeRef:
     name: bitcoin-bitcoin
   count: 3
-  intervalSeconds: 2
+  cadence:
+    mode: Fixed
+    intervalSeconds: 2
   address: mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn
   timeout: 2m

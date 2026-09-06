@@ -214,3 +214,7 @@ with matching controllers in the same namespace, then enable the network flags.
 That chart owns action CRDs, quotas, status and finalizers. The network worker
 has read-only action access.
 Baseline-only installation needs no action chart or action CRDs.
+
+Baseline `jitterSeconds` and finite generation cadence are API fields, not Helm
+scheduling settings. See the [baseline](../../docs/network-operator/bitcoin-production.md)
+and [finite cadence](../../docs/network-operator/bitcoin-generation.md#cadence) contracts.

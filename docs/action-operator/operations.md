@@ -86,7 +86,10 @@ executor-published timing authority is deferred.
 ## Upgrade and removal
 
 The initial compatibility pair is network/action `0.1.0` with
-`apis/network` `v0.1.0`. Arbitrary version skew is unqualified. Apply changed
+`apis/network` `v0.1.0`. Arbitrary version skew is unqualified. The cadence API and ledger extension
+require matching current source builds; do not upgrade an active environment
+containing requests or reservations from an incompatible schema. Provision a
+fresh disposable environment for such a change. Apply changed
 CRDs from the owning chart explicitly before upgrading; Helm does not upgrade
 existing CRDs automatically. Never run an older bundled lifecycle writer
 alongside this independent action operator.

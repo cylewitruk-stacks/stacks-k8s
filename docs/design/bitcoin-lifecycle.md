@@ -73,8 +73,9 @@ guaranteed canonical progress. It does not choose a winning branch.
 
 The served profile has one aggregate-owned policy, 1–8 active logical targets,
 and at most sixteen retained target identities per policy lifetime. Each target
-has a destination and integer weight in 1–1000. Timing is one fixed policy
-interval in 1–86400 seconds; jitter remains deferred. Only aggregate-owned
+has a destination and integer weight in 1–1000. Timing is one policy interval
+in 1–86400 seconds, with optional symmetric integer-second uniform jitter
+that keeps every sampled interval within those bounds. Only aggregate-owned
 policies are executable, preventing overlapping policy rates on the same actor.
 
 The scheduler records selections and its next due time durably, with an
@@ -99,10 +100,15 @@ Exceeding the lifetime identity bound blocks the unsupported policy update.
 
 ## Bounded Bitcoin actions
 
-`BitcoinBlockGeneration` requests a finite block count. Retain immediate
-batches, fixed cadence, uniform timing, and bounded explicit delay sequences
-as the design direction. A sequence describes one mechanism's timing, not a
-list of actions. Specs stay immutable and creation-relative timeouts bounded.
+`BitcoinBlockGeneration` requests 1–100 blocks with `Immediate`, `Fixed`,
+`Uniform`, or `Explicit` cadence. Every mode uses serial single-block RPCs;
+the first block is immediately eligible. Later delays follow receipts, with
+fixed/uniform bounds of 1–60 seconds and explicit delays of 0–60 seconds.
+An explicit sequence has exactly count minus one entries. It describes one
+mechanism's timing, not a list of actions. Specs stay immutable, and
+creation-relative timeouts remain at most ten minutes. The
+[generation guide](../network-operator/bitcoin-generation.md#cadence) defines
+durable timing and no-catch-up behavior.
 The `actions.stacks.org/correlation-id` label is a search hint; UID remains
 authoritative.
 

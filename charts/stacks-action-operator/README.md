@@ -34,3 +34,7 @@ workloads.
 ```bash
 make -C charts/stacks-action-operator verify
 ```
+
+Generation accepts immediate, fixed, uniform, or explicit-delay cadence; see the
+[cadence contract](../../docs/network-operator/bitcoin-generation.md#cadence).
+Timing and RPC execution remain in the network worker.

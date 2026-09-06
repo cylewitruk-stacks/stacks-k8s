@@ -260,9 +260,17 @@ func TestActionLifecycleDesignContract(t *testing.T) {
 		}
 		schema := version.Schema.OpenAPIV3Schema
 		spec, status := schema.Properties["spec"], schema.Properties["status"]
-		if len(spec.XValidations) != 1 || spec.XValidations[0].Rule != contract.SpecImmutabilityRule {
-			t.Fatal("missing whole-spec immutability")
+		wantRules := []string{contract.SpecImmutabilityRule}
+		if crd.Spec.Names.Kind == "BitcoinBlockGeneration" {
+			wantRules = append(wantRules, "self.cadence.mode != 'Explicit' || (has(self.cadence.delaysSeconds) ? size(self.cadence.delaysSeconds) : 0) == self.count - 1")
 		}
+		rules := make([]string, 0, len(spec.XValidations))
+		for _, validation := range spec.XValidations {
+			rules = append(rules, validation.Rule)
+		}
+		sort.Strings(rules)
+		sort.Strings(wantRules)
+		assertStringsEqual(t, "served spec immutability and bounds", rules, wantRules)
 		for _, field := range contract.CoreSpecFields {
 			if _, ok := spec.Properties[field]; !ok {
 				t.Fatalf("missing core spec %s", field)

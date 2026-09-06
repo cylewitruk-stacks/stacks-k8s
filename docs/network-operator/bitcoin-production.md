@@ -1,6 +1,6 @@
 # Bitcoin baseline production
 
-The implemented profile offers one regtest block per fixed policy interval,
+The implemented profile offers one regtest block per fixed or jittered policy interval,
 selecting among 1–8 declared Bitcoin targets using integer weights. Target
 execution is independent of aggregate readiness and of other targets' receipts
 or action reservations. It does not bootstrap Stacks or supply transaction demand.
@@ -68,6 +68,25 @@ does not change these shares. There is no round-robin or exact-ratio guarantee.
 The helper's `--target-weights 1,3` creates this pair with common static RPC
 configuration and P2P peer addresses; the default `1` creates one target.
 
+Set optional `jitterSeconds` to sample an inclusive integer-second interval
+uniformly from `intervalSeconds − jitterSeconds` through
+`intervalSeconds + jitterSeconds`. Omission or zero preserves fixed cadence.
+Every possible interval must stay within 1–86400 seconds: jitter must be smaller
+than the central interval, and their sum cannot exceed 86400. For example,
+`intervalSeconds: 5` with `jitterSeconds: 2` offers intervals of 3–7 seconds.
+
+Timing sampling is independent of weighted target selection. The scheduler
+uses policy UID, policy generation, and opportunity ordinal as a stable
+internal sampling key, and persists the next due time. Retries cannot redraw
+that decision; restart retains committed deadlines. Sampled deadlines use
+microsecond precision rounded upward. An opportunity expires at the next
+sampled deadline. Pause clears the pending timer; resume and policy edits
+start a fresh interval. If parent suspension clears the timer without changing
+the policy generation or opportunity ordinal, resume reuses that pending
+opportunity's delay sample with a fresh time anchor. It does not promise an
+independent draw on every resume. Retries retain the committed anchor.
+No user-facing seed or deterministic execution is promised.
+
 The aggregate compiles a same-name `BitcoinBlockProduction` and pins its UID
 in `status.bitcoinProductionUID`. A scheduler owns that policy's status and
 creates a `BitcoinProductionTarget` named after each compiled Bitcoin leaf.
@@ -121,7 +140,7 @@ interventions; `lastSkipReason` describes only the latest skip, not a breakdown
 or a measured steady-state failure rate. `PolicyChanged` and `Expired` take
 precedence over reservation/outstanding reasons when both apply.
 
-`BitcoinNode` configuration does not cause mining. Timing jitter, standalone
+`BitcoinNode` configuration does not cause mining. Standalone
 production, per-target credential profiles, and in-place recovery remain
 unimplemented. Optional [finite generation](bitcoin-generation.md) and
 [reorganization](bitcoin-reorganization.md) reserve only their target's executor.
@@ -275,3 +294,6 @@ blocked across producer replacement. `TestLiveBitcoinAbandonment` then deletes
 that dedicated network and verifies ledger cleanup. These test-only images
 are not production adapters or Chaos profiles. Select tests individually; the
 existing generic `live` suite remains separate.
+
+Cadence validation and qualification limits are recorded in the
+[cadence review ledger](../reviews/bitcoin-cadence-review.md).

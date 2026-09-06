@@ -41,7 +41,7 @@ type StacksNetworkList struct {
 type StacksNetworkSpec struct {
 	// StacksTransactionProduction optionally maintains fixed-interval STX transfers.
 	StacksTransactionProduction *stacksv1alpha1.TransferPolicy `json:"stacksTransactionProduction,omitempty"`
-	// BitcoinBlockProduction optionally maintains fixed-cadence regtest blocks.
+	// BitcoinBlockProduction optionally offers fixed or jittered regtest block production.
 	BitcoinBlockProduction *bitcoinv1alpha1.ProductionPolicy `json:"bitcoinBlockProduction,omitempty"`
 	Suspended              bool                              `json:"suspended,omitempty"`
 	Defaults               NetworkDefaults                   `json:"defaults"`

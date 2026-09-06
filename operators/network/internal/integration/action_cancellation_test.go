@@ -43,7 +43,7 @@ func verifyActionCancellation(t *testing.T, ctx context.Context, c client.Client
 				n.Status.BitcoinProductionUID = string(root.UID)
 				must(t, c.Status().Update(ctx, n))
 				p := createProductionTarget(t, ctx, c, root)
-				g := &actionv1.BitcoinBlockGeneration{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace, Finalizers: []string{actionv1.CleanupFinalizer}}, Spec: actionv1.BitcoinBlockGenerationSpec{NetworkRef: actionv1.LocalReference{Name: name}, BitcoinNodeRef: actionv1.LocalReference{Name: name + "-bitcoin"}, Count: 3, IntervalSeconds: 1, Address: policy.Targets[0].Address, Timeout: metav1.Duration{Duration: time.Minute}}}
+				g := &actionv1.BitcoinBlockGeneration{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace, Finalizers: []string{actionv1.CleanupFinalizer}}, Spec: actionv1.BitcoinBlockGenerationSpec{NetworkRef: actionv1.LocalReference{Name: name}, BitcoinNodeRef: actionv1.LocalReference{Name: name + "-bitcoin"}, Count: 3, Cadence: actionv1.GenerationCadence{Mode: "Fixed", IntervalSeconds: 1}, Address: policy.Targets[0].Address, Timeout: metav1.Duration{Duration: time.Minute}}}
 				a := &actionv1.BitcoinReorganization{ObjectMeta: g.ObjectMeta, Spec: actionv1.BitcoinReorganizationSpec{NetworkRef: g.Spec.NetworkRef, BitcoinNodeRef: g.Spec.BitcoinNodeRef, Depth: 2, Address: policy.Targets[0].Address, Timeout: g.Spec.Timeout, BoundaryPolicy: actionv1.ReorganizationBoundaryPolicy{AllowEpochBoundaryCrossing: true, AllowRewardCycleBoundaryCrossing: true, AllowPreparePhaseBoundaryCrossing: true}}}
 				var object client.Object = g
 				if kind == "reorganization" {
@@ -61,10 +61,18 @@ func verifyActionCancellation(t *testing.T, ctx context.Context, c client.Client
 				p.Status.DispatchState = "Idle"
 				if kind == "generation" {
 					p.Status.Action = &bitcoinv1.GenerationReservation{ActionReservation: common, Spec: g.Spec}
+					if progress {
+						next := metav1.NewMicroTime(time.Unix(1000, 123456000))
+						p.Status.Action.NextDispatchAt = &next
+					}
 				} else {
 					p.Status.Reorganization = &bitcoinv1.ReorganizationReservation{ActionReservation: common, Spec: a.Spec, InvalidationAcknowledged: progress, CleanupAcknowledged: progress}
 				}
 				must(t, c.Status().Update(ctx, p))
+				must(t, c.Get(ctx, client.ObjectKeyFromObject(p), p))
+				if kind == "generation" && progress && (p.Status.Action.NextDispatchAt == nil || !p.Status.Action.NextDispatchAt.Time.Equal(time.Unix(1000, 123456000))) {
+					t.Fatal("API pruned or truncated the persisted action due time")
+				}
 				worker := &production.Reconciler{Client: c, APIReader: c, ActionsEnabled: true, ReorganizationEnabled: true, Now: time.Now}
 				lifecycle := func() {
 					var err error

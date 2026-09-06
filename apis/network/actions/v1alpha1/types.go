@@ -47,8 +47,9 @@ type BitcoinBlockGenerationList struct {
 	Items []BitcoinBlockGeneration `json:"items"`
 }
 
-// BitcoinBlockGenerationSpec is the initial single-target fixed-cadence profile.
+// BitcoinBlockGenerationSpec bounds one target and its receipt-relative cadence.
 // +kubebuilder:validation:XValidation:rule="self == oldSelf",message="action spec is immutable"
+// +kubebuilder:validation:XValidation:rule="self.cadence.mode != 'Explicit' || (has(self.cadence.delaysSeconds) ? size(self.cadence.delaysSeconds) : 0) == self.count - 1",message="explicit cadence requires count minus one delays"
 type BitcoinBlockGenerationSpec struct {
 	// NetworkRef names the aggregate owning the execution ledger.
 	NetworkRef LocalReference `json:"networkRef"`
@@ -58,10 +59,8 @@ type BitcoinBlockGenerationSpec struct {
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=100
 	Count int32 `json:"count"`
-	// IntervalSeconds is the minimum delay after each receipt; no catch-up occurs.
-	// +kubebuilder:validation:Minimum=1
-	// +kubebuilder:validation:Maximum=60
-	IntervalSeconds int32 `json:"intervalSeconds"`
+	// Cadence controls delays between receipts and subsequent single-block requests.
+	Cadence GenerationCadence `json:"cadence"`
 	// Address receives the regtest coinbase outputs.
 	// +kubebuilder:validation:MinLength=14
 	// +kubebuilder:validation:MaxLength=128

@@ -11,6 +11,7 @@ import (
 	actionv1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/actions/v1alpha1"
 	bitcoinv1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/bitcoin/v1alpha1"
 	networkv1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha1"
+	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/cadence"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -75,6 +76,9 @@ func (r *Reconciler) selectAction(ctx context.Context, p *bitcoinv1.BitcoinProdu
 		}
 		a := item.(*actionv1.BitcoinBlockGeneration)
 		if a.Spec.NetworkRef.Name != n.Name || a.Spec.BitcoinNodeRef.Name != target.identity.Name || actionv1.IsTerminalPhase(a.Status.Phase) || a.Status.AdmittedAt != nil || !a.DeletionTimestamp.IsZero() || !r.Now().Before(a.CreationTimestamp.Add(a.Spec.Timeout.Duration)) {
+			continue
+		}
+		if err := cadence.Validate(a.Spec.Cadence, a.Spec.Count); err != nil {
 			continue
 		}
 		if err := r.RPC.Check(preflight, target.endpoint, a.Spec.Address); err != nil {
@@ -151,11 +155,19 @@ func (r *Reconciler) reconcileAction(ctx context.Context, p *bitcoinv1.BitcoinPr
 		}
 		return r.stopAction(ctx, p, reason)
 	}
+	if !actionv1.IsTerminalPhase(a.Status.Phase) && record.StopReason == "" {
+		if err := cadence.Validate(record.Spec.Cadence, record.Spec.Count); err != nil {
+			return r.stopAction(ctx, p, "MechanismFailed")
+		}
+	}
 	if actionv1.IsTerminalPhase(a.Status.Phase) || !a.DeletionTimestamp.IsZero() || !r.Now().Before(record.ExpiresAt.Time) || record.BlocksGenerated >= record.Spec.Count || record.StopReason != "" {
 		return r.report(ctx, p, "Reserved", "Waiting for action outcome and receipt acknowledgement", time.Second)
 	}
 	if !controllerutil.ContainsFinalizer(a, actionv1.CleanupFinalizer) || a.Status.AdmittedAt == nil || !reflect.DeepEqual(a.Status.AdmittedTarget, &record.Target) || a.Status.AdmittedPolicy == nil || a.Status.AdmittedPolicy.UID != string(p.UID) {
 		return r.report(ctx, p, "Reserved", "Waiting for durable action admission and finalizer", time.Second)
+	}
+	if record.BlocksGenerated > 0 && record.NextDispatchAt == nil {
+		return r.stopAction(ctx, p, "MechanismFailed")
 	}
 	target, err := r.admitTarget(ctx, p, n, false)
 	if err != nil || n.Spec.Suspended {
@@ -164,9 +176,8 @@ func (r *Reconciler) reconcileAction(ctx context.Context, p *bitcoinv1.BitcoinPr
 	if target.identity != record.Target || !p.DeletionTimestamp.IsZero() {
 		return r.stopAction(ctx, p, "IdentityDiverged")
 	}
-	if last := record.LastCompletedAt; last != nil {
-		remaining := last.Add(time.Duration(record.Spec.IntervalSeconds) * time.Second).Sub(r.Now())
-		if remaining > 0 {
+	if next := record.NextDispatchAt; next != nil {
+		if remaining := next.Sub(r.Now()); remaining > 0 {
 			return r.report(ctx, p, "Reserved", "Waiting for the next finite generation interval", min(remaining, time.Second))
 		}
 	}
