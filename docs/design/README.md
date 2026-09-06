@@ -103,7 +103,7 @@ external agent
 stacks-network-operator
   └─ compiles actor and baseline capability declarations
 
-baseline capability controllers (packaging open)
+baseline capability controllers (Bitcoin in network chart; transaction packaging open)
   ├─ BitcoinBlockProduction: timing and target selection
   └─ StacksTransactionProduction: ongoing offered traffic
 
@@ -128,7 +128,7 @@ when permissions, dependencies, or failure domains materially differ.
 | `StacksNetwork`, `BitcoinNode`, `StacksNode`, `StacksSigner` | Implemented; extend | [Topology](topology.md) |
 | `NetworkObservation` | Implemented compatibility API | [Current state](current-state.md) |
 | `ActionSafetyPolicy` | Recommended for custom actions | [Atomic actions](actions.md) |
-| `BitcoinBlockProduction` | M0.4 reopened for multi-target baseline production; not implemented | [Bitcoin lifecycle](bitcoin-lifecycle.md) |
+| `BitcoinBlockProduction` | Initial fixed-cadence single-target profile implemented; broader M0.4 contract reopened | [Bitcoin baseline](../network-operator/bitcoin-production.md) |
 | `BitcoinBlockGeneration`, `BitcoinReorganization` | M0.3/M0.4 execution, admission, credentials, and cleanup reopened; not implemented | [Bitcoin lifecycle](bitcoin-lifecycle.md) |
 | `StacksTransactionProduction` | Direction; working name and schema open | [Steady-state operation](steady-state-operation.md) |
 | `SignerBehavior`, `MinerBehavior` | Recommended | [Protocol actions](protocol-actions.md) |

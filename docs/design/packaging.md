@@ -4,7 +4,7 @@
 
 | Package | Responsibility | Dependency direction |
 | --- | --- | --- |
-| `apis/network` | Versioned network Kubernetes API types | Kubernetes API machinery only |
+| `apis/network` | Versioned topology and initial Bitcoin production Kubernetes API types | Kubernetes API machinery only |
 | `stacks-network-operator` | Reusable Stacks regtest topology | Kubernetes only |
 | `stacks-observability-operator` | Passive identity and telemetry collection | Reads network/action/Chaos APIs; does not import their runtime code |
 | `stacks-action-operator` | Bounded protocol actions, overrides, and safety policy | Uses versioned wire APIs |
@@ -19,6 +19,11 @@ not a new monolithic controller. Baseline operation must be available without
 enabling bounded-action controllers. M0.4/M0.6/M0.8 must choose controller,
 chart, ServiceAccount, and CRD ownership for baseline capabilities; do not
 silently require the action operator to run an ordinary productive network.
+
+The [initial Bitcoin baseline](../network-operator/bitcoin-production.md) now
+uses the network API module and chart, with a separate producer Deployment,
+ServiceAccount, leader election, and mounted credential. Transaction-demand
+packaging and broader capability release qualification remain open.
 
 The observability chart treats network APIs as required only when a
 `NetworkTelemetry` targets one, and action/Chaos APIs as optional discovery

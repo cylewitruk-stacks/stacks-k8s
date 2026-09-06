@@ -41,6 +41,7 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           args:
             - --watch-namespace={{ .Release.Namespace }}
+            - --bitcoin-production-enabled={{ .Values.bitcoinProduction.enabled }}
             - --max-concurrent-reconciles={{ .Values.controller.maxConcurrentReconciles }}
             - --leader-elect={{ .Values.controller.leaderElection }}
             - --zap-log-level={{ .Values.controller.logLevel }}

@@ -15,6 +15,18 @@ published. For an unpublished checkout, use the local-image procedure below.
 
 The chart watches only its release namespace.
 
+Optional [Bitcoin baseline production](../../docs/network-operator/bitcoin-production.md)
+runs in a separate Deployment and ServiceAccount. Set
+`bitcoinProduction.enabled=true` after provisioning its immutable static RPC
+profile and `bitcoinProduction.credentialsSecret` (default
+`stacks-bitcoin-production-rpc`). Production has its own leader election and a
+45-second shutdown grace period. The default chart remains topology-only.
+The chart also passes this setting to the topology controller so a configured
+policy reports `ProductionConfigured=False` / `ControllerDisabled` when disabled.
+This condition describes configuration, not producer health. The producer's
+32 receipt slots and 25-second drain are fixed initial-profile limits. Its
+ConfigMap `list` permission is required by the API-readiness probe.
+
 Leader election is enabled by default and is required when `replicaCount` is
 greater than one. If explicitly disabled for a single-replica installation,
 the Deployment uses `Recreate` so an upgrade cannot overlap two writers.

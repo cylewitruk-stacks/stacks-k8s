@@ -1,0 +1,157 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.22.0
+  name: bitcoinblockproductions.bitcoin.stacks.org
+spec:
+  group: bitcoin.stacks.org
+  names:
+    kind: BitcoinBlockProduction
+    listKind: BitcoinBlockProductionList
+    plural: bitcoinblockproductions
+    singular: bitcoinblockproduction
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.blocksProduced
+      name: Blocks
+      type: integer
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: BitcoinBlockProduction maintains aggregate-owned fixed-cadence
+          regtest production.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: Spec is compiled from the owning network.
+            properties:
+              networkName:
+                description: NetworkName identifies the owning StacksNetwork.
+                maxLength: 63
+                minLength: 1
+                type: string
+              networkUID:
+                description: NetworkUID prevents admission after parent replacement.
+                maxLength: 64
+                minLength: 1
+                type: string
+              policy:
+                description: Policy supplies the current target, cadence, destination
+                  and pause state.
+                properties:
+                  address:
+                    description: Address receives generated regtest coinbase outputs.
+                    maxLength: 128
+                    minLength: 14
+                    type: string
+                  intervalSeconds:
+                    description: IntervalSeconds is the delay after a completed dispatch;
+                      missed ticks are discarded.
+                    format: int32
+                    maximum: 86400
+                    minimum: 1
+                    type: integer
+                  paused:
+                    description: Paused stops new dispatches without cancelling one
+                      already armed.
+                    type: boolean
+                  target:
+                    description: Target names a Bitcoin actor in the owning network.
+                    maxLength: 63
+                    pattern: ^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$
+                    type: string
+                required:
+                - address
+                - intervalSeconds
+                - target
+                type: object
+            required:
+            - networkName
+            - networkUID
+            - policy
+            type: object
+            x-kubernetes-validations:
+            - message: network and production target are immutable
+              rule: self.networkName == oldSelf.networkName && self.networkUID ==
+                oldSelf.networkUID && self.policy.target == oldSelf.policy.target
+          status:
+            description: Status retains dispatch evidence for this network's production
+              lifetime.
+            properties:
+              blocksProduced:
+                description: BlocksProduced counts blocks acknowledged and atomically
+                  accounted by this ledger.
+                format: int64
+                type: integer
+              containerID:
+                description: ContainerID records the admitted Bitcoin process container.
+                type: string
+              dispatchID:
+                description: DispatchID uniquely identifies the last authorization,
+                  including its process-start nonce.
+                type: string
+              dispatchState:
+                description: DispatchState is empty before first use, Idle after a
+                  receipt, or Armed until resolved.
+                enum:
+                - Idle
+                - Armed
+                type: string
+              lastBlockHash:
+                description: LastBlockHash is the latest acknowledged block; it is
+                  not a canonical-chain assertion.
+                type: string
+              lastCompletedAt:
+                description: LastCompletedAt anchors cadence across ordinary controller
+                  restarts.
+                format: date-time
+                type: string
+              message:
+                description: Message explains the current operational state without
+                  credential material.
+                type: string
+              observedGeneration:
+                description: ObservedGeneration identifies the policy reflected by
+                  Phase.
+                format: int64
+                type: integer
+              phase:
+                description: Phase is Waiting, Collecting, Accounting, Running, Paused,
+                  Blocked, or Abandoned.
+                type: string
+              podUID:
+                description: PodUID records the admitted Pod incarnation.
+                type: string
+              targetUID:
+                description: TargetUID records the admitted leaf incarnation.
+                type: string
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

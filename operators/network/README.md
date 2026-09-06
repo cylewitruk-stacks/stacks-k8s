@@ -1,10 +1,14 @@
 # Operator development
 
-The Go module contains one aggregate controller, three leaf controllers, and a
-shared workload collaborator. See the chart's
+The Go module contains one aggregate controller, three leaf controllers, a
+separately deployed Bitcoin production controller, and a shared workload
+collaborator. See the chart's
 [architecture document](../../docs/network-operator/architecture.md).
 Development requires Go 1.27.1. Network API types and the matching isolated
 generator toolchain live under `../../apis/network`.
+
+The [Bitcoin baseline guide](../../docs/network-operator/bitcoin-production.md)
+covers static credential provisioning and real Core 31.1 acceptance tests.
 
 Run development commands from the repository root:
 

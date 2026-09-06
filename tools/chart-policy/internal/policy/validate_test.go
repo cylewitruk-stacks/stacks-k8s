@@ -16,6 +16,23 @@ func TestValidateAcceptsHardenedDeployment(t *testing.T) {
 	}
 }
 
+func TestValidateChecksEveryCapabilityDeployment(t *testing.T) {
+	first := hardenedDeployment()
+	second := hardenedDeployment()
+	encode := func() *bytes.Reader {
+		left, _ := json.Marshal(first)
+		right, _ := json.Marshal(second)
+		return bytes.NewReader(append(append(left, []byte("\n---\n")...), right...))
+	}
+	if err := Validate(encode()); err != nil {
+		t.Fatal(err)
+	}
+	second.Spec.Template.Spec.HostNetwork = true
+	if err := Validate(encode()); err == nil {
+		t.Fatal("unsafe additional capability Deployment accepted")
+	}
+}
+
 func TestValidateRejectsEveryWorkloadWeakening(t *testing.T) {
 	tests := map[string]func(*corev1.PodSpec){
 		"host network":             func(p *corev1.PodSpec) { p.HostNetwork = true },

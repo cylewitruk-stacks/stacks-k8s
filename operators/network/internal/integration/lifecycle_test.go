@@ -28,6 +28,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
+	bitcoinv1alpha1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/bitcoin/v1alpha1"
 	networkv1alpha1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha1"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/bitcoinnode"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/canonical"
@@ -65,6 +66,7 @@ func TestManagerLifecycleAndAPIServerValidation(t *testing.T) {
 	scheme := runtime.NewScheme()
 	must(t, clientgoscheme.AddToScheme(scheme))
 	must(t, networkv1alpha1.AddToScheme(scheme))
+	must(t, bitcoinv1alpha1.AddToScheme(scheme))
 	manager, err := ctrl.NewManager(configuration, ctrl.Options{
 		Scheme:  scheme,
 		Metrics: metricsserver.Options{BindAddress: "0"},
@@ -101,6 +103,66 @@ func TestManagerLifecycleAndAPIServerValidation(t *testing.T) {
 	})
 
 	invalid := bitcoinNetwork("invalid")
+	invalidProduction := bitcoinNetwork("invalid-production")
+	invalidProduction.Spec.BitcoinBlockProduction = &bitcoinv1alpha1.ProductionPolicy{Target: "missing", IntervalSeconds: 5, Address: "mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn"}
+	if err := direct.Create(ctx, invalidProduction); !apierrors.IsInvalid(err) {
+		t.Fatalf("invalid production target: %v", err)
+	}
+	productionNetwork := bitcoinNetwork("production")
+	productionNetwork.Spec.BitcoinBlockProduction = &bitcoinv1alpha1.ProductionPolicy{Target: "bitcoin", IntervalSeconds: 5, Address: "mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn"}
+	must(t, direct.Create(ctx, productionNetwork))
+	productionKey := client.ObjectKeyFromObject(productionNetwork)
+	productionPolicy := &bitcoinv1alpha1.BitcoinBlockProduction{}
+	eventually(t, "aggregate pins production independently of workload readiness", func() bool {
+		return direct.Get(ctx, productionKey, productionNetwork) == nil && direct.Get(ctx, productionKey, productionPolicy) == nil && productionPolicy.UID != "" && productionNetwork.Status.BitcoinProductionUID == string(productionPolicy.UID) && !productionNetwork.Status.InventoryReady
+	})
+	changedTarget := productionPolicy.DeepCopy()
+	changedTarget.Spec.Policy.Target = "other"
+	if err := direct.Update(ctx, changedTarget); !apierrors.IsInvalid(err) {
+		t.Fatalf("production target identity mutation: %v", err)
+	}
+	immutableLedgerUID := productionPolicy.UID
+	// Parent admission rejects direct retargeting before any controller runs.
+	changedParent := productionNetwork.DeepCopy()
+	otherBitcoin := changedParent.Spec.BitcoinNodes[0]
+	otherBitcoin.Name = "other"
+	changedParent.Spec.BitcoinNodes = append(changedParent.Spec.BitcoinNodes, otherBitcoin)
+	changedParent.Spec.BitcoinBlockProduction.Target = "other"
+	if err := direct.Update(ctx, changedParent); !apierrors.IsInvalid(err) {
+		t.Fatalf("parent production target mutation: %v", err)
+	}
+	// Removing and re-adding policy cannot bypass the retained ledger's target.
+	must(t, direct.Get(ctx, productionKey, productionNetwork))
+	productionNetwork.Spec.BitcoinBlockProduction = nil
+	must(t, direct.Update(ctx, productionNetwork))
+	must(t, direct.Get(ctx, productionKey, productionNetwork))
+	productionNetwork.Spec.BitcoinNodes = append(productionNetwork.Spec.BitcoinNodes, otherBitcoin)
+	productionNetwork.Spec.BitcoinBlockProduction = changedParent.Spec.BitcoinBlockProduction.DeepCopy()
+	must(t, direct.Update(ctx, productionNetwork))
+	_, _ = (&network.Reconciler{Client: direct, APIReader: direct, Scheme: scheme, Now: time.Now}).Reconcile(ctx, ctrl.Request{NamespacedName: productionKey})
+	must(t, direct.Get(ctx, productionKey, productionPolicy))
+	if productionPolicy.UID != immutableLedgerUID || productionPolicy.Spec.Policy.Target != "bitcoin" {
+		t.Fatal("remove/re-add changed the retained ledger identity")
+	}
+	must(t, direct.Delete(ctx, productionPolicy))
+	// Reconciliation may run repeatedly; a removed ledger must not acquire fresh authorization.
+	for i := 0; i < 5; i++ {
+		_, _ = (&network.Reconciler{Client: direct, APIReader: direct, Scheme: scheme, Now: time.Now}).Reconcile(ctx, ctrl.Request{NamespacedName: productionKey})
+		if err := direct.Get(ctx, productionKey, &bitcoinv1alpha1.BitcoinBlockProduction{}); !apierrors.IsNotFound(err) {
+			t.Fatalf("deleted ledger was recreated: %v", err)
+		}
+	}
+	must(t, direct.Get(ctx, productionKey, productionNetwork))
+	if productionNetwork.Status.BitcoinProductionUID != string(immutableLedgerUID) {
+		t.Fatal("missing ledger erased the pinned UID")
+	}
+	productionNetwork.Spec.BitcoinNodes[0].Image = "bitcoin:updated-after-ledger-deletion"
+	must(t, direct.Update(ctx, productionNetwork))
+	eventually(t, "missing production ledger does not block actor updates", func() bool {
+		actor := &networkv1alpha1.BitcoinNode{}
+		return direct.Get(ctx, client.ObjectKey{Namespace: testNamespace, Name: "production-bitcoin"}, actor) == nil && actor.Spec.Image == "bitcoin:updated-after-ledger-deletion"
+	})
+	must(t, direct.Delete(ctx, productionNetwork))
 	invalid.Spec.StacksNodes = []networkv1alpha1.StacksNodeTemplate{{
 		Name: "follower", Role: networkv1alpha1.StacksNodeFollower,
 		BitcoinNodeRef: "missing", Config: generatedStacks(),
@@ -176,6 +238,34 @@ func TestManagerLifecycleAndAPIServerValidation(t *testing.T) {
 	eventually(t, "compiled BitcoinNode", func() bool {
 		return direct.Get(ctx, childKey, &networkv1alpha1.BitcoinNode{}) == nil
 	})
+	eventually(t, "declarations published without ready actors", func() bool {
+		current := &networkv1alpha1.StacksNetwork{}
+		if direct.Get(ctx, client.ObjectKeyFromObject(networkObject), current) != nil {
+			return false
+		}
+		catalog := current.Status.TargetDeclarations
+		if catalog == nil || catalog.SchemaVersion != networkv1alpha1.TargetDeclarationsVersion ||
+			catalog.NetworkUID != string(current.UID) || catalog.ObservedGeneration != current.Generation || len(catalog.Actors) != 1 {
+			return false
+		}
+		child := &networkv1alpha1.BitcoinNode{}
+		if direct.Get(ctx, childKey, child) != nil {
+			return false
+		}
+		digest, err := workload.SpecDigest(child.Spec)
+		return err == nil && catalog.Actors[0].SpecDigest == digest &&
+			catalog.Actors[0].Name == child.Name && !current.Status.InventoryReady
+	})
+	staleCatalog := &networkv1alpha1.StacksNetwork{}
+	must(t, direct.Get(ctx, client.ObjectKeyFromObject(networkObject), staleCatalog))
+	newer := staleCatalog.DeepCopy()
+	newer.Labels = map[string]string{"test-catalog-conflict": "newer"}
+	must(t, direct.Patch(ctx, newer, client.MergeFrom(staleCatalog)))
+	staleStatus := staleCatalog.DeepCopy()
+	staleStatus.Status.TargetDeclarations = nil
+	if err := direct.Status().Patch(ctx, staleStatus, client.MergeFromWithOptions(staleCatalog, client.MergeFromWithOptimisticLock{})); !apierrors.IsConflict(err) {
+		t.Fatalf("stale catalog status patch = %v, want conflict", err)
+	}
 	eventually(t, "workload resources", func() bool {
 		return direct.Get(ctx, childKey, &appsv1.StatefulSet{}) == nil &&
 			direct.Get(ctx, childKey, &corev1.Service{}) == nil &&

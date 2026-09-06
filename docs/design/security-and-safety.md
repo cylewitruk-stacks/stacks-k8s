@@ -73,7 +73,9 @@ Mutable `BitcoinBlockProduction` and steady transaction demand are baseline
 capabilities, separate from the bounded-action lifecycle and
 `ActionSafetyPolicy`. Their schemas need absolute rate/work bounds,
 target-selection rules, and explicit coordination with bounded overrides.
-The revised production/exclusion contract remains open; see
+The [initial implemented profile](../network-operator/bitcoin-production.md)
+uses a UID-pinned, finalizer-retained production ledger for its sole mutation
+owner. Shared action/reservation and multi-target contracts remain open; see
 [Bitcoin lifecycle](bitcoin-lifecycle.md).
 
 ## Irreversible actions
@@ -124,7 +126,7 @@ uses per-user method lists and denies unlisted principals.
 - Prefer short-lived projected credentials or immutable Secret references.
 - Never copy credentials into status, logs, events, journal payloads, or
   evidence manifests.
-- Controllers read only administrator-configured Secret `resourceNames`;
+- Controllers with Secret-read access may read only administrator-configured `resourceNames`;
   public action specs never select credentials. R3 replaces the shared Bitcoin
   Secret proposal with separately restricted observation, Stacks-client, and
   mutation authority. Verify RPC permission enforcement server-side.
@@ -132,7 +134,9 @@ uses per-user method lists and denies unlisted principals.
   refresh credentials or retarget after uncertainty. Per-process credential
   epochs are required only if used to fence a later reset profile.
 - The network operator mounts and content-verifies inputs without Secret-read
-  RBAC; exact initial profiles remain design gates. Rotation is deferred.
+  RBAC. The initial Bitcoin producer reads its separately mounted immutable
+  credential file; broader actor/action profiles remain design gates. Rotation
+  is deferred.
 - Transaction signing credentials have a separate M0.6 Requirement 14 gate:
   designated worker access, account ownership, rotation/revocation, and
   isolation from actors, observers, and unrelated producers.

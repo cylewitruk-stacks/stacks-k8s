@@ -19,6 +19,7 @@ StacksNetwork reconciler
 | Owner | Fields and effects |
 | ---- | ---- |
 | Aggregate reconciler | Leaf specifications and ownership; `StacksNetwork.status`. |
+| Production reconciler | UID-pinned `BitcoinBlockProduction.status`, finalizer, and typed single-block RPC effects. |
 | Bitcoin leaf reconciler | Bitcoin workload resources; `BitcoinNode.status`. |
 | Stacks node reconciler | Stacks node workload resources; `StacksNode.status`. |
 | Signer leaf reconciler | Signer workload resources; `StacksSigner.status`. |
@@ -34,7 +35,8 @@ resource status and runs no controller.
 - One logical controller writes each status or managed child specification.
 - Compiled leaf specifications declare no API-server defaults, so exact
   stored-versus-compiled equality remains a valid drift check.
-- Every external effect is owner-checked and idempotent.
+- Kubernetes convergence is owner-checked and idempotent. Non-idempotent Bitcoin
+  production uses durable authorization and never blindly retries an RPC.
 - A labelled object without the expected controller UID is never adopted or
   deleted.
 - Controller-owner UIDs, rather than mutable labels, define the set of managed
@@ -44,7 +46,8 @@ resource status and runs no controller.
 - Leaf and aggregate status use uncached reads for admitted runtime identity.
 - Identity admission waits for the StatefulSet controller to observe the
   current generation and verifies the Pod revision and requested image.
-- Secret contents are mounted directly and never read by the controller.
+- Secret contents are mounted directly; no controller has Secret-read API
+  permission. Only the separate producer mounts and reads its RPC password.
 - Mutable owned Service drift is restored; a non-headless ClusterIP Service is
   replaced only with an API-server UID precondition.
 - Immutable StatefulSet identity or storage changes fail explicitly.
@@ -53,11 +56,25 @@ resource status and runs no controller.
   workload resources have finished foreground deletion.
 
 The aggregate reconciler is an ordered pipeline: compile desired leaf objects,
+publish generation-bound declarations, synchronize the optional production ledger,
 bulk-list each leaf kind, synchronize only missing or drifted specifications,
 prune retired leaves, then bulk-list directly from the API server to aggregate
-status. A status-only child event therefore performs no writes. The number of
-Kubernetes list operations is constant per reconcile rather than proportional
-to actor count.
+status. Production synchronization and topology convergence both run even if
+the other fails; a separate `ProductionConfigured` condition reports optional
+capability configuration. Production status-only updates are filtered from
+the aggregate watch, while generation, ownership, finalizer, deletion, and UID
+changes remain observable. Actor status-only events still update inventory
+when observed identity changes. The number of Kubernetes list operations is
+constant per reconcile rather than proportional to actor count.
+
+Declaration publication uses optimistic-lock status patches before workload
+synchronization and preserves current declarations through later degraded or
+retiring states. The [Bitcoin producer](bitcoin-production.md) admits its target
+independently of complete inventory. It runs in a separate Deployment and
+ServiceAccount with no workload mutation permissions.
+Its bounded receipt collectors run outside reconcile workers and retain
+received-but-unaccounted evidence until accounting, administrative abandonment,
+or exhausted shutdown drain.
 
 Each Stacks leaf receives only direct and explicitly declared Service
 dependencies. This keeps configuration and Pod-template digests local to the

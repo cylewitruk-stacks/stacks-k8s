@@ -21,15 +21,24 @@ import (
 
 // Options contains manager runtime settings.
 type Options struct {
-	MetricsAddress string
-	ProbeAddress   string
-	Namespace      string
-	Concurrency    int
-	LeaderElection bool
+	// Component selects topology or Bitcoin production controllers with separate credentials and RBAC.
+	Component string
+	// ProductionCredentialsFile names the mounted static producer credential document.
+	ProductionCredentialsFile string
+	// ProductionEnabled describes deployment configuration to the topology controller.
+	ProductionEnabled bool
+	MetricsAddress    string
+	ProbeAddress      string
+	Namespace         string
+	Concurrency       int
+	LeaderElection    bool
 }
 
 // Bind registers manager flags.
 func (o *Options) Bind(flags *flag.FlagSet) {
+	flags.StringVar(&o.Component, "component", "topology", "Controller component: topology or bitcoin-production.")
+	flags.BoolVar(&o.ProductionEnabled, "bitcoin-production-enabled", false, "Report that the separately deployed Bitcoin producer is enabled.")
+	flags.StringVar(&o.ProductionCredentialsFile, "production-credentials-file", "/etc/bitcoin-production/credentials.json", "Mounted producer credential document.")
 	flags.StringVar(&o.MetricsAddress, "metrics-bind-address", ":8080", "Prometheus metrics address.")
 	flags.StringVar(&o.ProbeAddress, "health-probe-bind-address", ":8081", "Health probe address.")
 	flags.StringVar(&o.Namespace, "watch-namespace", os.Getenv("WATCH_NAMESPACE"), "Namespace to watch; defaults to the ServiceAccount namespace.")
@@ -39,6 +48,9 @@ func (o *Options) Bind(flags *flag.FlagSet) {
 
 // New constructs the namespaced controller manager.
 func (o Options) New(scheme *runtime.Scheme) (ctrl.Manager, error) {
+	if o.Component != "" && o.Component != "topology" && o.Component != "bitcoin-production" {
+		return nil, fmt.Errorf("unsupported controller component %q", o.Component)
+	}
 	if o.Concurrency < 1 {
 		return nil, fmt.Errorf("max-concurrent-reconciles must be positive")
 	}
@@ -54,8 +66,14 @@ func (o Options) New(scheme *runtime.Scheme) (ctrl.Manager, error) {
 	if err != nil {
 		return nil, fmt.Errorf("load Kubernetes configuration: %w", err)
 	}
+	leaderID := "stacks-network-operator.network.stacks.org"
+	if o.Component == "bitcoin-production" {
+		leaderID = "bitcoin-production.bitcoin.stacks.org"
+	}
+	shutdown := 30 * time.Second
 	manager, err := ctrl.NewManager(config, ctrl.Options{Scheme: scheme, Metrics: metricsserver.Options{BindAddress: o.MetricsAddress},
-		HealthProbeBindAddress: o.ProbeAddress, LeaderElection: o.LeaderElection, LeaderElectionID: "stacks-network-operator.network.stacks.org",
+		GracefulShutdownTimeout: &shutdown,
+		HealthProbeBindAddress:  o.ProbeAddress, LeaderElection: o.LeaderElection, LeaderElectionID: leaderID,
 		Cache: cache.Options{DefaultNamespaces: map[string]cache.Config{namespace: {}}}})
 	if err != nil {
 		return nil, fmt.Errorf("create manager: %w", err)

@@ -12,7 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/yaml"
 )
 
-// Validate requires one hardened, namespaced operator Deployment.
+// Validate requires hardened operator Deployments, including optional capability controllers.
 func Validate(reader io.Reader) error {
 	decoder := yaml.NewYAMLOrJSONDecoder(reader, 4096)
 	var deployments []appsv1.Deployment
@@ -37,10 +37,15 @@ func Validate(reader io.Reader) error {
 		}
 		deployments = append(deployments, deployment)
 	}
-	if len(deployments) != 1 {
-		return fmt.Errorf("expected one operator Deployment, got %d", len(deployments))
+	if len(deployments) == 0 {
+		return fmt.Errorf("expected at least one operator Deployment")
 	}
-	return validatePodSpec(deployments[0].Spec.Template.Spec)
+	for _, deployment := range deployments {
+		if err := validatePodSpec(deployment.Spec.Template.Spec); err != nil {
+			return fmt.Errorf("Deployment %s: %w", deployment.Name, err)
+		}
+	}
+	return nil
 }
 
 func validatePodSpec(pod corev1.PodSpec) error {

@@ -56,6 +56,15 @@ func Compile(network *networkv1alpha1.StacksNetwork) (DesiredTopology, error) {
 	if network == nil {
 		return DesiredTopology{}, fmt.Errorf("StacksNetwork is required")
 	}
+	if policy := network.Spec.BitcoinBlockProduction; policy != nil {
+		found := false
+		for _, node := range network.Spec.BitcoinNodes {
+			found = found || node.Name == policy.Target
+		}
+		if !found || policy.IntervalSeconds < 1 || policy.IntervalSeconds > 86400 || len(policy.Address) < 14 || len(policy.Address) > 128 {
+			return DesiredTopology{}, fmt.Errorf("production requires a declared Bitcoin target, interval 1..86400 and a destination address")
+		}
+	}
 	if errors := validation.IsDNS1123Label(network.Name); len(errors) > 0 {
 		return DesiredTopology{}, fmt.Errorf("StacksNetwork name %q must be a DNS label: %s", network.Name, strings.Join(errors, "; "))
 	}

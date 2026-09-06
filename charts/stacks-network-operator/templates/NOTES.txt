@@ -5,3 +5,9 @@ Create a network:
 
 Inspect topology and compiled actors:
   kubectl --namespace {{ .Release.Namespace }} get stacksnetworks,bitcoinnodes,stacksnodes,stackssigners
+{{ if .Values.bitcoinProduction.enabled }}
+Inspect Bitcoin baseline dispatch state:
+  kubectl --namespace {{ .Release.Namespace }} get bitcoinblockproductions
+
+Delete networks and wait for their production ledgers before uninstalling this chart.
+{{ end }}

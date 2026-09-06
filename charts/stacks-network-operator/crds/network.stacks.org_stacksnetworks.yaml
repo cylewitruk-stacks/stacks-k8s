@@ -52,6 +52,36 @@ spec:
           spec:
             description: StacksNetworkSpec defines an aggregate regtest topology.
             properties:
+              bitcoinBlockProduction:
+                description: BitcoinBlockProduction optionally maintains fixed-cadence
+                  regtest blocks.
+                properties:
+                  address:
+                    description: Address receives generated regtest coinbase outputs.
+                    maxLength: 128
+                    minLength: 14
+                    type: string
+                  intervalSeconds:
+                    description: IntervalSeconds is the delay after a completed dispatch;
+                      missed ticks are discarded.
+                    format: int32
+                    maximum: 86400
+                    minimum: 1
+                    type: integer
+                  paused:
+                    description: Paused stops new dispatches without cancelling one
+                      already armed.
+                    type: boolean
+                  target:
+                    description: Target names a Bitcoin actor in the owning network.
+                    maxLength: 63
+                    pattern: ^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$
+                    type: string
+                required:
+                - address
+                - intervalSeconds
+                - target
+                type: object
               bitcoinNodes:
                 items:
                   description: BitcoinNodeTemplate is the aggregate declaration for
@@ -943,6 +973,12 @@ spec:
             - defaults
             type: object
             x-kubernetes-validations:
+            - message: changing the initial production target requires a fresh environment
+              rule: '!has(oldSelf.bitcoinBlockProduction) || !has(self.bitcoinBlockProduction)
+                || self.bitcoinBlockProduction.target == oldSelf.bitcoinBlockProduction.target'
+            - message: production must reference a declared Bitcoin node
+              rule: '!has(self.bitcoinBlockProduction) || self.bitcoinNodes.exists(node,
+                node.name == self.bitcoinBlockProduction.target)'
             - message: every Stacks node must reference a declared Bitcoin node
               rule: '!has(self.stacksNodes) || self.stacksNodes.all(node, self.bitcoinNodes.exists(bitcoin,
                 bitcoin.name == node.bitcoinNodeRef))'
@@ -1023,6 +1059,10 @@ spec:
                   type: object
                 maxItems: 232
                 type: array
+              bitcoinProductionUID:
+                description: BitcoinProductionUID permanently pins the production
+                  ledger for this network incarnation.
+                type: string
               children:
                 items:
                   description: ChildStatus summarizes one compiled topology resource.
@@ -1119,6 +1159,79 @@ spec:
               readyActors:
                 format: int32
                 type: integer
+              targetDeclarations:
+                description: TargetDeclarations reports compiled intent without requiring
+                  global readiness.
+                properties:
+                  actors:
+                    description: Actors lists compiled leaf declarations in stable
+                      kind/name order.
+                    items:
+                      description: TargetDeclaration binds a named actor to its complete
+                        compiled leaf specification.
+                      properties:
+                        actorName:
+                          description: ActorName is the logical actor name in the
+                            parent topology.
+                          maxLength: 63
+                          pattern: ^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$
+                          type: string
+                        kind:
+                          description: Kind is the leaf resource kind.
+                          enum:
+                          - BitcoinNode
+                          - StacksNode
+                          - StacksSigner
+                          type: string
+                        name:
+                          description: Name is the compiled same-namespace resource
+                            name.
+                          maxLength: 63
+                          pattern: ^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$
+                          type: string
+                        specDigest:
+                          description: SpecDigest uses the existing canonical leaf-specification
+                            digest contract.
+                          pattern: ^sha256:[0-9a-f]{64}$
+                          type: string
+                        suspended:
+                          description: Suspended is the effective parent-or-actor
+                            suspension state.
+                          type: boolean
+                      required:
+                      - actorName
+                      - kind
+                      - name
+                      - specDigest
+                      - suspended
+                      type: object
+                    maxItems: 232
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - kind
+                    - name
+                    x-kubernetes-list-type: map
+                  networkUID:
+                    description: NetworkUID prevents admission across parent recreation.
+                    minLength: 1
+                    type: string
+                  observedGeneration:
+                    description: ObservedGeneration binds compilation to a particular
+                      admitted parent spec.
+                    format: int64
+                    minimum: 1
+                    type: integer
+                  schemaVersion:
+                    description: SchemaVersion identifies the entry and digest interpretation.
+                    enum:
+                    - network.stacks.org/target-declarations/v1
+                    type: string
+                required:
+                - actors
+                - networkUID
+                - observedGeneration
+                - schemaVersion
+                type: object
             type: object
         required:
         - spec

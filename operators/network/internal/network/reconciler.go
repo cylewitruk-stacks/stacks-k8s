@@ -2,6 +2,7 @@ package network
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 	"sort"
@@ -13,12 +14,14 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	bitcoinv1alpha1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/bitcoin/v1alpha1"
 	networkv1alpha1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha1"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/canonical"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/leaf"
@@ -30,6 +33,8 @@ type Reconciler struct {
 	APIReader client.Reader
 	Scheme    *runtime.Scheme
 	Now       func() time.Time
+	// ProductionEnabled reports whether deployment configuration enables the producer.
+	ProductionEnabled bool
 }
 
 // Reconcile moves one aggregate network toward its compiled leaf topology.
@@ -44,39 +49,52 @@ func (r *Reconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 	}
 	desired, err := Compile(network)
 	if err != nil {
+		network.Status.TargetDeclarations = nil
 		log.FromContext(ctx).Error(err, "topology declaration is invalid")
 		if statusErr := r.updateStatus(ctx, network, patchBase, degradedStatus(network, "ReconciliationFailed", err)); statusErr != nil {
 			return ctrl.Result{}, statusErr
 		}
 		return ctrl.Result{}, reconcile.TerminalError(err)
 	}
+	catalog, err := declarations(network, desired)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	if !reflect.DeepEqual(network.Status.TargetDeclarations, catalog) {
+		network.Status.TargetDeclarations = catalog
+		if err := r.Status().Patch(ctx, network, client.MergeFromWithOptions(patchBase, client.MergeFromWithOptimisticLock{})); err != nil {
+			return ctrl.Result{}, err
+		}
+		patchBase = network.DeepCopy()
+	}
+	productionErr := r.synchronizeProduction(ctx, network)
+	patchBase = network.DeepCopy()
+	status, result, topologyErr := r.reconcileTopology(ctx, network, desired)
+	meta.SetStatusCondition(&status.Conditions, r.productionCondition(network, productionErr))
+	statusErr := r.updateStatus(ctx, network, patchBase, status)
+	return result, errors.Join(topologyErr, productionErr, statusErr)
+}
+
+// reconcileTopology converges actors independently of optional capability errors.
+func (r *Reconciler) reconcileTopology(ctx context.Context, network *networkv1alpha1.StacksNetwork, desired DesiredTopology) (networkv1alpha1.StacksNetworkStatus, ctrl.Result, error) {
 	retiring, err := r.synchronize(ctx, network, desired)
 	if err != nil {
 		log.FromContext(ctx).Error(err, "topology synchronization failed")
 		if leaf.IsTransientError(err) {
-			return ctrl.Result{}, err
+			return *network.Status.DeepCopy(), ctrl.Result{}, err
 		}
-		if statusErr := r.updateStatus(ctx, network, patchBase, degradedStatus(network, "ReconciliationFailed", err)); statusErr != nil {
-			return ctrl.Result{}, statusErr
-		}
-		return ctrl.Result{}, err
+		return degradedStatus(network, "ReconciliationFailed", err), ctrl.Result{}, err
 	}
 	if retiring {
 		status := transitionalStatus(network, int32(len(desired.Objects())), "ActorsRetiring", "Retired actor resources are still terminating")
-		if err := r.updateStatus(ctx, network, patchBase, status); err != nil {
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{RequeueAfter: time.Second}, nil
+		return status, ctrl.Result{RequeueAfter: time.Second}, nil
 	}
 	status, err := r.observe(ctx, network, desired)
 	if err != nil {
 		log.FromContext(ctx).Error(err, "topology observation failed")
-		if statusErr := r.updateStatus(ctx, network, patchBase, degradedStatus(network, "ObservationFailed", err)); statusErr != nil {
-			return ctrl.Result{}, statusErr
-		}
-		return ctrl.Result{}, err
+		return degradedStatus(network, "ObservationFailed", err), ctrl.Result{}, err
 	}
-	return ctrl.Result{}, r.updateStatus(ctx, network, patchBase, status)
+	return status, ctrl.Result{}, nil
 }
 
 // SetupWithManager registers aggregate and owned-child watches.
@@ -92,6 +110,7 @@ func (r *Reconciler) SetupWithManager(manager ctrl.Manager, concurrency int) err
 		Owns(&networkv1alpha1.BitcoinNode{}).
 		Owns(&networkv1alpha1.StacksNode{}).
 		Owns(&networkv1alpha1.StacksSigner{}).
+		Owns(&bitcoinv1alpha1.BitcoinBlockProduction{}, builder.WithPredicates(productionLifecyclePredicate())).
 		WithOptions(controller.Options{MaxConcurrentReconciles: concurrency}).
 		Complete(r)
 }
@@ -456,9 +475,13 @@ func condition(generation int64, status metav1.ConditionStatus, kind, reason, me
 }
 
 func (r *Reconciler) updateStatus(ctx context.Context, network, patchBase *networkv1alpha1.StacksNetwork, desired networkv1alpha1.StacksNetworkStatus) error {
+	desired.BitcoinProductionUID = network.Status.BitcoinProductionUID
+	if catalog := network.Status.TargetDeclarations; catalog != nil && catalog.NetworkUID == string(network.UID) && catalog.ObservedGeneration == network.Generation {
+		desired.TargetDeclarations = catalog.DeepCopy()
+	}
 	if reflect.DeepEqual(patchBase.Status, desired) {
 		return nil
 	}
 	network.Status = desired
-	return r.Status().Patch(ctx, network, client.MergeFrom(patchBase))
+	return r.Status().Patch(ctx, network, client.MergeFromWithOptions(patchBase, client.MergeFromWithOptimisticLock{}))
 }

@@ -10,10 +10,17 @@ The `network.stacks.org/v1alpha1` API provides:
 
 | Resource | Implemented behavior | Important limit |
 | --- | --- | --- |
-| `StacksNetwork` | Compiles an aggregate topology and publishes admitted actor identity. | Does not bootstrap protocol state or produce Bitcoin blocks. |
+| `StacksNetwork` | Compiles topology and optional Bitcoin production; publishes declarations and admitted actor identity. | Does not bootstrap protocol state or issue mining RPCs itself. |
 | `BitcoinNode` | Runs one Bitcoin Core miner or follower with explicit peers. | The miner role does not invoke mining RPCs. |
 | `StacksNode` | Runs one miner, follower, or signer-node bound to one Bitcoin node. | Protocol readiness is not independently established. |
 | `StacksSigner` | Runs one signer bound to one signer-node with index and weight. | Registration and reward-cycle participation are external. |
+
+The separate `bitcoin.stacks.org/v1alpha1` `BitcoinBlockProduction` API now
+supports an aggregate-owned, single-target fixed-cadence baseline. Its
+[implemented profile](../network-operator/bitcoin-production.md) defines static
+credential separation, admission, durable dispatch accounting, and the
+fail-closed availability limit after a lost receipt. Finite actions and
+multi-target production remain unavailable.
 
 The aggregate accepts 1–32 Bitcoin nodes and up to 100 Stacks nodes and 100
 signers. Multiple Bitcoin and Stacks miners are therefore structurally
@@ -28,7 +35,7 @@ Standalone leaf resources remain an advanced API.
 The [steady-state operation direction](steady-state-operation.md) extends the
 aggregate to owned baseline capabilities and makes future Bitcoin nodes
 mining-neutral. Existing role enums and complete-inventory APIs are unchanged;
-this documentation amendment does not implement that migration.
+the initial production slice does not implement that migration.
 
 The operator supports persistent volumes and retention, but refuses unsafe
 in-place changes to immutable StatefulSet service identity, selectors, and
@@ -68,7 +75,7 @@ Git, runs repository build logic, or constructs an image.
 
 | Area | Missing capability |
 | --- | --- |
-| Bitcoin lifecycle | Aggregate-owned timing/target-selection policy, continuous production, bounded generation, controlled reorganization, and RPC-observed branch state. |
+| Bitcoin lifecycle | Multi-target/jitter policies, bounded generation, controlled reorganization, and RPC-observed branch state. Fixed-cadence single-target baseline is implemented. |
 | Steady transaction demand | Ongoing producers, funding/nonce ownership, offered-rate control, backpressure, and submission evidence. |
 | Protocol bootstrap | Signer registration, stacking/reward-set activation, wallet funding, and explicit readiness beyond Kubernetes health. |
 | Generic faults | Native Chaos Mesh installation guidance, safe direct targeting, correlation, and observation. |
@@ -124,11 +131,11 @@ The following historical structures must not return:
 
 ## Open inventory questions
 
-1. Which real Bitcoin Core and Stacks image versions form the initial support
-   matrix?
+1. Which Stacks images and additional Bitcoin/platform combinations extend the
+   initial Bitcoin Core 31.1 Linux/arm64 baseline qualification?
 2. Which signer-registration and stacking actions belong in this repository
    rather than an external bootstrap tool?
 3. Is sBTC in the first actor-expansion release or a later extension?
 4. Which managed Kubernetes providers expose usable audit streams?
-5. Which controller/chart owns baseline production and transaction demand
-   while preserving independence from bounded actions?
+5. Which controller/chart should own transaction demand? Initial Bitcoin
+   production uses a separate Deployment and ServiceAccount in the network chart.

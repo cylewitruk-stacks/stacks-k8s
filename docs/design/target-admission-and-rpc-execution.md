@@ -2,15 +2,18 @@
 
 ## Status and recommendation
 
-**Recommended design; not a served API or completed runtime gate.** This
+**Decision record with a constrained initial implementation.** This
 proposal supplies the R1/R2 decision record for M0.3/M0.4. The parent
 [M0 plan](m0-remediation-plan.md) remains authoritative; production fields,
-credential profiles, and implementation qualification still need review.
+credential profiles, and broader implementation qualification still need review.
+The [implemented Bitcoin baseline](../network-operator/bitcoin-production.md)
+defines the served catalog and single-target production subset. The richer
+reservation/action/reset model below remains a proposal for later capabilities.
 
 Recommend a health-independent compiled-declaration catalog for R1 and a
 durable, single-dispatch execution record for R2. Apply the
 [initial delivery scope](m0-remediation-plan.md#initial-delivery-scope): implement
-R1 publication first, then the smallest reviewed baseline-production profile.
+R1 publication first, then the smallest baseline-production profile.
 Explicit reset/readmission, credential rotation, cryptographic process
 attestation, and execution-aware adapters are deferred.
 Retain the aggregate/leaf controller structure. No in-cluster planner,
@@ -248,8 +251,12 @@ Receipt collection has a separate lifetime from action waiting and reconcile
 calls. A profile may keep one receiver per outstanding target alive without a
 read deadline while the connection survives. This needs bounded worker counts,
 shutdown handling, and status visibility; it does not solve connection loss or
-controller restart. Freeze these choices with R3. This direct-RPC profile does
-not promise that irreversible effects cease at a wall-clock deadline.
+controller restart. The implemented single-target baseline selects this model:
+32 process-wide slots include retained receipts, accounting retries preserve
+the original receipt time, and SIGTERM allows a 25-second drain within the
+manager's 30 seconds and Pod's 45 seconds. These limits do not qualify a future
+bounded-action profile. This direct-RPC profile does not promise that
+irreversible effects cease at a wall-clock deadline.
 
 Supported controller recovery initially means graceful drain: on SIGTERM,
 stop new dispatch authorization, retain receipt collectors, and persist

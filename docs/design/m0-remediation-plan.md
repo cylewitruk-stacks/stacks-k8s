@@ -116,8 +116,9 @@ for finalizers; neither is permission to silently change the shared fixture.
 The [R1/R2 decision proposal](target-admission-and-rpc-execution.md) recommends
 a compiled-declaration catalog and protected single-dispatch execution record.
 It includes local feasibility evidence and the explicit availability cost of
-retaining unresolved requests. It is a review input; R1/R2/R3 remain open for
-their enabled capabilities, under the narrower delivery scope below.
+retaining unresolved requests. R1/R2/R3 remain open for broader capability
+contracts; the constrained implementation and qualification are recorded in
+the narrower delivery scope below.
 
 ### Initial delivery scope
 
@@ -128,15 +129,18 @@ per-environment RPC credentials are acceptable; credential rotation, per-process
 credential fencing, cryptographic process attestation, and in-place recovery
 are deferred. They are not prerequisites for R1 publication or initial production.
 
-The next implementation slice is R1 declaration publication: freeze its additive
-schema and compatibility vectors, then implement generation-bound publication,
-conflict protection, and preservation through unrelated actor failures. This
-repository foundation may proceed while other M0 work remains open; it enables
-no RPC mutations and does not close the broader target-admission gate.
+R1 declaration publication is implemented with an additive schema and
+compatibility vector, generation-bound publication, conflict protection, and
+preservation through unrelated actor failures. Complete inventory semantics
+remain unchanged. This does not close admission for every future capability.
 
-Next, review the smallest baseline-production profile and implement a vertical
-slice with necessary RPC permissions, durable outstanding-request tracking,
-bounded work, and explicit response-loss behavior. Possible unresolved execution
+The [initial Bitcoin baseline](../network-operator/bitcoin-production.md) now
+implements one-target fixed-cadence production with separated static RPC
+permissions, a UID-pinned durable production ledger, bounded work, and explicit
+response-loss behavior. Its CRD status provides exclusion for this sole enabled
+mutation owner; a shared reservation/action API remains deferred. R1–R3 stay
+open for wider capability contracts, and M1 finite generation remains pending.
+Possible unresolved execution
 keeps the target closed across restarts and replacement. No blind retry or
 in-place reset reopens it. Preserve evidence and use a fresh independently
 isolated environment: new namespace and UIDs, fresh per-environment RPC

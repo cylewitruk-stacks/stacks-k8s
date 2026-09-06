@@ -1,6 +1,7 @@
 # Network API module
 
-This types-only Go module defines the versioned `network.stacks.org` API used
+This types-only Go module defines the versioned `network.stacks.org` and
+`bitcoin.stacks.org` APIs used
 by the network operator and future typed consumers. It contains Kubernetes API
 types, scheme registration, and generated deepcopy implementations; it must
 not depend on controller-runtime, client-go, or controller implementations.

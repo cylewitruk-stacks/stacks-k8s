@@ -1,6 +1,7 @@
 # API reference
 
-The API group is `network.stacks.org/v1alpha1`. All resources are namespaced.
+Topology uses `network.stacks.org/v1alpha1`; Bitcoin production uses
+`bitcoin.stacks.org/v1alpha1`. All resources are namespaced.
 
 ## StacksNetwork
 
@@ -14,6 +15,12 @@ The API group is `network.stacks.org/v1alpha1`. All resources are namespaced.
 | `spec.bitcoinNodes` | Bitcoin Core actors and their directed peer graph. |
 | `spec.stacksNodes` | Miner, follower, and signer-node actors. |
 | `spec.signers` | Signer actors bound one-to-one to signer-node actors. |
+| `spec.bitcoinBlockProduction` | Optional one-target fixed-cadence policy; see the [production contract](bitcoin-production.md#desired-policy-and-ownership). |
+
+`status.targetDeclarations` publishes current compiled actor intent before
+workload readiness; it is not admitted inventory. `status.bitcoinProductionUID`
+pins the optional production ledger across policy changes and deletion.
+See [admission and credentials](bitcoin-production.md#admission-and-credentials).
 
 Logical actor names must be unique across all three lists. Every Stacks node
 references a declared Bitcoin node. Every signer references one distinct

@@ -50,31 +50,75 @@ func Validate(reader io.Reader) error {
 			return fmt.Errorf("chart must not render cluster-scoped RBAC kind %s", object.GetKind())
 		}
 	}
-	if len(roles) != 1 || len(bindings) != 1 {
-		return fmt.Errorf("expected one Role and RoleBinding, got %d and %d", len(roles), len(bindings))
+	if (len(roles) != 1 && len(roles) != 2) || len(bindings) != len(roles) {
+		return fmt.Errorf("expected topology and optional production Role/RoleBinding pairs, got %d and %d", len(roles), len(bindings))
 	}
-	actual, expected := normalize(roles[0].Rules), normalize(expectedRules())
-	if !reflect.DeepEqual(actual, expected) {
-		return fmt.Errorf("controller Role differs from exact permission contract\nactual: %#v\nexpected: %#v", actual, expected)
+	seen := map[string]bool{}
+	serviceAccounts := map[string]bool{}
+	for _, role := range roles {
+		component := role.Labels["app.kubernetes.io/component"]
+		if seen[component] {
+			return fmt.Errorf("duplicate controller Role")
+		}
+		seen[component] = true
+		rules := expectedRules()
+		if component == "bitcoin-production" {
+			rules = productionRules()
+		} else if component != "" {
+			return fmt.Errorf("unknown controller Role")
+		}
+		actual, expected := normalize(role.Rules), normalize(rules)
+		if !reflect.DeepEqual(actual, expected) {
+			return fmt.Errorf("controller Role differs from exact permission contract\nactual: %#v\nexpected: %#v", actual, expected)
+		}
+		var binding rbacv1.RoleBinding
+		count := 0
+		for _, candidate := range bindings {
+			if candidate.RoleRef.Name == role.Name {
+				binding = candidate
+				count++
+			}
+		}
+		if count != 1 || binding.Namespace != role.Namespace || binding.RoleRef.APIGroup != rbacv1.GroupName || binding.RoleRef.Kind != "Role" {
+			return fmt.Errorf("RoleBinding does not reference the rendered Role")
+		}
+		if len(binding.Subjects) != 1 || binding.Subjects[0].Kind != "ServiceAccount" || binding.Subjects[0].Name == "" || binding.Subjects[0].Namespace != binding.Namespace {
+			return fmt.Errorf("RoleBinding must select one same-namespace ServiceAccount")
+		}
+		if serviceAccounts[binding.Subjects[0].Name] {
+			return fmt.Errorf("topology and production must use separate ServiceAccounts")
+		}
+		serviceAccounts[binding.Subjects[0].Name] = true
 	}
-	binding := bindings[0]
-	if binding.RoleRef.APIGroup != rbacv1.GroupName || binding.RoleRef.Kind != "Role" || binding.RoleRef.Name != roles[0].Name {
-		return fmt.Errorf("RoleBinding does not reference the rendered Role")
-	}
-	if len(binding.Subjects) != 1 || binding.Subjects[0].Kind != "ServiceAccount" || binding.Subjects[0].Name == "" || binding.Subjects[0].Namespace != binding.Namespace {
-		return fmt.Errorf("RoleBinding must select one same-namespace ServiceAccount")
+	if !seen[""] {
+		return fmt.Errorf("topology Role is missing")
 	}
 	return nil
 }
 
 func expectedRules() []rbacv1.PolicyRule {
 	return []rbacv1.PolicyRule{
+		{APIGroups: []string{"bitcoin.stacks.org"}, Resources: []string{"bitcoinblockproductions"}, Verbs: []string{"get", "list", "watch", "create", "patch"}},
 		{APIGroups: []string{"network.stacks.org"}, Resources: []string{"stacksnetworks"}, Verbs: []string{"get", "list", "watch"}},
 		{APIGroups: []string{"network.stacks.org"}, Resources: []string{"bitcoinnodes", "stacksnodes", "stackssigners"}, Verbs: []string{"get", "list", "watch", "create", "update", "patch", "delete"}},
 		{APIGroups: []string{"network.stacks.org"}, Resources: []string{"stacksnetworks/status", "bitcoinnodes/status", "stacksnodes/status", "stackssigners/status"}, Verbs: []string{"get", "update", "patch"}},
 		{APIGroups: []string{""}, Resources: []string{"configmaps", "services"}, Verbs: []string{"get", "list", "watch", "create", "update", "patch", "delete"}},
 		{APIGroups: []string{""}, Resources: []string{"pods"}, Verbs: []string{"get", "list", "watch"}},
 		{APIGroups: []string{"apps"}, Resources: []string{"statefulsets"}, Verbs: []string{"get", "list", "watch", "create", "update", "patch", "delete"}},
+		{APIGroups: []string{"coordination.k8s.io"}, Resources: []string{"leases"}, Verbs: []string{"get", "list", "watch", "create", "update", "patch", "delete"}},
+	}
+}
+
+// productionRules excludes workload mutation and Secret API access.
+func productionRules() []rbacv1.PolicyRule {
+	return []rbacv1.PolicyRule{
+		{APIGroups: []string{"bitcoin.stacks.org"}, Resources: []string{"bitcoinblockproductions"}, Verbs: []string{"get", "list", "watch", "patch"}},
+		{APIGroups: []string{"bitcoin.stacks.org"}, Resources: []string{"bitcoinblockproductions/status"}, Verbs: []string{"get", "patch"}},
+		{APIGroups: []string{"network.stacks.org"}, Resources: []string{"stacksnetworks"}, Verbs: []string{"get", "list", "watch"}},
+		{APIGroups: []string{"network.stacks.org"}, Resources: []string{"bitcoinnodes"}, Verbs: []string{"get"}},
+		{APIGroups: []string{""}, Resources: []string{"pods"}, Verbs: []string{"get"}},
+		{APIGroups: []string{""}, Resources: []string{"configmaps"}, Verbs: []string{"get", "list"}},
+		{APIGroups: []string{"apps"}, Resources: []string{"statefulsets"}, Verbs: []string{"get"}},
 		{APIGroups: []string{"coordination.k8s.io"}, Resources: []string{"leases"}, Verbs: []string{"get", "list", "watch", "create", "update", "patch", "delete"}},
 	}
 }

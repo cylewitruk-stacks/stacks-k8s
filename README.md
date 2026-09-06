@@ -24,7 +24,10 @@ The [steady-state design](docs/design/steady-state-operation.md) makes
 `StacksNetwork` the declaration of baseline topology and operation: neutral
 Bitcoin nodes, a separate block-production policy with timing and target
 selection, Stacks miner configuration, and ongoing transaction demand.
-These capabilities are design direction, not implemented functionality.
+The first [Bitcoin baseline profile](docs/network-operator/bitcoin-production.md)
+is implemented: one target, fixed cadence, pause, and durable dispatch accounting.
+Multi-target policies, Bitcoin role migration, and Stacks transaction demand
+remain design work.
 
 The repository currently provides:
 
@@ -66,9 +69,10 @@ helm upgrade --install stacks-network-operator \
 kubectl --namespace stacks-regtest apply --filename examples/network/minimal.yaml
 ```
 
-Bitcoin block production currently requires an external mining client; the
-network operator does not generate blocks. Stacks RPC readiness may depend on
-advancing the Bitcoin chain. See the
+The topology-only quick start requires an external Bitcoin mining client.
+For automatic blocks, use the separately enabled
+[Bitcoin production guide](docs/network-operator/bitcoin-production.md).
+Stacks RPC readiness may depend on advancing the Bitcoin chain. See the
 [readiness guidance](docs/network-operator/operations.md#readiness).
 
 Install the observer after the network operator when trusted topology identity

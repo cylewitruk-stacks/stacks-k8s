@@ -1,6 +1,9 @@
 package v1alpha1
 
-import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+import (
+	bitcoinv1alpha1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/bitcoin/v1alpha1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
 
 // StacksNetwork declares the desired topology of one Stacks regtest network.
 // +kubebuilder:object:root=true
@@ -25,6 +28,8 @@ type StacksNetworkList struct {
 }
 
 // StacksNetworkSpec defines an aggregate regtest topology.
+// +kubebuilder:validation:XValidation:rule="!has(oldSelf.bitcoinBlockProduction) || !has(self.bitcoinBlockProduction) || self.bitcoinBlockProduction.target == oldSelf.bitcoinBlockProduction.target",message="changing the initial production target requires a fresh environment"
+// +kubebuilder:validation:XValidation:rule="!has(self.bitcoinBlockProduction) || self.bitcoinNodes.exists(node, node.name == self.bitcoinBlockProduction.target)",message="production must reference a declared Bitcoin node"
 // +kubebuilder:validation:XValidation:rule="!has(self.stacksNodes) || self.stacksNodes.all(node, self.bitcoinNodes.exists(bitcoin, bitcoin.name == node.bitcoinNodeRef))",message="every Stacks node must reference a declared Bitcoin node"
 // +kubebuilder:validation:XValidation:rule="!has(self.signers) || (has(self.stacksNodes) && self.signers.all(signer, self.stacksNodes.exists(node, node.name == signer.nodeRef && node.role == 'signer-node')))",message="every signer must reference a declared signer-node"
 // +kubebuilder:validation:XValidation:rule="!has(self.signers) || self.signers.all(signer, self.signers.exists_one(other, other.nodeRef == signer.nodeRef))",message="a signer-node may be referenced by only one signer"
@@ -32,9 +37,11 @@ type StacksNetworkList struct {
 // +kubebuilder:validation:XValidation:rule="!has(self.stacksNodes) || self.stacksNodes.all(node, !has(node.serviceRefs) || node.serviceRefs.all(ref, self.bitcoinNodes.exists(actor, actor.name == ref) || (has(self.stacksNodes) && self.stacksNodes.exists(actor, actor.name == ref)) || (has(self.signers) && self.signers.exists(actor, actor.name == ref))))",message="Stacks node serviceRefs must name declared actors"
 // +kubebuilder:validation:XValidation:rule="!has(self.signers) || self.signers.all(signer, !has(signer.serviceRefs) || signer.serviceRefs.all(ref, self.bitcoinNodes.exists(actor, actor.name == ref) || (has(self.stacksNodes) && self.stacksNodes.exists(actor, actor.name == ref)) || (has(self.signers) && self.signers.exists(actor, actor.name == ref))))",message="signer serviceRefs must name declared actors"
 type StacksNetworkSpec struct {
-	Suspended bool            `json:"suspended,omitempty"`
-	Defaults  NetworkDefaults `json:"defaults"`
-	Genesis   *GenesisSpec    `json:"genesis,omitempty"`
+	// BitcoinBlockProduction optionally maintains fixed-cadence regtest blocks.
+	BitcoinBlockProduction *bitcoinv1alpha1.ProductionPolicy `json:"bitcoinBlockProduction,omitempty"`
+	Suspended              bool                              `json:"suspended,omitempty"`
+	Defaults               NetworkDefaults                   `json:"defaults"`
+	Genesis                *GenesisSpec                      `json:"genesis,omitempty"`
 	// +kubebuilder:validation:MinItems=1
 	// +kubebuilder:validation:MaxItems=32
 	// +listType=map
@@ -132,13 +139,17 @@ type StacksSignerTemplate struct {
 
 // StacksNetworkStatus aggregates leaf readiness and admitted identity.
 type StacksNetworkStatus struct {
-	ObservedGeneration  int64        `json:"observedGeneration,omitempty"`
-	Phase               string       `json:"phase,omitempty"`
-	DesiredActors       int32        `json:"desiredActors,omitempty"`
-	ReadyActors         int32        `json:"readyActors,omitempty"`
-	InventoryReady      bool         `json:"inventoryReady,omitempty"`
-	InventoryDigest     string       `json:"inventoryDigest,omitempty"`
-	InventoryObservedAt *metav1.Time `json:"inventoryObservedAt,omitempty"`
+	// BitcoinProductionUID permanently pins the production ledger for this network incarnation.
+	BitcoinProductionUID string `json:"bitcoinProductionUID,omitempty"`
+	// TargetDeclarations reports compiled intent without requiring global readiness.
+	TargetDeclarations  *TargetDeclarations `json:"targetDeclarations,omitempty"`
+	ObservedGeneration  int64               `json:"observedGeneration,omitempty"`
+	Phase               string              `json:"phase,omitempty"`
+	DesiredActors       int32               `json:"desiredActors,omitempty"`
+	ReadyActors         int32               `json:"readyActors,omitempty"`
+	InventoryReady      bool                `json:"inventoryReady,omitempty"`
+	InventoryDigest     string              `json:"inventoryDigest,omitempty"`
+	InventoryObservedAt *metav1.Time        `json:"inventoryObservedAt,omitempty"`
 	// +kubebuilder:validation:MaxItems=232
 	Actors []ActorIdentity `json:"actors,omitempty"`
 	// +kubebuilder:validation:MaxItems=232

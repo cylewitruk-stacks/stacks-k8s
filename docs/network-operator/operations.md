@@ -21,11 +21,11 @@ kubectl get statefulset,pod -l network.stacks.org/actor=ACTOR
 kubectl logs NETWORK-ACTOR-0 --all-containers
 ```
 
-A generated Stacks node may need the external regtest client to advance its
-Bitcoin chain before its RPC listener becomes ready. Block production is
-deliberately outside this topology operator. Until the separately designed
-`BitcoinBlockProduction` controller is implemented, an external client must
-advance Bitcoin.
+A generated Stacks node may need Bitcoin advancement before its RPC listener
+becomes ready. Use an external client or the separately enabled
+[Bitcoin baseline controller](bitcoin-production.md). The topology reconciler
+does not issue mining RPCs. Bitcoin advancement alone does not supply Stacks
+bootstrap inputs or transaction demand.
 
 ## Safe changes
 

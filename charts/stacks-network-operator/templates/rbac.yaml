@@ -6,6 +6,9 @@ metadata:
   labels:
     {{- include "stacks-network-operator.labels" . | nindent 4 }}
 rules:
+  - apiGroups: ["bitcoin.stacks.org"]
+    resources: ["bitcoinblockproductions"]
+    verbs: ["get", "list", "watch", "create", "patch"]
   - apiGroups: ["network.stacks.org"]
     resources: ["stacksnetworks"]
     verbs: ["get", "list", "watch"]

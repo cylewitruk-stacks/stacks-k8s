@@ -11,6 +11,10 @@ controller:
   leaderElection: true
   logLevel: info
 
+bitcoinProduction:
+  enabled: false
+  credentialsSecret: stacks-bitcoin-production-rpc
+
 serviceAccount:
   create: true
   name: ""

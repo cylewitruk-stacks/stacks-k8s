@@ -9,8 +9,8 @@ fmt:
 	@test -z "$$(gofmt -l .)" || { echo "Go sources are not formatted" >&2; exit 1; }
 
 generate:
-	$(CONTROLLER_GEN) object paths=./v1alpha1/...
-	$(CONTROLLER_GEN) crd paths=./v1alpha1/... output:crd:artifacts:config=$(CRD_DIR)
+	$(CONTROLLER_GEN) object paths=./v1alpha1/... paths=./bitcoin/v1alpha1/...
+	$(CONTROLLER_GEN) crd paths=./v1alpha1/... paths=./bitcoin/v1alpha1/... output:crd:artifacts:config=$(CRD_DIR)
 
 test:
 	$(GO_ISOLATED) test ./...
@@ -22,4 +22,4 @@ vet:
 	$(GO_ISOLATED) vet ./...
 
 verify: fmt generate vet test test-race
-	@git diff --exit-code -- v1alpha1/zz_generated.deepcopy.go $(CRD_DIR)/network.stacks.org_*.yaml
+	@git diff --exit-code -- v1alpha1/zz_generated.deepcopy.go bitcoin/v1alpha1/zz_generated.deepcopy.go $(CRD_DIR)/*.yaml

@@ -4,14 +4,17 @@
 
 **Direction agreed; replacement implementation contracts open.** This document
 applies the [steady-state operation amendment](steady-state-operation.md).
-No Bitcoin production or bounded-action CRD is implemented. The reviewed
+A constrained [Bitcoin baseline profile](../network-operator/bitcoin-production.md)
+is implemented in `bitcoin.stacks.org/v1alpha1`; bounded-action CRDs remain
+unimplemented. The reviewed
 [M0.4 baseline](history/bitcoin-lifecycle-m0.4.md) and its three fixtures are
 superseded design history, not implementation authority.
 
 Target API groups remain `bitcoin.stacks.org/v1alpha1` for
 `BitcoinBlockProduction` and `actions.stacks.org/v1alpha1` for
 `BitcoinBlockGeneration` and `BitcoinReorganization`. Exact replacement
-production fields, schemas, admission, and recovery contracts are not frozen.
+multi-target production fields and bounded-action admission/recovery contracts
+remain open. The linked baseline profile owns the initial served fields.
 
 Only bounded actions follow the [atomic action contract](actions.md).
 Production maintains mutable baseline behavior without a timeout or terminal

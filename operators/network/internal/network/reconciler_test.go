@@ -16,6 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	bitcoinv1alpha1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/bitcoin/v1alpha1"
 	networkv1alpha1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha1"
 )
 
@@ -77,6 +78,9 @@ func TestReconcileCreatesCorrectsAndPrunesLeafResources(t *testing.T) {
 	}
 	if current.Status.Phase != "Progressing" || current.Status.InventoryReady || current.Status.InventoryDigest != "" {
 		t.Fatalf("retirement status = %#v", current.Status)
+	}
+	if current.Status.TargetDeclarations == nil || len(current.Status.TargetDeclarations.Actors) != 2 {
+		t.Fatalf("retirement lost the current two-actor catalog: %#v", current.Status.TargetDeclarations)
 	}
 }
 
@@ -401,6 +405,9 @@ func testScheme(t *testing.T) *runtime.Scheme {
 	t.Helper()
 	scheme := runtime.NewScheme()
 	if err := networkv1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	if err := bitcoinv1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatal(err)
 	}
 	return scheme

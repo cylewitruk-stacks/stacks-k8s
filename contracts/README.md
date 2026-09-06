@@ -19,6 +19,10 @@ extraction from kubelet container-status values.
 [`actor-ports-v1.json`](actor-ports-v1.json) pins each actor kind's Service
 interface across workload rendering and independent observation.
 
+[`target-declarations-v1.json`](target-declarations-v1.json) pins the implemented
+generation-bound compiled catalog using the existing complete leaf-spec
+vectors. It is independent of the complete admitted-inventory wire contract.
+
 [`action-lifecycle-v1.json`](action-lifecycle-v1.json) is a reviewed,
 unimplemented design baseline. It pins the normative
 custom-action API group, lifecycle phases, common conditions, correlation
@@ -46,5 +50,7 @@ Their exact historical payload checks continue against the
 [archived document](../docs/design/history/bitcoin-lifecycle-m0.4.md); passing
 them does not validate the reopened execution or API design. Do not implement
 their global-readiness, shared-credential, single-target, or deadline-recovery
-rules as current authority. Replacement schemas need a fresh reviewed contract
-and explicit migration before APIs or controllers are enabled.
+rules as current authority. The [initial implemented production profile](../docs/network-operator/bitcoin-production.md)
+and generated `bitcoin.stacks.org/v1alpha1` schema define the constrained
+baseline slice. They do not implement the historical action/reservation APIs;
+broader replacement schemas still need review and explicit migration.

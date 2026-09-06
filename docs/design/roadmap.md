@@ -57,11 +57,17 @@ on an unresolved gate.
 M0 resolves designs and specifies acceptance. M1–M8 implement and validate
 those resolutions; design completion does not claim runtime qualification.
 The [initial delivery scope](m0-remediation-plan.md#initial-delivery-scope)
-permits R1 declaration publication as the next repository foundation while
-other M0 work remains open. Freeze its additive schema and test its publication
-semantics before landing it; publication alone enables no RPC execution.
+permits the implemented R1 foundation and constrained Bitcoin baseline while
+other M0 work remains open. Publication alone enables no RPC execution; the
+[initial baseline profile](../network-operator/bitcoin-production.md) defines
+the separately enabled mutation controller and its limitations.
 
 ## M1: baseline and bounded Bitcoin production
+
+**Current delivery:** single-target fixed-cadence baseline, pause/cadence
+updates, static RPC separation, and durable response-loss exclusion are
+implemented. Bitcoin role migration, multi-target policy, and finite generation
+remain pending; M1 is not complete.
 
 **Outcome:** an ordinary regtest network advances Bitcoin through a declared
 baseline, with finite generation separately available.
