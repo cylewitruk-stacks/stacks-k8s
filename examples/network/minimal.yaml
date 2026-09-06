@@ -22,7 +22,6 @@ spec:
           memory: 2Gi
   bitcoinNodes:
     - name: bitcoin
-      role: miner
       config:
         generated:
           profile: bitcoin-regtest/v1

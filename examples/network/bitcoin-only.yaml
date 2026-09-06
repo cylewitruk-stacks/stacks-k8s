@@ -12,14 +12,12 @@ spec:
         enabled: true
         size: 1Gi
   bitcoinNodes:
-    - name: miner
-      role: miner
+    - name: bitcoin-a
       config:
         generated:
           profile: bitcoin-regtest/v1
-    - name: follower
-      role: follower
-      peerRefs: [miner]
+    - name: bitcoin-b
+      peerRefs: [bitcoin-a]
       config:
         generated:
           profile: bitcoin-regtest/v1

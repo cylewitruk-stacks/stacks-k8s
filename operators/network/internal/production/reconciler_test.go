@@ -73,7 +73,7 @@ func fixture(t *testing.T) *productionFixture {
 	f.parent.Spec.BitcoinBlockProduction = policy.DeepCopy()
 	f.parent.Status.BitcoinProductionUID = "production-uid"
 	f.policy = &bitcoinv1alpha1.BitcoinBlockProduction{ObjectMeta: metav1.ObjectMeta{Name: "network", Namespace: "test", UID: "production-uid", Generation: 1, Finalizers: []string{ledgerFinalizer}}, Spec: bitcoinv1alpha1.BitcoinBlockProductionSpec{NetworkName: "network", NetworkUID: "network-uid", Policy: policy}}
-	f.actor = &networkv1alpha1.BitcoinNode{ObjectMeta: metav1.ObjectMeta{Name: "network-bitcoin", Namespace: "test", UID: "bitcoin-uid", Generation: 1}, Spec: networkv1alpha1.BitcoinNodeSpec{NetworkRef: networkv1alpha1.LocalObjectReference{Name: "network"}, ActorName: "bitcoin", Role: "miner", Image: "bitcoin:test", Config: networkv1alpha1.ConfigSource{ConfigMapRef: &networkv1alpha1.ConfigObjectRef{Name: "config", Key: "bitcoin.conf", ExpectedDigest: digest}}}}
+	f.actor = &networkv1alpha1.BitcoinNode{ObjectMeta: metav1.ObjectMeta{Name: "network-bitcoin", Namespace: "test", UID: "bitcoin-uid", Generation: 1}, Spec: networkv1alpha1.BitcoinNodeSpec{NetworkRef: networkv1alpha1.LocalObjectReference{Name: "network"}, ActorName: "bitcoin", Image: "bitcoin:test", Config: networkv1alpha1.ConfigSource{ConfigMapRef: &networkv1alpha1.ConfigObjectRef{Name: "config", Key: "bitcoin.conf", ExpectedDigest: digest}}}}
 	specDigest, err := workload.SpecDigest(f.actor.Spec)
 	if err != nil {
 		t.Fatal(err)

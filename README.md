@@ -28,7 +28,7 @@ The first [Bitcoin baseline profile](docs/network-operator/bitcoin-production.md
 is implemented: one target, fixed cadence, pause, and durable dispatch accounting.
 The initial [Stacks transfer profile](docs/network-operator/stacks-production.md)
 adds isolated, fixed-interval STX demand and external bootstrap/signing helpers.
-Multi-target policies and Bitcoin role migration remain design work.
+Multi-target production policies remain design work.
 
 The repository currently provides:
 

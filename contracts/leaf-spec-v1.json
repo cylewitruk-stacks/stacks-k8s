@@ -4,11 +4,10 @@
     {
       "id": "bitcoin-minimal",
       "kind": "BitcoinNode",
-      "digest": "sha256:5c0a57d0ec34881a4bd8405780636a785ee6aac574e2fd606c323b2db4bdeba3",
+      "digest": "sha256:eeafe4ade386ffeb075b6aec0fc9fd7be9b56f8a873da40b175ec9a71de48df0",
       "spec": {
         "networkRef": {"name": "network"},
         "actorName": "bitcoin",
-        "role": "miner",
         "image": "bitcoin:test",
         "config": {"generated": {"profile": "bitcoin-regtest/v1"}},
         "rpcPort": 18443,
@@ -48,11 +47,10 @@
     {
       "id": "bitcoin-empty-resources",
       "kind": "BitcoinNode",
-      "digest": "sha256:1f9558ce838374453a1bd8e10b5af0e671f387fefc75798246406d6732625fba",
+      "digest": "sha256:d5cb959e9b92663a945afeba3cbd862511933bc442b612f8cbe23c4103673db9",
       "spec": {
         "networkRef": {"name": "network"},
         "actorName": "bitcoin-empty-resources",
-        "role": "follower",
         "image": "bitcoin:test",
         "config": {"generated": {"profile": "bitcoin-regtest/v1"}},
         "rpcPort": 18443,
@@ -63,16 +61,15 @@
     {
       "id": "bitcoin-rich",
       "kind": "BitcoinNode",
-      "digest": "sha256:e5be6528e60340257fb5c9d91608b3f8e66cb0521f0456cd81e0f2cb194b86bc",
+      "digest": "sha256:2a964f6ddbd7d706c17e7aebd2ad9a08dbb3f2bd5944e7d017003bcd28e9eda9",
       "spec": {
         "networkRef": {"name": "rich-network"},
-        "actorName": "bitcoin-follower",
-        "role": "follower",
+        "actorName": "bitcoin-b",
         "image": "registry.example/bitcoin@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "imagePullPolicy": "Always",
         "imagePullSecrets": [{"name": "registry-credentials"}],
         "config": {"inline": {"data": "regtest=1\nserver=1\n", "key": "bitcoin.conf", "mountPath": "/etc/bitcoin/bitcoin.conf"}},
-        "peerRefs": ["rich-network-bitcoin-miner"],
+        "peerRefs": ["rich-network-bitcoin-a"],
         "rpcPort": 19443,
         "p2pPort": 19444,
         "dependencyImage": "busybox:1.36.1",
@@ -90,7 +87,7 @@
     {
       "id": "stacks-node-rich",
       "kind": "StacksNode",
-      "digest": "sha256:e680134c90ea1be717860f9ad27fe2c238777ccc2b5670f0153db682cb3872a3",
+      "digest": "sha256:e89eca3af34f5b2f5819e11114f5ccdbe6adad253c899e296a56778ae12b0eaa",
       "spec": {
         "networkRef": {"name": "rich-network"},
         "actorName": "stacks-follower",
@@ -98,9 +95,9 @@
         "image": "registry.example/stacks-node@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         "imagePullPolicy": "IfNotPresent",
         "imagePullSecrets": [{"name": "registry-credentials"}],
-        "bitcoinNodeRef": {"name": "rich-network-bitcoin-follower"},
+        "bitcoinNodeRef": {"name": "rich-network-bitcoin-b"},
         "config": {"generated": {"profile": "nakamoto-regtest-node/v1", "seed": "rich-seed", "bootstrapPeers": ["02aa@example:20444"], "eventDispatcher": "queued"}},
-        "serviceMap": {"bitcoin-follower": "rich-network-bitcoin-follower", "stacks-miner": "rich-network-stacks-miner"},
+        "serviceMap": {"bitcoin-b": "rich-network-bitcoin-b", "stacks-miner": "rich-network-stacks-miner"},
         "bootstrapPeers": ["02aa@example:20444"],
         "genesis": {"balances": [{"address": "ST000000000000000000002AMW42H", "amount": 1000000}]},
         "dependencyImage": "busybox:1.36.1",

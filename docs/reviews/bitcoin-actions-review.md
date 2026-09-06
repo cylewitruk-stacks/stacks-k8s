@@ -118,5 +118,5 @@ A successful reorganization has no scheduled rollback: marker cleanup leaves
 the higher-work replacement as best chain. Completion is local mechanism evidence,
 not peer/Stacks convergence. Unknown RPC work remains excluded; fresh-environment
 recovery and administrative abandonment are unchanged. No runtime fencing,
-multi-target selection, Bitcoin role migration, three-node/cross-platform
+multi-target selection, three-node/cross-platform
 qualification, or full M0/M6 closure is claimed.

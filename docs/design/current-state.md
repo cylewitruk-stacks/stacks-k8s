@@ -11,7 +11,7 @@ The `network.stacks.org/v1alpha1` API provides:
 | Resource | Implemented behavior | Important limit |
 | --- | --- | --- |
 | `StacksNetwork` | Compiles topology and optional Bitcoin/STX production; publishes declarations and admitted actor identity. | Does not bootstrap protocol state or issue mining RPCs itself. |
-| `BitcoinNode` | Runs one Bitcoin Core miner or follower with explicit peers. | The miner role does not invoke mining RPCs. |
+| `BitcoinNode` | Runs one Bitcoin Core instance with explicit peers. | Block generation requires production or action resources. |
 | `StacksNode` | Runs one miner, follower, or signer-node bound to one Bitcoin node. | Protocol readiness is not independently established. |
 | `StacksSigner` | Runs one signer bound to one signer-node with index and weight. | Registration and reward-cycle participation are external. |
 
@@ -29,8 +29,8 @@ external Bitcoin funding, PoX-4 enrollment and renewal helpers. A local normal
 Stacks image is qualified; this is not a general image compatibility claim.
 
 The aggregate accepts 1–32 Bitcoin nodes and up to 100 Stacks nodes and 100
-signers. Multiple Bitcoin and Stacks miners are therefore structurally
-possible. Current live qualification does not establish every multi-miner or
+signers. Multiple Bitcoin nodes and Stacks miners are structurally possible.
+Current live qualification does not establish every multi-miner or
 mixed-version combination.
 
 Actor templates support per-actor images, raw or generated configuration,
@@ -38,10 +38,9 @@ container command overrides, storage, CPU and memory, placement, and
 suspension. Aggregate-owned leaf resources must be changed through the parent.
 Standalone leaf resources remain an advanced API.
 
-The [steady-state operation direction](steady-state-operation.md) extends the
-aggregate to owned baseline capabilities and makes future Bitcoin nodes
-mining-neutral. Existing role enums and complete-inventory APIs are unchanged;
-the initial production slice does not implement that migration.
+The [steady-state operation design](steady-state-operation.md) separates actor
+topology from baseline capabilities. Bitcoin nodes describe Core instances;
+production resources select where and when blocks are generated.
 
 The operator supports persistent volumes and retention, but refuses unsafe
 in-place changes to immutable StatefulSet service identity, selectors, and

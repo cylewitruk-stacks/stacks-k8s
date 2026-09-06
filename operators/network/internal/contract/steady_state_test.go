@@ -8,25 +8,6 @@ import (
 	"testing"
 )
 
-// assertSupersededBitcoinMetadata validates authority before checking the historical payload.
-func assertSupersededBitcoinMetadata(t *testing.T, fields map[string]json.RawMessage) {
-	t.Helper()
-	for key, want := range map[string]string{
-		"designStatus":   "superseded-design-baseline",
-		"sourceDocument": "docs/design/history/bitcoin-lifecycle-m0.4.md",
-		"supersededBy":   "contracts/steady-state-operation-v1.json",
-	} {
-		var got string
-		if err := json.Unmarshal(fields[key], &got); err != nil {
-			t.Fatalf("historical Bitcoin metadata %s: %v", key, err)
-		}
-		if got != want {
-			t.Fatalf("historical Bitcoin metadata %s = %q, want %q", key, got, want)
-		}
-		delete(fields, key)
-	}
-}
-
 // TestSteadyStateDesignAuthority keeps reopened designs distinct from implementation contracts.
 func TestSteadyStateDesignAuthority(t *testing.T) {
 	root := repositoryRoot(t)
@@ -82,24 +63,6 @@ func TestSteadyStateDesignAuthority(t *testing.T) {
 				t.Errorf("current design %s.%s = %s, want %s", name, key, got, want)
 			}
 		}
-	}
-	var historical []string
-	if err := json.Unmarshal(fields["supersededFixtures"], &historical); err != nil {
-		t.Fatal(err)
-	}
-	assertStringsEqual(t, "superseded fixtures", historical, []string{
-		"bitcoin-actions-v1.json", "bitcoin-block-production-v1.json", "bitcoin-reservation-v1.json",
-	})
-	for _, name := range historical {
-		content, err := os.ReadFile(filepath.Join(root, "contracts", name))
-		if err != nil {
-			t.Fatal(err)
-		}
-		var previous map[string]json.RawMessage
-		if err := json.Unmarshal(content, &previous); err != nil {
-			t.Fatal(err)
-		}
-		assertSupersededBitcoinMetadata(t, previous)
 	}
 	var gates []string
 	if err := json.Unmarshal(fields["openReviewGates"], &gates); err != nil {

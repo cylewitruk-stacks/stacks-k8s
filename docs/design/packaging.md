@@ -50,9 +50,6 @@ apis/
 contracts/
   action-lifecycle-v1.json
   actor-ports-v1.json
-  bitcoin-actions-v1.json
-  bitcoin-block-production-v1.json
-  bitcoin-reservation-v1.json
   image-id-v1.json
   inventory-v1.json
   leaf-spec-v1.json

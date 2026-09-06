@@ -42,8 +42,7 @@ hidden in code.
 
 M0.1 shared APIs and M0.2 common action vocabulary remain complete. M0.3 and
 M0.4 are reopened for independent target admission, multi-target production,
-RPC quiescence, authority separation, and cleanup. Historical Bitcoin fixtures
-are marked superseded; passing their tests does not authorize implementation.
+RPC quiescence, authority separation, and cleanup.
 
 M0.5 covers native faults, M0.6 bootstrap/transaction demand and actor
 capabilities, M0.7 observability/access, and M0.8 packaging/release alignment.
@@ -67,8 +66,8 @@ the separately enabled mutation controller and its limitations.
 **Current delivery:** single-target fixed-cadence baseline, pause/cadence
 updates, static RPC separation, and durable response-loss exclusion are
 implemented. The optional [finite generation profile](../network-operator/bitcoin-generation.md)
-adds bounded immutable actions sharing the same executor. Bitcoin role migration
-and multi-target policy remain pending; M1 is not complete.
+adds bounded immutable actions sharing the same executor. Multi-target policy remains
+pending; M1 is not complete.
 
 **Outcome:** an ordinary regtest network advances Bitcoin through a declared
 baseline, with finite generation separately available.
@@ -79,8 +78,8 @@ and basic authority separation suffice initially. Per-process credential
 rotation, cryptographic process attestation, reset/readmission, and an
 execution-aware adapter are deferred capabilities, not M1 prerequisites.
 
-- Implement neutral Bitcoin-node API migration and required credential/config
-  profiles, including leaf/inventory identity vectors and rollout semantics.
+- Qualify credential/config profiles, leaf/inventory identity vectors, and
+  rollout semantics across supported Bitcoin targets.
 - Compile owned baseline policy from `StacksNetwork`. Standalone capability
   support is conditional on reviewed ownership, overlap, and authorization.
 - Implement the reviewed timing/target-selection profile without silently
@@ -93,7 +92,8 @@ execution-aware adapter are deferred capabilities, not M1 prerequisites.
   journal; do not infer acknowledged effects from observed chain tips.
 
 **Done:** baseline production runs with actions/observation/Chaos disabled,
-resumes after a successful [graceful controller drain](target-admission-and-rpc-execution.md#deadlines-and-receipt-collection),
+resumes after a successful [graceful controller
+drain](target-admission-and-rpc-execution.md#deadlines-and-receipt-collection),
 and progresses on a valid target while
 unrelated actors are unready. Ambiguous server work cannot authorize unsafe
 takeover, retry, or resumption.

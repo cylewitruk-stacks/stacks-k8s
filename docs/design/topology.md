@@ -35,17 +35,15 @@ Role variation using the same binary and workload contract remains a field,
 not another CRD. New leaf kinds require a different executable, configuration
 contract, ports, dependencies, readiness, or persistent-state lifecycle.
 
-`StacksNode` retains miner role/configuration. The target `BitcoinNode` API is
-mining-neutral: `BitcoinBlockProduction` references nodes and owns production
-policy. Current Bitcoin miner/follower role fields remain implemented until an
-explicit API migration; they are not the future production-policy boundary.
+`StacksNode` retains miner role/configuration. `BitcoinNode` describes the Core
+instance and peer graph. `BitcoinBlockProduction` references nodes and owns
+block-production policy.
 
 ## Illustrative topology example
 
-This example combines existing role fields with proposed topology extensions;
-it is not an installable steady-state API example. The future Bitcoin shape
-removes mining roles and declares a separate owned production policy. Exact
-baseline fields, defaults, and transaction producer names remain open.
+This example combines implemented actor declarations with proposed topology
+extensions. Exact multi-target production policy and workload defaults remain
+open; use the examples directory for installable profiles.
 
 ```yaml
 apiVersion: network.stacks.org/v1alpha1
@@ -64,20 +62,17 @@ spec:
         retainOnDelete: true
   bitcoinNodes:
     - name: bitcoin-a
-      role: miner
       config:
         generated:
           profile: bitcoin-regtest/v1
       peerRefs: [bitcoin-b, bitcoin-c]
     - name: bitcoin-b
-      role: miner
       image: registry.example/bitcoin@sha256:4444444444444444444444444444444444444444444444444444444444444444
       config:
         generated:
           profile: bitcoin-regtest/v1
       peerRefs: [bitcoin-a, bitcoin-c]
     - name: bitcoin-c
-      role: follower
       config:
         generated:
           profile: bitcoin-regtest/v1

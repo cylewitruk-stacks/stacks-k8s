@@ -79,7 +79,7 @@ The next interval starts after receipt collection. Missed ticks do not queue
 catch-up work. Policy updates affect future dispatches; an already authorized
 request may finish after a pause, suspension, or update.
 
-The legacy `BitcoinNode` miner/follower field remains compatible and does not
+`BitcoinNode` configuration does not
 cause mining. Multi-target selection, jitter, weighted policies, standalone
 production and in-place recovery are not implemented. Optional
 [finite generation](bitcoin-generation.md) shares the same executor.
@@ -200,7 +200,8 @@ GOWORK=off go -C operators/network test -tags=live,bitcoinproduction -count=1 -v
 
 The suite temporarily changes the dedicated network and returns it to a
 Bitcoin-only five-second policy. The separate
-[`bitcoin-receipt-delay` fixture](../../operators/network/internal/integration/testdata/bitcoin-receipt-delay/)
+[`bitcoin-receipt-delay`
+fixture](../../operators/network/internal/integration/testdata/bitcoin-receipt-delay/)
 wraps real Core 31.1 and delays the first generation receipt for 15 seconds.
 Build it with its directory as Docker context and provision a fresh namespace
 using the helper's `--image` flag. Set the generated parent's policy to

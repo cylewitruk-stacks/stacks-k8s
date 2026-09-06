@@ -79,7 +79,7 @@ func TestLiveMutableTopologyLifecycle(t *testing.T) {
 
 	updateNetwork(t, ctx, kubeClient, key, func(value *networkv1alpha1.StacksNetwork) {
 		value.Spec.BitcoinNodes = append(value.Spec.BitcoinNodes, networkv1alpha1.BitcoinNodeTemplate{
-			Name: "bitcoin-follower", Role: networkv1alpha1.BitcoinNodeFollower,
+			Name:     "bitcoin-peer",
 			PeerRefs: []string{"bitcoin"}, Config: liveGeneratedBitcoin(), Container: listener(18443),
 		})
 	})
@@ -126,7 +126,7 @@ func TestLiveMutableTopologyLifecycle(t *testing.T) {
 		value.Spec.BitcoinNodes = value.Spec.BitcoinNodes[:1]
 	})
 	finalNetwork := waitNetworkReady(t, ctx, kubeClient, key, 2)
-	waitAbsent(t, ctx, kubeClient, types.NamespacedName{Namespace: namespace, Name: name + "-bitcoin-follower"}, &networkv1alpha1.BitcoinNode{})
+	waitAbsent(t, ctx, kubeClient, types.NamespacedName{Namespace: namespace, Name: name + "-bitcoin-peer"}, &networkv1alpha1.BitcoinNode{})
 	result.FinalDigest = finalNetwork.Status.InventoryDigest
 	result.Assertions["actor-removed"] = true
 
@@ -161,7 +161,7 @@ func liveNetwork(name, namespace, image string) *networkv1alpha1.StacksNetwork {
 			Workload: networkv1alpha1.WorkloadSpec{Storage: &networkv1alpha1.StorageSpec{Enabled: &storage}},
 		},
 		BitcoinNodes: []networkv1alpha1.BitcoinNodeTemplate{{
-			Name: "bitcoin", Role: networkv1alpha1.BitcoinNodeMiner, Config: liveGeneratedBitcoin(), Container: listener(18443),
+			Name: "bitcoin", Config: liveGeneratedBitcoin(), Container: listener(18443),
 		}},
 		StacksNodes: []networkv1alpha1.StacksNodeTemplate{{
 			Name: "follower", Role: networkv1alpha1.StacksNodeFollower, BitcoinNodeRef: "bitcoin",

@@ -18,9 +18,6 @@ spec:
     - jsonPath: .spec.actorName
       name: Actor
       type: string
-    - jsonPath: .spec.role
-      name: Role
-      type: string
     - jsonPath: .status.phase
       name: Phase
       type: string
@@ -218,13 +215,6 @@ spec:
                   type: string
                 type: array
                 x-kubernetes-list-type: set
-              role:
-                description: BitcoinNodeRole describes a Bitcoin Core node's topology
-                  role.
-                enum:
-                - miner
-                - follower
-                type: string
               rpcPort:
                 format: int32
                 maximum: 65535
@@ -321,7 +311,6 @@ spec:
             - image
             - networkRef
             - p2pPort
-            - role
             - rpcPort
             type: object
           status:
@@ -405,6 +394,8 @@ spec:
                   resourceName:
                     type: string
                   role:
+                    description: Role is the Stacks node or signer role; Bitcoin nodes
+                      have none.
                     type: string
                   runtimeImageID:
                     type: string
@@ -425,7 +416,6 @@ spec:
                 - podUID
                 - requestedImage
                 - resourceName
-                - role
                 - runtimeImageID
                 - serviceName
                 - specDigest

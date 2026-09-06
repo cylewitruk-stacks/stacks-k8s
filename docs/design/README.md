@@ -43,7 +43,7 @@ must distinguish implemented behavior from proposed or unavailable features.
 | --- | --- |
 | Implemented | Present in the committed operators. |
 | Contract complete | Reviewed design and contract baseline is complete; runtime and served API availability require separate implementation. |
-| Reopened | A prior reviewed baseline needs amendment before implementation; its fixtures may be retained as superseded history. |
+| Reopened | A reviewed capability contract needs further design before broader implementation. |
 | Direction | Agreed architectural constraint. |
 | Recommended | Proposed implementation awaiting API review. |
 | Open | Decision required before implementation. |
@@ -85,9 +85,8 @@ must distinguish implemented behavior from proposed or unavailable features.
 | [Roadmap](roadmap.md) | Ordered implementation phases and definitions of done. |
 | [M0 remediation plan](m0-remediation-plan.md) | Authoritative ordered M0.x delivery ledger, stable remediation requirements, and acceptance checklist. |
 
-The M0 remediation plan takes precedence where the original design documents
-still describe a superseded proposal. Those documents will be reconciled as
-part of M0 rather than silently treated as implemented decisions.
+The M0 remediation plan owns delivery status. Reviewed designs and implemented
+capabilities are distinguished throughout this index.
 
 ## Recommended component map
 
@@ -129,7 +128,7 @@ when permissions, dependencies, or failure domains materially differ.
 | `NetworkObservation` | Implemented compatibility API | [Current state](current-state.md) |
 | `ActionSafetyPolicy` | Recommended for custom actions | [Atomic actions](actions.md) |
 | `BitcoinBlockProduction` | Initial fixed-cadence single-target profile implemented; broader M0.4 contract reopened | [Bitcoin baseline](../network-operator/bitcoin-production.md) |
-| `BitcoinBlockGeneration`, `BitcoinReorganization` | M0.3/M0.4 execution, admission, credentials, and cleanup reopened; not implemented | [Bitcoin lifecycle](bitcoin-lifecycle.md) |
+| `BitcoinBlockGeneration`, `BitcoinReorganization` | Initial bounded profiles implemented; broader execution and recovery contracts open | [Bitcoin lifecycle](bitcoin-lifecycle.md) |
 | `StacksTransactionProduction` | Direction; working name and schema open | [Steady-state operation](steady-state-operation.md) |
 | `SignerBehavior`, `MinerBehavior` | Recommended | [Protocol actions](protocol-actions.md) |
 | `ApplicationClockOffset` | Conditional on a qualified native `TimeChaos` gap | [Protocol actions](protocol-actions.md) |

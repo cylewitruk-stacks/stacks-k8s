@@ -127,7 +127,8 @@ spec:
                       description: ResourceName is the admitted leaf resource name.
                       type: string
                     role:
-                      description: Role is the actor's declared role.
+                      description: Role is the Stacks node or signer role; Bitcoin
+                        nodes have none.
                       type: string
                     runtimeImageID:
                       description: RuntimeImageID is the immutable image digest reported
@@ -156,7 +157,6 @@ spec:
                   - podUID
                   - requestedImage
                   - resourceName
-                  - role
                   - runtimeImageID
                   - serviceName
                   - specDigest

@@ -68,8 +68,8 @@ type ObservedActorIdentity struct {
 	Kind string `json:"kind"`
 	// Name is the logical actor name.
 	Name string `json:"name"`
-	// Role is the actor's declared role.
-	Role string `json:"role"`
+	// Role is the Stacks node or signer role; Bitcoin nodes have none.
+	Role string `json:"role,omitempty"`
 	// ResourceName is the admitted leaf resource name.
 	ResourceName string `json:"resourceName"`
 	// ServiceName is the actor's stable Service identity.

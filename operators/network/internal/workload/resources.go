@@ -76,9 +76,11 @@ func render(descriptor Descriptor, schemeOwner func(metav1.Object) error) (resou
 	environment = append(environment,
 		corev1.EnvVar{Name: "STACKS_NETWORK", Value: descriptor.Network},
 		corev1.EnvVar{Name: "STACKS_ACTOR", Value: descriptor.Actor},
-		corev1.EnvVar{Name: "STACKS_ACTOR_ROLE", Value: descriptor.Role},
 		corev1.EnvVar{Name: "POD_IP", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{APIVersion: "v1", FieldPath: "status.podIP"}}},
 	)
+	if descriptor.Role != "" {
+		environment = append(environment, corev1.EnvVar{Name: "STACKS_ACTOR_ROLE", Value: descriptor.Role})
+	}
 	if descriptor.Container != nil {
 		if descriptor.Container.Command != nil {
 			actorCommand = append([]string(nil), descriptor.Container.Command...)

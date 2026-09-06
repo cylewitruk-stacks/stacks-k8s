@@ -379,7 +379,7 @@ func setReadyStatuses(t *testing.T, ctx context.Context, c client.Client) {
 	t.Helper()
 	bitcoin := &networkv1alpha1.BitcoinNode{}
 	mustGet(t, ctx, c, "testnet-bitcoin", bitcoin)
-	bitcoin.Status = readyStatus(bitcoin.Generation, "BitcoinNode", "bitcoin", "miner", bitcoin.Name)
+	bitcoin.Status = readyStatus(bitcoin.Generation, "BitcoinNode", "bitcoin", "", bitcoin.Name)
 	if err := c.Status().Update(ctx, bitcoin); err != nil {
 		t.Fatal(err)
 	}

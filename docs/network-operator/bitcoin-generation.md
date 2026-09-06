@@ -43,8 +43,7 @@ silently choosing from a partial list; baseline work remains available.
 
 ## Admission and shared execution
 
-This profile amends R1–R3 for finite generation; it does not implement the
-superseded Lease-based Bitcoin fixtures. Admission joins the current parent
+This profile defines R1–R3 for finite generation. Admission joins the current parent
 declaration catalog to the exact ready leaf, immutable approved configuration,
 StatefulSet revision, Pod, and container identity using uncached reads. Global
 inventory readiness is unnecessary. Specs cannot choose endpoints or credentials.
@@ -131,6 +130,6 @@ environment is abandoned. Disabling the flag retains existing reservations as
 Do not reuse an active environment across incompatible executor versions.
 
 The separately enabled [reorganization profile](bitcoin-reorganization.md)
-uses the same exclusion boundary. Multi-target scheduling, jitter, Bitcoin role
-migration, credential epochs, server fencing, and in-place recovery remain separate work.
+uses the same exclusion boundary. Multi-target scheduling, jitter, credential epochs,
+server fencing, and in-place recovery remain separate work.
 See the [qualification and review ledger](../reviews/bitcoin-actions-review.md).

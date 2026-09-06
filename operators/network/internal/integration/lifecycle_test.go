@@ -273,7 +273,7 @@ func TestManagerLifecycleAndAPIServerValidation(t *testing.T) {
 		t.Fatalf("dangling service reference error = %v", err)
 	}
 	invalidActorName := &networkv1alpha1.BitcoinNode{ObjectMeta: metav1.ObjectMeta{Name: "invalid-actor-name", Namespace: testNamespace}, Spec: networkv1alpha1.BitcoinNodeSpec{
-		NetworkRef: networkv1alpha1.LocalObjectReference{Name: "invalid"}, ActorName: "Bad/Value", Role: networkv1alpha1.BitcoinNodeFollower,
+		NetworkRef: networkv1alpha1.LocalObjectReference{Name: "invalid"}, ActorName: "Bad/Value",
 		Image: "bitcoin:test", Config: networkv1alpha1.ConfigSource{Generated: &networkv1alpha1.GeneratedConfig{Profile: "bitcoin-regtest/v1"}}, RPCPort: 18443, P2PPort: 18444,
 	}}
 	if err := direct.Create(ctx, invalidActorName); !apierrors.IsInvalid(err) {
@@ -430,7 +430,7 @@ func assertServiceReplacementRoundTrip(t *testing.T, ctx context.Context, kubeCl
 	must(t, kubeClient.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}))
 	storageDisabled := false
 	actor := &networkv1alpha1.BitcoinNode{ObjectMeta: metav1.ObjectMeta{Name: "replacement-bitcoin", Namespace: namespace}, Spec: networkv1alpha1.BitcoinNodeSpec{
-		NetworkRef: networkv1alpha1.LocalObjectReference{Name: "replacement-network"}, ActorName: "bitcoin", Role: networkv1alpha1.BitcoinNodeFollower,
+		NetworkRef: networkv1alpha1.LocalObjectReference{Name: "replacement-network"}, ActorName: "bitcoin",
 		Image: "bitcoin:test", Config: networkv1alpha1.ConfigSource{Generated: &networkv1alpha1.GeneratedConfig{Profile: "bitcoin-regtest/v1"}},
 		RPCPort: 18443, P2PPort: 18444, DependencyImage: "busybox:test",
 		Workload: networkv1alpha1.WorkloadSpec{Storage: &networkv1alpha1.StorageSpec{Enabled: &storageDisabled}},
@@ -553,12 +553,17 @@ func assertLeafDigestRoundTrips(t *testing.T, ctx context.Context, kubeClient cl
 		readBack := &unstructured.Unstructured{}
 		readBack.SetGroupVersionKind(networkv1alpha1.GroupVersion.WithKind(vector.Kind))
 		must(t, kubeClient.Get(ctx, client.ObjectKeyFromObject(object), readBack))
-		spec, found, err := unstructured.NestedMap(readBack.Object, "spec")
+		readSpec, found, err := unstructured.NestedMap(readBack.Object, "spec")
 		must(t, err)
 		if !found {
 			t.Fatalf("%s API-server spec is absent", vector.ID)
 		}
-		actual, err := canonical.Digest(spec)
+		if vector.Kind == "BitcoinNode" {
+			if _, exists := readSpec["role"]; exists {
+				t.Fatal("Bitcoin API-server spec includes a role")
+			}
+		}
+		actual, err := canonical.Digest(readSpec)
 		must(t, err)
 		if actual != expected {
 			t.Fatalf("%s API-server spec digest = %s, want %s", vector.ID, actual, expected)
@@ -574,7 +579,7 @@ func bitcoinNetwork(name string) *networkv1alpha1.StacksNetwork {
 			Workload: networkv1alpha1.WorkloadSpec{Storage: &networkv1alpha1.StorageSpec{Enabled: pointer(false)}},
 		},
 		BitcoinNodes: []networkv1alpha1.BitcoinNodeTemplate{{
-			Name: "bitcoin", Role: networkv1alpha1.BitcoinNodeMiner,
+			Name:   "bitcoin",
 			Config: networkv1alpha1.ConfigSource{Generated: &networkv1alpha1.GeneratedConfig{Profile: "bitcoin-regtest/v1"}},
 		}},
 	}}

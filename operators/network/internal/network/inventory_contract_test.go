@@ -75,28 +75,32 @@ func assertActorContractFields(t *testing.T, payload json.RawMessage, actorType 
 	if err := json.Unmarshal(payload, &raw); err != nil {
 		t.Fatal(err)
 	}
-	if len(raw.Actors) != 1 {
-		t.Fatalf("compatibility actor count = %d, want 1", len(raw.Actors))
+	if len(raw.Actors) != 2 {
+		t.Fatalf("compatibility actor count = %d, want 2", len(raw.Actors))
 	}
-	want := make([]string, 0, actorType.NumField())
-	for index := 0; index < actorType.NumField(); index++ {
-		tag := actorType.Field(index).Tag.Get("json")
-		name, options, _ := strings.Cut(tag, ",")
-		if name == "" || name == "-" {
-			t.Fatalf("field %s has no inventory JSON name", actorType.Field(index).Name)
+	for _, actor := range raw.Actors {
+		want := make([]string, 0, actorType.NumField())
+		for index := 0; index < actorType.NumField(); index++ {
+			tag := actorType.Field(index).Tag.Get("json")
+			name, options, _ := strings.Cut(tag, ",")
+			if name == "" || name == "-" {
+				t.Fatalf("field %s has no inventory JSON name", actorType.Field(index).Name)
+			}
+			if strings.Contains(options, "omitempty") != (name == "role") {
+				t.Fatalf("unexpected optionality for inventory field %s", name)
+			}
+			if name != "role" || string(actor["kind"]) != `"BitcoinNode"` {
+				want = append(want, name)
+			}
 		}
-		if strings.Contains(options, "omitempty") {
-			t.Fatalf("inventory field %s must not be optional", name)
+		got := make([]string, 0, len(actor))
+		for name := range actor {
+			got = append(got, name)
 		}
-		want = append(want, name)
-	}
-	got := make([]string, 0, len(raw.Actors[0]))
-	for name := range raw.Actors[0] {
-		got = append(got, name)
-	}
-	sort.Strings(got)
-	sort.Strings(want)
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("inventory actor fields = %v, want %v", got, want)
+		sort.Strings(got)
+		sort.Strings(want)
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("inventory actor fields = %v, want %v", got, want)
+		}
 	}
 }

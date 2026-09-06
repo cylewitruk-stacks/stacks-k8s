@@ -9,7 +9,7 @@ uncommitted. Review all staged and unstaged changes and newly added files.
 A normal disposable Stacks network now has explicit external bootstrap and
 ongoing tiny STX demand. The aggregate compiles an owned transfer policy; a
 separate worker signs and submits one transaction at a time. The external
-helper funds the Bitcoin miner, registers a PoX-4 signer and observes productive
+helper funds the Stacks miner's Bitcoin address, registers a PoX-4 signer and observes productive
 operation. A separate bounded helper extends the signer lock for longer runs.
 No agent, action controller, Chaos Mesh or observability operator is required.
 

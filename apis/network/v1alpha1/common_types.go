@@ -136,9 +136,10 @@ type PortSpec struct {
 
 // ActorIdentity is the immutable admitted identity of one running actor.
 type ActorIdentity struct {
-	Kind               string `json:"kind"`
-	Name               string `json:"name"`
-	Role               string `json:"role"`
+	Kind string `json:"kind"`
+	Name string `json:"name"`
+	// Role is the Stacks node or signer role; Bitcoin nodes have none.
+	Role               string `json:"role,omitempty"`
 	ResourceName       string `json:"resourceName"`
 	ServiceName        string `json:"serviceName"`
 	StatefulSetName    string `json:"statefulSetName"`

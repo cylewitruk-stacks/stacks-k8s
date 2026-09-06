@@ -7,8 +7,8 @@ review of the architecture design package. It is the authoritative M0 plan.
 Where it conflicts with another document under `docs/design/`, this plan takes
 precedence until that document is revised. This plan adopts the
 [steady-state operation amendment](steady-state-operation.md), including its
-R1–R8 review ledger. M0.3 and M0.4 are reopened; prior Bitcoin fixture payloads
-are explicitly superseded history, not implementation authority.
+R1–R8 review ledger. M0.3 and M0.4 are reopened; the capability profiles define their
+implemented scope.
 
 M0 changes design, packaging, and repository foundations. It does not add an
 in-cluster experiment planner. The external agent remains the sole
@@ -78,7 +78,7 @@ qualification, with relevant cases exercised in earlier vertical slices.
 | M0.1 | Complete | 1 | Extract the shared network API module and make generation, module verification, and container builds work across the module boundary. |
 | M0.2 | Complete | 2–5, 8, 13 | Freeze the typed, immutable, bounded atomic-action contract and structural anti-orchestration checks. |
 | M0.3 | Reopened | 9–12; R1–R4 | Amend finite actions, independent target admission, credentials, quiescence, attribution, and cleanup. |
-| M0.4 | Reopened | Extends 9–11; R1–R3 | Define Bitcoin role migration, aggregate-owned multi-target production, policy updates, bounded status, and safe action coexistence. |
+| M0.4 | Reopened | Extends 9–11; R1–R3 | Define aggregate-owned multi-target production, policy updates, bounded status, and safe action coexistence. |
 | M0.5 | Planned | 6–8, 16 | Define and qualify native admission, protocol/control traffic separation, limits, and the initial platform matrix. |
 | M0.6 | In progress | 14, 15, 26 | Define bootstrap, steady transaction demand, baseline/override composition, and instrumented-actor support. |
 | M0.7 | Planned | 12, 17–23 | Reconcile RPC observation authority, Kubernetes-authenticated agent access, passive observation, journal, query, export, and evidence contracts. |
@@ -91,8 +91,7 @@ owner remains the primary slice listed above.
 ### Reopened Bitcoin scope
 
 M0.3 and M0.4 retain the separation between mutable desired production and
-bounded immutable actions. Replace their superseded single-target/global-Ready
-contracts with the direction in [Bitcoin lifecycle](bitcoin-lifecycle.md):
+bounded immutable actions. Use the direction in [Bitcoin lifecycle](bitcoin-lifecycle.md):
 
 - neutral Bitcoin nodes; production policy separately declares timing and
   selection among referenced nodes;
@@ -377,27 +376,17 @@ coordination layer over otherwise independent actions.
 
 **Slices:** M0.3 and M0.4. **Status:** Reopened.
 
-The earlier finite-action baseline in `ba9a666` and M0.4 production amendment
-remain available in [historical Bitcoin lifecycle](history/bitcoin-lifecycle-m0.4.md).
-Their three Bitcoin fixtures are marked superseded. Current direction is
+The current contract is
 [Bitcoin lifecycle](bitcoin-lifecycle.md) and
 [Steady-state operation](steady-state-operation.md).
 
 Keep `BitcoinBlockGeneration` finite and immutable, with immediate, fixed,
 uniform-random, or explicit-sequence cadence. Keep `BitcoinBlockProduction`
 mutable and outside the action lifecycle. Its revised policy separates timing
-from selection among neutral `BitcoinNode` references. Freeze list bounds,
+from selection among neutral `BitcoinNode` references. Freeze multi-target list bounds,
 destination mapping, cadence bounds, weights, update/pause behavior, conflict
-rules, and status before implementation; do not infer those fields from the
-historical fixture.
-
-### Bitcoin role migration
-
-M0.4 owns this part of Requirement 9. Define removal of Bitcoin miner/follower
-roles, compatibility for existing declarations, defaults, generated profiles,
-and compiler/leaf/inventory fixture changes. M1 implements and validates the
-reviewed migration before enabling the revised production API. The role
-contract remains unchanged until then.
+rules, and status before implementation; keep the production policy separate from node
+configuration.
 
 ## Requirement 10: Attributable Bitcoin generation
 

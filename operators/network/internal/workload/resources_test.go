@@ -37,6 +37,13 @@ func TestRenderedPodLabelsMapToEveryLeafController(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			if test.kind == "BitcoinNode" {
+				for _, env := range result.statefulSet.Spec.Template.Spec.Containers[0].Env {
+					if env.Name == "STACKS_ACTOR_ROLE" {
+						t.Fatal("Bitcoin workload received a role")
+					}
+				}
+			}
 			pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Namespace: "test", Labels: result.statefulSet.Spec.Template.Labels}}
 			requests := leaf.PodRequest(test.label)(context.Background(), pod)
 			if len(requests) != 1 || requests[0].Name != test.owner.GetName() || requests[0].Namespace != test.owner.GetNamespace() {

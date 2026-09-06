@@ -108,7 +108,7 @@ func TestCompileLimitsServiceBindingsToDirectAndExplicitDependencies(t *testing.
 	}
 
 	value.Spec.BitcoinNodes = append(value.Spec.BitcoinNodes, networkv1alpha1.BitcoinNodeTemplate{
-		Name: "unrelated", Role: networkv1alpha1.BitcoinNodeFollower,
+		Name:   "unrelated",
 		Config: networkv1alpha1.ConfigSource{Generated: &networkv1alpha1.GeneratedConfig{Profile: "bitcoin-regtest/v1"}},
 	})
 	expanded, err := Compile(value)
@@ -141,7 +141,7 @@ func TestCompileRejectsNetworkNameThatCannotNameWorkloads(t *testing.T) {
 func fixture() *networkv1alpha1.StacksNetwork {
 	return &networkv1alpha1.StacksNetwork{ObjectMeta: metav1.ObjectMeta{Name: "testnet", Namespace: "test", UID: "network-uid"}, Spec: networkv1alpha1.StacksNetworkSpec{
 		Defaults:     networkv1alpha1.NetworkDefaults{BitcoinImage: "bitcoin:test", StacksNodeImage: "stacks:test", StacksSignerImage: "signer:test", ImagePullPolicy: corev1.PullIfNotPresent},
-		BitcoinNodes: []networkv1alpha1.BitcoinNodeTemplate{{Name: "bitcoin", Role: networkv1alpha1.BitcoinNodeMiner, Config: networkv1alpha1.ConfigSource{Generated: &networkv1alpha1.GeneratedConfig{Profile: "bitcoin-regtest/v1"}}}},
+		BitcoinNodes: []networkv1alpha1.BitcoinNodeTemplate{{Name: "bitcoin", Config: networkv1alpha1.ConfigSource{Generated: &networkv1alpha1.GeneratedConfig{Profile: "bitcoin-regtest/v1"}}}},
 		StacksNodes: []networkv1alpha1.StacksNodeTemplate{
 			{Name: "follower", Role: networkv1alpha1.StacksNodeFollower, BitcoinNodeRef: "bitcoin", Config: generatedStacks()},
 			{Name: "signer-node-1", Role: networkv1alpha1.StacksNodeSigner, BitcoinNodeRef: "bitcoin", Config: generatedStacks()},
@@ -161,8 +161,8 @@ func TestCompileLongNamesRemainDistinct(t *testing.T) {
 	value := fixture()
 	value.Name = strings.Repeat("n", 50)
 	value.Spec.BitcoinNodes = append(value.Spec.BitcoinNodes,
-		networkv1alpha1.BitcoinNodeTemplate{Name: "bitcoin-long-one", Role: networkv1alpha1.BitcoinNodeFollower, Config: networkv1alpha1.ConfigSource{Generated: &networkv1alpha1.GeneratedConfig{Profile: "bitcoin-regtest/v1"}}},
-		networkv1alpha1.BitcoinNodeTemplate{Name: "bitcoin-long-two", Role: networkv1alpha1.BitcoinNodeFollower, Config: networkv1alpha1.ConfigSource{Generated: &networkv1alpha1.GeneratedConfig{Profile: "bitcoin-regtest/v1"}}})
+		networkv1alpha1.BitcoinNodeTemplate{Name: "bitcoin-long-one", Config: networkv1alpha1.ConfigSource{Generated: &networkv1alpha1.GeneratedConfig{Profile: "bitcoin-regtest/v1"}}},
+		networkv1alpha1.BitcoinNodeTemplate{Name: "bitcoin-long-two", Config: networkv1alpha1.ConfigSource{Generated: &networkv1alpha1.GeneratedConfig{Profile: "bitcoin-regtest/v1"}}})
 	desired, err := Compile(value)
 	if err != nil {
 		t.Fatal(err)

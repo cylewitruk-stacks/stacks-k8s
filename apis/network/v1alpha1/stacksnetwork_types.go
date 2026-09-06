@@ -81,11 +81,9 @@ type GenesisBalance struct {
 type BitcoinNodeTemplate struct {
 	// +kubebuilder:validation:MaxLength=63
 	// +kubebuilder:validation:Pattern=`^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$`
-	Name string `json:"name"`
-	// +kubebuilder:validation:Enum=miner;follower
-	Role   BitcoinNodeRole `json:"role"`
-	Image  string          `json:"image,omitempty"`
-	Config ConfigSource    `json:"config"`
+	Name   string       `json:"name"`
+	Image  string       `json:"image,omitempty"`
+	Config ConfigSource `json:"config"`
 	// +kubebuilder:validation:MaxItems=31
 	// +listType=set
 	PeerRefs  []string           `json:"peerRefs,omitempty"`

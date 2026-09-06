@@ -21,13 +21,16 @@ import (
 
 func TestDescribeGeneratedBitcoinProfile(t *testing.T) {
 	actor := &networkv1alpha1.BitcoinNode{ObjectMeta: metav1.ObjectMeta{Name: "network-bitcoin"}, Spec: networkv1alpha1.BitcoinNodeSpec{
-		NetworkRef: networkv1alpha1.LocalObjectReference{Name: "network"}, ActorName: "bitcoin", Role: networkv1alpha1.BitcoinNodeMiner,
+		NetworkRef: networkv1alpha1.LocalObjectReference{Name: "network"}, ActorName: "bitcoin",
 		Image: "bitcoin:test", Config: networkv1alpha1.ConfigSource{Generated: &networkv1alpha1.GeneratedConfig{Profile: "bitcoin-regtest/v1"}},
 		PeerRefs: []string{"network-peer"}, RPCPort: 18443, P2PPort: 18444,
 	}}
 	descriptor, err := describe(actor)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if descriptor.Role != "" {
+		t.Fatal("Bitcoin descriptor declares a role")
 	}
 	if descriptor.Config.Inline == nil || !strings.Contains(descriptor.Config.Inline.Data, "regtest=1") {
 		t.Fatal("generated Bitcoin profile was not materialized")
@@ -46,7 +49,7 @@ func TestReconcilePreservesStatusOnTransientConflict(t *testing.T) {
 		t.Fatal(err)
 	}
 	actor := &networkv1alpha1.BitcoinNode{ObjectMeta: metav1.ObjectMeta{Name: "network-bitcoin", Namespace: "test", UID: "actor-uid", Generation: 1}, Spec: networkv1alpha1.BitcoinNodeSpec{
-		NetworkRef: networkv1alpha1.LocalObjectReference{Name: "network"}, ActorName: "bitcoin", Role: networkv1alpha1.BitcoinNodeMiner,
+		NetworkRef: networkv1alpha1.LocalObjectReference{Name: "network"}, ActorName: "bitcoin",
 		Image: "bitcoin:test", Config: networkv1alpha1.ConfigSource{Generated: &networkv1alpha1.GeneratedConfig{Profile: "bitcoin-regtest/v1"}}, RPCPort: 18443, P2PPort: 18444,
 	}, Status: networkv1alpha1.ActorStatus{ObservedGeneration: 1, Phase: "Ready", Ready: true, Identity: &networkv1alpha1.ActorIdentity{PodUID: "admitted-pod"}}}
 	want := actor.Status.DeepCopy()

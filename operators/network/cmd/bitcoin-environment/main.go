@@ -55,7 +55,7 @@ func main() {
 		&corev1.Secret{TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "Secret"}, ObjectMeta: metav1.ObjectMeta{Name: "stacks-bitcoin-observer-rpc", Namespace: *namespace}, Immutable: &immutable, Type: corev1.SecretTypeOpaque, Data: map[string][]byte{"credentials.json": readCredentials}},
 		&networkv1alpha1.StacksNetwork{TypeMeta: metav1.TypeMeta{APIVersion: networkv1alpha1.GroupVersion.String(), Kind: "StacksNetwork"}, ObjectMeta: metav1.ObjectMeta{Name: *name, Namespace: *namespace}, Spec: networkv1alpha1.StacksNetworkSpec{
 			Defaults:               networkv1alpha1.NetworkDefaults{BitcoinImage: *image},
-			BitcoinNodes:           []networkv1alpha1.BitcoinNodeTemplate{{Name: "bitcoin", Role: networkv1alpha1.BitcoinNodeRole("miner"), Config: networkv1alpha1.ConfigSource{ConfigMapRef: &networkv1alpha1.ConfigObjectRef{Name: "stacks-bitcoin-rpc-config", Key: "bitcoin.conf", ExpectedDigest: digest}}}},
+			BitcoinNodes:           []networkv1alpha1.BitcoinNodeTemplate{{Name: "bitcoin", Config: networkv1alpha1.ConfigSource{ConfigMapRef: &networkv1alpha1.ConfigObjectRef{Name: "stacks-bitcoin-rpc-config", Key: "bitcoin.conf", ExpectedDigest: digest}}}},
 			BitcoinBlockProduction: &bitcoinv1alpha1.ProductionPolicy{Target: "bitcoin", IntervalSeconds: int32(*interval), Address: *address},
 		}},
 	}

@@ -32,10 +32,5 @@
     "R6",
     "R7",
     "R8"
-  ],
-  "supersededFixtures": [
-    "bitcoin-actions-v1.json",
-    "bitcoin-block-production-v1.json",
-    "bitcoin-reservation-v1.json"
   ]
 }

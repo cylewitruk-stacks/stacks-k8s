@@ -79,7 +79,7 @@ func describe(actor *networkv1alpha1.BitcoinNode) (workload.Descriptor, error) {
 	for _, peer := range actor.Spec.PeerRefs {
 		args = append(args, "-addnode="+peer+fmt.Sprintf(":%d", portOr(actor.Spec.P2PPort, 18444)))
 	}
-	return workload.Descriptor{Owner: actor, Kind: "BitcoinNode", Network: actor.Spec.NetworkRef.Name, Actor: actor.Spec.ActorName, Role: string(actor.Spec.Role),
+	return workload.Descriptor{Owner: actor, Kind: "BitcoinNode", Network: actor.Spec.NetworkRef.Name, Actor: actor.Spec.ActorName,
 		Image: actor.Spec.Image, ImagePullPolicy: actor.Spec.ImagePullPolicy, ImagePullSecrets: actor.Spec.ImagePullSecrets,
 		Config: config, SpecDigest: specDigest, Command: []string{"bitcoind"}, Args: args,
 		Ports:           ports.Bitcoin(portOr(actor.Spec.RPCPort, 18443), portOr(actor.Spec.P2PPort, 18444)),

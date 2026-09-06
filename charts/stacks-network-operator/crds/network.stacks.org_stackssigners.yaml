@@ -414,6 +414,8 @@ spec:
                   resourceName:
                     type: string
                   role:
+                    description: Role is the Stacks node or signer role; Bitcoin nodes
+                      have none.
                     type: string
                   runtimeImageID:
                     type: string
@@ -434,7 +436,6 @@ spec:
                 - podUID
                 - requestedImage
                 - resourceName
-                - role
                 - runtimeImageID
                 - serviceName
                 - specDigest

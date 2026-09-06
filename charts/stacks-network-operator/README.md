@@ -87,9 +87,8 @@ kubectl --namespace stacks-regtest get \
   stacksnetworks,bitcoinnodes,stacksnodes,stackssigners
 ```
 
-The minimal example creates one Bitcoin miner and one Stacks follower. Mining
-Bitcoin blocks is intentionally outside the topology operator; another client
-or a fault-testing system can drive the regtest RPC endpoint.
+The minimal example creates one Bitcoin node and one Stacks follower. Bitcoin
+block generation is configured separately through production or action resources.
 
 ## API model
 

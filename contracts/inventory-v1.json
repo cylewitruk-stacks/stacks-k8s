@@ -1,8 +1,23 @@
 {
   "contract": "network.stacks.org/inventory/v1",
-  "digest": "sha256:028894a143c37ab6977c9abb4db72dfb7fc6401450df3f22514761cc01392ec6",
+  "digest": "sha256:f198e17ea5db76179c3f1bbac946c3d14e34d8192cd0521ef047dc051b157144",
   "payload": {
     "actors": [
+      {
+        "configDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "controllerRevision": "testnet-bitcoin-7b9f84c684",
+        "kind": "BitcoinNode",
+        "name": "bitcoin",
+        "podName": "testnet-bitcoin-0",
+        "podUID": "22222222-2222-4222-8222-222222222222",
+        "requestedImage": "bitcoin/bitcoin@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "resourceName": "testnet-bitcoin",
+        "runtimeImageID": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "serviceName": "testnet-bitcoin",
+        "specDigest": "sha256:eeafe4ade386ffeb075b6aec0fc9fd7be9b56f8a873da40b175ec9a71de48df0",
+        "statefulSetName": "testnet-bitcoin",
+        "statefulSetUID": "11111111-1111-4111-8111-111111111111"
+      },
       {
         "configDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
         "controllerRevision": "testnet-follower-7b9f84c684",

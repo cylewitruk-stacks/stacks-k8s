@@ -218,13 +218,6 @@ spec:
                       maxItems: 31
                       type: array
                       x-kubernetes-list-type: set
-                    role:
-                      description: BitcoinNodeRole describes a Bitcoin Core node's
-                        topology role.
-                      enum:
-                      - miner
-                      - follower
-                      type: string
                     suspended:
                       type: boolean
                     workload:
@@ -313,7 +306,6 @@ spec:
                   required:
                   - config
                   - name
-                  - role
                   type: object
                 maxItems: 32
                 minItems: 1
@@ -1088,6 +1080,8 @@ spec:
                     resourceName:
                       type: string
                     role:
+                      description: Role is the Stacks node or signer role; Bitcoin
+                        nodes have none.
                       type: string
                     runtimeImageID:
                       type: string
@@ -1108,7 +1102,6 @@ spec:
                   - podUID
                   - requestedImage
                   - resourceName
-                  - role
                   - runtimeImageID
                   - serviceName
                   - specDigest

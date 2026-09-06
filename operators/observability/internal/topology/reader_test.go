@@ -326,3 +326,75 @@ func mustTestInventoryDigest() string {
 }
 
 func pointer[T any](value T) *T { return &value }
+
+func TestObserveBitcoinIdentityWithoutRole(t *testing.T) {
+	objects := testObjects()
+	network := objects[0].(*unstructured.Unstructured)
+	statefulSet := objects[1].(*appsv1.StatefulSet)
+	pod := objects[2].(*corev1.Pod)
+	service := objects[3].(*corev1.Service)
+	leaf := objects[4].(*unstructured.Unstructured)
+	spec, _, err := unstructured.NestedMap(leaf.Object, "spec")
+	if err != nil {
+		t.Fatal(err)
+	}
+	delete(spec, "role")
+	spec["image"] = "bitcoin:test"
+	spec["config"] = map[string]any{"generated": map[string]any{"profile": "bitcoin-regtest/v1"}}
+	specDigest, err := canonical.Digest(spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	actor := testActor(specDigest)
+	actor.Kind = "BitcoinNode"
+	actor.Role = ""
+	actor.RequestedImage = "bitcoin:test"
+	identity := actorMap(actor)
+	delete(identity, "role")
+	digest, err := inventoryDigest(2, []observationv1alpha1.ObservedActorIdentity{actor})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := unstructured.SetNestedSlice(network.Object, []any{identity}, "status", "actors"); err != nil {
+		t.Fatal(err)
+	}
+	if err := unstructured.SetNestedField(network.Object, digest, "status", "inventoryDigest"); err != nil {
+		t.Fatal(err)
+	}
+	leaf.SetKind("BitcoinNode")
+	leaf.Object["spec"] = spec
+	if err := unstructured.SetNestedMap(leaf.Object, identity, "status", "identity"); err != nil {
+		t.Fatal(err)
+	}
+	for _, o := range objects[1:] {
+		labels := o.GetLabels()
+		labels[actorKindLabel] = "bitcoin"
+		o.SetLabels(labels)
+	}
+	statefulSet.OwnerReferences[0].Kind = "BitcoinNode"
+	service.OwnerReferences[0].Kind = "BitcoinNode"
+	statefulSet.Spec.Template.Spec.Containers[0].Image = "bitcoin:test"
+	pod.Spec.Containers[0].Image = "bitcoin:test"
+	service.Spec.Ports = service.Spec.Ports[:2]
+	service.Spec.Ports[0].Port = 18443
+	service.Spec.Ports[1].Port = 18444
+	snapshot, err := testReaderWith(t, objects...).Observe(context.Background(), testNamespace, testNetwork, digest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(snapshot.Actors) != 1 || snapshot.Actors[0].Kind != "BitcoinNode" || snapshot.Actors[0].Role != "" {
+		t.Fatalf("incorrect Bitcoin identity: %#v", snapshot.Actors)
+	}
+	if _, err := decodeActor(identity); err != nil {
+		t.Fatal(err)
+	}
+	identity["role"] = "unexpected"
+	if _, err := decodeActor(identity); err == nil {
+		t.Fatal("Bitcoin identity accepted a role")
+	}
+	stacks := actorMap(testActor(specDigest))
+	delete(stacks, "role")
+	if _, err := decodeActor(stacks); err == nil {
+		t.Fatal("Stacks identity accepted a missing role")
+	}
+}

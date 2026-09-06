@@ -167,7 +167,7 @@ func Compile(network *networkv1alpha1.StacksNetwork) (DesiredTopology, error) {
 		result.BitcoinNodes = append(result.BitcoinNodes, networkv1alpha1.BitcoinNode{
 			TypeMeta:   metav1.TypeMeta{APIVersion: networkv1alpha1.GroupVersion.String(), Kind: "BitcoinNode"},
 			ObjectMeta: metav1.ObjectMeta{Name: services[actor.Name], Namespace: network.Namespace, Labels: operatorlabels.ForActor(network.Name, actor.Name, operatorlabels.Bitcoin)},
-			Spec: networkv1alpha1.BitcoinNodeSpec{NetworkRef: ref(network.Name), ActorName: actor.Name, Role: actor.Role,
+			Spec: networkv1alpha1.BitcoinNodeSpec{NetworkRef: ref(network.Name), ActorName: actor.Name,
 				Image: image, ImagePullPolicy: pull,
 				ImagePullSecrets: references(network.Spec.Defaults.ImagePullSecrets), Config: actor.Config, PeerRefs: peers,
 				RPCPort: 18443, P2PPort: 18444, DependencyImage: dependencyImage, Workload: mergeWorkload(network.Spec.Defaults.Workload, actor.Workload), Container: actor.Container,

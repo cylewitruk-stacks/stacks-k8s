@@ -9,9 +9,7 @@ is implemented in `bitcoin.stacks.org/v1alpha1`; the initial
 [finite generation profile](../network-operator/bitcoin-generation.md) is served
 in `actions.stacks.org/v1alpha1`. A constrained
 [reorganization profile](bitcoin-reorganization.md) adds local replacement and
-acknowledged compensation. The reviewed
-[M0.4 baseline](history/bitcoin-lifecycle-m0.4.md) and its three fixtures are
-superseded design history, not implementation authority.
+acknowledged compensation.
 
 Target API groups remain `bitcoin.stacks.org/v1alpha1` for
 `BitcoinBlockProduction` and `actions.stacks.org/v1alpha1` for
@@ -27,13 +25,8 @@ completion claim. It is not a scenario or ordered action plan.
 
 `StacksNetwork` declares baseline production and compiles an owned
 `BitcoinBlockProduction` alongside neutral `BitcoinNode` resources. Bitcoin
-nodes have no mining role in the target API. The implemented `miner`/`follower`
-enum remains a compatibility fact until an explicit migration updates types,
-schemas, compiler, examples, and wire fixtures.
-
-M0.4 owns the migration design under
-[Requirement 9](m0-remediation-plan.md#requirement-9-consolidated-bitcoin-generation-api);
-M1 implements and validates that reviewed migration.
+nodes have no mining role. Their configuration, peers, storage and resources
+are independent of production timing and target selection.
 
 The aggregate writes child specs; a separately permissioned production
 controller issues typed regtest RPC requests. Permanent baseline changes go
@@ -79,8 +72,7 @@ guaranteed canonical progress. It does not choose a winning branch.
 
 One policy per network is the recommended initial shape. Naming, uniqueness,
 target overlap, exact bounds, jitter distribution, and mutability require API
-review. The former name-equals-node rule and single `bitcoinNodeRef` schema are
-superseded. Reservations serialize effects but cannot prevent overlapping
+review. Reservations serialize effects but cannot prevent overlapping
 policies from multiplying offered rates.
 
 Each selected opportunity requests one block on the target's local chain
@@ -180,7 +172,8 @@ may coexist with retained cleanup obligations and explicit administrative
 recovery.
 
 Deleting the entire network/namespace is explicit abandonment, not successful
-cleanup. Apply the [teardown exception](target-admission-and-rpc-execution.md#recovery-record-loss-and-replacement)
+cleanup. Apply the [teardown
+exception](target-admission-and-rpc-execution.md#recovery-record-loss-and-replacement)
 so unresolved RPCs alone cannot retain cleanup finalizers indefinitely.
 
 ## Credential and renderer gate
@@ -251,12 +244,10 @@ Before implementation:
 
 - Close applicable R1–R4 gates and freeze replacement schemas, limits,
   credentials, and execution contracts for each enabled capability.
-- Define the Bitcoin role API migration and consumer compatibility.
 - Qualify bootstrap, multi-target selection, partial faults, lost control,
   policy changes, and outstanding RPCs beyond client deadlines.
 - Test every reorganization cleanup exit and actual finalizer permissions.
-- Keep historical fixture checks separate from current-direction and future
-  non-vacuous schema/runtime tests.
+- Validate current contracts with schema, controller and real-runtime tests.
 
 ## References
 

@@ -260,6 +260,13 @@ func decodeActor(value map[string]any) (observationv1alpha1.ObservedActorIdentit
 	}
 	fields := make([]string, 0, 14)
 	for _, name := range []string{"kind", "name", "role", "resourceName", "serviceName", "statefulSetName", "statefulSetUID", "controllerRevision", "podName", "podUID", "requestedImage", "runtimeImageID", "configDigest", "specDigest"} {
+		if name == "role" && value["kind"] == "BitcoinNode" {
+			if _, present := value[name]; present {
+				return observationv1alpha1.ObservedActorIdentity{}, fmt.Errorf("Bitcoin identity must not declare a role")
+			}
+			fields = append(fields, "")
+			continue
+		}
 		field, err := required(name)
 		if err != nil {
 			return observationv1alpha1.ObservedActorIdentity{}, err
@@ -287,8 +294,11 @@ func verifyActor(binding observationv1alpha1.NetworkBinding, actor observationv1
 	}
 	networkRef, _, _ := unstructured.NestedString(leaf.Object, "spec", "networkRef", "name")
 	actorName, _, _ := unstructured.NestedString(leaf.Object, "spec", "actorName")
-	role := "signer"
-	if actor.Kind != "StacksSigner" {
+	role := ""
+	switch actor.Kind {
+	case "StacksSigner":
+		role = "signer"
+	case "StacksNode":
 		role, _, _ = unstructured.NestedString(leaf.Object, "spec", "role")
 	}
 	if networkRef != binding.Name || actorName != actor.Name || role != actor.Role || leaf.GetName() != actor.ResourceName {
@@ -424,7 +434,7 @@ func expectedActorPorts(kind string, spec map[string]any) (map[string]int32, boo
 type digestActor struct {
 	Kind               string    `json:"kind"`
 	Name               string    `json:"name"`
-	Role               string    `json:"role"`
+	Role               string    `json:"role,omitempty"`
 	ResourceName       string    `json:"resourceName"`
 	ServiceName        string    `json:"serviceName"`
 	StatefulSetName    string    `json:"statefulSetName"`

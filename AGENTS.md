@@ -24,9 +24,9 @@ integrity. See the
   The aggregate controller compiles owned resources; separate capability
   controllers perform production. It does not execute an experiment or
   bootstrap plan. Follow the [steady-state design](docs/design/steady-state-operation.md).
-- Target APIs keep `BitcoinNode` mining-neutral and retain mining as a
-  `StacksNode` role. Preserve the implemented Bitcoin role contract until an
-  explicit API/fixture migration.
+- `BitcoinNode` describes a Bitcoin Core instance without a mining role.
+  `BitcoinBlockProduction` and bounded actions own block generation;
+  `StacksNode` retains its mining role.
 - The observability operator is read-only with respect to the environment it
   observes. It must not mutate network topology, action resources, or actor
   workloads, or import the network operator's runtime implementation. It may

@@ -6,12 +6,12 @@
 [M0 remediation plan](m0-remediation-plan.md) adopts this amendment as the
 current product and ownership direction. It supersedes the topology-only
 boundary and single-target production model of M0.3/M0.4. Its broader contracts
-remain open; the constrained [implemented Bitcoin baseline](../network-operator/bitcoin-production.md)
+remain open; the constrained [implemented Bitcoin
+baseline](../network-operator/bitcoin-production.md)
 is an initial delivery slice, not completion of this amendment.
 
 [`steady-state-operation-v1.json`](../../contracts/steady-state-operation-v1.json)
-records these decisions and implementation gates. Historical Bitcoin fixtures
-remain explicitly superseded baselines, not current schema promises.
+records these decisions and implementation gates.
 
 ## Desired operating state
 
@@ -24,7 +24,7 @@ configured, and externally driven networks remain valid uses.
 | Resource | Responsibility |
 | --- | --- |
 | `StacksNetwork` | Declare actors, relationships, baseline production, and transaction demand. |
-| `BitcoinNode` | Run Bitcoin Core and expose qualified interfaces; no mining role or cadence policy in the target API. |
+| `BitcoinNode` | Run Bitcoin Core and expose qualified interfaces; no mining role or cadence policy. |
 | `StacksNode` | Run a Stacks node, including its miner role and supported miner configuration. |
 | `StacksSigner` | Run a signer with its configured identity and behavior. |
 | `BitcoinBlockProduction` | Apply emission timing and target-selection policy across referenced Bitcoin nodes. |
@@ -194,7 +194,7 @@ defines basic RPC authority separation; R4 gates reorganization cleanup.
   outcome attribution.
 - Change a baseline during an override; removal resumes the latest baseline.
 - Close applicable gates and freeze replacement schemas/fixtures before
-  enabling controllers. Historical fixture tests do not establish readiness.
+  enabling controllers. Runtime acceptance requires implementation evidence.
 
 ## References
 

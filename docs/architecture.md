@@ -91,7 +91,7 @@ minimality.
 The [steady-state amendment](design/steady-state-operation.md) extends the
 target `StacksNetwork` declaration to baseline operation. Its controller
 compiles owned production resources; separately permissioned controllers
-perform effects. Bitcoin nodes become mining-neutral, while Stacks nodes keep
+perform effects. Bitcoin nodes have no mining role, while Stacks nodes keep
 their miner role. Timing, weighted Bitcoin target selection, transaction
 demand, and temporary overrides have separate contracts. Capability admission
 must not depend on unrelated actors being healthy. These changes are not yet
