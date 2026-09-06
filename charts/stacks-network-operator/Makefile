@@ -33,12 +33,16 @@ helm-verify:
 	@$(HELM) template verify . --namespace stacks-network-system --set controller.leaderElection=false | grep -q 'type: Recreate'
 
 rbac-verify:
+	$(HELM) template verify . --namespace stacks-network-system --set bitcoinProduction.enabled=true --set stacksTransactions.enabled=true | $(GO_ISOLATED) -C $(OPERATOR_DIR) run ./cmd/rbac-check
 	$(HELM) template verify . --namespace stacks-network-system | $(GO_ISOLATED) -C $(OPERATOR_DIR) run ./cmd/rbac-check
 	$(HELM) template verify . --namespace stacks-network-system --set bitcoinProduction.enabled=true | $(GO_ISOLATED) -C $(OPERATOR_DIR) run ./cmd/rbac-check
+	$(HELM) template verify . --namespace stacks-network-system --set stacksTransactions.enabled=true | $(GO_ISOLATED) -C $(OPERATOR_DIR) run ./cmd/rbac-check
 
 workload-verify:
+	$(HELM) template verify . --namespace stacks-network-system --set bitcoinProduction.enabled=true --set stacksTransactions.enabled=true | $(GO_ISOLATED) -C $(CHART_POLICY_DIR) run ./cmd/chart-policy-check
 	$(HELM) template verify . --namespace stacks-network-system | $(GO_ISOLATED) -C $(CHART_POLICY_DIR) run ./cmd/chart-policy-check
 	$(HELM) template verify . --namespace stacks-network-system --set bitcoinProduction.enabled=true | $(GO_ISOLATED) -C $(CHART_POLICY_DIR) run ./cmd/chart-policy-check
+	$(HELM) template verify . --namespace stacks-network-system --set stacksTransactions.enabled=true | $(GO_ISOLATED) -C $(CHART_POLICY_DIR) run ./cmd/chart-policy-check
 	$(HELM) template verify . --namespace stacks-network-system --set serviceAccount.create=false --set serviceAccount.name=existing.account >/dev/null
 	@if $(HELM) template verify . --namespace stacks-network-system --set-json 'image.pullSecrets=["bad\nhostNetwork: true"]' >/dev/null 2>&1; then \
 		echo "invalid image pull Secret name unexpectedly rendered" >&2; exit 1; \

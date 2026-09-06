@@ -134,3 +134,10 @@ in one kind. A new kind requires:
 Faults, protocol observations, evidence, and adaptive sessions do not belong
 in this manager. Their ownership boundaries are defined in the repository
 [architecture](../architecture.md#agent-and-operator-boundary).
+
+## Stacks transfer profile
+
+The aggregate compiles the optional same-name `StacksTransactionProduction`
+and pins its UID. A separate Deployment and ServiceAccount own signing, nonce
+reservation and native inclusion reads. Bitcoin funding and signer enrollment
+remain external clients. See the [transfer contract](stacks-production.md).

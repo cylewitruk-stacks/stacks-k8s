@@ -27,16 +27,22 @@ type Options struct {
 	ProductionCredentialsFile string
 	// ProductionEnabled describes deployment configuration to the topology controller.
 	ProductionEnabled bool
-	MetricsAddress    string
-	ProbeAddress      string
-	Namespace         string
-	Concurrency       int
-	LeaderElection    bool
+	// TransactionsEnabled describes the separately deployed transfer worker.
+	TransactionsEnabled bool
+	// TransactionAccountFile names its mounted administrator-selected account.
+	TransactionAccountFile string
+	MetricsAddress         string
+	ProbeAddress           string
+	Namespace              string
+	Concurrency            int
+	LeaderElection         bool
 }
 
 // Bind registers manager flags.
 func (o *Options) Bind(flags *flag.FlagSet) {
 	flags.StringVar(&o.Component, "component", "topology", "Controller component: topology or bitcoin-production.")
+	flags.BoolVar(&o.TransactionsEnabled, "stacks-transactions-enabled", false, "Report that the separate STX transfer worker is enabled.")
+	flags.StringVar(&o.TransactionAccountFile, "transaction-account-file", "/etc/stacks-transactions/account.json", "Mounted transfer account profile.")
 	flags.BoolVar(&o.ProductionEnabled, "bitcoin-production-enabled", false, "Report that the separately deployed Bitcoin producer is enabled.")
 	flags.StringVar(&o.ProductionCredentialsFile, "production-credentials-file", "/etc/bitcoin-production/credentials.json", "Mounted producer credential document.")
 	flags.StringVar(&o.MetricsAddress, "metrics-bind-address", ":8080", "Prometheus metrics address.")
@@ -48,7 +54,7 @@ func (o *Options) Bind(flags *flag.FlagSet) {
 
 // New constructs the namespaced controller manager.
 func (o Options) New(scheme *runtime.Scheme) (ctrl.Manager, error) {
-	if o.Component != "" && o.Component != "topology" && o.Component != "bitcoin-production" {
+	if o.Component != "" && o.Component != "topology" && o.Component != "bitcoin-production" && o.Component != "stacks-transactions" {
 		return nil, fmt.Errorf("unsupported controller component %q", o.Component)
 	}
 	if o.Concurrency < 1 {
@@ -69,6 +75,9 @@ func (o Options) New(scheme *runtime.Scheme) (ctrl.Manager, error) {
 	leaderID := "stacks-network-operator.network.stacks.org"
 	if o.Component == "bitcoin-production" {
 		leaderID = "bitcoin-production.bitcoin.stacks.org"
+	}
+	if o.Component == "stacks-transactions" {
+		leaderID = "transaction-production.stacks.stacks.org"
 	}
 	shutdown := 30 * time.Second
 	manager, err := ctrl.NewManager(config, ctrl.Options{Scheme: scheme, Metrics: metricsserver.Options{BindAddress: o.MetricsAddress},

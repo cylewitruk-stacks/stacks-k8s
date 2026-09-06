@@ -23,6 +23,7 @@
 **/coverage
 **/testdata
 **/tools
+**/node_modules
 **/*_test.go
 **/*.md
 **/Makefile

@@ -1,7 +1,8 @@
 # API reference
 
 Topology uses `network.stacks.org/v1alpha1`; Bitcoin production uses
-`bitcoin.stacks.org/v1alpha1`. All resources are namespaced.
+`bitcoin.stacks.org/v1alpha1`; transfer production uses
+`stacks.stacks.org/v1alpha1`. All resources are namespaced.
 
 ## StacksNetwork
 
@@ -15,11 +16,14 @@ Topology uses `network.stacks.org/v1alpha1`; Bitcoin production uses
 | `spec.bitcoinNodes` | Bitcoin Core actors and their directed peer graph. |
 | `spec.stacksNodes` | Miner, follower, and signer-node actors. |
 | `spec.signers` | Signer actors bound one-to-one to signer-node actors. |
+| `spec.stacksTransactionProduction` | Optional fixed-interval tiny STX transfers; see the [transfer contract](stacks-production.md#policy-and-evidence). |
 | `spec.bitcoinBlockProduction` | Optional one-target fixed-cadence policy; see the [production contract](bitcoin-production.md#desired-policy-and-ownership). |
 
 `status.targetDeclarations` publishes current compiled actor intent before
 workload readiness; it is not admitted inventory. `status.bitcoinProductionUID`
-pins the optional production ledger across policy changes and deletion.
+pins its optional production ledger across policy changes and deletion.
+`status.transactionProductionUID` independently pins the transfer ledger.
+`TransactionsConfigured` reports compilation/enabling, not protocol progress.
 See [admission and credentials](bitcoin-production.md#admission-and-credentials).
 
 Logical actor names must be unique across all three lists. Every Stacks node
@@ -135,3 +139,10 @@ Custom environment names are rendered in lexical order. The following
 operator-owned names cannot be overridden: `POD_IP`, `STACKS_ACTOR`,
 `STACKS_ACTOR_ROLE`, `STACKS_CONFIG_RENDERED`, `STACKS_CONFIG_TEMPLATE`,
 `STACKS_NETWORK`, and `STACKS_SERVICE_MAP`.
+
+## Transaction rejection evidence
+
+`StacksTransactionProduction.status.rejectionReason` retains a matching ingress
+rejection for the last `txID`, using only `FeeTooLow`, `BadNonce`, or `Other`.
+It does not release the reserved nonce or prove permanent non-execution. See the
+[policy and evidence contract](stacks-production.md#policy-and-evidence).

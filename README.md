@@ -26,8 +26,9 @@ Bitcoin nodes, a separate block-production policy with timing and target
 selection, Stacks miner configuration, and ongoing transaction demand.
 The first [Bitcoin baseline profile](docs/network-operator/bitcoin-production.md)
 is implemented: one target, fixed cadence, pause, and durable dispatch accounting.
-Multi-target policies, Bitcoin role migration, and Stacks transaction demand
-remain design work.
+The initial [Stacks transfer profile](docs/network-operator/stacks-production.md)
+adds isolated, fixed-interval STX demand and external bootstrap/signing helpers.
+Multi-target policies and Bitcoin role migration remain design work.
 
 The repository currently provides:
 
@@ -72,6 +73,8 @@ kubectl --namespace stacks-regtest apply --filename examples/network/minimal.yam
 The topology-only quick start requires an external Bitcoin mining client.
 For automatic blocks, use the separately enabled
 [Bitcoin production guide](docs/network-operator/bitcoin-production.md).
+For a productive miner/signer network with tiny STX transfers, follow the
+[Stacks bootstrap and transfer guide](docs/network-operator/stacks-production.md).
 Stacks RPC readiness may depend on advancing the Bitcoin chain. See the
 [readiness guidance](docs/network-operator/operations.md#readiness).
 
@@ -92,7 +95,9 @@ development guidance.
 
 ## Verify
 
-Go 1.27.1, Helm 3, and access to envtest assets are required.
+Go 1.27.1, Node.js 24 or newer, npm, Helm 3, and access to envtest assets are required.
+`make verify` runs `npm ci`; it needs npm registry access or a fully populated
+npm cache. See [offline verification](docs/development.md#stacks-transfer-profile).
 
 ```bash
 make verify

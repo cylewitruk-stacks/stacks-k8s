@@ -22,3 +22,5 @@ vet:
 	$(GO_ISOLATED) vet ./...
 
 verify: fmt vet test test-race test-integration
+	npm --prefix transactions ci --ignore-scripts
+	npm --prefix transactions test

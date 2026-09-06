@@ -144,3 +144,11 @@ suite. It uses lightweight actor processes to isolate controller and
 Kubernetes lifecycle behavior. A release candidate must additionally run the
 documented minimal example with real Bitcoin Core and Stacks node images and
 advance the external regtest burnchain until both actors are Ready.
+
+## Stacks transfer profile
+
+For productive miner/signer operation, use the
+[bootstrap and transfer guide](stacks-production.md). Kubernetes readiness and
+`TransactionsConfigured` do not establish signer participation or block progress.
+Inspect exact transfer inclusion and protocol tips separately. Delete both
+production ledgers through parent disposal before removing their controllers.

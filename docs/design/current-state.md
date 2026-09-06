@@ -10,7 +10,7 @@ The `network.stacks.org/v1alpha1` API provides:
 
 | Resource | Implemented behavior | Important limit |
 | --- | --- | --- |
-| `StacksNetwork` | Compiles topology and optional Bitcoin production; publishes declarations and admitted actor identity. | Does not bootstrap protocol state or issue mining RPCs itself. |
+| `StacksNetwork` | Compiles topology and optional Bitcoin/STX production; publishes declarations and admitted actor identity. | Does not bootstrap protocol state or issue mining RPCs itself. |
 | `BitcoinNode` | Runs one Bitcoin Core miner or follower with explicit peers. | The miner role does not invoke mining RPCs. |
 | `StacksNode` | Runs one miner, follower, or signer-node bound to one Bitcoin node. | Protocol readiness is not independently established. |
 | `StacksSigner` | Runs one signer bound to one signer-node with index and weight. | Registration and reward-cycle participation are external. |
@@ -21,6 +21,13 @@ supports an aggregate-owned, single-target fixed-cadence baseline. Its
 credential separation, admission, durable dispatch accounting, and the
 fail-closed availability limit after a lost receipt. Finite actions and
 multi-target production remain unavailable.
+
+The separate `stacks.stacks.org/v1alpha1` `StacksTransactionProduction` API
+supports one exclusive account, fixed-interval tiny STX transfers, bounded
+pending work, and exact native inclusion accounting. The
+[initial Stacks profile](../network-operator/stacks-production.md) provides
+external Bitcoin funding, PoX-4 enrollment and renewal helpers. A local normal
+Stacks image is qualified; this is not a general image compatibility claim.
 
 The aggregate accepts 1–32 Bitcoin nodes and up to 100 Stacks nodes and 100
 signers. Multiple Bitcoin and Stacks miners are therefore structurally
@@ -76,8 +83,8 @@ Git, runs repository build logic, or constructs an image.
 | Area | Missing capability |
 | --- | --- |
 | Bitcoin lifecycle | Multi-target/jitter policies, bounded generation, controlled reorganization, and RPC-observed branch state. Fixed-cadence single-target baseline is implemented. |
-| Steady transaction demand | Ongoing producers, funding/nonce ownership, offered-rate control, backpressure, and submission evidence. |
-| Protocol bootstrap | Signer registration, stacking/reward-set activation, wallet funding, and explicit readiness beyond Kubernetes health. |
+| Steady transaction demand | Multi-account/ingress profiles, overrides and wider signing lifecycle support. One-account fixed-interval demand is implemented. |
+| Protocol bootstrap | General image/epoch compatibility, PoX-5 transitions and reusable bounded APIs. External PoX-4 bootstrap and renewal are implemented for one local profile. |
 | Generic faults | Native Chaos Mesh installation guidance, safe direct targeting, correlation, and observation. |
 | Protocol actions | Signer/miner behavior controls, application clock offset, bounded input behaviors, and portable storage pressure. |
 | Continuous observation | Mutation history, protocol telemetry, logs, metrics, resource telemetry, rolling retention, and capture-gap reporting. |
@@ -137,5 +144,5 @@ The following historical structures must not return:
    rather than an external bootstrap tool?
 3. Is sBTC in the first actor-expansion release or a later extension?
 4. Which managed Kubernetes providers expose usable audit streams?
-5. Which controller/chart should own transaction demand? Initial Bitcoin
-   production uses a separate Deployment and ServiceAccount in the network chart.
+5. Which additional transaction profiles merit support? Initial Bitcoin and STX
+   production use separate Deployments and ServiceAccounts in the network chart.

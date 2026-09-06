@@ -63,3 +63,16 @@ make docker-check
 Keep controller packages aligned with the Kubernetes resource they reconcile.
 Small cohesive packages are valid boundaries; merge them only when measured
 coupling or duplication demonstrates a clearer design.
+
+## Stacks transfer profile
+
+Network verification also runs the locked SDK tests with Node.js 24 or newer
+and npm. Verification runs `npm ci --ignore-scripts`, so an existing
+`node_modules` directory does not substitute for registry access. Offline CI
+must prepopulate the npm cache with the exact locked packages and set
+`npm_config_offline=true`; Go modules/toolchains and envtest assets must also
+already be available. `make vuln` requires access to the npm advisory registry
+and Go vulnerability database for a current audit. The separate worker Dockerfile
+is `operators/network/transactions/Dockerfile`; external bootstrap/renewal
+scripts are checkout tools and are not installed in the worker image. See the
+[qualification commands](network-operator/stacks-qualification.md).

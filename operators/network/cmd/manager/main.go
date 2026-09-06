@@ -15,6 +15,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	bitcoinv1alpha1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/bitcoin/v1alpha1"
+	stacksv1alpha1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/stacks/v1alpha1"
 	networkv1alpha1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha1"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/bitcoinnode"
 	manageroptions "github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/manager"
@@ -22,6 +23,7 @@ import (
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/production"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/stacksnode"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/stackssigner"
+	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/transactions"
 )
 
 func main() {
@@ -38,10 +40,17 @@ func main() {
 	must(corev1.AddToScheme(scheme))
 	must(networkv1alpha1.AddToScheme(scheme))
 	must(bitcoinv1alpha1.AddToScheme(scheme))
+	must(stacksv1alpha1.AddToScheme(scheme))
 	manager, err := options.New(scheme)
 	must(err)
 
-	if options.Component == "bitcoin-production" {
+	if options.Component == "stacks-transactions" {
+		data, err := os.ReadFile(options.TransactionAccountFile)
+		must(err)
+		var profile transactions.AccountProfile
+		must(json.Unmarshal(data, &profile))
+		must((&transactions.Reconciler{Client: manager.GetClient(), APIReader: manager.GetAPIReader(), Profile: profile, Signer: transactions.LocalSigner{AccountFile: options.TransactionAccountFile, Script: "/opt/stacks-transactions/sign.mjs"}, RPC: transactions.NewNodeRPC()}).SetupWithManager(manager))
+	} else if options.Component == "bitcoin-production" {
 		data, err := os.ReadFile(options.ProductionCredentialsFile)
 		must(err)
 		var credentials production.Credentials
@@ -51,7 +60,7 @@ func main() {
 		}
 		must((&production.Reconciler{Client: manager.GetClient(), APIReader: manager.GetAPIReader(), RPC: production.NewBitcoinRPC(credentials), ConfigDigest: credentials.ConfigDigest}).SetupWithManager(manager, options.Concurrency))
 	} else {
-		must((&network.Reconciler{Client: manager.GetClient(), APIReader: manager.GetAPIReader(), Scheme: manager.GetScheme(), ProductionEnabled: options.ProductionEnabled}).SetupWithManager(manager, options.Concurrency))
+		must((&network.Reconciler{Client: manager.GetClient(), APIReader: manager.GetAPIReader(), Scheme: manager.GetScheme(), ProductionEnabled: options.ProductionEnabled, TransactionsEnabled: options.TransactionsEnabled}).SetupWithManager(manager, options.Concurrency))
 		must((&bitcoinnode.Reconciler{Client: manager.GetClient(), APIReader: manager.GetAPIReader(), Scheme: manager.GetScheme()}).SetupWithManager(manager, options.Concurrency))
 		must((&stacksnode.Reconciler{Client: manager.GetClient(), APIReader: manager.GetAPIReader(), Scheme: manager.GetScheme()}).SetupWithManager(manager, options.Concurrency))
 		must((&stackssigner.Reconciler{Client: manager.GetClient(), APIReader: manager.GetAPIReader(), Scheme: manager.GetScheme()}).SetupWithManager(manager, options.Concurrency))

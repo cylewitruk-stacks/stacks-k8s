@@ -38,3 +38,11 @@ resources:
   limits:
     cpu: 500m
     memory: 256Mi
+
+# Separate STX signing worker; provision the account Secret before enabling.
+stacksTransactions:
+  enabled: false
+  credentialsSecret: stacks-transaction-account
+  image:
+    repository: stacks-transaction-worker
+    tag: "0.1.0"

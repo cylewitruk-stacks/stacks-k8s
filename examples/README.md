@@ -16,3 +16,10 @@ The examples are source-checkout templates, not image-distribution manifests.
 image and load it into the target cluster, or replace it with an accessible
 image reference. Apply the examples only after every referenced image is
 available to the cluster.
+
+## Stacks transfer profile
+
+The [Stacks bootstrap and transfer guide](../docs/network-operator/stacks-production.md)
+uses an external generator instead of committing private fixture keys. It
+creates a Bitcoin node, miner, signer-node/signer and paused transfer policy,
+with fresh isolated accounts and version-specific raw configuration.

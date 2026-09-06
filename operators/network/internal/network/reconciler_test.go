@@ -17,6 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	bitcoinv1alpha1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/bitcoin/v1alpha1"
+	stacksv1alpha1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/stacks/v1alpha1"
 	networkv1alpha1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha1"
 )
 
@@ -405,6 +406,9 @@ func testScheme(t *testing.T) *runtime.Scheme {
 	t.Helper()
 	scheme := runtime.NewScheme()
 	if err := networkv1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	if err := stacksv1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatal(err)
 	}
 	if err := bitcoinv1alpha1.AddToScheme(scheme); err != nil {

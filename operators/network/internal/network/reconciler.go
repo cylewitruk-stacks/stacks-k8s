@@ -22,6 +22,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	bitcoinv1alpha1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/bitcoin/v1alpha1"
+	stacksv1alpha1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/stacks/v1alpha1"
 	networkv1alpha1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha1"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/canonical"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/leaf"
@@ -35,6 +36,8 @@ type Reconciler struct {
 	Now       func() time.Time
 	// ProductionEnabled reports whether deployment configuration enables the producer.
 	ProductionEnabled bool
+	// TransactionsEnabled reports deployment of the separately credentialed transfer worker.
+	TransactionsEnabled bool
 }
 
 // Reconcile moves one aggregate network toward its compiled leaf topology.
@@ -68,11 +71,13 @@ func (r *Reconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 		patchBase = network.DeepCopy()
 	}
 	productionErr := r.synchronizeProduction(ctx, network)
+	transactionErr := r.synchronizeTransactions(ctx, network)
 	patchBase = network.DeepCopy()
 	status, result, topologyErr := r.reconcileTopology(ctx, network, desired)
 	meta.SetStatusCondition(&status.Conditions, r.productionCondition(network, productionErr))
+	meta.SetStatusCondition(&status.Conditions, r.transactionCondition(network, transactionErr))
 	statusErr := r.updateStatus(ctx, network, patchBase, status)
-	return result, errors.Join(topologyErr, productionErr, statusErr)
+	return result, errors.Join(topologyErr, productionErr, transactionErr, statusErr)
 }
 
 // reconcileTopology converges actors independently of optional capability errors.
@@ -111,6 +116,7 @@ func (r *Reconciler) SetupWithManager(manager ctrl.Manager, concurrency int) err
 		Owns(&networkv1alpha1.StacksNode{}).
 		Owns(&networkv1alpha1.StacksSigner{}).
 		Owns(&bitcoinv1alpha1.BitcoinBlockProduction{}, builder.WithPredicates(productionLifecyclePredicate())).
+		Owns(&stacksv1alpha1.StacksTransactionProduction{}, builder.WithPredicates(productionLifecyclePredicate())).
 		WithOptions(controller.Options{MaxConcurrentReconciles: concurrency}).
 		Complete(r)
 }
@@ -476,6 +482,7 @@ func condition(generation int64, status metav1.ConditionStatus, kind, reason, me
 
 func (r *Reconciler) updateStatus(ctx context.Context, network, patchBase *networkv1alpha1.StacksNetwork, desired networkv1alpha1.StacksNetworkStatus) error {
 	desired.BitcoinProductionUID = network.Status.BitcoinProductionUID
+	desired.TransactionProductionUID = network.Status.TransactionProductionUID
 	if catalog := network.Status.TargetDeclarations; catalog != nil && catalog.NetworkUID == string(network.UID) && catalog.ObservedGeneration == network.Generation {
 		desired.TargetDeclarations = catalog.DeepCopy()
 	}

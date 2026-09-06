@@ -71,6 +71,23 @@ integrity. See the
   webhook only when an invariant requires live cluster state or cannot
   reasonably be expressed statically.
 
+## Language boundary
+
+- Go is the implementation language for operators and repository tooling.
+  Keep Kubernetes APIs, reconciliation, admission, production nonce ownership,
+  submission/recovery, and evidence accounting in Go.
+- JavaScript is a narrow Stacks SDK integration exception, confined to
+  `operators/network/transactions`: offline transaction signing, external
+  SDK-dependent provisioning/bootstrap/renewal helpers, and their focused tests.
+  External helpers may sequence bootstrap; they must not become controllers.
+- Keep repository wire-contract fixtures in `contracts/` and their production
+  decoding/digest implementations in the respective Go consumers. Do not move
+  or duplicate these contracts into JavaScript fixtures or modules.
+- Do not infer permission for broader JavaScript/TypeScript use from the SDK
+  package. Additional JavaScript/TypeScript packages or moving operator/tooling
+  logic into those languages require explicit user direction to change this
+  language boundary.
+
 ## Kubernetes and Go
 
 - Follow idiomatic Go, SOLID/DRY principles, and `controller-runtime`

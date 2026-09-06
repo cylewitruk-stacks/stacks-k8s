@@ -56,7 +56,8 @@ func TestMarkdownLinksResolve(t *testing.T) {
 			return walkErr
 		}
 		if entry.IsDir() {
-			if entry.Name() == ".git" {
+			// Installed npm packages are external artifacts, not repository documentation.
+			if entry.Name() == ".git" || entry.Name() == "node_modules" {
 				return filepath.SkipDir
 			}
 			return nil

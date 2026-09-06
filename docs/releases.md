@@ -42,3 +42,12 @@ Before tagging:
 Repository placement does not imply compatibility across arbitrary operator
 versions. Document the network API and inventory-contract versions accepted by
 each observability release.
+
+## Transaction worker artifact
+
+The optional `stacks-transaction-worker` image is built from
+`operators/network/transactions/Dockerfile` and configured independently through
+`stacksTransactions.image`. Qualify it with the network API/chart version and
+selected actor image. Include its locked npm dependencies in release scanning
+and provenance; the local [Stacks qualification](network-operator/stacks-qualification.md)
+is not a published image support matrix.

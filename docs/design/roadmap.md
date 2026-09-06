@@ -104,6 +104,12 @@ use before prioritizing in-place recovery.
 
 ## M2: bootstrap primitives and steady transaction demand
 
+**Current delivery:** the [initial Stacks profile](../network-operator/stacks-production.md)
+implements external PoX-4 bootstrap/renewal and an isolated one-account transfer
+worker. Native inclusion, pause/update, backpressure and pending-worker recovery
+are qualified on a local normal image. Multi-profile compatibility, overrides,
+and wider rotation/revocation remain open; M2 is not complete.
+
 **Outcome:** supported Stacks images reach productive operation with explicit
 bootstrap inputs and ongoing offered traffic.
 

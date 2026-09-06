@@ -27,6 +27,16 @@ This condition describes configuration, not producer health. The producer's
 32 receipt slots and 25-second drain are fixed initial-profile limits. Its
 ConfigMap `list` permission is required by the API-readiness probe.
 
+Optional [Stacks transfers](../../docs/network-operator/stacks-production.md)
+use `stacksTransactions.enabled=true`, a separate worker image configured under
+`stacksTransactions.image`, and an immutable `stacksTransactions.credentialsSecret`
+(default `stacks-transaction-account`). Its own ServiceAccount can read admitted
+actor identity and update only its capability ledger; it cannot read Secrets
+through the API or mutate workloads. Only that Deployment mounts the signing
+account. `TransactionsConfigured` reports whether this capability is compiled
+and enabled. The worker uses one replica with `Recreate` and independent leader
+election. ConfigMap `list` is required by its API-readiness probe.
+
 Leader election is enabled by default and is required when `replicaCount` is
 greater than one. If explicitly disabled for a single-replica installation,
 the Deployment uses `Recreate` so an upgrade cannot overlap two writers.
@@ -89,6 +99,8 @@ it into small, owned resources:
 | Kind | Owns |
 | ---- | ---- |
 | `StacksNetwork` | Desired actor graph, leaf CRs, aggregate readiness, admitted inventory. |
+| `BitcoinBlockProduction` | Optional fixed-interval Bitcoin baseline and durable dispatch ledger. |
+| `StacksTransactionProduction` | Optional fixed-interval STX demand and bounded account/transaction ledger. |
 | `BitcoinNode` | One Bitcoin Core StatefulSet, Service, configuration, and actor status. |
 | `StacksNode` | One Stacks node StatefulSet, Service, configuration, and actor status. |
 | `StacksSigner` | One Stacks signer StatefulSet, Service, configuration, and actor status. |
@@ -161,10 +173,13 @@ Observation time and Kubernetes resource versions are not digest inputs.
 
 ## Uninstall
 
-Delete networks before uninstalling the controller:
+Delete networks and wait for both production ledgers to disappear before
+uninstalling the controllers:
 
 ```bash
 kubectl --namespace stacks-regtest delete stacksnetworks --all
+kubectl --namespace stacks-regtest wait --for=delete \
+  bitcoinblockproductions,stackstransactionproductions --all --timeout=120s
 helm --namespace stacks-regtest uninstall stacks-network-operator
 ```
 

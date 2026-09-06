@@ -9,5 +9,11 @@ Inspect topology and compiled actors:
 Inspect Bitcoin baseline dispatch state:
   kubectl --namespace {{ .Release.Namespace }} get bitcoinblockproductions
 
-Delete networks and wait for their production ledgers before uninstalling this chart.
+{{ end }}
+{{ if .Values.stacksTransactions.enabled }}
+Inspect steady STX transfer evidence:
+  kubectl --namespace {{ .Release.Namespace }} get stackstransactionproductions
+{{ end }}
+{{ if or .Values.bitcoinProduction.enabled .Values.stacksTransactions.enabled }}
+Delete networks and wait for both production ledgers before uninstalling this chart.
 {{ end }}

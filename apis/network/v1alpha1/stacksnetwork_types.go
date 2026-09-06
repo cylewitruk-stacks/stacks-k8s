@@ -2,6 +2,7 @@ package v1alpha1
 
 import (
 	bitcoinv1alpha1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/bitcoin/v1alpha1"
+	stacksv1alpha1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/stacks/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -28,6 +29,8 @@ type StacksNetworkList struct {
 }
 
 // StacksNetworkSpec defines an aggregate regtest topology.
+// +kubebuilder:validation:XValidation:rule="!has(self.stacksTransactionProduction) || (has(self.stacksNodes) && self.stacksNodes.exists(node, node.name == self.stacksTransactionProduction.target))",message="transaction production must reference a declared Stacks node"
+// +kubebuilder:validation:XValidation:rule="!has(oldSelf.stacksTransactionProduction) || !has(self.stacksTransactionProduction) || (self.stacksTransactionProduction.target == oldSelf.stacksTransactionProduction.target && self.stacksTransactionProduction.sender == oldSelf.stacksTransactionProduction.sender)",message="changing transaction ingress or sender requires a fresh environment"
 // +kubebuilder:validation:XValidation:rule="!has(oldSelf.bitcoinBlockProduction) || !has(self.bitcoinBlockProduction) || self.bitcoinBlockProduction.target == oldSelf.bitcoinBlockProduction.target",message="changing the initial production target requires a fresh environment"
 // +kubebuilder:validation:XValidation:rule="!has(self.bitcoinBlockProduction) || self.bitcoinNodes.exists(node, node.name == self.bitcoinBlockProduction.target)",message="production must reference a declared Bitcoin node"
 // +kubebuilder:validation:XValidation:rule="!has(self.stacksNodes) || self.stacksNodes.all(node, self.bitcoinNodes.exists(bitcoin, bitcoin.name == node.bitcoinNodeRef))",message="every Stacks node must reference a declared Bitcoin node"
@@ -37,6 +40,8 @@ type StacksNetworkList struct {
 // +kubebuilder:validation:XValidation:rule="!has(self.stacksNodes) || self.stacksNodes.all(node, !has(node.serviceRefs) || node.serviceRefs.all(ref, self.bitcoinNodes.exists(actor, actor.name == ref) || (has(self.stacksNodes) && self.stacksNodes.exists(actor, actor.name == ref)) || (has(self.signers) && self.signers.exists(actor, actor.name == ref))))",message="Stacks node serviceRefs must name declared actors"
 // +kubebuilder:validation:XValidation:rule="!has(self.signers) || self.signers.all(signer, !has(signer.serviceRefs) || signer.serviceRefs.all(ref, self.bitcoinNodes.exists(actor, actor.name == ref) || (has(self.stacksNodes) && self.stacksNodes.exists(actor, actor.name == ref)) || (has(self.signers) && self.signers.exists(actor, actor.name == ref))))",message="signer serviceRefs must name declared actors"
 type StacksNetworkSpec struct {
+	// StacksTransactionProduction optionally maintains fixed-interval STX transfers.
+	StacksTransactionProduction *stacksv1alpha1.TransferPolicy `json:"stacksTransactionProduction,omitempty"`
 	// BitcoinBlockProduction optionally maintains fixed-cadence regtest blocks.
 	BitcoinBlockProduction *bitcoinv1alpha1.ProductionPolicy `json:"bitcoinBlockProduction,omitempty"`
 	Suspended              bool                              `json:"suspended,omitempty"`
@@ -139,6 +144,8 @@ type StacksSignerTemplate struct {
 
 // StacksNetworkStatus aggregates leaf readiness and admitted identity.
 type StacksNetworkStatus struct {
+	// TransactionProductionUID permanently pins the exclusive account ledger.
+	TransactionProductionUID string `json:"transactionProductionUID,omitempty"`
 	// BitcoinProductionUID permanently pins the production ledger for this network incarnation.
 	BitcoinProductionUID string `json:"bitcoinProductionUID,omitempty"`
 	// TargetDeclarations reports compiled intent without requiring global readiness.

@@ -966,6 +966,57 @@ spec:
                 x-kubernetes-list-map-keys:
                 - name
                 x-kubernetes-list-type: map
+              stacksTransactionProduction:
+                description: StacksTransactionProduction optionally maintains fixed-interval
+                  STX transfers.
+                properties:
+                  amountMicroSTX:
+                    description: AmountMicroSTX bounds each ordinary transfer to at
+                      most one STX.
+                    format: int64
+                    maximum: 1000000
+                    minimum: 1
+                    type: integer
+                  feeMicroSTX:
+                    description: FeeMicroSTX is explicit; no automatic fee escalation
+                      occurs.
+                    format: int64
+                    maximum: 1000000
+                    minimum: 1
+                    type: integer
+                  intervalSeconds:
+                    description: IntervalSeconds is offered cadence, not a guaranteed
+                      block interval.
+                    format: int32
+                    maximum: 86400
+                    minimum: 1
+                    type: integer
+                  paused:
+                    description: Paused stops new signing/dispatch while outstanding
+                      evidence remains observable.
+                    type: boolean
+                  recipient:
+                    description: Recipient receives the offered micro-STX amount.
+                    pattern: ^ST[0-9A-HJKMNP-TV-Z]{20,40}$
+                    type: string
+                  sender:
+                    description: Sender identifies the administrator-provisioned exclusive
+                      test account.
+                    pattern: ^ST[0-9A-HJKMNP-TV-Z]{20,40}$
+                    type: string
+                  target:
+                    description: Target names the declared Stacks ingress actor.
+                    maxLength: 63
+                    pattern: ^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$
+                    type: string
+                required:
+                - amountMicroSTX
+                - feeMicroSTX
+                - intervalSeconds
+                - recipient
+                - sender
+                - target
+                type: object
               suspended:
                 type: boolean
             required:
@@ -973,6 +1024,13 @@ spec:
             - defaults
             type: object
             x-kubernetes-validations:
+            - message: transaction production must reference a declared Stacks node
+              rule: '!has(self.stacksTransactionProduction) || (has(self.stacksNodes)
+                && self.stacksNodes.exists(node, node.name == self.stacksTransactionProduction.target))'
+            - message: changing transaction ingress or sender requires a fresh environment
+              rule: '!has(oldSelf.stacksTransactionProduction) || !has(self.stacksTransactionProduction)
+                || (self.stacksTransactionProduction.target == oldSelf.stacksTransactionProduction.target
+                && self.stacksTransactionProduction.sender == oldSelf.stacksTransactionProduction.sender)'
             - message: changing the initial production target requires a fresh environment
               rule: '!has(oldSelf.bitcoinBlockProduction) || !has(self.bitcoinBlockProduction)
                 || self.bitcoinBlockProduction.target == oldSelf.bitcoinBlockProduction.target'
@@ -1232,6 +1290,10 @@ spec:
                 - observedGeneration
                 - schemaVersion
                 type: object
+              transactionProductionUID:
+                description: TransactionProductionUID permanently pins the exclusive
+                  account ledger.
+                type: string
             type: object
         required:
         - spec

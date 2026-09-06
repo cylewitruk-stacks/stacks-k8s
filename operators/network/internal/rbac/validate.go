@@ -50,7 +50,7 @@ func Validate(reader io.Reader) error {
 			return fmt.Errorf("chart must not render cluster-scoped RBAC kind %s", object.GetKind())
 		}
 	}
-	if (len(roles) != 1 && len(roles) != 2) || len(bindings) != len(roles) {
+	if (len(roles) < 1 || len(roles) > 3) || len(bindings) != len(roles) {
 		return fmt.Errorf("expected topology and optional production Role/RoleBinding pairs, got %d and %d", len(roles), len(bindings))
 	}
 	seen := map[string]bool{}
@@ -64,6 +64,8 @@ func Validate(reader io.Reader) error {
 		rules := expectedRules()
 		if component == "bitcoin-production" {
 			rules = productionRules()
+		} else if component == "stacks-transactions" {
+			rules = transactionRules()
 		} else if component != "" {
 			return fmt.Errorf("unknown controller Role")
 		}
@@ -98,6 +100,7 @@ func Validate(reader io.Reader) error {
 
 func expectedRules() []rbacv1.PolicyRule {
 	return []rbacv1.PolicyRule{
+		{APIGroups: []string{"stacks.stacks.org"}, Resources: []string{"stackstransactionproductions"}, Verbs: []string{"get", "list", "watch", "create", "patch"}},
 		{APIGroups: []string{"bitcoin.stacks.org"}, Resources: []string{"bitcoinblockproductions"}, Verbs: []string{"get", "list", "watch", "create", "patch"}},
 		{APIGroups: []string{"network.stacks.org"}, Resources: []string{"stacksnetworks"}, Verbs: []string{"get", "list", "watch"}},
 		{APIGroups: []string{"network.stacks.org"}, Resources: []string{"bitcoinnodes", "stacksnodes", "stackssigners"}, Verbs: []string{"get", "list", "watch", "create", "update", "patch", "delete"}},
@@ -139,4 +142,28 @@ func normalize(rules []rbacv1.PolicyRule) []rbacv1.PolicyRule {
 		return string(left) < string(right)
 	})
 	return result
+}
+
+// transactionRules preserves the separate worker's read-only actor and no-Secret-API boundary.
+func transactionRules() []rbacv1.PolicyRule {
+	rules := productionRules()
+	for i := range rules {
+		if rules[i].APIGroups[0] == "bitcoin.stacks.org" {
+			rules[i].APIGroups = []string{"stacks.stacks.org"}
+			for j, value := range rules[i].Resources {
+				if value == "bitcoinblockproductions" {
+					rules[i].Resources[j] = "stackstransactionproductions"
+				} else {
+					rules[i].Resources[j] = "stackstransactionproductions/status"
+				}
+			}
+		}
+		if rules[i].Resources[0] == "configmaps" {
+			rules[i].Verbs = []string{"list"}
+		}
+		if rules[i].Resources[0] == "bitcoinnodes" {
+			rules[i].Resources = []string{"stacksnodes"}
+		}
+	}
+	return rules
 }

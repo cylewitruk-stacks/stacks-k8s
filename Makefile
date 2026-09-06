@@ -74,11 +74,13 @@ modules-verify:
 	done
 
 vuln:
+	npm --prefix operators/network/transactions audit --omit=dev
 	GOWORK=off $(GO) -C apis/network run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
 	GOWORK=off $(GO) -C operators/network run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
 	GOWORK=off $(GO) -C operators/observability run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
 
 docker-check:
+	docker build --check --file operators/network/transactions/Dockerfile .
 	docker build --check --file operators/network/Dockerfile .
 	docker build --check --file operators/observability/Dockerfile .
 

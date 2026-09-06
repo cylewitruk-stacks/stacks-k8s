@@ -29,6 +29,7 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	bitcoinv1alpha1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/bitcoin/v1alpha1"
+	stacksv1alpha1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/stacks/v1alpha1"
 	networkv1alpha1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha1"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/bitcoinnode"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/canonical"
@@ -67,6 +68,7 @@ func TestManagerLifecycleAndAPIServerValidation(t *testing.T) {
 	must(t, clientgoscheme.AddToScheme(scheme))
 	must(t, networkv1alpha1.AddToScheme(scheme))
 	must(t, bitcoinv1alpha1.AddToScheme(scheme))
+	must(t, stacksv1alpha1.AddToScheme(scheme))
 	manager, err := ctrl.NewManager(configuration, ctrl.Options{
 		Scheme:  scheme,
 		Metrics: metricsserver.Options{BindAddress: "0"},
@@ -101,6 +103,76 @@ func TestManagerLifecycleAndAPIServerValidation(t *testing.T) {
 			t.Error("manager did not stop")
 		}
 	})
+
+	// A real API server enforces transaction target/sender immutability and ledger retention.
+	txNetwork := bitcoinNetwork("transactions")
+	txNetwork.Spec.StacksNodes = []networkv1alpha1.StacksNodeTemplate{{Name: "ingress", Role: "follower", BitcoinNodeRef: "bitcoin", Config: generatedStacks()}}
+	txNetwork.Spec.StacksTransactionProduction = &stacksv1alpha1.TransferPolicy{Target: "ingress", Sender: "ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM", Recipient: "ST2CY5V39NHDPWSXMW9QDT3HC3GD6Q6XX4CFRK9AG", AmountMicroSTX: 1, FeeMicroSTX: 1000, IntervalSeconds: 10}
+	must(t, direct.Create(ctx, txNetwork))
+	txKey := client.ObjectKeyFromObject(txNetwork)
+	txLedger := &stacksv1alpha1.StacksTransactionProduction{}
+	eventually(t, "transaction ledger is pinned before ingress readiness", func() bool {
+		return direct.Get(ctx, txKey, txLedger) == nil && direct.Get(ctx, txKey, txNetwork) == nil && txNetwork.Status.TransactionProductionUID == string(txLedger.UID) && txLedger.UID != ""
+	})
+	// The API retains bounded rejection evidence and rejects arbitrary server text.
+	txLedger.Status.RejectionReason = "FeeTooLow"
+	must(t, direct.Status().Update(ctx, txLedger))
+	must(t, direct.Get(ctx, txKey, txLedger))
+	if txLedger.Status.RejectionReason != "FeeTooLow" {
+		t.Fatal("rejection evidence was pruned")
+	}
+	invalidRejection := txLedger.DeepCopy()
+	invalidRejection.Status.RejectionReason = "unbounded upstream detail"
+	if err := direct.Status().Update(ctx, invalidRejection); !apierrors.IsInvalid(err) {
+		t.Fatalf("unbounded rejection reason admitted: %v", err)
+	}
+	changedTx := txNetwork.DeepCopy()
+	changedTx.Spec.StacksTransactionProduction.Sender = changedTx.Spec.StacksTransactionProduction.Recipient
+	if err := direct.Update(ctx, changedTx); !apierrors.IsInvalid(err) {
+		t.Fatalf("transaction sender mutation: %v", err)
+	}
+	changedChild := txLedger.DeepCopy()
+	changedChild.Spec.Policy.Target = "other"
+	if err := direct.Update(ctx, changedChild); !apierrors.IsInvalid(err) {
+		t.Fatalf("child ingress mutation: %v", err)
+	}
+	// Removing the public declaration cannot bypass the retained sender/ledger binding.
+	oldPolicy := txNetwork.Spec.StacksTransactionProduction.DeepCopy()
+	must(t, direct.Get(ctx, txKey, txNetwork))
+	txNetwork.Spec.StacksTransactionProduction = nil
+	must(t, direct.Update(ctx, txNetwork))
+	must(t, direct.Get(ctx, txKey, txNetwork))
+	oldPolicy.Sender = oldPolicy.Recipient
+	txNetwork.Spec.StacksTransactionProduction = oldPolicy
+	must(t, direct.Update(ctx, txNetwork))
+	eventually(t, "remove/re-add cannot change the retained transaction sender", func() bool {
+		if direct.Get(ctx, txKey, txNetwork) != nil || direct.Get(ctx, txKey, txLedger) != nil {
+			return false
+		}
+		for _, condition := range txNetwork.Status.Conditions {
+			if condition.Type == "TransactionsConfigured" && condition.ObservedGeneration == txNetwork.Generation && condition.Reason == "PolicyUnavailable" {
+				return txLedger.Spec.Policy.Sender != oldPolicy.Sender && string(txLedger.UID) == txNetwork.Status.TransactionProductionUID
+			}
+		}
+		return false
+	})
+	txUID := txLedger.UID
+	must(t, direct.Delete(ctx, txLedger))
+	must(t, direct.Get(ctx, txKey, txNetwork))
+	txNetwork.Spec.BitcoinNodes[0].Image = "bitcoin:after-transaction-ledger-deletion"
+	must(t, direct.Update(ctx, txNetwork))
+	eventually(t, "transaction ledger failure does not block actors", func() bool {
+		leaf := &networkv1alpha1.BitcoinNode{}
+		return direct.Get(ctx, client.ObjectKey{Namespace: testNamespace, Name: "transactions-bitcoin"}, leaf) == nil && leaf.Spec.Image == "bitcoin:after-transaction-ledger-deletion"
+	})
+	if err := direct.Get(ctx, txKey, &stacksv1alpha1.StacksTransactionProduction{}); !apierrors.IsNotFound(err) {
+		t.Fatalf("removed transaction ledger was recreated: %v", err)
+	}
+	must(t, direct.Get(ctx, txKey, txNetwork))
+	if txNetwork.Status.TransactionProductionUID != string(txUID) {
+		t.Fatal("transaction ledger UID was reset")
+	}
+	must(t, direct.Delete(ctx, txNetwork))
 
 	invalid := bitcoinNetwork("invalid")
 	invalidProduction := bitcoinNetwork("invalid-production")

@@ -80,7 +80,7 @@ qualification, with relevant cases exercised in earlier vertical slices.
 | M0.3 | Reopened | 9–12; R1–R4 | Amend finite actions, independent target admission, credentials, quiescence, attribution, and cleanup. |
 | M0.4 | Reopened | Extends 9–11; R1–R3 | Define Bitcoin role migration, aggregate-owned multi-target production, policy updates, bounded status, and safe action coexistence. |
 | M0.5 | Planned | 6–8, 16 | Define and qualify native admission, protocol/control traffic separation, limits, and the initial platform matrix. |
-| M0.6 | Planned | 14, 15, 26 | Define bootstrap, steady transaction demand, baseline/override composition, and instrumented-actor support. |
+| M0.6 | In progress | 14, 15, 26 | Define bootstrap, steady transaction demand, baseline/override composition, and instrumented-actor support. |
 | M0.7 | Planned | 12, 17–23 | Reconcile RPC observation authority, Kubernetes-authenticated agent access, passive observation, journal, query, export, and evidence contracts. |
 | M0.8 | Planned | 24–27 | Align layout, fixtures, validation, packaging, roadmap, examples, and the final M0 acceptance record. |
 
@@ -487,7 +487,16 @@ controller, such as an activated testing hook with its own absolute expiry.
 
 ## Requirement 14: Protocol-bootstrap design
 
-**Slice:** M0.6. **Status:** Planned.
+**Slice:** M0.6. **Status:** In progress (initial profile implemented).
+
+The [initial Stacks profile](../network-operator/stacks-production.md) delivers
+external PoX-4 bootstrap/renewal and one-account steady STX transfers without
+a controller workflow. Its static signing isolation, explicit nonce ownership,
+backpressure and restart evidence are qualified on one local normal image.
+Initial withdrawal/rotation requires terminating the designated worker and
+using a fresh account/environment; no hot rotation or server-side revocation is
+claimed. Multi-profile support, overrides and wider credential lifecycle remain
+open, so this does not close Requirement 14 or M0.6.
 
 Add a dedicated design for the primitives required to make a Stacks network
 productive:

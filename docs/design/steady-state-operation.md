@@ -28,7 +28,7 @@ configured, and externally driven networks remain valid uses.
 | `StacksNode` | Run a Stacks node, including its miner role and supported miner configuration. |
 | `StacksSigner` | Run a signer with its configured identity and behavior. |
 | `BitcoinBlockProduction` | Apply emission timing and target-selection policy across referenced Bitcoin nodes. |
-| `StacksTransactionProduction` | Working name for ongoing Stacks transaction demand through referenced ingress nodes. |
+| `StacksTransactionProduction` | Ongoing Stacks demand; one-account fixed-interval transfers through one ingress are implemented. |
 | Bounded action/override | Apply one temporary, independently observable intervention. |
 
 The aggregate controller compiles owned resources; it does not issue mining
@@ -78,6 +78,13 @@ the actor unless the image offers a qualified live-update capability.
 current miner. Submission targets may include follower RPC endpoints. Exact
 empty-mempool behavior is image-specific; offered demand does not guarantee a
 proposal or block in every interval.
+
+The [initial transfer profile](../network-operator/stacks-production.md) implements
+a separately deployed worker, one exclusive account/ingress, fixed offered
+intervals, and exact inclusion accounting. External helpers own funding and
+PoX-4 enrollment/renewal. Its static account isolation is qualified; rotation
+means withdrawal followed by a fresh account/environment, with no hot rotation
+or protocol revocation claim. Broader contracts below remain open.
 
 The recommended execution model uses dedicated workers reconciled by a small
 controller. M0.6 must define transaction profiles, ingress references, offered

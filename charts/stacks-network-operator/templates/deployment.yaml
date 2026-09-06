@@ -42,6 +42,7 @@ spec:
           args:
             - --watch-namespace={{ .Release.Namespace }}
             - --bitcoin-production-enabled={{ .Values.bitcoinProduction.enabled }}
+            - --stacks-transactions-enabled={{ .Values.stacksTransactions.enabled }}
             - --max-concurrent-reconciles={{ .Values.controller.maxConcurrentReconciles }}
             - --leader-elect={{ .Values.controller.leaderElection }}
             - --zap-log-level={{ .Values.controller.logLevel }}

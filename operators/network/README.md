@@ -1,14 +1,18 @@
 # Operator development
 
-The Go module contains one aggregate controller, three leaf controllers, a
-separately deployed Bitcoin production controller, and a shared workload
+The Go module contains one aggregate controller, three leaf controllers, separately
+deployed Bitcoin and Stacks transaction controllers, and a shared workload
 collaborator. See the chart's
 [architecture document](../../docs/network-operator/architecture.md).
-Development requires Go 1.27.1. Network API types and the matching isolated
-generator toolchain live under `../../apis/network`.
+Development requires Go 1.27.1 and Node.js 24 or newer with npm. Network API
+types and the matching isolated generator toolchain live under `../../apis/network`.
 
 The [Bitcoin baseline guide](../../docs/network-operator/bitcoin-production.md)
 covers static credential provisioning and real Core 31.1 acceptance tests.
+The [Stacks transfer guide](../../docs/network-operator/stacks-production.md)
+covers the separate SDK worker and external PoX-4 helpers; its
+[qualification record](../../docs/network-operator/stacks-qualification.md)
+includes commands for the opt-in live transfer tests.
 
 Run development commands from the repository root:
 
