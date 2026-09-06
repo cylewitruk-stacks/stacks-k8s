@@ -57,6 +57,9 @@ func (r *Reconciler) SetupWithManager(manager ctrl.Manager, concurrency int) err
 			return fmt.Errorf("reorganization requires its typed RPC surface")
 		}
 	}
+	if err := r.checkActionAPIs(manager.GetRESTMapper()); err != nil {
+		return err
+	}
 	if r.Now == nil {
 		r.Now = time.Now
 	}

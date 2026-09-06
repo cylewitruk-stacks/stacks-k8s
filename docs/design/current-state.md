@@ -4,6 +4,13 @@ This inventory separates implemented functionality from historical Attacknet
 features. Historical code is feature research only; its orchestration model is
 not a migration target.
 
+## Action deployment
+
+The independent `stacks-action-operator` owns `BitcoinBlockGeneration` and
+optional `BitcoinReorganization` status/finalizers. The network Bitcoin worker
+reads actions and owns the reservation ledger and all mutation RPCs. See the
+[action guide](../action-operator/operations.md).
+
 ## Implemented topology
 
 The `network.stacks.org/v1alpha1` API provides:

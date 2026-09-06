@@ -1,6 +1,6 @@
 # Releases
 
-The two operators are independently versioned products in one repository.
+The three operators are independently versioned products in one repository.
 Each release updates its chart `version`, chart `appVersion`, image tag, and
 operator release notes together.
 
@@ -9,6 +9,7 @@ Use component-prefixed product tags:
 ```text
 stacks-network-operator/v0.1.0
 stacks-observability-operator/v0.1.0
+stacks-action-operator/v0.1.0
 ```
 
 If a Go module is published for external import, its semantic-version tag must
@@ -18,9 +19,13 @@ match its repository subdirectory instead:
 apis/network/v0.1.0
 operators/network/v0.1.0
 operators/observability/v0.1.0
+operators/action/v0.1.0
 ```
 
-Release the API module before an operator module that requires its version.
+Publish Go module tags in dependency order: `apis/network`, then
+`operators/action`, then `operators/network`. The network module’s paired tests
+require the action module tag even though its production binary does not import
+the action runtime. The observability module has no dependency on that pair.
 Repository builds use a local `replace`, but published consumers ignore that
 directive and must be able to resolve the declared API tag. The API module
 depends only on Kubernetes API machinery and follows the network API's

@@ -18,18 +18,12 @@ rules:
   {{- if .Values.bitcoinReorganization.enabled }}
   - apiGroups: ["actions.stacks.org"]
     resources: ["bitcoinreorganizations"]
-    verbs: ["get", "list", "watch", "patch"]
-  - apiGroups: ["actions.stacks.org"]
-    resources: ["bitcoinreorganizations/status"]
-    verbs: ["get", "patch"]
+    verbs: ["get", "list", "watch"]
   {{- end }}
   {{- if .Values.bitcoinGeneration.enabled }}
   - apiGroups: ["actions.stacks.org"]
     resources: ["bitcoinblockgenerations"]
-    verbs: ["get", "list", "watch", "patch"]
-  - apiGroups: ["actions.stacks.org"]
-    resources: ["bitcoinblockgenerations/status"]
-    verbs: ["get", "patch"]
+    verbs: ["get", "list", "watch"]
   {{- end }}
   - apiGroups: ["bitcoin.stacks.org"]
     resources: ["bitcoinblockproductions"]
@@ -152,28 +146,4 @@ spec:
       affinity:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-{{- end }}
-
-{{- if .Values.bitcoinGeneration.enabled }}
----
-apiVersion: v1
-kind: ResourceQuota
-metadata:
-  name: {{ include "stacks-network-operator.fullname" . }}-generation
-  namespace: {{ .Release.Namespace }}
-spec:
-  hard:
-    count/bitcoinblockgenerations.actions.stacks.org: "64"
-{{- end }}
-
-{{- if .Values.bitcoinReorganization.enabled }}
----
-apiVersion: v1
-kind: ResourceQuota
-metadata:
-  name: {{ include "stacks-network-operator.fullname" . }}-reorganization
-  namespace: {{ .Release.Namespace }}
-spec:
-  hard:
-    count/bitcoinreorganizations.actions.stacks.org: "64"
 {{- end }}

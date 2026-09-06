@@ -187,9 +187,11 @@ resources are gone and no other release uses them.
 
 ## Optional finite Bitcoin generation
 
-Enable `bitcoinGeneration.enabled` together with `bitcoinProduction.enabled`
-to use bounded `BitcoinBlockGeneration` actions on the existing executor.
-The chart adds the action Role rules and a 64-object namespace quota.
+First install the action chart in the same namespace. Then enable
+`bitcoinGeneration.enabled` together with `bitcoinProduction.enabled` on the
+network release to use bounded `BitcoinBlockGeneration` actions. The network
+chart adds read-only action Role rules; the action chart owns the 64-object
+namespace quota and lifecycle permissions.
 See the [operating profile](../../docs/network-operator/bitcoin-generation.md)
 for immutable fields, admission, cancellation, attribution, and recovery.
 
@@ -200,3 +202,12 @@ shared executor and requires `bitcoinProduction.enabled`. Provision the helper's
 explicit `--reorganization` RPC profile in a fresh environment first.
 See the [operating guide](../../docs/network-operator/bitcoin-reorganization.md)
 for depth/boundary limits, retained cleanup, cancellation, and teardown.
+
+## Action lifecycle deployment
+
+`bitcoinGeneration.enabled` and `bitcoinReorganization.enabled` enable executor
+selection only. First install the [action chart](../stacks-action-operator/README.md)
+with matching controllers in the same namespace, then enable the network flags.
+That chart owns action CRDs, quotas, status and finalizers. The network worker
+has read-only action access.
+Baseline-only installation needs no action chart or action CRDs.

@@ -4,11 +4,15 @@ go 1.27.1
 
 replace github.com/cylewitruk-stacks/stacks-k8s/apis/network => ../../apis/network
 
+// Paired execution/lifecycle tests only; not imported by the network binary.
+replace github.com/cylewitruk-stacks/stacks-k8s/operators/action => ../action
+
 // controller-runtime v0.24 is tested against Kubernetes v0.36. Keep these
 // module minors aligned until controller-runtime publishes the corresponding
 // stable Kubernetes v0.37 release.
 require (
 	github.com/cylewitruk-stacks/stacks-k8s/apis/network v0.1.0
+	github.com/cylewitruk-stacks/stacks-k8s/operators/action v0.1.0
 	k8s.io/api v0.36.4
 	k8s.io/apiextensions-apiserver v0.36.4
 	k8s.io/apimachinery v0.36.4

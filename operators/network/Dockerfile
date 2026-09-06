@@ -2,6 +2,7 @@
 FROM golang:1.27.1 AS builder
 WORKDIR /src
 COPY apis/network/go.mod apis/network/go.sum ./apis/network/
+COPY operators/action/go.mod operators/action/go.sum ./operators/action/
 COPY operators/network/go.mod operators/network/go.sum ./operators/network/
 RUN --mount=type=cache,target=/go/pkg/mod cd operators/network && go mod download
 COPY apis/network ./apis/network

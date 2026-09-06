@@ -187,18 +187,16 @@ func transactionRules() []rbacv1.PolicyRule {
 	return rules
 }
 
-// generationRules allow only action lifecycle writes within the shared Bitcoin executor.
+// generationRules allow only action reads within the shared Bitcoin executor.
 func generationRules() []rbacv1.PolicyRule {
 	return []rbacv1.PolicyRule{
-		{APIGroups: []string{"actions.stacks.org"}, Resources: []string{"bitcoinblockgenerations"}, Verbs: []string{"get", "list", "watch", "patch"}},
-		{APIGroups: []string{"actions.stacks.org"}, Resources: []string{"bitcoinblockgenerations/status"}, Verbs: []string{"get", "patch"}},
+		{APIGroups: []string{"actions.stacks.org"}, Resources: []string{"bitcoinblockgenerations"}, Verbs: []string{"get", "list", "watch"}},
 	}
 }
 
-// reorganizationRules allow this kind's status/finalizer writes on the shared executor.
+// reorganizationRules allow only this kind's action reads on the shared executor.
 func reorganizationRules() []rbacv1.PolicyRule {
 	return []rbacv1.PolicyRule{
-		{APIGroups: []string{"actions.stacks.org"}, Resources: []string{"bitcoinreorganizations"}, Verbs: []string{"get", "list", "watch", "patch"}},
-		{APIGroups: []string{"actions.stacks.org"}, Resources: []string{"bitcoinreorganizations/status"}, Verbs: []string{"get", "patch"}},
+		{APIGroups: []string{"actions.stacks.org"}, Resources: []string{"bitcoinreorganizations"}, Verbs: []string{"get", "list", "watch"}},
 	}
 }

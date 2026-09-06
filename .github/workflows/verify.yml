@@ -27,8 +27,23 @@ jobs:
             apis/network/go.sum
             apis/network/tools/go.sum
             operators/network/go.sum
+            operators/action/go.sum
       - uses: azure/setup-helm@v5
       - run: make verify-network
+
+  action:
+    name: Action operator
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: operators/action/go.mod
+          cache-dependency-path: |
+            apis/network/go.sum
+            operators/action/go.sum
+      - uses: azure/setup-helm@v5
+      - run: make verify-action
 
   observability:
     name: Observability operator
@@ -56,6 +71,7 @@ jobs:
             apis/network/go.sum
             apis/network/tools/go.sum
             operators/network/go.sum
+            operators/action/go.sum
             operators/observability/go.sum
             operators/observability/tools/go.sum
       - run: make modules-verify

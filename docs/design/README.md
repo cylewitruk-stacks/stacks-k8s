@@ -106,7 +106,7 @@ baseline capability controllers (Bitcoin in network chart; transaction packaging
   ├─ BitcoinBlockProduction: timing and target selection
   └─ StacksTransactionProduction: ongoing offered traffic
 
-stacks-action-operator (recommended)
+stacks-action-operator (initial Bitcoin profiles implemented)
   └─ small independent controllers for bounded actions and overrides
 
 Chaos Mesh

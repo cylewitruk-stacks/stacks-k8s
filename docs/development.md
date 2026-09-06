@@ -27,7 +27,7 @@ make verify
 ```
 
 `make generate` runs the isolated generator under `apis/network/tools`, updates
-generated deepcopy code, and writes network CRDs directly to the owning chart.
+generated deepcopy code, and writes network and action CRDs directly to their owning charts.
 Generated code and CRDs must be committed with their API source changes; CI
 rejects drift.
 
@@ -35,10 +35,10 @@ rejects drift.
 and structurally checks the manager Deployment's security posture. It also
 executes negative renders for unsafe replica settings and malformed image-pull
 secret or service-account names. The shared structural validator lives under
-`tools/chart-policy` and is not part of either operator binary.
+`tools/chart-policy` and is not part of any operator binary.
 
-`make docker-check` validates both Dockerfiles, while `make docker-build`
-compiles both operator images from the repository's default-deny root build
+`make docker-check` validates the operator and worker Dockerfiles, while `make docker-build`
+compiles all three operator images from the repository's default-deny root build
 context. CI runs both so sibling-module changes cannot silently break image
 builds.
 
@@ -46,6 +46,15 @@ The network runtime consumes the types-only `apis/network` module through a
 repository-local replacement. Published releases tag the API module first so
 that the runtime module's declared version remains resolvable without that
 replacement.
+
+Paired executor/lifecycle tests in the network module import the action
+controller packages through a test-only local module requirement. Production
+binaries do not import another operator’s runtime; the repository contract
+check enforces that boundary. Each module retains its own dependency pins, but
+Go’s minimal version selection includes the test dependency in the network
+module’s build list. An action-side dependency upgrade can therefore change
+network-selected versions; qualify the pair together. A separate paired-test
+module is deferred until independent version divergence warrants it.
 
 Changes to admitted inventory, leaf specifications, actor Service ports, or
 kubelet image-ID parsing must update the relevant fixture under

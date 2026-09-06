@@ -1,0 +1,28 @@
+replicaCount: 1
+
+image:
+  repository: ghcr.io/cylewitruk-stacks/stacks-action-operator
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+controller:
+  maxConcurrentReconciles: 2
+  leaderElection: true
+  logLevel: info
+
+serviceAccount:
+  create: true
+  name: ""
+
+resources:
+  requests:
+    cpu: 25m
+    memory: 32Mi
+  limits:
+    cpu: 250m
+    memory: 128Mi
+
+bitcoinGeneration:
+  enabled: true
+bitcoinReorganization:
+  enabled: false

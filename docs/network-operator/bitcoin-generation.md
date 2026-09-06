@@ -8,10 +8,13 @@ with the action controller disabled.
 
 ## Enable and request
 
-Provision the baseline profile, then set both `bitcoinProduction.enabled=true`
-and `bitcoinGeneration.enabled=true` on its chart release. The existing
-Bitcoin Deployment runs the action lifecycle controller and shared executor.
-No second mutation credential, workload, or RPC dispatcher is introduced.
+Provision the baseline profile with `bitcoinProduction.enabled=true` and action
+selection disabled. Install the
+[action chart](../../charts/stacks-action-operator/README.md) in the same namespace
+with its default generation controller enabled, then enable
+`bitcoinGeneration.enabled=true` on the network chart release. The network worker remains the
+sole RPC executor; the separate action Deployment owns status and finalizers
+and receives no mutation credentials.
 
 Create [the example](../../examples/actions/bitcoin-generation.yaml) in the
 network's namespace:
@@ -33,7 +36,7 @@ kubectl --kubeconfig "$STACKS_KUBECONFIG" --context "$STACKS_CONTEXT" \
 | `timeout` | Positive Kubernetes duration, at most 10 minutes from object creation, including pending time. |
 
 The whole spec is immutable. Delete to cancel; create a new object for a new
-request. The chart installs a namespace quota of 64 action objects, including
+request. The action chart installs a namespace quota of 64 action objects, including
 terminal records. After first CRD installation, Kubernetes may reject creates
 with `status unknown for quota` until its quota controller discovers the kind
 and populates `status.used`; wait for that initialization before submitting.

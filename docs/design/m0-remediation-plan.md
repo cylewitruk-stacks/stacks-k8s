@@ -82,7 +82,11 @@ qualification, with relevant cases exercised in earlier vertical slices.
 | M0.5 | Planned | 6–8, 16 | Define and qualify native admission, protocol/control traffic separation, limits, and the initial platform matrix. |
 | M0.6 | In progress | 14, 15, 26 | Define bootstrap, steady transaction demand, baseline/override composition, and instrumented-actor support. |
 | M0.7 | Planned | 12, 17–23 | Reconcile RPC observation authority, Kubernetes-authenticated agent access, passive observation, journal, query, export, and evidence contracts. |
-| M0.8 | Planned | 24–27 | Align layout, fixtures, validation, packaging, roadmap, examples, and the final M0 acceptance record. |
+| M0.8 | In progress | 24–27 | Align layout, fixtures, validation, packaging, roadmap, examples, and the final M0 acceptance record. |
+
+The independent [action package](../action-operator/operations.md) now owns
+the initial Bitcoin action CRDs and lifecycle controllers. Remaining M0.8
+release/compatibility qualification and broader packaging are still open.
 
 Supporting requirements such as safety bounds, evidence integrity, repository
 layout, and roadmap alignment may be updated by an earlier slice. Their final
@@ -717,7 +721,7 @@ Describe actual and proposed paths accurately:
 apis/network/
 operators/network/
 operators/observability/
-operators/action/        # proposed
+operators/action/        # initial Bitcoin lifecycle controllers
 contracts/
 tools/
 charts/

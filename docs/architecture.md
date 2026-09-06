@@ -14,6 +14,10 @@ StacksNetwork
   -> BitcoinNode / StacksNode / StacksSigner controllers
   -> Services, StatefulSets, ConfigMaps, and Pods
 
+BitcoinBlockGeneration / BitcoinReorganization
+  -> action operator: status and finalizers
+  -> network Bitcoin executor: reserved RPCs and receipt ledger
+
 NetworkObservation
   -> observability controller
   -> uncached reads of network and Kubernetes resources
@@ -47,13 +51,11 @@ does not replace the agent with an in-cluster experiment engine.
 | Observability operator | Passively collect, correlate, retain, query, and export facts and telemetry. |
 | Agent | Orchestrate, adapt, investigate, attempt replay, reduce, diagnose, and construct regression cases. |
 
-The network and initial observability controllers exist today. The observer's
-inventory verifier intentionally continues to decode the raw wire shape rather
-than round-trip it through shared typed structs. Desired-operation and action
-controllers and the external agent are target-architecture participants, not
-implementations currently provided by this repository. Defining their
-boundaries now prevents future action APIs from growing into an in-cluster
-scenario or playbook engine.
+The network, action, and initial observability controllers exist today. Bitcoin
+and STX baseline workers are separately enabled network components. The action
+operator projects the shared Bitcoin executor’s durable ledger without RPC
+credentials or ledger-write authority. The observer decodes raw inventory wire
+shapes independently. Expanded actions and observability remain design work.
 
 The observability operator must not create or alter networks, apply actions or
 faults, replay a recorded journal, reduce a scenario, or classify root cause.

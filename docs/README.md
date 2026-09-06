@@ -10,6 +10,8 @@
   - [Stacks bootstrap and steady transfers](network-operator/stacks-production.md)
   - [Stacks qualification evidence](network-operator/stacks-qualification.md)
   - [Hacknet migration](network-operator/migration.md)
+- [Stacks action operator](../charts/stacks-action-operator/README.md)
+  - [Installation and operations](action-operator/operations.md)
 - [Stacks observability operator](../charts/stacks-observability-operator/README.md)
 
 ## Repository

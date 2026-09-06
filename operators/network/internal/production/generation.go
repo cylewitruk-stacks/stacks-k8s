@@ -11,7 +11,6 @@ import (
 	actionv1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/actions/v1alpha1"
 	bitcoinv1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/bitcoin/v1alpha1"
 	networkv1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha1"
-	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/generation"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -75,7 +74,7 @@ func (r *Reconciler) selectAction(ctx context.Context, p *bitcoinv1.BitcoinBlock
 			continue
 		}
 		a := item.(*actionv1.BitcoinBlockGeneration)
-		if a.Spec.NetworkRef.Name != n.Name || a.Spec.BitcoinNodeRef.Name != target.identity.Name || generation.Terminal(a.Status.Phase) || a.Status.AdmittedAt != nil || !a.DeletionTimestamp.IsZero() || !r.Now().Before(a.CreationTimestamp.Add(a.Spec.Timeout.Duration)) {
+		if a.Spec.NetworkRef.Name != n.Name || a.Spec.BitcoinNodeRef.Name != target.identity.Name || actionv1.IsTerminalPhase(a.Status.Phase) || a.Status.AdmittedAt != nil || !a.DeletionTimestamp.IsZero() || !r.Now().Before(a.CreationTimestamp.Add(a.Spec.Timeout.Duration)) {
 			continue
 		}
 		if err := r.RPC.Check(preflight, target.endpoint, a.Spec.Address); err != nil {
@@ -98,7 +97,7 @@ func (r *Reconciler) selectAction(ctx context.Context, p *bitcoinv1.BitcoinBlock
 			}
 			return false, err
 		}
-		if current.UID != a.UID || !reflect.DeepEqual(current.Spec, a.Spec) || generation.Terminal(current.Status.Phase) || current.Status.AdmittedAt != nil || !current.DeletionTimestamp.IsZero() || !r.Now().Before(current.CreationTimestamp.Add(current.Spec.Timeout.Duration)) {
+		if current.UID != a.UID || !reflect.DeepEqual(current.Spec, a.Spec) || actionv1.IsTerminalPhase(current.Status.Phase) || current.Status.AdmittedAt != nil || !current.DeletionTimestamp.IsZero() || !r.Now().Before(current.CreationTimestamp.Add(current.Spec.Timeout.Duration)) {
 			continue
 		}
 		before := p.DeepCopy()
@@ -134,7 +133,7 @@ func (r *Reconciler) reconcileAction(ctx context.Context, p *bitcoinv1.BitcoinBl
 		}
 		return r.report(ctx, p, "Blocked", "Unresolved finite generation retains target exclusion", time.Second)
 	}
-	if !same || (generation.Terminal(a.Status.Phase) && a.Status.BlocksGenerated == record.BlocksGenerated && a.Status.LastDispatchID == record.LastDispatchID) {
+	if !same || (actionv1.IsTerminalPhase(a.Status.Phase) && a.Status.BlocksGenerated == record.BlocksGenerated && a.Status.LastDispatchID == record.LastDispatchID) {
 		before := p.DeepCopy()
 		p.Status.Action = nil
 		p.Status.Phase, p.Status.Message = "Running", "Finite action reservation released; latest baseline will be evaluated"
@@ -147,10 +146,10 @@ func (r *Reconciler) reconcileAction(ctx context.Context, p *bitcoinv1.BitcoinBl
 		}
 		return r.stopAction(ctx, p, reason)
 	}
-	if generation.Terminal(a.Status.Phase) || !a.DeletionTimestamp.IsZero() || !r.Now().Before(record.ExpiresAt.Time) || record.BlocksGenerated >= record.Spec.Count || record.StopReason != "" {
+	if actionv1.IsTerminalPhase(a.Status.Phase) || !a.DeletionTimestamp.IsZero() || !r.Now().Before(record.ExpiresAt.Time) || record.BlocksGenerated >= record.Spec.Count || record.StopReason != "" {
 		return r.report(ctx, p, "Reserved", "Waiting for action outcome and receipt acknowledgement", time.Second)
 	}
-	if !controllerutil.ContainsFinalizer(a, generation.Finalizer) || a.Status.AdmittedAt == nil || !reflect.DeepEqual(a.Status.AdmittedTarget, &record.Target) || a.Status.AdmittedPolicy == nil || a.Status.AdmittedPolicy.UID != string(p.UID) {
+	if !controllerutil.ContainsFinalizer(a, actionv1.CleanupFinalizer) || a.Status.AdmittedAt == nil || !reflect.DeepEqual(a.Status.AdmittedTarget, &record.Target) || a.Status.AdmittedPolicy == nil || a.Status.AdmittedPolicy.UID != string(p.UID) {
 		return r.report(ctx, p, "Reserved", "Waiting for durable action admission and finalizer", time.Second)
 	}
 	target, err := r.admitTarget(ctx, p, n, false)
@@ -179,7 +178,7 @@ func (r *Reconciler) reconcileAction(ctx context.Context, p *bitcoinv1.BitcoinBl
 	if err := r.APIReader.Get(ctx, client.ObjectKeyFromObject(a), a); err != nil {
 		return ctrl.Result{RequeueAfter: time.Second}, client.IgnoreNotFound(err)
 	}
-	if string(a.UID) != record.UID || !reflect.DeepEqual(a.Spec, record.Spec) || generation.Terminal(a.Status.Phase) || !a.DeletionTimestamp.IsZero() || !r.Now().Before(record.ExpiresAt.Time) {
+	if string(a.UID) != record.UID || !reflect.DeepEqual(a.Spec, record.Spec) || actionv1.IsTerminalPhase(a.Status.Phase) || !a.DeletionTimestamp.IsZero() || !r.Now().Before(record.ExpiresAt.Time) {
 		return ctrl.Result{RequeueAfter: time.Millisecond}, nil
 	}
 	if err := r.APIReader.Get(ctx, client.ObjectKeyFromObject(n), n); err != nil {

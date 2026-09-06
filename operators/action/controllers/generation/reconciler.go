@@ -9,11 +9,12 @@ import (
 	actionv1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/actions/v1alpha1"
 	bitcoinv1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/bitcoin/v1alpha1"
 	networkv1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha1"
-	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/actionstatus"
+	"github.com/cylewitruk-stacks/stacks-k8s/operators/action/internal/actionstatus"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
@@ -27,6 +28,8 @@ func Terminal(phase string) bool {
 
 // Reconciler projects the executor ledger into this kind's lifecycle and finalizer.
 type Reconciler struct {
+	// Concurrency bounds parallel reconciles of distinct actions.
+	Concurrency int
 	// Client writes action status and primary metadata only.
 	client.Client
 	// APIReader reads current admitted identity and durable execution facts.
@@ -40,7 +43,7 @@ func (r *Reconciler) SetupWithManager(m ctrl.Manager) error {
 	if r.Now == nil {
 		r.Now = time.Now
 	}
-	return ctrl.NewControllerManagedBy(m).For(&actionv1.BitcoinBlockGeneration{}).Complete(r)
+	return ctrl.NewControllerManagedBy(m).For(&actionv1.BitcoinBlockGeneration{}).WithOptions(controller.Options{MaxConcurrentReconciles: r.Concurrency}).Complete(r)
 }
 
 // Reconcile never grants RPC authority or clears unresolved ledger state.

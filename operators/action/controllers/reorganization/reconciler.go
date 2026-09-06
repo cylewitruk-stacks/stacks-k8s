@@ -9,17 +9,20 @@ import (
 	actionv1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/actions/v1alpha1"
 	bitcoinv1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/bitcoin/v1alpha1"
 	networkv1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha1"
-	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/actionstatus"
+	"github.com/cylewitruk-stacks/stacks-k8s/operators/action/internal/actionstatus"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
 // Reconciler projects durable branch and cleanup facts into one action kind.
 type Reconciler struct {
+	// Concurrency bounds parallel reconciles of distinct actions.
+	Concurrency int
 	// Client writes only this action's status and metadata.
 	client.Client
 	// APIReader reads current ownership and execution facts directly.
@@ -33,7 +36,7 @@ func (r *Reconciler) SetupWithManager(m ctrl.Manager) error {
 	if r.Now == nil {
 		r.Now = time.Now
 	}
-	return ctrl.NewControllerManagedBy(m).For(&actionv1.BitcoinReorganization{}).Complete(r)
+	return ctrl.NewControllerManagedBy(m).For(&actionv1.BitcoinReorganization{}).WithOptions(controller.Options{MaxConcurrentReconciles: r.Concurrency}).Complete(r)
 }
 
 // Reconcile retains unresolved cleanup even when the visible outcome is terminal.

@@ -66,7 +66,8 @@ the separately enabled mutation controller and its limitations.
 **Current delivery:** single-target fixed-cadence baseline, pause/cadence
 updates, static RPC separation, and durable response-loss exclusion are
 implemented. The optional [finite generation profile](../network-operator/bitcoin-generation.md)
-adds bounded immutable actions sharing the same executor. Multi-target policy remains
+adds bounded immutable actions through the independent action operator,
+sharing the network worker’s executor. Multi-target policy remains
 pending; M1 is not complete.
 
 **Outcome:** an ordinary regtest network advances Bitcoin through a declared

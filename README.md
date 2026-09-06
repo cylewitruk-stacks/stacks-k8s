@@ -33,9 +33,11 @@ Multi-target production policies remain design work.
 The repository currently provides:
 
 - `stacks-network-operator`, which compiles a declarative `StacksNetwork` into
-  small actor resources and Kubernetes workloads; and
+  small actor resources and Kubernetes workloads;
 - `stacks-observability-operator`, which performs identity-bound, read-only
-  observations of an admitted network topology.
+  observations of an admitted network topology; and
+- `stacks-action-operator`, which owns bounded Bitcoin generation and optional
+  reorganization lifecycles through the network worker’s shared executor.
 
 The observability operator consumes the network operator's Kubernetes API and
 the shared inventory wire contract. It does not import the network operator's
@@ -77,6 +79,10 @@ For a productive miner/signer network with tiny STX transfers, follow the
 [Stacks bootstrap and transfer guide](docs/network-operator/stacks-production.md).
 Stacks RPC readiness may depend on advancing the Bitcoin chain. See the
 [readiness guidance](docs/network-operator/operations.md#readiness).
+
+For finite block generation, install the separate
+[action chart](charts/stacks-action-operator/README.md) and enable the network
+executor’s matching capability.
 
 Install the observer after the network operator when trusted topology identity
 is required:

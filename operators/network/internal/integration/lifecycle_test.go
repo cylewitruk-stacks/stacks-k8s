@@ -47,7 +47,7 @@ func TestManagerLifecycleAndAPIServerValidation(t *testing.T) {
 	testEnvironment := &envtest.Environment{
 		CRDDirectoryPaths: []string{filepath.Join(
 			"..", "..", "..", "..", "charts", "stacks-network-operator", "crds",
-		)},
+		), filepath.Join("..", "..", "..", "..", "charts", "stacks-action-operator", "crds")},
 		ErrorIfCRDPathMissing:       true,
 		DownloadBinaryAssets:        true,
 		DownloadBinaryAssetsVersion: "1.36",

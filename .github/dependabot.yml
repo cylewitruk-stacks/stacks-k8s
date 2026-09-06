@@ -49,3 +49,13 @@ updates:
     directory: /operators/observability
     schedule:
       interval: weekly
+
+  - package-ecosystem: gomod
+    directory: /operators/action
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: docker
+    directory: /operators/action
+    schedule:
+      interval: weekly

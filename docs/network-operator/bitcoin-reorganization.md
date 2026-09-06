@@ -16,8 +16,11 @@ This opt-in adds producer `getblockheader`, `getblockhash`, `getchaintips`,
 the corresponding read methods. Actor workloads still receive no mutation
 password. Existing immutable baseline configurations are not rewritten.
 
-Enable `bitcoinProduction.enabled=true` and `bitcoinReorganization.enabled=true`
-on the chart. `bitcoinGeneration.enabled` is independent. All enabled actions
+Keep `bitcoinProduction.enabled=true` on the network chart. First install the
+[action chart](../../charts/stacks-action-operator/README.md) in the same namespace
+with `bitcoinReorganization.enabled=true`, then enable the matching
+`bitcoinReorganization.enabled` flag on the network chart.
+`bitcoinGeneration.enabled` is independent on both charts. All enabled actions
 share the same producer Deployment, credentials, receipt pool, and durable
 execution ledger. The topology controller does not execute actions.
 

@@ -10,11 +10,11 @@ import (
 )
 
 // Finalizer retains cleanup and unresolved execution obligations.
-const Finalizer = "actions.stacks.org/action-cleanup"
+const Finalizer = actionv1.CleanupFinalizer
 
 // Terminal reports a frozen action outcome.
 func Terminal(phase string) bool {
-	return phase == "Completed" || phase == "Recovered" || phase == "Failed" || phase == "Inconclusive"
+	return actionv1.IsTerminalPhase(phase)
 }
 
 // Finish freezes the terminal projection while permitting later receipt facts to be copied.

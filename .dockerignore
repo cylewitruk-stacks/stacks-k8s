@@ -8,6 +8,8 @@
 !operators/
 !operators/network/
 !operators/network/**
+!operators/action/
+!operators/action/**
 !operators/observability/
 !operators/observability/**
 

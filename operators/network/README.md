@@ -55,9 +55,11 @@ Generated deepcopy code and CRDs are committed. Do not hand-edit them.
 
 ## Optional finite Bitcoin generation
 
-Enable `bitcoinGeneration.enabled` together with `bitcoinProduction.enabled`
-to use bounded `BitcoinBlockGeneration` actions on the existing executor.
-The chart adds the action Role rules and a 64-object namespace quota.
+First install the action chart in the same namespace. Then enable
+`bitcoinGeneration.enabled` together with `bitcoinProduction.enabled` on the
+network release to use bounded `BitcoinBlockGeneration` actions. The network
+chart adds read-only action Role rules; the action chart owns the 64-object
+namespace quota and lifecycle permissions.
 See the [operating profile](../../docs/network-operator/bitcoin-generation.md)
 for immutable fields, admission, cancellation, attribution, and recovery.
 

@@ -21,5 +21,5 @@ available to the cluster.
 
 The [Stacks bootstrap and transfer guide](../docs/network-operator/stacks-production.md)
 uses an external generator instead of committing private fixture keys. It
-creates a Bitcoin node, miner, signer-node/signer and paused transfer policy,
+creates a Bitcoin node, Stacks miner, signer-node/signer and paused transfer policy,
 with fresh isolated accounts and version-specific raw configuration.

@@ -7,7 +7,7 @@ import (
 	"time"
 
 	actionv1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/actions/v1alpha1"
-	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/reorganization"
+	"github.com/cylewitruk-stacks/stacks-k8s/operators/action/controllers/reorganization"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"

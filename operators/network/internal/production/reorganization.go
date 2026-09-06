@@ -9,7 +9,6 @@ import (
 	actionv1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/actions/v1alpha1"
 	bitcoinv1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/bitcoin/v1alpha1"
 	networkv1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha1"
-	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/actionstatus"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -19,7 +18,7 @@ import (
 
 // reserveReorganization prepares immutable local-chain identity without side effects.
 func (r *Reconciler) reserveReorganization(ctx context.Context, p *bitcoinv1.BitcoinBlockProduction, n *networkv1.StacksNetwork, target admittedTarget, a *actionv1.BitcoinReorganization) (bool, error) {
-	if a.Spec.NetworkRef.Name != n.Name || a.Spec.BitcoinNodeRef.Name != target.identity.Name || a.Status.AdmittedAt != nil || actionstatus.Terminal(a.Status.Phase) || !a.DeletionTimestamp.IsZero() || !r.Now().Before(a.CreationTimestamp.Add(a.Spec.Timeout.Duration)) {
+	if a.Spec.NetworkRef.Name != n.Name || a.Spec.BitcoinNodeRef.Name != target.identity.Name || a.Status.AdmittedAt != nil || actionv1.IsTerminalPhase(a.Status.Phase) || !a.DeletionTimestamp.IsZero() || !r.Now().Before(a.CreationTimestamp.Add(a.Spec.Timeout.Duration)) {
 		return false, nil
 	}
 	rpc := r.RPC.(ReorganizationRPC)
@@ -74,7 +73,7 @@ func (r *Reconciler) reserveReorganization(ctx context.Context, p *bitcoinv1.Bit
 	if err := r.APIReader.Get(ctx, client.ObjectKeyFromObject(a), fresh); err != nil {
 		return false, client.IgnoreNotFound(err)
 	}
-	if fresh.UID != a.UID || !reflect.DeepEqual(fresh.Spec, a.Spec) || fresh.Status.AdmittedAt != nil || actionstatus.Terminal(fresh.Status.Phase) || !fresh.DeletionTimestamp.IsZero() || !r.Now().Before(fresh.CreationTimestamp.Add(fresh.Spec.Timeout.Duration)) {
+	if fresh.UID != a.UID || !reflect.DeepEqual(fresh.Spec, a.Spec) || fresh.Status.AdmittedAt != nil || actionv1.IsTerminalPhase(fresh.Status.Phase) || !fresh.DeletionTimestamp.IsZero() || !r.Now().Before(fresh.CreationTimestamp.Add(fresh.Spec.Timeout.Duration)) {
 		return false, nil
 	}
 	before := p.DeepCopy()
@@ -107,7 +106,7 @@ func (r *Reconciler) reconcileReorganization(ctx context.Context, p *bitcoinv1.B
 		return r.report(ctx, p, "Blocked", "Unresolved reorganization call forbids further mutation, including cleanup", time.Second)
 	}
 	clean := record.CleanupAcknowledged || record.StartedAt == nil
-	acknowledged := same && actionstatus.Terminal(a.Status.Phase) && a.Status.LastDispatchID == record.LastDispatchID && a.Status.BlocksGenerated == record.BlocksGenerated && a.Status.CleanupAcknowledged == record.CleanupAcknowledged
+	acknowledged := same && actionv1.IsTerminalPhase(a.Status.Phase) && a.Status.LastDispatchID == record.LastDispatchID && a.Status.BlocksGenerated == record.BlocksGenerated && a.Status.CleanupAcknowledged == record.CleanupAcknowledged
 	if clean && (!same || acknowledged) {
 		before := p.DeepCopy()
 		p.Status.Reorganization = nil
@@ -125,7 +124,7 @@ func (r *Reconciler) reconcileReorganization(ctx context.Context, p *bitcoinv1.B
 		stop = "IdentityDiverged"
 	case record.BlocksGenerated < record.Spec.Depth+1 && !r.Now().Before(record.ExpiresAt.Time):
 		stop = "DeadlineExceeded"
-	case actionstatus.Terminal(a.Status.Phase):
+	case actionv1.IsTerminalPhase(a.Status.Phase):
 		stop = "EffectUncertain"
 	}
 	if record.StopReason == "" && stop != "" {
@@ -134,7 +133,7 @@ func (r *Reconciler) reconcileReorganization(ctx context.Context, p *bitcoinv1.B
 	if clean && record.StopReason != "" || record.FinalChain != nil {
 		return r.report(ctx, p, "Reserved", "Waiting for terminal reorganization receipt acknowledgement", time.Second)
 	}
-	if same && (!controllerutil.ContainsFinalizer(a, actionstatus.Finalizer) || a.Status.AdmittedAt == nil || a.Status.AdmittedTarget == nil || *a.Status.AdmittedTarget != record.Target || a.Status.AdmittedPolicy == nil || a.Status.AdmittedPolicy.UID != string(p.UID)) {
+	if same && (!controllerutil.ContainsFinalizer(a, actionv1.CleanupFinalizer) || a.Status.AdmittedAt == nil || a.Status.AdmittedTarget == nil || *a.Status.AdmittedTarget != record.Target || a.Status.AdmittedPolicy == nil || a.Status.AdmittedPolicy.UID != string(p.UID)) {
 		return r.report(ctx, p, "Reserved", "Waiting for durable reorganization admission", time.Second)
 	}
 	cleanup := record.InvalidationAcknowledged && !record.CleanupAcknowledged && (record.StopReason != "" || record.BlocksGenerated == record.Spec.Depth+1)
@@ -250,7 +249,7 @@ func (r *Reconciler) armReorganization(ctx context.Context, p *bitcoinv1.Bitcoin
 		if err := r.APIReader.Get(ctx, client.ObjectKey{Namespace: p.Namespace, Name: record.Name}, a); err != nil {
 			return ctrl.Result{RequeueAfter: time.Second}, client.IgnoreNotFound(err)
 		}
-		if string(a.UID) != record.UID || !reflect.DeepEqual(a.Spec, record.Spec) || actionstatus.Terminal(a.Status.Phase) || !a.DeletionTimestamp.IsZero() || n.Spec.Suspended || !r.Now().Before(record.ExpiresAt.Time) {
+		if string(a.UID) != record.UID || !reflect.DeepEqual(a.Spec, record.Spec) || actionv1.IsTerminalPhase(a.Status.Phase) || !a.DeletionTimestamp.IsZero() || n.Spec.Suspended || !r.Now().Before(record.ExpiresAt.Time) {
 			return ctrl.Result{RequeueAfter: time.Second}, nil
 		}
 	} else if !r.Now().Before(record.ExpiresAt.Add(30 * time.Second)) {

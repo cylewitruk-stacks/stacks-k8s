@@ -9,10 +9,9 @@ import (
 
 	actionv1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/actions/v1alpha1"
 	bitcoinv1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/bitcoin/v1alpha1"
-	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/actionstatus"
-	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/generation"
+	"github.com/cylewitruk-stacks/stacks-k8s/operators/action/controllers/generation"
+	"github.com/cylewitruk-stacks/stacks-k8s/operators/action/controllers/reorganization"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/production"
-	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/reorganization"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -43,7 +42,7 @@ func verifyActionCancellation(t *testing.T, ctx context.Context, c client.Client
 				must(t, c.Create(ctx, p))
 				n.Status.BitcoinProductionUID = string(p.UID)
 				must(t, c.Status().Update(ctx, n))
-				g := &actionv1.BitcoinBlockGeneration{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace, Finalizers: []string{actionstatus.Finalizer}}, Spec: actionv1.BitcoinBlockGenerationSpec{NetworkRef: actionv1.LocalReference{Name: name}, BitcoinNodeRef: actionv1.LocalReference{Name: name + "-bitcoin"}, Count: 3, IntervalSeconds: 1, Address: policy.Address, Timeout: metav1.Duration{Duration: time.Minute}}}
+				g := &actionv1.BitcoinBlockGeneration{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace, Finalizers: []string{actionv1.CleanupFinalizer}}, Spec: actionv1.BitcoinBlockGenerationSpec{NetworkRef: actionv1.LocalReference{Name: name}, BitcoinNodeRef: actionv1.LocalReference{Name: name + "-bitcoin"}, Count: 3, IntervalSeconds: 1, Address: policy.Address, Timeout: metav1.Duration{Duration: time.Minute}}}
 				a := &actionv1.BitcoinReorganization{ObjectMeta: g.ObjectMeta, Spec: actionv1.BitcoinReorganizationSpec{NetworkRef: g.Spec.NetworkRef, BitcoinNodeRef: g.Spec.BitcoinNodeRef, Depth: 2, Address: policy.Address, Timeout: g.Spec.Timeout, BoundaryPolicy: actionv1.ReorganizationBoundaryPolicy{AllowEpochBoundaryCrossing: true, AllowRewardCycleBoundaryCrossing: true, AllowPreparePhaseBoundaryCrossing: true}}}
 				var object client.Object = g
 				if kind == "reorganization" {

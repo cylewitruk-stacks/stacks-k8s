@@ -150,6 +150,7 @@ func TestRepositoryLayout(t *testing.T) {
 	required := []string{
 		"apis/network/go.mod",
 		"apis/network/tools/go.mod",
+		"charts/stacks-action-operator/Chart.yaml",
 		"charts/stacks-network-operator/Chart.yaml",
 		"charts/stacks-observability-operator/Chart.yaml",
 		"contracts/action-lifecycle-v1.json",
@@ -159,6 +160,7 @@ func TestRepositoryLayout(t *testing.T) {
 		"contracts/leaf-spec-v1.json",
 		"contracts/steady-state-operation-v1.json",
 		"docs/design/steady-state-operation.md",
+		"operators/action/go.mod",
 		"operators/network/go.mod",
 		"operators/observability/go.mod",
 	}
@@ -242,7 +244,7 @@ func TestActionLifecycleDesignContract(t *testing.T) {
 
 	// The first served action must obey the shared fixture, not only its prose.
 	for _, filename := range []string{"actions.stacks.org_bitcoinblockgenerations.yaml", "actions.stacks.org_bitcoinreorganizations.yaml"} {
-		schemaBytes, err := os.ReadFile(filepath.Join(root, "charts", "stacks-network-operator", "crds", filename))
+		schemaBytes, err := os.ReadFile(filepath.Join(root, "charts", "stacks-action-operator", "crds", filename))
 		if err != nil {
 			t.Fatal(err)
 		}

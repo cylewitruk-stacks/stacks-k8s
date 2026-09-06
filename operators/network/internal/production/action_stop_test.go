@@ -7,7 +7,7 @@ import (
 
 	actionv1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/actions/v1alpha1"
 	bitcoinv1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/bitcoin/v1alpha1"
-	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/generation"
+	"github.com/cylewitruk-stacks/stacks-k8s/operators/action/controllers/generation"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"

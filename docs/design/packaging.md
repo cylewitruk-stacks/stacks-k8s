@@ -1,5 +1,9 @@
 # Packaging and release design
 
+The implemented [action package](../action-operator/operations.md) owns the
+served action CRDs and lifecycle writers. The network worker retains the sole
+Bitcoin RPC executor. Baseline installs do not require the action chart.
+
 ## Independent products
 
 | Package | Responsibility | Dependency direction |
@@ -8,7 +12,7 @@
 | `stacks-network-operator` | Reusable Stacks regtest topology | Kubernetes only |
 | `stacks-observability-operator` | Passive identity and telemetry collection | Reads network/action/Chaos APIs; does not import their runtime code |
 | `stacks-action-operator` | Bounded protocol actions, overrides, and safety policy | Uses versioned wire APIs |
-| Baseline capability controllers (placement open) | Bitcoin production and ongoing transaction demand | Independent of enabled action, Chaos Mesh, or observation controllers |
+| Baseline capability controllers (initial workers in network chart) | Bitcoin production and ongoing transaction demand | Independent of enabled action, Chaos Mesh, or observation controllers |
 | Chaos Mesh | Generic infrastructure faults | External optional dependency |
 | Telemetry backend bundle | Loki/Prometheus/OpenTelemetry/object storage profile | External optional dependencies |
 | Development bundle | Pins compatible chart versions for local use | Depends on products; does not merge their release lifecycles |
