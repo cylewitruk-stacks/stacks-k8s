@@ -28,6 +28,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
+	actionv1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/actions/v1alpha1"
 	bitcoinv1alpha1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/bitcoin/v1alpha1"
 	stacksv1alpha1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/stacks/v1alpha1"
 	networkv1alpha1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha1"
@@ -68,6 +69,7 @@ func TestManagerLifecycleAndAPIServerValidation(t *testing.T) {
 	must(t, clientgoscheme.AddToScheme(scheme))
 	must(t, networkv1alpha1.AddToScheme(scheme))
 	must(t, bitcoinv1alpha1.AddToScheme(scheme))
+	must(t, actionv1.AddToScheme(scheme))
 	must(t, stacksv1alpha1.AddToScheme(scheme))
 	manager, err := ctrl.NewManager(configuration, ctrl.Options{
 		Scheme:  scheme,
@@ -103,6 +105,10 @@ func TestManagerLifecycleAndAPIServerValidation(t *testing.T) {
 			t.Error("manager did not stop")
 		}
 	})
+
+	verifyGenerationAdmission(t, ctx, direct)
+	verifyReorganizationAdmission(t, ctx, direct)
+	verifyActionCancellation(t, ctx, direct)
 
 	// A real API server enforces transaction target/sender immutability and ledger retention.
 	txNetwork := bitcoinNetwork("transactions")
@@ -204,13 +210,11 @@ func TestManagerLifecycleAndAPIServerValidation(t *testing.T) {
 		t.Fatalf("parent production target mutation: %v", err)
 	}
 	// Removing and re-adding policy cannot bypass the retained ledger's target.
-	must(t, direct.Get(ctx, productionKey, productionNetwork))
-	productionNetwork.Spec.BitcoinBlockProduction = nil
-	must(t, direct.Update(ctx, productionNetwork))
-	must(t, direct.Get(ctx, productionKey, productionNetwork))
-	productionNetwork.Spec.BitcoinNodes = append(productionNetwork.Spec.BitcoinNodes, otherBitcoin)
-	productionNetwork.Spec.BitcoinBlockProduction = changedParent.Spec.BitcoinBlockProduction.DeepCopy()
-	must(t, direct.Update(ctx, productionNetwork))
+	must(t, updateNetworkWithRetry(ctx, direct, productionNetwork, func(n *networkv1alpha1.StacksNetwork) { n.Spec.BitcoinBlockProduction = nil }))
+	must(t, updateNetworkWithRetry(ctx, direct, productionNetwork, func(n *networkv1alpha1.StacksNetwork) {
+		n.Spec.BitcoinNodes = append(n.Spec.BitcoinNodes, otherBitcoin)
+		n.Spec.BitcoinBlockProduction = changedParent.Spec.BitcoinBlockProduction.DeepCopy()
+	}))
 	_, _ = (&network.Reconciler{Client: direct, APIReader: direct, Scheme: scheme, Now: time.Now}).Reconcile(ctx, ctrl.Request{NamespacedName: productionKey})
 	must(t, direct.Get(ctx, productionKey, productionPolicy))
 	if productionPolicy.UID != immutableLedgerUID || productionPolicy.Spec.Policy.Target != "bitcoin" {
@@ -228,8 +232,9 @@ func TestManagerLifecycleAndAPIServerValidation(t *testing.T) {
 	if productionNetwork.Status.BitcoinProductionUID != string(immutableLedgerUID) {
 		t.Fatal("missing ledger erased the pinned UID")
 	}
-	productionNetwork.Spec.BitcoinNodes[0].Image = "bitcoin:updated-after-ledger-deletion"
-	must(t, direct.Update(ctx, productionNetwork))
+	must(t, updateNetworkWithRetry(ctx, direct, productionNetwork, func(n *networkv1alpha1.StacksNetwork) {
+		n.Spec.BitcoinNodes[0].Image = "bitcoin:updated-after-ledger-deletion"
+	}))
 	eventually(t, "missing production ledger does not block actor updates", func() bool {
 		actor := &networkv1alpha1.BitcoinNode{}
 		return direct.Get(ctx, client.ObjectKey{Namespace: testNamespace, Name: "production-bitcoin"}, actor) == nil && actor.Spec.Image == "bitcoin:updated-after-ledger-deletion"
@@ -623,3 +628,14 @@ func must(t *testing.T, err error) {
 }
 
 func pointer[T any](value T) *T { return &value }
+
+// updateNetworkWithRetry reapplies a test spec edit after concurrent controller status writes.
+func updateNetworkWithRetry(ctx context.Context, c client.Client, n *networkv1alpha1.StacksNetwork, change func(*networkv1alpha1.StacksNetwork)) error {
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		if err := c.Get(ctx, client.ObjectKeyFromObject(n), n); err != nil {
+			return err
+		}
+		change(n)
+		return c.Update(ctx, n)
+	})
+}

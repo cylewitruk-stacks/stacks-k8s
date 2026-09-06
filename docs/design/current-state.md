@@ -19,8 +19,7 @@ The separate `bitcoin.stacks.org/v1alpha1` `BitcoinBlockProduction` API now
 supports an aggregate-owned, single-target fixed-cadence baseline. Its
 [implemented profile](../network-operator/bitcoin-production.md) defines static
 credential separation, admission, durable dispatch accounting, and the
-fail-closed availability limit after a lost receipt. Finite actions and
-multi-target production remain unavailable.
+fail-closed availability limit after a lost receipt. Multi-target production remains unavailable.
 
 The separate `stacks.stacks.org/v1alpha1` `StacksTransactionProduction` API
 supports one exclusive account, fixed-interval tiny STX transfers, bounded
@@ -48,6 +47,12 @@ The operator supports persistent volumes and retention, but refuses unsafe
 in-place changes to immutable StatefulSet service identity, selectors, and
 volume-claim templates. A replacement logical actor is required for those
 changes.
+
+The optional [`BitcoinBlockGeneration`](../network-operator/bitcoin-generation.md)
+API shares the baseline executor with durable reservation, bounded immutable
+requests, cancellation, and receipt attribution. The optional
+[`BitcoinReorganization`](../network-operator/bitcoin-reorganization.md) profile
+adds bounded suffix replacement and explicit compensation obligations.
 
 ## Implemented observation
 
@@ -82,7 +87,7 @@ Git, runs repository build logic, or constructs an image.
 
 | Area | Missing capability |
 | --- | --- |
-| Bitcoin lifecycle | Multi-target/jitter policies, bounded generation, controlled reorganization, and RPC-observed branch state. Fixed-cadence single-target baseline is implemented. |
+| Bitcoin lifecycle | Multi-target/jitter policies and broader branch observation. Single-target baseline, finite generation, and constrained local reorganization are implemented. |
 | Steady transaction demand | Multi-account/ingress profiles, overrides and wider signing lifecycle support. One-account fixed-interval demand is implemented. |
 | Protocol bootstrap | General image/epoch compatibility, PoX-5 transitions and reusable bounded APIs. External PoX-4 bootstrap and renewal are implemented for one local profile. |
 | Generic faults | Native Chaos Mesh installation guidance, safe direct targeting, correlation, and observation. |

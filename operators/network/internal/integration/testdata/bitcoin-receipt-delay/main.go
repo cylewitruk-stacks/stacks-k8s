@@ -19,10 +19,24 @@ import (
 	"time"
 )
 
-// delayKey marks the first generation response selected for a delivery fault.
+// delayKey marks the first selected method response for a delivery fault.
 type delayKey struct{}
 
+// methodKey identifies the request for credential-free receipt evidence.
+type methodKey struct{}
+
 func main() {
+	method := os.Getenv("RECEIPT_METHOD")
+	if method == "" {
+		method = "generatetoaddress"
+	}
+	switch method {
+	case "generatetoaddress", "invalidateblock", "reconsiderblock":
+	default:
+		log.Fatal("unsupported fixture method")
+	}
+	var invalidated atomic.Bool
+
 	args := append(append([]string(nil), os.Args[1:]...), "-rpcbind=127.0.0.1:28443", "-rpcport=28443")
 	bitcoin := exec.Command("/opt/bitcoin-31.1/bin/bitcoind-real", args...)
 	bitcoin.Stdout, bitcoin.Stderr = os.Stdout, os.Stderr
@@ -43,12 +57,19 @@ func main() {
 		http.Error(w, "Bitcoin RPC unavailable", http.StatusBadGateway)
 	}
 	proxy.ModifyResponse = func(response *http.Response) error {
+		if method, _ := response.Request.Context().Value(methodKey{}).(string); method == "invalidateblock" && response.StatusCode == http.StatusOK {
+			invalidated.Store(true)
+		}
 		if delay, _ := response.Request.Context().Value(delayKey{}).(bool); delay && response.StatusCode == http.StatusOK {
+			label := method
+			if label == "generatetoaddress" {
+				label = "generation"
+			}
 			if os.Getenv("RECEIPT_FAULT") == "drop" {
-				log.Print("acceptance fixture: Bitcoin returned generation receipt; dropping response connection")
+				log.Printf("acceptance fixture: Bitcoin returned %s receipt; dropping response connection", label)
 				return dropReceipt
 			}
-			log.Print("acceptance fixture: Bitcoin returned generation receipt; delaying delivery for 15 seconds")
+			log.Printf("acceptance fixture: Bitcoin returned %s receipt; delaying delivery for 15 seconds", label)
 			time.Sleep(15 * time.Second)
 		}
 		return nil
@@ -65,7 +86,11 @@ func main() {
 		var request struct {
 			Method string `json:"method"`
 		}
-		if json.Unmarshal(body, &request) == nil && request.Method == "generatetoaddress" && delayed.CompareAndSwap(false, true) {
+		if json.Unmarshal(body, &request) == nil {
+			r = r.WithContext(context.WithValue(r.Context(), methodKey{}, request.Method))
+		}
+		eligible := os.Getenv("RECEIPT_AFTER_INVALIDATION") != "true" || invalidated.Load()
+		if eligible && request.Method == method && delayed.CompareAndSwap(false, true) {
 			r = r.WithContext(context.WithValue(r.Context(), delayKey{}, true))
 		}
 		proxy.ServeHTTP(w, r)

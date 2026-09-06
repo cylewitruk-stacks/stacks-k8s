@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	actionv1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/actions/v1alpha1"
 	"net"
 	"reflect"
 	"strconv"
@@ -20,6 +21,8 @@ import (
 
 // admittedTarget pins the address and runtime identity used by one dispatch.
 type admittedTarget struct {
+	// identity binds action execution to the admitted leaf and workload.
+	identity actionv1.TargetIdentity
 	// endpoint is the admitted Pod's RPC address, without mutable Service resolution.
 	endpoint string
 	// actorUID identifies the BitcoinNode incarnation.
@@ -32,11 +35,16 @@ type admittedTarget struct {
 
 // admit uses direct reads and validates only this capability's required actor.
 func (r *Reconciler) admit(ctx context.Context, policy *bitcoinv1alpha1.BitcoinBlockProduction, parent *networkv1alpha1.StacksNetwork) (admittedTarget, error) {
+	return r.admitTarget(ctx, policy, parent, true)
+}
+
+// admitTarget optionally checks baseline policy convergence while always checking current actor identity.
+func (r *Reconciler) admitTarget(ctx context.Context, policy *bitcoinv1alpha1.BitcoinBlockProduction, parent *networkv1alpha1.StacksNetwork, baseline bool) (admittedTarget, error) {
 	var zero admittedTarget
 	if !metav1.IsControlledBy(policy, parent) || policy.Spec.NetworkUID != string(parent.UID) || parent.Status.BitcoinProductionUID != string(policy.UID) {
 		return zero, fmt.Errorf("production ledger is not bound to this network")
 	}
-	if parent.Spec.BitcoinBlockProduction == nil || !reflect.DeepEqual(*parent.Spec.BitcoinBlockProduction, policy.Spec.Policy) {
+	if baseline && (parent.Spec.BitcoinBlockProduction == nil || !reflect.DeepEqual(*parent.Spec.BitcoinBlockProduction, policy.Spec.Policy)) {
 		return zero, fmt.Errorf("compiled production policy is not current")
 	}
 	catalog := parent.Status.TargetDeclarations
@@ -118,5 +126,5 @@ func (r *Reconciler) admit(ctx context.Context, policy *bitcoinv1alpha1.BitcoinB
 	if port == 0 {
 		port = 18443
 	}
-	return admittedTarget{endpoint: "http://" + net.JoinHostPort(pod.Status.PodIP, strconv.Itoa(int(port))), actorUID: string(actor.UID), podUID: string(pod.UID), containerID: containerID}, nil
+	return admittedTarget{identity: actionv1.TargetIdentity{APIVersion: networkv1alpha1.GroupVersion.String(), Kind: "BitcoinNode", Name: actor.Name, UID: string(actor.UID), SpecDigest: digest, ConfigDigest: r.ConfigDigest, StatefulSetUID: string(statefulSet.UID), Revision: identity.ControllerRevision, PodUID: string(pod.UID), ContainerID: containerID, RuntimeImageID: identity.RuntimeImageID}, endpoint: "http://" + net.JoinHostPort(pod.Status.PodIP, strconv.Itoa(int(port))), actorUID: string(actor.UID), podUID: string(pod.UID), containerID: containerID}, nil
 }

@@ -5,8 +5,11 @@
 **Direction agreed; replacement implementation contracts open.** This document
 applies the [steady-state operation amendment](steady-state-operation.md).
 A constrained [Bitcoin baseline profile](../network-operator/bitcoin-production.md)
-is implemented in `bitcoin.stacks.org/v1alpha1`; bounded-action CRDs remain
-unimplemented. The reviewed
+is implemented in `bitcoin.stacks.org/v1alpha1`; the initial
+[finite generation profile](../network-operator/bitcoin-generation.md) is served
+in `actions.stacks.org/v1alpha1`. A constrained
+[reorganization profile](bitcoin-reorganization.md) adds local replacement and
+acknowledged compensation. The reviewed
 [M0.4 baseline](history/bitcoin-lifecycle-m0.4.md) and its three fixtures are
 superseded design history, not implementation authority.
 
@@ -58,7 +61,7 @@ replacement target-validation and endpoint-identity contract.
 The [R1/R2 proposal](target-admission-and-rpc-execution.md) recommends a
 health-independent declaration catalog joined to current leaf/runtime identity,
 with endpoint checks under the initial trusted-network profile. Declaration
-publication is the next implementation slice and enables no RPC mutations.
+publication is implemented and itself enables no RPC mutations.
 Cryptographic process authentication belongs to deferred reset-profile work.
 
 References are typed and same-namespace. Public specs do not choose arbitrary
@@ -161,6 +164,9 @@ contract. R2 also determines whether production can omit durable per-request
 execution state. Bounded status does not justify forgetting outstanding work.
 
 ## Reorganization cleanup gate
+
+The [initial R4 contract](bitcoin-reorganization.md) now defines this gate for
+one trusted local regtest profile. Broader cleanup/recovery profiles remain open.
 
 Reorganization combines irreversible history with a temporary invalidation
 marker. R4 must define cleanup after success, definite failure, timeout,

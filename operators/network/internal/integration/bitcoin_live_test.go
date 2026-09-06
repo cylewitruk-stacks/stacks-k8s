@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	actionv1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/actions/v1alpha1"
 	bitcoinv1alpha1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/bitcoin/v1alpha1"
 	networkv1alpha1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
@@ -236,6 +237,7 @@ func bitcoinLiveClient(t *testing.T) (client.Client, types.NamespacedName) {
 	liveMust(t, clientgoscheme.AddToScheme(scheme))
 	liveMust(t, networkv1alpha1.AddToScheme(scheme))
 	liveMust(t, bitcoinv1alpha1.AddToScheme(scheme))
+	liveMust(t, actionv1.AddToScheme(scheme))
 	c, err := client.New(liveConfiguration(t), client.Options{Scheme: scheme})
 	liveMust(t, err)
 	return c, types.NamespacedName{Namespace: requiredEnvironment(t, "STACKS_BITCOIN_LIVE_NAMESPACE"), Name: requiredEnvironment(t, "STACKS_BITCOIN_LIVE_NETWORK")}

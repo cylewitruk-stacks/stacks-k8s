@@ -15,6 +15,22 @@ metadata:
   labels:
     app.kubernetes.io/component: bitcoin-production
 rules:
+  {{- if .Values.bitcoinReorganization.enabled }}
+  - apiGroups: ["actions.stacks.org"]
+    resources: ["bitcoinreorganizations"]
+    verbs: ["get", "list", "watch", "patch"]
+  - apiGroups: ["actions.stacks.org"]
+    resources: ["bitcoinreorganizations/status"]
+    verbs: ["get", "patch"]
+  {{- end }}
+  {{- if .Values.bitcoinGeneration.enabled }}
+  - apiGroups: ["actions.stacks.org"]
+    resources: ["bitcoinblockgenerations"]
+    verbs: ["get", "list", "watch", "patch"]
+  - apiGroups: ["actions.stacks.org"]
+    resources: ["bitcoinblockgenerations/status"]
+    verbs: ["get", "patch"]
+  {{- end }}
   - apiGroups: ["bitcoin.stacks.org"]
     resources: ["bitcoinblockproductions"]
     verbs: ["get", "list", "watch", "patch"]
@@ -88,6 +104,8 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           args:
             - --component=bitcoin-production
+            - --bitcoin-reorganization-enabled={{ .Values.bitcoinReorganization.enabled }}
+            - --bitcoin-generation-enabled={{ .Values.bitcoinGeneration.enabled }}
             - --watch-namespace={{ .Release.Namespace }}
             - --leader-elect=true
             - --max-concurrent-reconciles={{ .Values.controller.maxConcurrentReconciles }}
@@ -134,4 +152,28 @@ spec:
       affinity:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+{{- end }}
+
+{{- if .Values.bitcoinGeneration.enabled }}
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: {{ include "stacks-network-operator.fullname" . }}-generation
+  namespace: {{ .Release.Namespace }}
+spec:
+  hard:
+    count/bitcoinblockgenerations.actions.stacks.org: "64"
+{{- end }}
+
+{{- if .Values.bitcoinReorganization.enabled }}
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: {{ include "stacks-network-operator.fullname" . }}-reorganization
+  namespace: {{ .Release.Namespace }}
+spec:
+  hard:
+    count/bitcoinreorganizations.actions.stacks.org: "64"
 {{- end }}

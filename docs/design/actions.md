@@ -2,9 +2,11 @@
 
 ## Status and authority
 
-This document is the normative lifecycle and API contract for future custom
-`actions.stacks.org/v1alpha1` resources. No custom action CRD is implemented
-yet. Each implemented kind retains its own typed spec, controller package,
+This document is the normative lifecycle and API contract for custom
+`actions.stacks.org/v1alpha1` resources. The first served kind is
+[`BitcoinBlockGeneration`](../network-operator/bitcoin-generation.md).
+[`BitcoinReorganization`](bitcoin-reorganization.md) adds the explicitly
+compensated irreversible profile. Each implemented kind retains its own typed spec, controller package,
 RBAC slice, example, and reference page.
 
 Native Chaos Mesh resources keep their upstream schemas and status. The
@@ -403,7 +405,7 @@ Before the first action CRD merges, schema tests must consume the lifecycle
 fixture and non-vacuously assert:
 
 - the complete spec has `self == oldSelf`;
-- phase and common-condition enums match the fixture exactly;
+- phase enums and allowed common-condition values match the fixture exactly;
 - every forbidden field is absent recursively under `spec`;
 - `timeout` has the fixture's duration-string wire type, no OpenAPI `format`,
   the exact positive CEL rule, and a finite per-kind maximum;
@@ -415,10 +417,11 @@ fixture and non-vacuously assert:
 
 Every controller then adds transition-table tests proving `phase` agrees with
 conditions and mechanism state, plus cached-versus-uncached identity, restart,
-foreign-object, timeout, deletion, cleanup, and ambiguous-effect tests. Current
-repository tests verify the fixture and its representation in this normative
-document; they do not claim to validate action schemas before those schemas
-exist.
+foreign-object, timeout, deletion, cleanup, and ambiguous-effect tests.
+Current repository tests consume the fixture and validate the served
+generation and reorganization schemas, including condition-value CEL restrictions. The generation
+profile explicitly amends independent target admission and the meaning of
+`startedAt` as the first durable authorization; broader mechanisms remain open.
 
 ## Definition of done
 

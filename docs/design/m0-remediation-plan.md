@@ -138,8 +138,12 @@ The [initial Bitcoin baseline](../network-operator/bitcoin-production.md) now
 implements one-target fixed-cadence production with separated static RPC
 permissions, a UID-pinned durable production ledger, bounded work, and explicit
 response-loss behavior. Its CRD status provides exclusion for this sole enabled
-mutation owner; a shared reservation/action API remains deferred. R1–R3 stay
-open for wider capability contracts, and M1 finite generation remains pending.
+mutation owner. The [finite generation profile](../network-operator/bitcoin-generation.md)
+now extends that ledger with a shared action reservation and bounded lifecycle.
+R1–R3 stay open for wider capability contracts. The initial
+[reorganization/R4 profile](bitcoin-reorganization.md) defines bounded local
+replacement with retained uncertainty and acknowledged compensation; broader
+recovery remains open.
 Possible unresolved execution
 keeps the target closed across restarts and replacement. No blind retry or
 in-place reset reopens it. Preserve evidence and use a fresh independently
@@ -149,8 +153,9 @@ fence an already-resolved request. Graceful controller drain stops new arming
 and persists outstanding receipts within the shutdown grace period; failed
 drains remain uncertain. Network/namespace teardown explicitly abandons work
 and must not wait indefinitely for RPC quiescence or an optional evidence sink.
-Use observed disruption to prioritize advanced recovery. R4 remains a gate for
-reorganization, not for declaration publication or baseline-only production.
+Use observed disruption to prioritize advanced recovery. The initial R4 amendment
+covers this constrained reorganization profile; wider recovery remains gated.
+It does not gate declaration publication or baseline-only production.
 
 ## Requirement 1: Shared network API-module spike
 

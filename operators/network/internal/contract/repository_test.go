@@ -244,6 +244,88 @@ func TestActionLifecycleDesignContract(t *testing.T) {
 		t.Fatalf("unexpected timeout field contract: %#v", contract.TimeoutField)
 	}
 
+	// The first served action must obey the shared fixture, not only its prose.
+	for _, filename := range []string{"actions.stacks.org_bitcoinblockgenerations.yaml", "actions.stacks.org_bitcoinreorganizations.yaml"} {
+		schemaBytes, err := os.ReadFile(filepath.Join(root, "charts", "stacks-network-operator", "crds", filename))
+		if err != nil {
+			t.Fatal(err)
+		}
+		crd := &apiextensionsv1.CustomResourceDefinition{}
+		if err := yaml.UnmarshalStrict(schemaBytes, crd); err != nil {
+			t.Fatal(err)
+		}
+		version := crd.Spec.Versions[0]
+		if crd.Spec.Group != contract.APIGroup || version.Name != contract.APIVersion || version.Subresources.Status == nil {
+			t.Fatal("served action identity or status differs from lifecycle")
+		}
+		schema := version.Schema.OpenAPIV3Schema
+		spec, status := schema.Properties["spec"], schema.Properties["status"]
+		if len(spec.XValidations) != 1 || spec.XValidations[0].Rule != contract.SpecImmutabilityRule {
+			t.Fatal("missing whole-spec immutability")
+		}
+		for _, field := range contract.CoreSpecFields {
+			if _, ok := spec.Properties[field]; !ok {
+				t.Fatalf("missing core spec %s", field)
+			}
+		}
+		for _, field := range contract.CoreStatusFields {
+			if _, ok := status.Properties[field]; !ok {
+				t.Fatalf("missing core status %s", field)
+			}
+		}
+		phases := []string{}
+		for _, value := range status.Properties["phase"].Enum {
+			var phase string
+			if err := json.Unmarshal(value.Raw, &phase); err != nil {
+				t.Fatal(err)
+			}
+			phases = append(phases, phase)
+		}
+		assertStringsEqual(t, "served phases", phases, contract.Phases)
+		conditionRule := "self.all(c, c.type in ['" + strings.Join(contract.ConditionTypes, "', '") + "'])"
+		conditions := status.Properties["conditions"]
+		if len(conditions.XValidations) != 1 || conditions.XValidations[0].Rule != conditionRule {
+			t.Fatal("condition vocabulary not restricted to lifecycle")
+		}
+		timeout := spec.Properties["timeout"]
+		if timeout.Type != contract.TimeoutField.WireType || timeout.Format != "" || len(timeout.XValidations) != 2 || timeout.XValidations[0].Rule != contract.TimeoutField.PositiveCEL || timeout.XValidations[1].Rule != "duration(self) <= duration('10m')" {
+			t.Fatal("served timeout violates lifecycle")
+		}
+		var checkSpec func(apiextensionsv1.JSONSchemaProps)
+		checkSpec = func(value apiextensionsv1.JSONSchemaProps) {
+			if value.XPreserveUnknownFields != nil && *value.XPreserveUnknownFields {
+				t.Fatal("free-form action payload")
+			}
+			if value.Type == "string" && value.MaxLength == nil {
+				t.Fatal("unbounded spec string")
+			}
+			if value.Type == "array" {
+				if value.MaxItems == nil {
+					t.Fatal("unbounded spec array")
+				}
+				checkSpec(*value.Items.Schema)
+			}
+			if value.AdditionalProperties != nil {
+				t.Fatal("open spec map")
+			}
+			for name, child := range value.Properties {
+				for _, forbidden := range contract.ForbiddenSpecFields {
+					if name == forbidden {
+						t.Fatalf("orchestration field %s", name)
+					}
+				}
+				checkSpec(child)
+			}
+		}
+		checkSpec(spec)
+		for _, field := range []string{"networkRef", "bitcoinNodeRef"} {
+			ref := spec.Properties[field]
+			if len(ref.Properties) != 1 || ref.Properties["name"].Type != "string" {
+				t.Fatalf("untyped reference %s", field)
+			}
+		}
+
+	}
 	documentBytes, err := os.ReadFile(filepath.Join(root, "docs", "design", "actions.md"))
 	if err != nil {
 		t.Fatal(err)

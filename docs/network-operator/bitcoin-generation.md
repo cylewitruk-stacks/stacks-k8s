@@ -1,0 +1,136 @@
+# Finite Bitcoin block generation
+
+`actions.stacks.org/v1alpha1` `BitcoinBlockGeneration` requests a bounded
+number of single-block regtest RPCs. Its `Completed` outcome means the requested
+receipts were accounted, without asserting chain adoption or a Stacks outcome.
+It is optional; ordinary [Bitcoin production](bitcoin-production.md) works
+with the action controller disabled.
+
+## Enable and request
+
+Provision the baseline profile, then set both `bitcoinProduction.enabled=true`
+and `bitcoinGeneration.enabled=true` on its chart release. The existing
+Bitcoin Deployment runs the action lifecycle controller and shared executor.
+No second mutation credential, workload, or RPC dispatcher is introduced.
+
+Create [the example](../../examples/actions/bitcoin-generation.yaml) in the
+network's namespace:
+
+```bash
+kubectl --kubeconfig "$STACKS_KUBECONFIG" --context "$STACKS_CONTEXT" \
+  -n "$STACKS_NAMESPACE" create -f examples/actions/bitcoin-generation.yaml
+kubectl --kubeconfig "$STACKS_KUBECONFIG" --context "$STACKS_CONTEXT" \
+  -n "$STACKS_NAMESPACE" get bitcoinblockgeneration three-blocks -o yaml
+```
+
+| Spec field | Meaning and bound |
+| --- | --- |
+| `networkRef.name` | Same-namespace owning `StacksNetwork`. |
+| `bitcoinNodeRef.name` | Exact compiled `BitcoinNode` name, matching the retained baseline target. |
+| `count` | 1–100 acknowledged single-block requests. |
+| `intervalSeconds` | 1–60 seconds after each receipt, without catch-up. |
+| `address` | Explicit valid regtest coinbase destination, 14–128 characters. |
+| `timeout` | Positive Kubernetes duration, at most 10 minutes from object creation, including pending time. |
+
+The whole spec is immutable. Delete to cancel; create a new object for a new
+request. The chart installs a namespace quota of 64 action objects, including
+terminal records. After first CRD installation, Kubernetes may reject creates
+with `status unknown for quota` until its quota controller discovers the kind
+and populates `status.used`; wait for that initialization before submitting.
+Export and delete finished records when capacity is needed.
+The executor rejects truncated or oversized queue inventories rather than
+silently choosing from a partial list; baseline work remains available.
+
+## Admission and shared execution
+
+This profile amends R1–R3 for finite generation; it does not implement the
+superseded Lease-based Bitcoin fixtures. Admission joins the current parent
+declaration catalog to the exact ready leaf, immutable approved configuration,
+StatefulSet revision, Pod, and container identity using uncached reads. Global
+inventory readiness is unnecessary. Specs cannot choose endpoints or credentials.
+`admittedNetwork` records name, UID, and declaration generation;
+`admittedTarget` records leaf/configuration/runtime identity; `admittedPolicy`
+records the execution-ledger UID/generation and approved configuration digest.
+It does not claim that an `ActionSafetyPolicy` exists.
+
+The producer selects the oldest eligible request, breaking creation-time ties
+by UID. Invalid or unavailable requests do not reserve the target. Admission
+requires a compiled baseline policy; that policy may be paused. A reservation
+lives in the existing UID-pinned `BitcoinBlockProduction.status.action`.
+Only the production controller writes that ledger and issues RPCs. Only the
+kind's lifecycle controller writes action status and its finalizer.
+
+Before the first call, the action controller must persist admission and
+`actions.stacks.org/action-cleanup`. Each authorization records the action
+owner and `Armed` intent in one optimistic-lock ledger write. The reservation
+excludes baseline generation through inter-block gaps and receipt accounting.
+The action cannot follow a changed admitted runtime. Temporary unavailability
+waits without dispatch; a different current identity stops the action. Read-only
+preflight failures are retried within the existing action deadline. A successful
+read that rejects regtest or the destination stops the action as `MechanismFailed`.
+
+The collector accounts each matching receipt atomically into action progress,
+without incrementing baseline `blocksProduced`. Action status acknowledges
+`blocksGenerated`, `lastBlockHash`, and `lastDispatchID`. The executor releases
+only after a terminal action acknowledges all known receipts and no call is
+unresolved. These fields retain the latest receipt and a counter, not a full
+block journal. Shared ledger `lastCompletedAt` anchors the next baseline tick.
+
+Baseline pause, cadence, destination, or policy removal does not rewrite an
+admitted action. Parent suspension stops its future authorizations. After
+release, the executor evaluates the **latest** baseline declaration; it never
+restores a saved policy snapshot. The aggregate continues to update other
+actors independently.
+
+## Outcomes, cancellation, and recovery
+
+| Phase | Meaning |
+| --- | --- |
+| `Pending` | Waiting for an eligible target and executor before the creation-relative deadline. |
+| `Admitted` | Exact identities and reservation persisted; no call armed yet. |
+| `Active` | At least one call authorized; finite work is in progress. |
+| `Completed` | All requested receipts arrived within the deadline and before cancellation. |
+| `Failed` | Definite stop with known partial or zero progress, without an unresolved call. |
+| `Inconclusive` | An authorized effect or admitted identity became uncertain. |
+
+The common conditions are `Admitted`, `Progressing`, and `EffectObserved`;
+`CleanupComplete` is absent because generated blocks are irreversible.
+`ActionCancelled` supplements the common reason vocabulary for deletion.
+Deletion may advance Kubernetes metadata generation; UID and the immutable spec
+preserve action identity. An idle cancellation records the executor stop and
+waits for terminal receipt acknowledgement before releasing the reservation.
+`startedAt` marks the first durable authorization, which may be committed even
+if its acknowledgement is lost before any send begins.
+
+Deadline or deletion stops new authorizations, without cancelling receipt
+collection or pretending to undo blocks. A terminal outcome and `finishedAt`
+remain frozen. A late receipt can still update progress; it cannot turn a
+terminal uncertainty into success. Terminal conditions describe that outcome,
+while progress records subsequent receipt facts.
+
+Collectors retain the baseline profile's limits: no normal read deadline,
+ten-second preflight, three-second dial, 32 receipt slots, five-second accounting
+attempts, and 25-second graceful drain within the 30-second manager/45-second
+Pod allowance. A successful drain or restart between accounted calls preserves
+progress. Lost arm-write acknowledgements conservatively close the target even
+when the live process sent nothing. An `Armed` request without a surviving
+collector or durable receipt stays excluded across restart, deletion, and
+expiry. No mutation is retried or inferred successful from chain height.
+
+Recreate an unresolved environment in a **new namespace with fresh credentials
+and no reused data**. Delete its owning network while controllers are running,
+wait for action and ledger finalizers to clear, then uninstall and delete the
+namespace. Administrative abandonment removes retention obligations without
+claiming server quiescence. Never force-clear a ledger to resume an old network.
+If a ledger was forcibly lost, the parent's permanent UID pin still prevents
+replacement; action finalizer removal is not readmission.
+
+Keep the action-enabled executor installed until reservations resolve or the
+environment is abandoned. Disabling the flag retains existing reservations as
+`Blocked`. Downgrading to a binary predating this ledger extension is unsupported.
+Do not reuse an active environment across incompatible executor versions.
+
+The separately enabled [reorganization profile](bitcoin-reorganization.md)
+uses the same exclusion boundary. Multi-target scheduling, jitter, Bitcoin role
+migration, credential epochs, server fencing, and in-place recovery remain separate work.
+See the [qualification and review ledger](../reviews/bitcoin-actions-review.md).

@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	actionv1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/actions/v1alpha1"
 	bitcoinv1alpha1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/bitcoin/v1alpha1"
 	networkv1alpha1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha1"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/workload"
@@ -60,7 +61,7 @@ type productionFixture struct {
 func fixture(t *testing.T) *productionFixture {
 	t.Helper()
 	scheme := runtime.NewScheme()
-	for _, add := range []func(*runtime.Scheme) error{corev1.AddToScheme, appsv1.AddToScheme, networkv1alpha1.AddToScheme, bitcoinv1alpha1.AddToScheme} {
+	for _, add := range []func(*runtime.Scheme) error{corev1.AddToScheme, appsv1.AddToScheme, networkv1alpha1.AddToScheme, bitcoinv1alpha1.AddToScheme, actionv1.AddToScheme} {
 		if err := add(scheme); err != nil {
 			t.Fatal(err)
 		}
@@ -89,7 +90,7 @@ func fixture(t *testing.T) *productionFixture {
 			t.Fatal(err)
 		}
 	}
-	c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(f.parent, f.policy, f.actor, f.sts, f.pod).WithObjects(f.parent, f.policy, f.actor, f.sts, f.pod, f.config).Build()
+	c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(f.parent, f.policy, f.actor, f.sts, f.pod, &actionv1.BitcoinBlockGeneration{}, &actionv1.BitcoinReorganization{}).WithObjects(f.parent, f.policy, f.actor, f.sts, f.pod, f.config).Build()
 	f.r = &Reconciler{Client: c, APIReader: c, RPC: f.rpc, ConfigDigest: digest, RPCTimeout: time.Second, Now: func() time.Time { return f.now }, ProcessNonce: "process-one"}
 	f.r.collectors = newCollectorPool(f.r, collectorLimit, collectorDrain)
 	t.Cleanup(func() {
@@ -216,7 +217,7 @@ func TestAdmissionRejectsStaleOrUnapprovedTargets(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			f := fixture(t)
 			mutate(f)
-			c := fake.NewClientBuilder().WithScheme(f.r.Scheme()).WithStatusSubresource(f.parent, f.policy, f.actor, f.sts, f.pod).WithObjects(f.parent, f.policy, f.actor, f.sts, f.pod, f.config).Build()
+			c := fake.NewClientBuilder().WithScheme(f.r.Scheme()).WithStatusSubresource(f.parent, f.policy, f.actor, f.sts, f.pod, &actionv1.BitcoinBlockGeneration{}, &actionv1.BitcoinReorganization{}).WithObjects(f.parent, f.policy, f.actor, f.sts, f.pod, f.config).Build()
 			f.r.Client, f.r.APIReader = c, c
 			f.reconcile(t, context.Background())
 			if f.rpc.sends != 0 {

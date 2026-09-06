@@ -66,8 +66,9 @@ the separately enabled mutation controller and its limitations.
 
 **Current delivery:** single-target fixed-cadence baseline, pause/cadence
 updates, static RPC separation, and durable response-loss exclusion are
-implemented. Bitcoin role migration, multi-target policy, and finite generation
-remain pending; M1 is not complete.
+implemented. The optional [finite generation profile](../network-operator/bitcoin-generation.md)
+adds bounded immutable actions sharing the same executor. Bitcoin role migration
+and multi-target policy remain pending; M1 is not complete.
 
 **Outcome:** an ordinary regtest network advances Bitcoin through a declared
 baseline, with finite generation separately available.
@@ -181,11 +182,15 @@ platform assumptions.
 
 ## M6: remaining Bitcoin lifecycle actions
 
+**Current delivery:** the [initial local profile](bitcoin-reorganization.md)
+implements bounded suffix replacement, acknowledged compensation and retained
+RPC uncertainty. Wider lifecycle qualification remains open.
+
 **Outcome:** bounded Bitcoin lifecycle mechanisms compose with baseline
 production under the reviewed exclusion contract.
 
-Implement `BitcoinReorganization` only after R4 defines invalidation-marker
-cleanup for every exit path and R2 covers server work across takeover/recovery.
+Broader `BitcoinReorganization` profiles require corresponding R4 invalidation-marker
+cleanup for every exit path and R2 coverage of server work across takeover/recovery.
 Retain conservative bounds and fail-closed protocol-boundary handling until a
 trusted schedule source is designed. Passive observations report branch facts
 without claiming causal attribution or deterministic results.

@@ -24,6 +24,7 @@ func main() {
 	name := flag.String("name", "bitcoin", "StacksNetwork name.")
 	image := flag.String("image", "bitcoin/bitcoin:31.1@sha256:da25cedc66b1daefff9f412ee196c901a899c3fa68a33b20849c3e08b5c40d63", "Bitcoin Core image; defaults to the pinned 31.1 image index.")
 	address := flag.String("address", "mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn", "Regtest coinbase destination; the default is a test-only address with no provided spending key.")
+	reorganization := flag.Bool("reorganization", false, "Provision the optional local reorganization RPC method profile.")
 	interval := flag.Int("interval-seconds", 5, "Delay between acknowledged single-block requests.")
 	flag.Parse()
 	if len(validation.IsDNS1123Label(*namespace)) != 0 || len(validation.IsDNS1123Label(*name)) != 0 || *interval < 1 || *interval > 86400 {
@@ -31,9 +32,15 @@ func main() {
 		os.Exit(1)
 	}
 	producer, observer := token(), token()
+	producerMethods := "getblockchaininfo,validateaddress,generatetoaddress"
+	observerMethods := "getblockchaininfo,getblockcount,getbestblockhash"
+	if *reorganization {
+		producerMethods += ",getblockheader,getblockhash,getchaintips,invalidateblock,reconsiderblock"
+		observerMethods += ",getblockheader,getblockhash,getchaintips"
+	}
 	configuration := "regtest=1\nserver=1\nprinttoconsole=1\ntxindex=1\ndiscover=0\ndnsseed=0\nlistenonion=0\nrpcwhitelistdefault=1\n" +
 		auth("producer", producer) + auth("observer", observer) +
-		"rpcwhitelist=producer:getblockchaininfo,validateaddress,generatetoaddress\nrpcwhitelist=observer:getblockchaininfo,getblockcount,getbestblockhash\n" +
+		"rpcwhitelist=producer:" + producerMethods + "\nrpcwhitelist=observer:" + observerMethods + "\n" +
 		"[regtest]\nrpcbind=0.0.0.0:18443\nrpcallowip=0.0.0.0/0\n"
 	digest := fmt.Sprintf("sha256:%x", sha256.Sum256([]byte(configuration)))
 	credentials, err := json.Marshal(production.Credentials{Username: "producer", Password: producer, ConfigDigest: digest})

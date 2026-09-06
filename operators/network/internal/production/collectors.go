@@ -23,6 +23,8 @@ const (
 
 // receivedReceipt is immutable evidence retained until accounting or administrative retirement.
 type receivedReceipt struct {
+	// method identifies a reorganization mutation; empty means ordinary generation.
+	method string
 	// hash is the matching single-block success result.
 	hash string
 	// completed is the original receipt time, not the time of a later accounting retry.
@@ -148,11 +150,31 @@ func (p *collectorPool) collect(armed *bitcoinv1alpha1.BitcoinBlockProduction, e
 	p.mutex.Unlock()
 	go func() {
 		defer p.release(armed.Status.DispatchID)
-		hash, err := p.reconciler.RPC.Generate(entry.ctx, endpoint, armed.Spec.Policy.Address, armed.Status.DispatchID)
+		var hash, method string
+		var err error
+		if record := armed.Status.Reorganization; record != nil {
+			rpc, ok := p.reconciler.RPC.(ReorganizationRPC)
+			if !ok {
+				return
+			}
+			method = record.Step
+			switch method {
+			case "Invalidate":
+				err = rpc.Invalidate(entry.ctx, endpoint, record.InvalidatedHash, armed.Status.DispatchID)
+			case "Generate":
+				hash, err = rpc.Generate(entry.ctx, endpoint, record.Spec.Address, armed.Status.DispatchID)
+			case "Reconsider":
+				err = rpc.Reconsider(entry.ctx, endpoint, record.InvalidatedHash, armed.Status.DispatchID)
+			default:
+				return
+			}
+		} else {
+			hash, err = p.reconciler.RPC.Generate(entry.ctx, endpoint, armed.Spec.Policy.Address, armed.Status.DispatchID)
+		}
 		if err != nil {
 			return
 		} // The persistent Armed record, without a local collector, becomes Blocked.
-		receipt := &receivedReceipt{hash: hash, completed: metav1.NewTime(p.reconciler.Now().UTC())}
+		receipt := &receivedReceipt{method: method, hash: hash, completed: metav1.NewTime(p.reconciler.Now().UTC())}
 		p.mutex.Lock()
 		entry.receipt, entry.phase = receipt, "Accounting"
 		p.mutex.Unlock()

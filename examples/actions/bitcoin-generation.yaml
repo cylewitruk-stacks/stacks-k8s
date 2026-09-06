@@ -1,0 +1,15 @@
+apiVersion: actions.stacks.org/v1alpha1
+kind: BitcoinBlockGeneration
+metadata:
+  name: three-blocks
+  labels:
+    actions.stacks.org/correlation-id: ordinary-regtest-check
+spec:
+  networkRef:
+    name: bitcoin
+  bitcoinNodeRef:
+    name: bitcoin-bitcoin
+  count: 3
+  intervalSeconds: 2
+  address: mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn
+  timeout: 2m

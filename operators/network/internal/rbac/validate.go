@@ -64,6 +64,25 @@ func Validate(reader io.Reader) error {
 		rules := expectedRules()
 		if component == "bitcoin-production" {
 			rules = productionRules()
+
+			generation, reorganization := false, false
+			for _, rule := range role.Rules {
+				for _, group := range rule.APIGroups {
+					if group == "actions.stacks.org" {
+						for _, resource := range rule.Resources {
+							generation = generation || resource == "bitcoinblockgenerations"
+							reorganization = reorganization || resource == "bitcoinreorganizations"
+						}
+					}
+				}
+			}
+			if generation {
+				rules = append(rules, generationRules()...)
+			}
+			if reorganization {
+				rules = append(rules, reorganizationRules()...)
+			}
+
 		} else if component == "stacks-transactions" {
 			rules = transactionRules()
 		} else if component != "" {
@@ -166,4 +185,20 @@ func transactionRules() []rbacv1.PolicyRule {
 		}
 	}
 	return rules
+}
+
+// generationRules allow only action lifecycle writes within the shared Bitcoin executor.
+func generationRules() []rbacv1.PolicyRule {
+	return []rbacv1.PolicyRule{
+		{APIGroups: []string{"actions.stacks.org"}, Resources: []string{"bitcoinblockgenerations"}, Verbs: []string{"get", "list", "watch", "patch"}},
+		{APIGroups: []string{"actions.stacks.org"}, Resources: []string{"bitcoinblockgenerations/status"}, Verbs: []string{"get", "patch"}},
+	}
+}
+
+// reorganizationRules allow this kind's status/finalizer writes on the shared executor.
+func reorganizationRules() []rbacv1.PolicyRule {
+	return []rbacv1.PolicyRule{
+		{APIGroups: []string{"actions.stacks.org"}, Resources: []string{"bitcoinreorganizations"}, Verbs: []string{"get", "list", "watch", "patch"}},
+		{APIGroups: []string{"actions.stacks.org"}, Resources: []string{"bitcoinreorganizations/status"}, Verbs: []string{"get", "patch"}},
+	}
 }

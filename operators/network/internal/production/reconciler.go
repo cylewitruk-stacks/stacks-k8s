@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"time"
 
+	actionv1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/actions/v1alpha1"
 	bitcoinv1alpha1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/bitcoin/v1alpha1"
 	networkv1alpha1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -24,6 +25,10 @@ const ledgerFinalizer = "bitcoin.stacks.org/retain-production-ledger"
 
 // Reconciler authorizes at most one unresolved mutating RPC per network ledger.
 type Reconciler struct {
+	// ReorganizationEnabled enables compensated local suffix replacement.
+	ReorganizationEnabled bool
+	// ActionsEnabled enables finite generation selection on the shared executor.
+	ActionsEnabled bool
 	// Client writes production resources; it has no workload mutation permissions.
 	client.Client
 	// APIReader supplies uncached admitted identities and ledger state.
@@ -47,6 +52,11 @@ func (r *Reconciler) SetupWithManager(manager ctrl.Manager, concurrency int) err
 	if r.Client == nil || r.APIReader == nil || r.RPC == nil || len(r.ConfigDigest) != 71 {
 		return fmt.Errorf("producer requires clients, typed RPC and approved configuration digest")
 	}
+	if r.ReorganizationEnabled {
+		if _, ok := r.RPC.(ReorganizationRPC); !ok {
+			return fmt.Errorf("reorganization requires its typed RPC surface")
+		}
+	}
 	if r.Now == nil {
 		r.Now = time.Now
 	}
@@ -67,10 +77,23 @@ func (r *Reconciler) SetupWithManager(manager ctrl.Manager, concurrency int) err
 	if err := manager.Add(r.collectors); err != nil {
 		return err
 	}
-	return ctrl.NewControllerManagedBy(manager).For(&bitcoinv1alpha1.BitcoinBlockProduction{}).
+	builder := ctrl.NewControllerManagedBy(manager).For(&bitcoinv1alpha1.BitcoinBlockProduction{}).
 		Watches(&networkv1alpha1.StacksNetwork{}, handler.EnqueueRequestsFromMapFunc(func(_ context.Context, object client.Object) []ctrl.Request {
 			return []ctrl.Request{{NamespacedName: client.ObjectKeyFromObject(object)}}
-		})).WithOptions(controller.Options{MaxConcurrentReconciles: concurrency}).Complete(r)
+		})).WithOptions(controller.Options{MaxConcurrentReconciles: concurrency})
+	if r.ActionsEnabled {
+		builder = builder.Watches(&actionv1.BitcoinBlockGeneration{}, handler.EnqueueRequestsFromMapFunc(func(_ context.Context, o client.Object) []ctrl.Request {
+			a := o.(*actionv1.BitcoinBlockGeneration)
+			return []ctrl.Request{{NamespacedName: client.ObjectKey{Namespace: a.Namespace, Name: a.Spec.NetworkRef.Name}}}
+		}))
+	}
+	if r.ReorganizationEnabled {
+		builder = builder.Watches(&actionv1.BitcoinReorganization{}, handler.EnqueueRequestsFromMapFunc(func(_ context.Context, o client.Object) []ctrl.Request {
+			a := o.(*actionv1.BitcoinReorganization)
+			return []ctrl.Request{{NamespacedName: client.ObjectKey{Namespace: a.Namespace, Name: a.Spec.NetworkRef.Name}}}
+		}))
+	}
+	return builder.Complete(r)
 }
 
 // Reconcile checks current intent, arms durably, then collects and accounts one receipt.
@@ -95,6 +118,12 @@ func (r *Reconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 		controllerutil.AddFinalizer(policy, ledgerFinalizer)
 		return ctrl.Result{RequeueAfter: time.Millisecond}, r.Patch(ctx, policy, client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{}))
 	}
+	if policy.Status.Reorganization != nil {
+		return r.reconcileReorganization(ctx, policy, parent)
+	}
+	if policy.Status.Action != nil {
+		return r.reconcileAction(ctx, policy, parent)
+	}
 	if policy.Status.DispatchState == "Armed" {
 		if phase := r.collectors.phase(policy.Status.DispatchID, policy.UID); phase != "" {
 			message := "Waiting for the authorized RPC receipt"
@@ -107,6 +136,12 @@ func (r *Reconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 	}
 	if !policy.DeletionTimestamp.IsZero() {
 		return r.report(ctx, policy, "Blocked", "Ledger retained until owning network deletion", 0)
+	}
+	if r.ActionsEnabled || r.ReorganizationEnabled {
+		selected, err := r.selectAction(ctx, policy, parent)
+		if err != nil || selected {
+			return ctrl.Result{RequeueAfter: time.Second}, err
+		}
 	}
 	if parent.Spec.Suspended || parent.Spec.BitcoinBlockProduction == nil || parent.Spec.BitcoinBlockProduction.Paused {
 		return r.report(ctx, policy, "Paused", "New production dispatches are paused", 0)
@@ -177,6 +212,9 @@ func (r *Reconciler) account(ctx context.Context, armed *bitcoinv1alpha1.Bitcoin
 	if current.UID != armed.UID || current.Status.DispatchID != armed.Status.DispatchID {
 		return errLedgerRetired
 	}
+	if current.Status.Reorganization != nil && current.Status.DispatchState == "Idle" && current.Status.Reorganization.LastDispatchID == armed.Status.DispatchID {
+		return nil
+	}
 	if current.Status.DispatchState == "Idle" && current.Status.LastBlockHash == receipt.hash {
 		return nil
 	}
@@ -185,8 +223,39 @@ func (r *Reconciler) account(ctx context.Context, armed *bitcoinv1alpha1.Bitcoin
 	}
 	base := current.DeepCopy()
 	current.Status.DispatchState = "Idle"
-	current.Status.BlocksProduced++
-	current.Status.LastBlockHash, current.Status.LastCompletedAt = receipt.hash, receipt.completed.DeepCopy()
+	if current.Status.Reorganization != nil {
+		record := current.Status.Reorganization
+		if armed.Status.Reorganization == nil || record.UID != armed.Status.Reorganization.UID || record.Step != receipt.method {
+			return errLedgerRetired
+		}
+		switch receipt.method {
+		case "Invalidate":
+			record.InvalidationAcknowledged = true
+		case "Generate":
+			record.BlocksGenerated++
+			record.ReplacementBlockHashes = append(record.ReplacementBlockHashes, receipt.hash)
+			record.LastBlockHash = receipt.hash
+		case "Reconsider":
+			record.CleanupAcknowledged = true
+		default:
+			return errLedgerRetired
+		}
+		record.LastCompletedAt = receipt.completed.DeepCopy()
+		record.LastDispatchID = current.Status.DispatchID
+	} else if current.Status.Action != nil {
+		if armed.Status.Action == nil || current.Status.Action.UID != armed.Status.Action.UID {
+			return errLedgerRetired
+		}
+		current.Status.Action.BlocksGenerated++
+		current.Status.Action.LastBlockHash, current.Status.Action.LastCompletedAt = receipt.hash, receipt.completed.DeepCopy()
+		current.Status.Action.LastDispatchID = current.Status.DispatchID
+	} else {
+		current.Status.BlocksProduced++
+	}
+	if receipt.hash != "" {
+		current.Status.LastBlockHash = receipt.hash
+	}
+	current.Status.LastCompletedAt = receipt.completed.DeepCopy()
 	current.Status.Phase, current.Status.Message = "Running", "Block receipt accounted"
 	return r.Status().Patch(ctx, current, client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{}))
 }

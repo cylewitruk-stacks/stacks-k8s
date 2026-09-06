@@ -52,3 +52,19 @@ The explicit kubeconfig is required; the context may be omitted when that file
 already selects the qualification cluster.
 
 Generated deepcopy code and CRDs are committed. Do not hand-edit them.
+
+## Optional finite Bitcoin generation
+
+Enable `bitcoinGeneration.enabled` together with `bitcoinProduction.enabled`
+to use bounded `BitcoinBlockGeneration` actions on the existing executor.
+The chart adds the action Role rules and a 64-object namespace quota.
+See the [operating profile](../../docs/network-operator/bitcoin-generation.md)
+for immutable fields, admission, cancellation, attribution, and recovery.
+
+## Optional local reorganization
+
+`bitcoinReorganization.enabled` adds bounded local suffix replacement to the
+shared executor and requires `bitcoinProduction.enabled`. Provision the helper's
+explicit `--reorganization` RPC profile in a fresh environment first.
+See the [operating guide](../../docs/network-operator/bitcoin-reorganization.md)
+for depth/boundary limits, retained cleanup, cancellation, and teardown.

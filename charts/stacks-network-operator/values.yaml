@@ -11,6 +11,12 @@ controller:
   leaderElection: true
   logLevel: info
 
+bitcoinReorganization:
+  enabled: false
+
+bitcoinGeneration:
+  enabled: false
+
 bitcoinProduction:
   enabled: false
   credentialsSecret: stacks-bitcoin-production-rpc

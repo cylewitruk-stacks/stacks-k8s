@@ -1,6 +1,7 @@
 package v1alpha1
 
 import (
+	actionv1alpha1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/actions/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -72,10 +73,15 @@ type BitcoinBlockProductionSpec struct {
 }
 
 // BitcoinBlockProductionStatus is both the bounded dispatch ledger and user-facing state.
+// +kubebuilder:validation:XValidation:rule="!(has(self.action) && has(self.reorganization))",message="only one action may reserve the executor"
 type BitcoinBlockProductionStatus struct {
+	// Reorganization retains the finite replacement and its cleanup obligation.
+	Reorganization *ReorganizationReservation `json:"reorganization,omitempty"`
+	// Action reserves this ledger for one bounded action through durable accounting.
+	Action *GenerationReservation `json:"action,omitempty"`
 	// ObservedGeneration identifies the policy reflected by Phase.
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
-	// Phase is Waiting, Collecting, Accounting, Running, Paused, Blocked, or Abandoned.
+	// Phase is Waiting, Reserved, Collecting, Accounting, Running, Paused, Blocked, or Abandoned.
 	Phase string `json:"phase,omitempty"`
 	// Message explains the current operational state without credential material.
 	Message string `json:"message,omitempty"`
@@ -96,4 +102,78 @@ type BitcoinBlockProductionStatus struct {
 	LastBlockHash string `json:"lastBlockHash,omitempty"`
 	// LastCompletedAt anchors cadence across ordinary controller restarts.
 	LastCompletedAt *metav1.Time `json:"lastCompletedAt,omitempty"`
+}
+
+// GenerationReservation keeps generation exclusion in the atomic ledger.
+type GenerationReservation struct {
+	ActionReservation `json:",inline"`
+	// Spec snapshots the admitted typed operation.
+	Spec actionv1alpha1.BitcoinBlockGenerationSpec `json:"spec"`
+}
+
+// ActionReservation retains shared identity and receipt accounting facts.
+type ActionReservation struct {
+	// Name identifies the selected action object.
+	Name string `json:"name"`
+	// UID prevents action replacement from inheriting authority.
+	UID string `json:"uid"`
+	// Generation records admission metadata; deletion may advance it without changing the immutable spec.
+	Generation int64 `json:"generation"`
+	// AdmittedAt records first reservation time.
+	AdmittedAt metav1.Time `json:"admittedAt"`
+	// ExpiresAt is the action's creation-relative deadline.
+	ExpiresAt metav1.Time `json:"expiresAt"`
+	// Network captures admission against the current parent catalog.
+	Network actionv1alpha1.NetworkIdentity `json:"network"`
+	// Target freezes the actor/runtime identity for all dispatches.
+	Target actionv1alpha1.TargetIdentity `json:"target"`
+	// Policy records the ledger and static configuration profile.
+	Policy actionv1alpha1.PolicyIdentity `json:"policy"`
+	// CorrelationID snapshots the external correlation label.
+	CorrelationID string `json:"correlationID,omitempty"`
+	// StartedAt records the first durable authorization.
+	StartedAt *metav1.Time `json:"startedAt,omitempty"`
+	// BlocksGenerated counts acknowledged receipts, separately from baseline blocks.
+	BlocksGenerated int32 `json:"blocksGenerated,omitempty"`
+	// LastBlockHash retains the latest action receipt.
+	LastBlockHash string `json:"lastBlockHash,omitempty"`
+	// LastDispatchID identifies the receipt to acknowledge in action status.
+	LastDispatchID string `json:"lastDispatchID,omitempty"`
+	// LastCompletedAt anchors the action's next dispatch.
+	LastCompletedAt *metav1.Time `json:"lastCompletedAt,omitempty"`
+	// StopReason freezes a definite admission/identity failure before another dispatch.
+	StopReason string `json:"stopReason,omitempty"`
+	// EffectUncertain marks lost receipt/process knowledge; time cannot clear it.
+	EffectUncertain bool `json:"effectUncertain,omitempty"`
+}
+
+// ReorganizationReservation retains compensation obligations across dependent RPCs.
+type ReorganizationReservation struct {
+	ActionReservation `json:",inline"`
+	// Spec snapshots the immutable replacement operation.
+	Spec actionv1alpha1.BitcoinReorganizationSpec `json:"spec"`
+	// OriginalChain fixes the original active tip.
+	OriginalChain actionv1alpha1.BitcoinChainPoint `json:"originalChain"`
+	// ForkParent fixes the retained ancestor.
+	ForkParent actionv1alpha1.BitcoinChainPoint `json:"forkParent"`
+	// InvalidatedHash fixes the sole compensation target.
+	InvalidatedHash string `json:"invalidatedHash"`
+	// Step identifies the current or most recently acknowledged typed mutation.
+	// +kubebuilder:validation:Enum=Invalidate;Generate;Reconsider
+	Step string `json:"step,omitempty"`
+	// InvalidationAcknowledged means the first mutation returned successfully.
+	InvalidationAcknowledged bool `json:"invalidationAcknowledged,omitempty"`
+	// CleanupAcknowledged means compensation returned successfully.
+	CleanupAcknowledged bool `json:"cleanupAcknowledged,omitempty"`
+	// ReplacementBlockHashes retains at most depth+1 exact receipt hashes.
+	// +kubebuilder:validation:MaxItems=7
+	ReplacementBlockHashes []string `json:"replacementBlockHashes,omitempty"`
+	// VerifiedBlocks counts receipts whose header ancestry has been checked.
+	VerifiedBlocks int32 `json:"verifiedBlocks,omitempty"`
+	// VerifiedTip anchors the next single-block request.
+	VerifiedTip *actionv1alpha1.BitcoinChainPoint `json:"verifiedTip,omitempty"`
+	// FinalChain records a successful local canonical/work observation.
+	FinalChain *actionv1alpha1.BitcoinChainPoint `json:"finalChain,omitempty"`
+	// CleanupUnsafe prevents compensation on a changed or expired execution boundary.
+	CleanupUnsafe bool `json:"cleanupUnsafe,omitempty"`
 }

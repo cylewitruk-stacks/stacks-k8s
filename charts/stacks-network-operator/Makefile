@@ -15,6 +15,8 @@ verify:
 	$(MAKE) workload-verify
 
 helm-verify:
+	@if $(HELM) template verify . --set bitcoinReorganization.enabled=true >/dev/null 2>&1; then echo "reorganization without executor unexpectedly rendered" >&2; exit 1; fi
+	@if $(HELM) template verify . --set bitcoinGeneration.enabled=true >/dev/null 2>&1; then echo "generation without executor unexpectedly rendered" >&2; exit 1; fi
 	$(HELM) lint .
 	$(HELM) template verify . --namespace stacks-network-system >/dev/null
 	@if $(HELM) template verify . --namespace stacks-network-system --set-json image=null >/dev/null 2>&1; then \
@@ -36,12 +38,18 @@ rbac-verify:
 	$(HELM) template verify . --namespace stacks-network-system --set bitcoinProduction.enabled=true --set stacksTransactions.enabled=true | $(GO_ISOLATED) -C $(OPERATOR_DIR) run ./cmd/rbac-check
 	$(HELM) template verify . --namespace stacks-network-system | $(GO_ISOLATED) -C $(OPERATOR_DIR) run ./cmd/rbac-check
 	$(HELM) template verify . --namespace stacks-network-system --set bitcoinProduction.enabled=true | $(GO_ISOLATED) -C $(OPERATOR_DIR) run ./cmd/rbac-check
+	$(HELM) template verify . --namespace stacks-network-system --set bitcoinProduction.enabled=true --set bitcoinGeneration.enabled=true | $(GO_ISOLATED) -C $(OPERATOR_DIR) run ./cmd/rbac-check
+	$(HELM) template verify . --namespace stacks-network-system --set bitcoinProduction.enabled=true --set bitcoinReorganization.enabled=true | $(GO_ISOLATED) -C $(OPERATOR_DIR) run ./cmd/rbac-check
+	$(HELM) template verify . --namespace stacks-network-system --set bitcoinProduction.enabled=true --set bitcoinGeneration.enabled=true --set bitcoinReorganization.enabled=true | $(GO_ISOLATED) -C $(OPERATOR_DIR) run ./cmd/rbac-check
 	$(HELM) template verify . --namespace stacks-network-system --set stacksTransactions.enabled=true | $(GO_ISOLATED) -C $(OPERATOR_DIR) run ./cmd/rbac-check
 
 workload-verify:
 	$(HELM) template verify . --namespace stacks-network-system --set bitcoinProduction.enabled=true --set stacksTransactions.enabled=true | $(GO_ISOLATED) -C $(CHART_POLICY_DIR) run ./cmd/chart-policy-check
 	$(HELM) template verify . --namespace stacks-network-system | $(GO_ISOLATED) -C $(CHART_POLICY_DIR) run ./cmd/chart-policy-check
 	$(HELM) template verify . --namespace stacks-network-system --set bitcoinProduction.enabled=true | $(GO_ISOLATED) -C $(CHART_POLICY_DIR) run ./cmd/chart-policy-check
+	$(HELM) template verify . --namespace stacks-network-system --set bitcoinProduction.enabled=true --set bitcoinGeneration.enabled=true | $(GO_ISOLATED) -C $(CHART_POLICY_DIR) run ./cmd/chart-policy-check
+	$(HELM) template verify . --namespace stacks-network-system --set bitcoinProduction.enabled=true --set bitcoinReorganization.enabled=true | $(GO_ISOLATED) -C $(CHART_POLICY_DIR) run ./cmd/chart-policy-check
+	$(HELM) template verify . --namespace stacks-network-system --set bitcoinProduction.enabled=true --set bitcoinGeneration.enabled=true --set bitcoinReorganization.enabled=true | $(GO_ISOLATED) -C $(CHART_POLICY_DIR) run ./cmd/chart-policy-check
 	$(HELM) template verify . --namespace stacks-network-system --set stacksTransactions.enabled=true | $(GO_ISOLATED) -C $(CHART_POLICY_DIR) run ./cmd/chart-policy-check
 	$(HELM) template verify . --namespace stacks-network-system --set serviceAccount.create=false --set serviceAccount.name=existing.account >/dev/null
 	@if $(HELM) template verify . --namespace stacks-network-system --set-json 'image.pullSecrets=["bad\nhostNetwork: true"]' >/dev/null 2>&1; then \

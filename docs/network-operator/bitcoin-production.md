@@ -81,7 +81,8 @@ request may finish after a pause, suspension, or update.
 
 The legacy `BitcoinNode` miner/follower field remains compatible and does not
 cause mining. Multi-target selection, jitter, weighted policies, standalone
-production, bounded actions, and in-place recovery are not implemented.
+production and in-place recovery are not implemented. Optional
+[finite generation](bitcoin-generation.md) shares the same executor.
 
 ## Admission and credentials
 
@@ -122,7 +123,8 @@ the exact process that eventually executed an ambiguous request.
 | `Collecting` | The live process is waiting for its authorized RPC response. |
 | `Accounting` | A matching receipt is retained locally pending durable accounting. |
 | `Running` | The receipt is accounted; production waits for its next interval. |
-| `Paused` | Current parent intent stops new dispatches. |
+| `Paused` | Current parent intent stops new baseline dispatches. |
+| `Reserved` | A finite action holds the shared executor between calls or pending receipt acknowledgement. |
 | `Blocked` | The ledger cannot safely authorize another request. Inspect `message` and `dispatchState`. |
 | `Abandoned` | The owning environment was removed; this is not an execution-recovery claim. |
 

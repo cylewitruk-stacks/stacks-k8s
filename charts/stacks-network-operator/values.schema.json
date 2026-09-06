@@ -3,6 +3,8 @@
   "type": "object",
   "additionalProperties": false,
   "properties": {
+    "bitcoinReorganization": {"type":"object","additionalProperties":false,"properties":{"enabled":{"type":"boolean"}},"required":["enabled"]},
+    "bitcoinGeneration": {"type": "object", "additionalProperties": false, "required": ["enabled"], "properties": {"enabled": {"type": "boolean"}}},
     "stacksTransactions": {
       "type": "object",
       "additionalProperties": false,
@@ -106,5 +108,6 @@
     "affinity": {"type": "object"},
     "resources": {"type": "object"}
   },
-  "required": ["replicaCount", "image", "controller", "serviceAccount", "metrics", "podAnnotations", "podLabels", "nodeSelector", "tolerations", "affinity", "resources"]
+  "required": ["replicaCount", "image", "controller", "serviceAccount", "metrics", "podAnnotations", "podLabels", "nodeSelector", "tolerations", "affinity", "resources"],
+  "allOf": [{"if":{"required":["bitcoinReorganization"],"properties":{"bitcoinReorganization":{"properties":{"enabled":{"const":true}}}}},"then":{"required":["bitcoinProduction"],"properties":{"bitcoinProduction":{"properties":{"enabled":{"const":true}}}}}},{"if": {"required": ["bitcoinGeneration"], "properties": {"bitcoinGeneration": {"properties": {"enabled": {"const": true}}}}}, "then": {"required": ["bitcoinProduction"], "properties": {"bitcoinProduction": {"properties": {"enabled": {"const": true}}}}}}]
 }

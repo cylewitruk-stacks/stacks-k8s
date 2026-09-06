@@ -10,6 +10,14 @@ Inspect Bitcoin baseline dispatch state:
   kubectl --namespace {{ .Release.Namespace }} get bitcoinblockproductions
 
 {{ end }}
+{{ if .Values.bitcoinGeneration.enabled }}
+Inspect finite generation and retained action reservations:
+  kubectl --namespace {{ .Release.Namespace }} get bitcoinblockgenerations,bitcoinblockproductions
+{{ end }}
+{{ if .Values.bitcoinReorganization.enabled }}
+Inspect local reorganization and cleanup evidence:
+  kubectl --namespace {{ .Release.Namespace }} get bitcoinreorganizations,bitcoinblockproductions
+{{ end }}
 {{ if .Values.stacksTransactions.enabled }}
 Inspect steady STX transfer evidence:
   kubectl --namespace {{ .Release.Namespace }} get stackstransactionproductions

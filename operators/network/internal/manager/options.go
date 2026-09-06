@@ -21,6 +21,10 @@ import (
 
 // Options contains manager runtime settings.
 type Options struct {
+	// ReorganizationEnabled enables compensated local suffix replacement.
+	ReorganizationEnabled bool
+	// GenerationEnabled enables finite actions on the shared Bitcoin executor.
+	GenerationEnabled bool
 	// Component selects topology or Bitcoin production controllers with separate credentials and RBAC.
 	Component string
 	// ProductionCredentialsFile names the mounted static producer credential document.
@@ -40,6 +44,8 @@ type Options struct {
 
 // Bind registers manager flags.
 func (o *Options) Bind(flags *flag.FlagSet) {
+	flags.BoolVar(&o.ReorganizationEnabled, "bitcoin-reorganization-enabled", false, "Enable compensated regtest suffix replacement.")
+	flags.BoolVar(&o.GenerationEnabled, "bitcoin-generation-enabled", false, "Enable finite generation on the shared Bitcoin executor.")
 	flags.StringVar(&o.Component, "component", "topology", "Controller component: topology or bitcoin-production.")
 	flags.BoolVar(&o.TransactionsEnabled, "stacks-transactions-enabled", false, "Report that the separate STX transfer worker is enabled.")
 	flags.StringVar(&o.TransactionAccountFile, "transaction-account-file", "/etc/stacks-transactions/account.json", "Mounted transfer account profile.")

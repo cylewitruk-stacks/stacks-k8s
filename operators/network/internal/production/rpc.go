@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -42,6 +43,9 @@ func NewBitcoinRPC(credentials Credentials) *BitcoinRPC {
 	}}
 }
 
+// errInvalidPreflight identifies a definite negative result from a successful preflight read.
+var errInvalidPreflight = errors.New("invalid production preflight")
+
 // Check verifies regtest and destination validity without creating wallet state.
 func (r *BitcoinRPC) Check(ctx context.Context, endpoint, address string) error {
 	var chain struct {
@@ -50,17 +54,23 @@ func (r *BitcoinRPC) Check(ctx context.Context, endpoint, address string) error 
 	if err := r.call(ctx, endpoint, "preflight-chain", "getblockchaininfo", []any{}, &chain); err != nil {
 		return err
 	}
+	if chain.Chain == "" {
+		return fmt.Errorf("RPC preflight omitted chain identity")
+	}
 	if chain.Chain != "regtest" {
-		return fmt.Errorf("target is not regtest")
+		return fmt.Errorf("%w: target is not regtest", errInvalidPreflight)
 	}
 	var validation struct {
-		Valid bool `json:"isvalid"`
+		Valid *bool `json:"isvalid"`
 	}
 	if err := r.call(ctx, endpoint, "preflight-address", "validateaddress", []any{address}, &validation); err != nil {
 		return err
 	}
-	if !validation.Valid {
-		return fmt.Errorf("invalid regtest destination")
+	if validation.Valid == nil {
+		return fmt.Errorf("RPC preflight omitted destination validity")
+	}
+	if !*validation.Valid {
+		return fmt.Errorf("%w: invalid regtest destination", errInvalidPreflight)
 	}
 	return nil
 }

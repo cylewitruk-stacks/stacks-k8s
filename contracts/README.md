@@ -23,8 +23,8 @@ interface across workload rendering and independent observation.
 generation-bound compiled catalog using the existing complete leaf-spec
 vectors. It is independent of the complete admitted-inventory wire contract.
 
-[`action-lifecycle-v1.json`](action-lifecycle-v1.json) is a reviewed,
-unimplemented design baseline. It pins the normative
+[`action-lifecycle-v1.json`](action-lifecycle-v1.json) is the reviewed shared lifecycle vocabulary,
+now checked against the first served finite-generation schema. It pins the normative
 custom-action API group, lifecycle phases, common conditions, correlation
 label, cleanup finalizer, core fields, timestamps, stable reasons, spec
 immutability rule, timeout wire/validation contract, and forbidden
