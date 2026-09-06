@@ -30,7 +30,7 @@ type accountingOutageWriter struct {
 }
 
 func (w *accountingOutageWriter) Patch(ctx context.Context, object client.Object, patch client.Patch, options ...client.SubResourcePatchOption) error {
-	if policy, ok := object.(*bitcoinv1alpha1.BitcoinBlockProduction); ok && policy.Status.DispatchState == "Idle" {
+	if policy, ok := object.(*bitcoinv1alpha1.BitcoinProductionTarget); ok && policy.Status.DispatchState == "Idle" {
 		w.owner.attempts.Add(1)
 		if w.owner.unavailable.Load() {
 			return fmt.Errorf("accounting API unavailable")

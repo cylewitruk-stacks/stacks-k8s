@@ -20,7 +20,7 @@ rules:
     resources: ["stacksnetworks"]
     verbs: ["get"]
   - apiGroups: ["bitcoin.stacks.org"]
-    resources: ["bitcoinblockproductions"]
+    resources: ["bitcoinblockproductions", "bitcoinproductiontargets"]
     verbs: ["get"]
   - apiGroups: ["coordination.k8s.io"]
     resources: ["leases"]

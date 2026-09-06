@@ -13,9 +13,10 @@ acknowledged compensation.
 
 Target API groups remain `bitcoin.stacks.org/v1alpha1` for
 `BitcoinBlockProduction` and `actions.stacks.org/v1alpha1` for
-`BitcoinBlockGeneration` and `BitcoinReorganization`. Exact replacement
-multi-target production fields and bounded-action admission/recovery contracts
-remain open. The linked baseline profile owns the initial served fields.
+`BitcoinBlockGeneration` and `BitcoinReorganization`. The linked baseline
+profile owns the served weighted production fields and
+per-target execution ledgers. Broader timing and bounded-action
+admission/recovery contracts remain open.
 
 Only bounded actions follow the [atomic action contract](actions.md).
 Production maintains mutable baseline behavior without a timeout or terminal
@@ -70,32 +71,31 @@ weighted random selection over a bounded set of Bitcoin node references.
 Weights distribute generation opportunities, not physical hash power or
 guaranteed canonical progress. It does not choose a winning branch.
 
-One policy per network is the recommended initial shape. Naming, uniqueness,
-target overlap, exact bounds, jitter distribution, and mutability require API
-review. Reservations serialize effects but cannot prevent overlapping
-policies from multiplying offered rates.
+The served profile has one aggregate-owned policy, 1–8 active logical targets,
+and at most sixteen retained target identities per policy lifetime. Each target
+has a destination and integer weight in 1–1000. Timing is one fixed policy
+interval in 1–86400 seconds; jitter remains deferred. Only aggregate-owned
+policies are executable, preventing overlapping policy rates on the same actor.
 
-Each selected opportunity requests one block on the target's local chain
-through `generatetoaddress`. Unavailable/reserved targets do not cause silent
-weight redistribution. Skip-and-report is recommended pending final API review.
-No catch-up burst follows downtime. Bounded interventions take priority on
-their own targets without implicitly stopping every other target. Test
-stale/expired waiting status and disabled action controllers while preserving
-outstanding execution and cleanup obligations.
+The scheduler records selections and its next due time durably, with an
+optimistic-lock status write. A selected opportunity expires at the end of its
+interval. A late reconcile publishes at most one fresh opportunity; a policy
+change or resume starts a fresh interval. Delayed queue entries only prompt
+reconciliation. They never authorize replaying stale choices or catch-up work.
 
-Status stays bounded: baseline generation, per-target identity/availability
-within the target bound, offered/acknowledged/skipped/ambiguous summaries, and
-a recent-hash ring. Detailed history belongs to configured observation sinks.
-An acknowledgement does not prove global adoption. Exact fields and flush
-rates require replacement-fixture review.
+Each `BitcoinProductionTarget` consumes its offer in the same status write that
+arms `generatetoaddress`. Unavailable, reserved, outstanding, expired, or
+capacity-limited opportunities are skipped and counted without redistribution.
+Finite actions reserve only their target. Removal stops new baseline admission
+while retaining existing authorization, cleanup obligations, and the ledger UID.
+Re-addition cannot clear an unresolved dispatch or reservation.
 
-In-memory timing state with `RequeueAfter` remains a recommendation. The
-standard reconcile request carries namespace/name, not UID or generation.
-Store UID, admitted policy generation, and due time in reconciler-owned timer
-state. On every reconciliation, compare that record with the current object;
-discard stale timing state and select a fresh delay after replacement, policy
-change, or restart. A delayed queue entry only prompts reconciliation and
-never authorizes applying previous target weights or cadence.
+Policy status contains bounded target UID pins and offered counts. Execution
+ledgers contain consumed/skipped counts, the latest skip reason, acknowledged
+block counts, and bounded dispatch/action facts. Detailed history belongs to
+observation sinks. Acknowledged generation does not prove canonical adoption.
+Missing or replaced target ledgers remain closed; other targets can continue.
+Exceeding the lifetime identity bound blocks the unsupported policy update.
 
 ## Bounded Bitcoin actions
 

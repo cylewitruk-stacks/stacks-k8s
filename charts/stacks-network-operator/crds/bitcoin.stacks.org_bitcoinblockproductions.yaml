@@ -18,14 +18,14 @@ spec:
     - jsonPath: .status.phase
       name: Phase
       type: string
-    - jsonPath: .status.blocksProduced
-      name: Blocks
+    - jsonPath: .status.opportunities
+      name: Opportunities
       type: integer
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: BitcoinBlockProduction maintains aggregate-owned fixed-cadence
-          regtest production.
+        description: BitcoinBlockProduction maintains one aggregate-owned weighted
+          production policy.
         properties:
           apiVersion:
             description: |-
@@ -45,7 +45,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: Spec is compiled from the owning network.
+            description: Spec is compiled from StacksNetwork.
             properties:
               networkName:
                 description: NetworkName identifies the owning StacksNetwork.
@@ -53,39 +53,66 @@ spec:
                 minLength: 1
                 type: string
               networkUID:
-                description: NetworkUID prevents admission after parent replacement.
+                description: NetworkUID prevents replacement networks from inheriting
+                  authority.
                 maxLength: 64
                 minLength: 1
                 type: string
               policy:
-                description: Policy supplies the current target, cadence, destination
-                  and pause state.
+                description: Policy declares the total offered cadence and target
+                  weights.
                 properties:
-                  address:
-                    description: Address receives generated regtest coinbase outputs.
-                    maxLength: 128
-                    minLength: 14
-                    type: string
                   intervalSeconds:
-                    description: IntervalSeconds is the delay after a completed dispatch;
-                      missed ticks are discarded.
+                    description: IntervalSeconds bounds the fixed policy cadence,
+                      independently of receipt time.
                     format: int32
                     maximum: 86400
                     minimum: 1
                     type: integer
                   paused:
-                    description: Paused stops new dispatches without cancelling one
-                      already armed.
+                    description: Paused stops new opportunities; already authorized
+                      work may still complete.
                     type: boolean
-                  target:
-                    description: Target names a Bitcoin actor in the owning network.
-                    maxLength: 63
-                    pattern: ^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$
-                    type: string
+                  targets:
+                    description: Targets names declared actors; weights distribute
+                      the policy's total offered rate.
+                    items:
+                      description: ProductionTarget configures one weighted actor
+                        and its coinbase destination.
+                      properties:
+                        address:
+                          description: Address receives this target's generated coinbase
+                            outputs.
+                          maxLength: 128
+                          minLength: 14
+                          type: string
+                        name:
+                          description: Name identifies a Bitcoin actor declared in
+                            the owning network.
+                          maxLength: 63
+                          pattern: ^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$
+                          type: string
+                        weight:
+                          description: Weight is a relative share of generation opportunities,
+                            without availability redistribution.
+                          format: int32
+                          maximum: 1000
+                          minimum: 1
+                          type: integer
+                      required:
+                      - address
+                      - name
+                      - weight
+                      type: object
+                    maxItems: 8
+                    minItems: 1
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
                 required:
-                - address
                 - intervalSeconds
-                - target
+                - targets
                 type: object
             required:
             - networkName
@@ -93,663 +120,110 @@ spec:
             - policy
             type: object
             x-kubernetes-validations:
-            - message: network and production target are immutable
+            - message: network identity is immutable
               rule: self.networkName == oldSelf.networkName && self.networkUID ==
-                oldSelf.networkUID && self.policy.target == oldSelf.policy.target
+                oldSelf.networkUID
           status:
-            description: Status retains dispatch evidence for this network's production
-              lifetime.
+            description: Status pins target ledgers and records bounded scheduling
+              facts.
             properties:
-              action:
-                description: Action reserves this ledger for one bounded action through
-                  durable accounting.
-                properties:
-                  admittedAt:
-                    description: AdmittedAt records first reservation time.
-                    format: date-time
-                    type: string
-                  blocksGenerated:
-                    description: BlocksGenerated counts acknowledged receipts, separately
-                      from baseline blocks.
-                    format: int32
-                    type: integer
-                  correlationID:
-                    description: CorrelationID snapshots the external correlation
-                      label.
-                    type: string
-                  effectUncertain:
-                    description: EffectUncertain marks lost receipt/process knowledge;
-                      time cannot clear it.
-                    type: boolean
-                  expiresAt:
-                    description: ExpiresAt is the action's creation-relative deadline.
-                    format: date-time
-                    type: string
-                  generation:
-                    description: Generation records admission metadata; deletion may
-                      advance it without changing the immutable spec.
-                    format: int64
-                    type: integer
-                  lastBlockHash:
-                    description: LastBlockHash retains the latest action receipt.
-                    type: string
-                  lastCompletedAt:
-                    description: LastCompletedAt anchors the action's next dispatch.
-                    format: date-time
-                    type: string
-                  lastDispatchID:
-                    description: LastDispatchID identifies the receipt to acknowledge
-                      in action status.
-                    type: string
-                  name:
-                    description: Name identifies the selected action object.
-                    type: string
-                  network:
-                    description: Network captures admission against the current parent
-                      catalog.
-                    properties:
-                      name:
-                        description: Name identifies the admitted parent.
-                        type: string
-                      observedGeneration:
-                        description: ObservedGeneration records the declaration generation
-                          at admission.
-                        format: int64
-                        type: integer
-                      uid:
-                        description: UID fixes its incarnation.
-                        type: string
-                    required:
-                    - name
-                    - observedGeneration
-                    - uid
-                    type: object
-                  policy:
-                    description: Policy records the ledger and static configuration
-                      profile.
-                    properties:
-                      digest:
-                        description: Digest identifies approved RPC configuration.
-                        type: string
-                      generation:
-                        description: Generation records its policy generation at admission.
-                        format: int64
-                        type: integer
-                      uid:
-                        description: UID identifies the execution ledger.
-                        type: string
-                    required:
-                    - digest
-                    - generation
-                    - uid
-                    type: object
-                  spec:
-                    description: Spec snapshots the admitted typed operation.
-                    properties:
-                      address:
-                        description: Address receives the regtest coinbase outputs.
-                        maxLength: 128
-                        minLength: 14
-                        type: string
-                      bitcoinNodeRef:
-                        description: BitcoinNodeRef names the exact compiled BitcoinNode,
-                          not a Pod or Service.
-                        properties:
-                          name:
-                            description: Name is the exact Kubernetes resource name.
-                            maxLength: 63
-                            pattern: ^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$
-                            type: string
-                        required:
-                        - name
-                        type: object
-                      count:
-                        description: Count bounds acknowledged single-block RPCs.
-                        format: int32
-                        maximum: 100
-                        minimum: 1
-                        type: integer
-                      intervalSeconds:
-                        description: IntervalSeconds is the minimum delay after each
-                          receipt; no catch-up occurs.
-                        format: int32
-                        maximum: 60
-                        minimum: 1
-                        type: integer
-                      networkRef:
-                        description: NetworkRef names the aggregate owning the execution
-                          ledger.
-                        properties:
-                          name:
-                            description: Name is the exact Kubernetes resource name.
-                            maxLength: 63
-                            pattern: ^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$
-                            type: string
-                        required:
-                        - name
-                        type: object
-                      timeout:
-                        description: Timeout includes all pending time from API-server
-                          creation.
-                        maxLength: 32
-                        type: string
-                        x-kubernetes-validations:
-                        - message: timeout must be positive
-                          rule: duration(self) > duration('0s')
-                        - message: timeout cannot exceed 10m
-                          rule: duration(self) <= duration('10m')
-                    required:
-                    - address
-                    - bitcoinNodeRef
-                    - count
-                    - intervalSeconds
-                    - networkRef
-                    - timeout
-                    type: object
-                    x-kubernetes-validations:
-                    - message: action spec is immutable
-                      rule: self == oldSelf
-                  startedAt:
-                    description: StartedAt records the first durable authorization.
-                    format: date-time
-                    type: string
-                  stopReason:
-                    description: StopReason freezes a definite admission/identity
-                      failure before another dispatch.
-                    type: string
-                  target:
-                    description: Target freezes the actor/runtime identity for all
-                      dispatches.
-                    properties:
-                      apiVersion:
-                        description: APIVersion fixes the actor API.
-                        type: string
-                      configDigest:
-                        description: ConfigDigest binds approved configuration bytes.
-                        type: string
-                      containerID:
-                        description: ContainerID records the admitted process container.
-                        type: string
-                      kind:
-                        description: Kind fixes the actor type.
-                        type: string
-                      name:
-                        description: Name identifies the compiled leaf.
-                        type: string
-                      podUID:
-                        description: PodUID identifies the admitted Pod.
-                        type: string
-                      revision:
-                        description: Revision identifies the admitted workload rollout.
-                        type: string
-                      runtimeImageID:
-                        description: RuntimeImageID identifies the executed image.
-                        type: string
-                      specDigest:
-                        description: SpecDigest binds actor configuration intent.
-                        type: string
-                      statefulSetUID:
-                        description: StatefulSetUID identifies the owning workload
-                          incarnation.
-                        type: string
-                      uid:
-                        description: UID fixes the leaf incarnation.
-                        type: string
-                    required:
-                    - apiVersion
-                    - configDigest
-                    - containerID
-                    - kind
-                    - name
-                    - podUID
-                    - revision
-                    - runtimeImageID
-                    - specDigest
-                    - statefulSetUID
-                    - uid
-                    type: object
-                  uid:
-                    description: UID prevents action replacement from inheriting authority.
-                    type: string
-                required:
-                - admittedAt
-                - expiresAt
-                - generation
-                - name
-                - network
-                - policy
-                - spec
-                - target
-                - uid
-                type: object
-              blocksProduced:
-                description: BlocksProduced counts blocks acknowledged and atomically
-                  accounted by this ledger.
-                format: int64
-                type: integer
-              containerID:
-                description: ContainerID records the admitted Bitcoin process container.
-                type: string
-              dispatchID:
-                description: DispatchID uniquely identifies the last authorization,
-                  including its process-start nonce.
-                type: string
-              dispatchState:
-                description: DispatchState is empty before first use, Idle after a
-                  receipt, or Armed until resolved.
-                enum:
-                - Idle
-                - Armed
-                type: string
-              lastBlockHash:
-                description: LastBlockHash is the latest acknowledged block; it is
-                  not a canonical-chain assertion.
-                type: string
-              lastCompletedAt:
-                description: LastCompletedAt anchors cadence across ordinary controller
-                  restarts.
-                format: date-time
+              lastUnassignedTarget:
+                description: LastUnassignedTarget names the most recent selection
+                  without a pinned ledger.
+                maxLength: 63
+                pattern: ^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$
                 type: string
               message:
-                description: Message explains the current operational state without
-                  credential material.
+                description: Message reports scheduling/configuration state without
+                  credentials.
+                type: string
+              nextOpportunityAt:
+                description: NextOpportunityAt enforces cadence across reconciles
+                  and restarts without catch-up.
+                format: date-time
                 type: string
               observedGeneration:
-                description: ObservedGeneration identifies the policy reflected by
-                  Phase.
+                description: ObservedGeneration identifies the scheduling configuration.
                 format: int64
                 type: integer
+              opportunities:
+                description: Opportunities counts durably published weighted selections.
+                format: int64
+                minimum: 0
+                type: integer
               phase:
-                description: Phase is Waiting, Reserved, Collecting, Accounting, Running,
-                  Paused, Blocked, or Abandoned.
+                description: Phase summarizes scheduler availability, not network
+                  health or receipts.
+                enum:
+                - Running
+                - Paused
+                - Waiting
+                - Blocked
+                - Abandoned
                 type: string
-              podUID:
-                description: PodUID records the admitted Pod incarnation.
-                type: string
-              reorganization:
-                description: Reorganization retains the finite replacement and its
-                  cleanup obligation.
-                properties:
-                  admittedAt:
-                    description: AdmittedAt records first reservation time.
-                    format: date-time
-                    type: string
-                  blocksGenerated:
-                    description: BlocksGenerated counts acknowledged receipts, separately
-                      from baseline blocks.
-                    format: int32
-                    type: integer
-                  cleanupAcknowledged:
-                    description: CleanupAcknowledged means compensation returned successfully.
-                    type: boolean
-                  cleanupUnsafe:
-                    description: CleanupUnsafe prevents compensation on a changed
-                      or expired execution boundary.
-                    type: boolean
-                  correlationID:
-                    description: CorrelationID snapshots the external correlation
-                      label.
-                    type: string
-                  effectUncertain:
-                    description: EffectUncertain marks lost receipt/process knowledge;
-                      time cannot clear it.
-                    type: boolean
-                  expiresAt:
-                    description: ExpiresAt is the action's creation-relative deadline.
-                    format: date-time
-                    type: string
-                  finalChain:
-                    description: FinalChain records a successful local canonical/work
-                      observation.
-                    properties:
-                      chainwork:
-                        description: Chainwork is the fixed-width hexadecimal cumulative
-                          work.
-                        type: string
-                      hash:
-                        description: Hash identifies the block.
-                        type: string
-                      height:
-                        description: Height records its chain position.
-                        format: int64
-                        type: integer
-                      previousBlockHash:
-                        description: PreviousBlockHash identifies its parent; genesis
-                          has none.
-                        type: string
-                    required:
-                    - chainwork
-                    - hash
-                    - height
-                    type: object
-                  forkParent:
-                    description: ForkParent fixes the retained ancestor.
-                    properties:
-                      chainwork:
-                        description: Chainwork is the fixed-width hexadecimal cumulative
-                          work.
-                        type: string
-                      hash:
-                        description: Hash identifies the block.
-                        type: string
-                      height:
-                        description: Height records its chain position.
-                        format: int64
-                        type: integer
-                      previousBlockHash:
-                        description: PreviousBlockHash identifies its parent; genesis
-                          has none.
-                        type: string
-                    required:
-                    - chainwork
-                    - hash
-                    - height
-                    type: object
-                  generation:
-                    description: Generation records admission metadata; deletion may
-                      advance it without changing the immutable spec.
-                    format: int64
-                    type: integer
-                  invalidatedHash:
-                    description: InvalidatedHash fixes the sole compensation target.
-                    type: string
-                  invalidationAcknowledged:
-                    description: InvalidationAcknowledged means the first mutation
-                      returned successfully.
-                    type: boolean
-                  lastBlockHash:
-                    description: LastBlockHash retains the latest action receipt.
-                    type: string
-                  lastCompletedAt:
-                    description: LastCompletedAt anchors the action's next dispatch.
-                    format: date-time
-                    type: string
-                  lastDispatchID:
-                    description: LastDispatchID identifies the receipt to acknowledge
-                      in action status.
-                    type: string
-                  name:
-                    description: Name identifies the selected action object.
-                    type: string
-                  network:
-                    description: Network captures admission against the current parent
-                      catalog.
-                    properties:
-                      name:
-                        description: Name identifies the admitted parent.
-                        type: string
-                      observedGeneration:
-                        description: ObservedGeneration records the declaration generation
-                          at admission.
-                        format: int64
-                        type: integer
-                      uid:
-                        description: UID fixes its incarnation.
-                        type: string
-                    required:
-                    - name
-                    - observedGeneration
-                    - uid
-                    type: object
-                  originalChain:
-                    description: OriginalChain fixes the original active tip.
-                    properties:
-                      chainwork:
-                        description: Chainwork is the fixed-width hexadecimal cumulative
-                          work.
-                        type: string
-                      hash:
-                        description: Hash identifies the block.
-                        type: string
-                      height:
-                        description: Height records its chain position.
-                        format: int64
-                        type: integer
-                      previousBlockHash:
-                        description: PreviousBlockHash identifies its parent; genesis
-                          has none.
-                        type: string
-                    required:
-                    - chainwork
-                    - hash
-                    - height
-                    type: object
-                  policy:
-                    description: Policy records the ledger and static configuration
-                      profile.
-                    properties:
-                      digest:
-                        description: Digest identifies approved RPC configuration.
-                        type: string
-                      generation:
-                        description: Generation records its policy generation at admission.
-                        format: int64
-                        type: integer
-                      uid:
-                        description: UID identifies the execution ledger.
-                        type: string
-                    required:
-                    - digest
-                    - generation
-                    - uid
-                    type: object
-                  replacementBlockHashes:
-                    description: ReplacementBlockHashes retains at most depth+1 exact
-                      receipt hashes.
-                    items:
+              targets:
+                description: Targets retains up to sixteen identities for the policy
+                  lifetime, including removed targets.
+                items:
+                  description: TargetLedger permanently pins one target's execution
+                    resource and latest opportunity.
+                  properties:
+                    name:
+                      description: Name is the logical actor name.
                       type: string
-                    maxItems: 7
-                    type: array
-                  spec:
-                    description: Spec snapshots the immutable replacement operation.
-                    properties:
-                      address:
-                        description: Address receives replacement coinbase outputs.
-                        maxLength: 128
-                        minLength: 14
-                        type: string
-                      bitcoinNodeRef:
-                        description: BitcoinNodeRef names its exact compiled baseline
-                          target.
-                        properties:
-                          name:
-                            description: Name is the exact Kubernetes resource name.
-                            maxLength: 63
-                            pattern: ^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$
-                            type: string
-                        required:
-                        - name
-                        type: object
-                      boundaryPolicy:
-                        description: BoundaryPolicy explicitly accepts unknown protocol
-                          schedule boundaries.
-                        properties:
-                          allowEpochBoundaryCrossing:
-                            description: AllowEpochBoundaryCrossing permits an epoch
-                              boundary in the affected range.
-                            type: boolean
-                            x-kubernetes-validations:
-                            - message: unknown schedule requires explicit epoch opt-in
-                              rule: self == true
-                          allowPreparePhaseBoundaryCrossing:
-                            description: AllowPreparePhaseBoundaryCrossing permits
-                              a PoX prepare-phase boundary.
-                            type: boolean
-                            x-kubernetes-validations:
-                            - message: unknown schedule requires explicit prepare-phase
-                                opt-in
-                              rule: self == true
-                          allowRewardCycleBoundaryCrossing:
-                            description: AllowRewardCycleBoundaryCrossing permits
-                              a reward-cycle boundary.
-                            type: boolean
-                            x-kubernetes-validations:
-                            - message: unknown schedule requires explicit reward-cycle
-                                opt-in
-                              rule: self == true
-                        required:
-                        - allowEpochBoundaryCrossing
-                        - allowPreparePhaseBoundaryCrossing
-                        - allowRewardCycleBoundaryCrossing
-                        type: object
-                      depth:
-                        description: Depth is the suffix length; exactly depth+1 replacement
-                          blocks are requested.
-                        format: int32
-                        maximum: 6
-                        minimum: 1
-                        type: integer
-                      networkRef:
-                        description: NetworkRef names the owning aggregate.
-                        properties:
-                          name:
-                            description: Name is the exact Kubernetes resource name.
-                            maxLength: 63
-                            pattern: ^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$
-                            type: string
-                        required:
-                        - name
-                        type: object
-                      timeout:
-                        description: Timeout bounds new invalidation and generation
-                          from object creation.
-                        maxLength: 32
-                        type: string
-                        x-kubernetes-validations:
-                        - message: timeout must be positive
-                          rule: duration(self) > duration('0s')
-                        - message: timeout cannot exceed 10m
-                          rule: duration(self) <= duration('10m')
-                    required:
-                    - address
-                    - bitcoinNodeRef
-                    - boundaryPolicy
-                    - depth
-                    - networkRef
-                    - timeout
-                    type: object
-                    x-kubernetes-validations:
-                    - message: action spec is immutable
-                      rule: self == oldSelf
-                  startedAt:
-                    description: StartedAt records the first durable authorization.
-                    format: date-time
-                    type: string
-                  step:
-                    description: Step identifies the current or most recently acknowledged
-                      typed mutation.
-                    enum:
-                    - Invalidate
-                    - Generate
-                    - Reconsider
-                    type: string
-                  stopReason:
-                    description: StopReason freezes a definite admission/identity
-                      failure before another dispatch.
-                    type: string
-                  target:
-                    description: Target freezes the actor/runtime identity for all
-                      dispatches.
-                    properties:
-                      apiVersion:
-                        description: APIVersion fixes the actor API.
-                        type: string
-                      configDigest:
-                        description: ConfigDigest binds approved configuration bytes.
-                        type: string
-                      containerID:
-                        description: ContainerID records the admitted process container.
-                        type: string
-                      kind:
-                        description: Kind fixes the actor type.
-                        type: string
-                      name:
-                        description: Name identifies the compiled leaf.
-                        type: string
-                      podUID:
-                        description: PodUID identifies the admitted Pod.
-                        type: string
-                      revision:
-                        description: Revision identifies the admitted workload rollout.
-                        type: string
-                      runtimeImageID:
-                        description: RuntimeImageID identifies the executed image.
-                        type: string
-                      specDigest:
-                        description: SpecDigest binds actor configuration intent.
-                        type: string
-                      statefulSetUID:
-                        description: StatefulSetUID identifies the owning workload
-                          incarnation.
-                        type: string
-                      uid:
-                        description: UID fixes the leaf incarnation.
-                        type: string
-                    required:
-                    - apiVersion
-                    - configDigest
-                    - containerID
-                    - kind
-                    - name
-                    - podUID
-                    - revision
-                    - runtimeImageID
-                    - specDigest
-                    - statefulSetUID
-                    - uid
-                    type: object
-                  uid:
-                    description: UID prevents action replacement from inheriting authority.
-                    type: string
-                  verifiedBlocks:
-                    description: VerifiedBlocks counts receipts whose header ancestry
-                      has been checked.
-                    format: int32
-                    type: integer
-                  verifiedTip:
-                    description: VerifiedTip anchors the next single-block request.
-                    properties:
-                      chainwork:
-                        description: Chainwork is the fixed-width hexadecimal cumulative
-                          work.
-                        type: string
-                      hash:
-                        description: Hash identifies the block.
-                        type: string
-                      height:
-                        description: Height records its chain position.
-                        format: int64
-                        type: integer
-                      previousBlockHash:
-                        description: PreviousBlockHash identifies its parent; genesis
-                          has none.
-                        type: string
-                    required:
-                    - chainwork
-                    - hash
-                    - height
-                    type: object
-                required:
-                - admittedAt
-                - expiresAt
-                - forkParent
-                - generation
-                - invalidatedHash
+                    offered:
+                      description: Offered counts selections of this target, including
+                        unavailable or reserved opportunities.
+                      format: int64
+                      type: integer
+                    opportunity:
+                      description: Opportunity retains the latest selection for this
+                        target; earlier unseen selections are skipped.
+                      properties:
+                        expiresAt:
+                          description: ExpiresAt bounds admission; it does not cancel
+                            an already armed server operation.
+                          format: date-time
+                          type: string
+                        number:
+                          description: Number is the target's monotonically increasing
+                            offered count.
+                          format: int64
+                          type: integer
+                        policyGeneration:
+                          description: PolicyGeneration binds the selected policy
+                            configuration.
+                          format: int64
+                          type: integer
+                      required:
+                      - expiresAt
+                      - number
+                      - policyGeneration
+                      type: object
+                    resourceName:
+                      description: ResourceName identifies the internal BitcoinProductionTarget.
+                      type: string
+                    uid:
+                      description: UID pins the ledger even after target removal or
+                        resource loss.
+                      type: string
+                  required:
+                  - name
+                  - resourceName
+                  - uid
+                  type: object
+                maxItems: 16
+                type: array
+                x-kubernetes-list-map-keys:
                 - name
-                - network
-                - originalChain
-                - policy
-                - spec
-                - target
-                - uid
-                type: object
-              targetUID:
-                description: TargetUID records the admitted leaf incarnation.
-                type: string
+                x-kubernetes-list-type: map
+              unassignedOpportunities:
+                description: UnassignedOpportunities counts selections skipped before
+                  a target ledger could be pinned.
+                format: int64
+                minimum: 0
+                type: integer
             type: object
-            x-kubernetes-validations:
-            - message: only one action may reserve the executor
-              rule: '!(has(self.action) && has(self.reorganization))'
         required:
         - spec
         type: object

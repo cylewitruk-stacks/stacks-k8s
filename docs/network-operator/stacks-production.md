@@ -196,8 +196,11 @@ PoX-5 transitions and automatic re-enrollment are not part of this profile.
 
 ## Teardown
 
-Delete the parent and wait for **both** production resources to disappear
-before uninstalling the chart or deleting the namespace. Controllers release
+Delete the parent and wait for the Stacks transaction ledger, Bitcoin production
+policy, and **all retained Bitcoin target ledgers** to disappear before
+uninstalling the chart or deleting the namespace. Follow the
+[Bitcoin teardown procedure](bitcoin-production.md#dispatch-state-and-recovery)
+to include targets removed from the current policy. Controllers release
 their own ledger finalizers during explicit environment abandonment. This does
 not cancel already-signed transfers or prove Bitcoin RPC quiescence. Removing
 controllers first can strand finalizers and requires administrator disposal.

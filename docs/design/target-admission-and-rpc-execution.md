@@ -7,7 +7,7 @@ proposal supplies the R1/R2 decision record for M0.3/M0.4. The parent
 [M0 plan](m0-remediation-plan.md) remains authoritative; production fields,
 credential profiles, and broader implementation qualification still need review.
 The [implemented Bitcoin baseline](../network-operator/bitcoin-production.md)
-defines the served catalog and single-target production subset. The richer
+defines the served catalog and weighted multi-target production subset. The richer
 reservation/action/reset model below remains a proposal for later capabilities.
 
 Recommend a health-independent compiled-declaration catalog for R1 and a
@@ -251,7 +251,7 @@ Receipt collection has a separate lifetime from action waiting and reconcile
 calls. A profile may keep one receiver per outstanding target alive without a
 read deadline while the connection survives. This needs bounded worker counts,
 shutdown handling, and status visibility; it does not solve connection loss or
-controller restart. The implemented single-target baseline selects this model:
+controller restart. The implemented per-target baseline selects this model:
 32 process-wide slots include retained receipts, accounting retries preserve
 the original receipt time, and SIGTERM allows a 25-second drain within the
 manager's 30 seconds and Pod's 45 seconds. These limits do not qualify a future

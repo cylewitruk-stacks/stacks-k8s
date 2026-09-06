@@ -34,17 +34,18 @@ type admittedTarget struct {
 }
 
 // admit uses direct reads and validates only this capability's required actor.
-func (r *Reconciler) admit(ctx context.Context, policy *bitcoinv1alpha1.BitcoinBlockProduction, parent *networkv1alpha1.StacksNetwork) (admittedTarget, error) {
+func (r *Reconciler) admit(ctx context.Context, policy *bitcoinv1alpha1.BitcoinProductionTarget, parent *networkv1alpha1.StacksNetwork) (admittedTarget, error) {
 	return r.admitTarget(ctx, policy, parent, true)
 }
 
 // admitTarget optionally checks baseline policy convergence while always checking current actor identity.
-func (r *Reconciler) admitTarget(ctx context.Context, policy *bitcoinv1alpha1.BitcoinBlockProduction, parent *networkv1alpha1.StacksNetwork, baseline bool) (admittedTarget, error) {
+func (r *Reconciler) admitTarget(ctx context.Context, policy *bitcoinv1alpha1.BitcoinProductionTarget, parent *networkv1alpha1.StacksNetwork, baseline bool) (admittedTarget, error) {
 	var zero admittedTarget
-	if !metav1.IsControlledBy(policy, parent) || policy.Spec.NetworkUID != string(parent.UID) || parent.Status.BitcoinProductionUID != string(policy.UID) {
-		return zero, fmt.Errorf("production ledger is not bound to this network")
+	root, err := r.rootPolicy(ctx, policy, parent)
+	if err != nil {
+		return zero, err
 	}
-	if baseline && (parent.Spec.BitcoinBlockProduction == nil || !reflect.DeepEqual(*parent.Spec.BitcoinBlockProduction, policy.Spec.Policy)) {
+	if baseline && (parent.Spec.BitcoinBlockProduction == nil || !root.DeletionTimestamp.IsZero() || !reflect.DeepEqual(root.Spec.Policy, *parent.Spec.BitcoinBlockProduction) || !reflect.DeepEqual(root.Spec.Policy.ExecutionPolicy(policy.Spec.Policy.Target), &policy.Spec.Policy)) {
 		return zero, fmt.Errorf("compiled production policy is not current")
 	}
 	catalog := parent.Status.TargetDeclarations

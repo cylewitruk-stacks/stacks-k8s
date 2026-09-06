@@ -58,7 +58,7 @@ It does not claim that an `ActionSafetyPolicy` exists.
 The producer selects the oldest eligible request, breaking creation-time ties
 by UID. Invalid or unavailable requests do not reserve the target. Admission
 requires a compiled baseline policy; that policy may be paused. A reservation
-lives in the existing UID-pinned `BitcoinBlockProduction.status.action`.
+lives in the existing UID-pinned `BitcoinProductionTarget.status.action`.
 Only the production controller writes that ledger and issues RPCs. Only the
 kind's lifecycle controller writes action status and its finalizer.
 
@@ -76,7 +76,12 @@ without incrementing baseline `blocksProduced`. Action status acknowledges
 `blocksGenerated`, `lastBlockHash`, and `lastDispatchID`. The executor releases
 only after a terminal action acknowledges all known receipts and no call is
 unresolved. These fields retain the latest receipt and a counter, not a full
-block journal. Shared ledger `lastCompletedAt` anchors the next baseline tick.
+block journal. Future baseline dispatches require a fresh weighted policy opportunity.
+
+New generation and reorganization actions require a target selected by the
+current compiled production policy. Removing a target retains its ledger but
+does not admit new actions. Already-admitted work retains its existing bounds
+and cleanup obligations; retaining the ledger does not grant new authority.
 
 Baseline pause, cadence, destination, or policy removal does not rewrite an
 admitted action. Parent suspension stops its future authorizations. After

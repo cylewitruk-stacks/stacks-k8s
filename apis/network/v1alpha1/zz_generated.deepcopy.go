@@ -497,7 +497,7 @@ func (in *StacksNetworkSpec) DeepCopyInto(out *StacksNetworkSpec) {
 	if in.BitcoinBlockProduction != nil {
 		in, out := &in.BitcoinBlockProduction, &out.BitcoinBlockProduction
 		*out = new(bitcoinv1alpha1.ProductionPolicy)
-		**out = **in
+		(*in).DeepCopyInto(*out)
 	}
 	in.Defaults.DeepCopyInto(&out.Defaults)
 	if in.Genesis != nil {

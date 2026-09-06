@@ -19,7 +19,7 @@ import (
 )
 
 // selectAction reserves only an eligible request; unavailable requests never hold baseline work.
-func (r *Reconciler) selectAction(ctx context.Context, p *bitcoinv1.BitcoinBlockProduction, n *networkv1.StacksNetwork) (bool, error) {
+func (r *Reconciler) selectAction(ctx context.Context, p *bitcoinv1.BitcoinProductionTarget, n *networkv1.StacksNetwork) (bool, error) {
 	if n.Spec.Suspended || n.Spec.BitcoinBlockProduction == nil {
 		return false, nil
 	}
@@ -101,6 +101,11 @@ func (r *Reconciler) selectAction(ctx context.Context, p *bitcoinv1.BitcoinBlock
 			continue
 		}
 		before := p.DeepCopy()
+		offer, reason, err := r.opportunity(ctx, p, n)
+		if err != nil {
+			return false, err
+		}
+		consumeReserved(p, offer, reason)
 		p.Status.Action = &bitcoinv1.GenerationReservation{ActionReservation: bitcoinv1.ActionReservation{Name: a.Name, UID: string(a.UID), Generation: a.Generation, AdmittedAt: metav1.NewTime(r.Now().UTC()), ExpiresAt: metav1.NewTime(a.CreationTimestamp.Add(a.Spec.Timeout.Duration)), Network: actionv1.NetworkIdentity{Name: n.Name, UID: string(n.UID), ObservedGeneration: n.Generation}, Target: target.identity, Policy: actionv1.PolicyIdentity{UID: string(p.UID), Generation: p.Generation, Digest: r.ConfigDigest}, CorrelationID: a.Labels["actions.stacks.org/correlation-id"]}, Spec: a.Spec}
 		p.Status.Phase, p.Status.Message = "Reserved", "Finite generation reserved the shared Bitcoin executor"
 		return true, r.Status().Patch(ctx, p, client.MergeFromWithOptions(before, client.MergeFromWithOptimisticLock{}))
@@ -109,7 +114,7 @@ func (r *Reconciler) selectAction(ctx context.Context, p *bitcoinv1.BitcoinBlock
 }
 
 // reconcileAction maintains one reservation through dispatch, receipt accounting and status acknowledgement.
-func (r *Reconciler) reconcileAction(ctx context.Context, p *bitcoinv1.BitcoinBlockProduction, n *networkv1.StacksNetwork) (ctrl.Result, error) {
+func (r *Reconciler) reconcileAction(ctx context.Context, p *bitcoinv1.BitcoinProductionTarget, n *networkv1.StacksNetwork) (ctrl.Result, error) {
 	record := p.Status.Action
 	if !r.ActionsEnabled {
 		return r.report(ctx, p, "Blocked", "Restore the action-enabled executor to resolve its retained reservation", 0)
@@ -218,7 +223,7 @@ func (r *Reconciler) reconcileAction(ctx context.Context, p *bitcoinv1.BitcoinBl
 }
 
 // stopAction records an immutable stop fact for the lifecycle controller to classify.
-func (r *Reconciler) stopAction(ctx context.Context, p *bitcoinv1.BitcoinBlockProduction, reason string) (ctrl.Result, error) {
+func (r *Reconciler) stopAction(ctx context.Context, p *bitcoinv1.BitcoinProductionTarget, reason string) (ctrl.Result, error) {
 	if p.Status.Action.StopReason == reason {
 		return ctrl.Result{RequeueAfter: time.Second}, nil
 	}

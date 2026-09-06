@@ -36,14 +36,15 @@ func verifyActionCancellation(t *testing.T, ctx context.Context, c client.Client
 				n := bitcoinNetwork(name)
 				n.Namespace = namespace
 				must(t, c.Create(ctx, n))
-				policy := bitcoinv1.ProductionPolicy{Target: "bitcoin", Address: "mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn", IntervalSeconds: 1}
-				p := &bitcoinv1.BitcoinBlockProduction{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace, Finalizers: []string{"bitcoin.stacks.org/retain-production-ledger"}}, Spec: bitcoinv1.BitcoinBlockProductionSpec{NetworkName: name, NetworkUID: string(n.UID), Policy: policy}}
-				must(t, controllerutil.SetControllerReference(n, p, c.Scheme()))
-				must(t, c.Create(ctx, p))
-				n.Status.BitcoinProductionUID = string(p.UID)
+				policy := bitcoinv1.ProductionPolicy{Targets: []bitcoinv1.ProductionTarget{{Name: "bitcoin", Weight: 1, Address: "mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn"}}, IntervalSeconds: 1}
+				root := &bitcoinv1.BitcoinBlockProduction{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace}, Spec: bitcoinv1.BitcoinBlockProductionSpec{NetworkName: name, NetworkUID: string(n.UID), Policy: policy}}
+				must(t, controllerutil.SetControllerReference(n, root, c.Scheme()))
+				must(t, c.Create(ctx, root))
+				n.Status.BitcoinProductionUID = string(root.UID)
 				must(t, c.Status().Update(ctx, n))
-				g := &actionv1.BitcoinBlockGeneration{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace, Finalizers: []string{actionv1.CleanupFinalizer}}, Spec: actionv1.BitcoinBlockGenerationSpec{NetworkRef: actionv1.LocalReference{Name: name}, BitcoinNodeRef: actionv1.LocalReference{Name: name + "-bitcoin"}, Count: 3, IntervalSeconds: 1, Address: policy.Address, Timeout: metav1.Duration{Duration: time.Minute}}}
-				a := &actionv1.BitcoinReorganization{ObjectMeta: g.ObjectMeta, Spec: actionv1.BitcoinReorganizationSpec{NetworkRef: g.Spec.NetworkRef, BitcoinNodeRef: g.Spec.BitcoinNodeRef, Depth: 2, Address: policy.Address, Timeout: g.Spec.Timeout, BoundaryPolicy: actionv1.ReorganizationBoundaryPolicy{AllowEpochBoundaryCrossing: true, AllowRewardCycleBoundaryCrossing: true, AllowPreparePhaseBoundaryCrossing: true}}}
+				p := createProductionTarget(t, ctx, c, root)
+				g := &actionv1.BitcoinBlockGeneration{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace, Finalizers: []string{actionv1.CleanupFinalizer}}, Spec: actionv1.BitcoinBlockGenerationSpec{NetworkRef: actionv1.LocalReference{Name: name}, BitcoinNodeRef: actionv1.LocalReference{Name: name + "-bitcoin"}, Count: 3, IntervalSeconds: 1, Address: policy.Targets[0].Address, Timeout: metav1.Duration{Duration: time.Minute}}}
+				a := &actionv1.BitcoinReorganization{ObjectMeta: g.ObjectMeta, Spec: actionv1.BitcoinReorganizationSpec{NetworkRef: g.Spec.NetworkRef, BitcoinNodeRef: g.Spec.BitcoinNodeRef, Depth: 2, Address: policy.Targets[0].Address, Timeout: g.Spec.Timeout, BoundaryPolicy: actionv1.ReorganizationBoundaryPolicy{AllowEpochBoundaryCrossing: true, AllowRewardCycleBoundaryCrossing: true, AllowPreparePhaseBoundaryCrossing: true}}}
 				var object client.Object = g
 				if kind == "reorganization" {
 					object = a
@@ -116,4 +117,16 @@ func verifyActionCancellation(t *testing.T, ctx context.Context, c client.Client
 			})
 		}
 	}
+}
+
+// createProductionTarget installs a pinned target ledger using real API-server UIDs.
+func createProductionTarget(t *testing.T, ctx context.Context, c client.Client, root *bitcoinv1.BitcoinBlockProduction) *bitcoinv1.BitcoinProductionTarget {
+	t.Helper()
+	name := root.Spec.Policy.Targets[0].Name
+	p := &bitcoinv1.BitcoinProductionTarget{ObjectMeta: metav1.ObjectMeta{Name: root.Name + "-" + name, Namespace: root.Namespace, Finalizers: []string{"bitcoin.stacks.org/retain-production-ledger"}}, Spec: bitcoinv1.BitcoinProductionTargetSpec{NetworkName: root.Spec.NetworkName, NetworkUID: root.Spec.NetworkUID, ProductionUID: string(root.UID), Policy: *root.Spec.Policy.ExecutionPolicy(name)}}
+	must(t, controllerutil.SetControllerReference(root, p, c.Scheme()))
+	must(t, c.Create(ctx, p))
+	root.Status.Targets = []bitcoinv1.TargetLedger{{Name: name, ResourceName: p.Name, UID: string(p.UID)}}
+	must(t, c.Status().Update(ctx, root))
+	return p
 }

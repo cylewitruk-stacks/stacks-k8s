@@ -51,7 +51,8 @@ type productionFixture struct {
 	rpc    *fakeRPC
 	now    time.Time
 	parent *networkv1alpha1.StacksNetwork
-	policy *bitcoinv1alpha1.BitcoinBlockProduction
+	policy *bitcoinv1alpha1.BitcoinProductionTarget
+	root   *bitcoinv1alpha1.BitcoinBlockProduction
 	actor  *networkv1alpha1.BitcoinNode
 	pod    *corev1.Pod
 	sts    *appsv1.StatefulSet
@@ -69,10 +70,11 @@ func fixture(t *testing.T) *productionFixture {
 	digest := fmt.Sprintf("sha256:%x", sha256.Sum256([]byte("approved configuration")))
 	f := &productionFixture{now: time.Unix(1000, 0), rpc: &fakeRPC{}}
 	f.parent = &networkv1alpha1.StacksNetwork{ObjectMeta: metav1.ObjectMeta{Name: "network", Namespace: "test", UID: "network-uid", Generation: 1}}
-	policy := bitcoinv1alpha1.ProductionPolicy{Target: "bitcoin", IntervalSeconds: 5, Address: "mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn"}
-	f.parent.Spec.BitcoinBlockProduction = policy.DeepCopy()
-	f.parent.Status.BitcoinProductionUID = "production-uid"
-	f.policy = &bitcoinv1alpha1.BitcoinBlockProduction{ObjectMeta: metav1.ObjectMeta{Name: "network", Namespace: "test", UID: "production-uid", Generation: 1, Finalizers: []string{ledgerFinalizer}}, Spec: bitcoinv1alpha1.BitcoinBlockProductionSpec{NetworkName: "network", NetworkUID: "network-uid", Policy: policy}}
+	policy := bitcoinv1alpha1.TargetPolicy{Target: "bitcoin", IntervalSeconds: 5, Address: "mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn"}
+	f.parent.Spec.BitcoinBlockProduction = &bitcoinv1alpha1.ProductionPolicy{Targets: []bitcoinv1alpha1.ProductionTarget{{Name: policy.Target, Weight: 1, Address: policy.Address}}, IntervalSeconds: policy.IntervalSeconds}
+	f.root = &bitcoinv1alpha1.BitcoinBlockProduction{ObjectMeta: metav1.ObjectMeta{Name: "network", Namespace: "test", UID: "root-uid", Generation: 1}, Spec: bitcoinv1alpha1.BitcoinBlockProductionSpec{NetworkName: "network", NetworkUID: "network-uid", Policy: *f.parent.Spec.BitcoinBlockProduction.DeepCopy()}, Status: bitcoinv1alpha1.BitcoinBlockProductionStatus{ObservedGeneration: 1, Targets: []bitcoinv1alpha1.TargetLedger{{Name: "bitcoin", ResourceName: "network-bitcoin", UID: "production-uid", Offered: 1, Opportunity: &bitcoinv1alpha1.ProductionOpportunity{Number: 1, PolicyGeneration: 1, ExpiresAt: metav1.NewMicroTime(f.now.Add(5 * time.Second))}}}}}
+	f.parent.Status.BitcoinProductionUID = "root-uid"
+	f.policy = &bitcoinv1alpha1.BitcoinProductionTarget{ObjectMeta: metav1.ObjectMeta{Name: "network-bitcoin", Namespace: "test", UID: "production-uid", Generation: 1, Finalizers: []string{ledgerFinalizer}}, Spec: bitcoinv1alpha1.BitcoinProductionTargetSpec{NetworkName: "network", NetworkUID: "network-uid", ProductionUID: "root-uid", Policy: policy}}
 	f.actor = &networkv1alpha1.BitcoinNode{ObjectMeta: metav1.ObjectMeta{Name: "network-bitcoin", Namespace: "test", UID: "bitcoin-uid", Generation: 1}, Spec: networkv1alpha1.BitcoinNodeSpec{NetworkRef: networkv1alpha1.LocalObjectReference{Name: "network"}, ActorName: "bitcoin", Image: "bitcoin:test", Config: networkv1alpha1.ConfigSource{ConfigMapRef: &networkv1alpha1.ConfigObjectRef{Name: "config", Key: "bitcoin.conf", ExpectedDigest: digest}}}}
 	specDigest, err := workload.SpecDigest(f.actor.Spec)
 	if err != nil {
@@ -85,12 +87,12 @@ func fixture(t *testing.T) *productionFixture {
 	f.pod = &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: f.actor.Name + "-0", Namespace: "test", UID: "pod-uid", Labels: map[string]string{appsv1.StatefulSetRevisionLabel: "revision"}}, Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "actor", Image: "bitcoin:test"}}}, Status: corev1.PodStatus{PodIP: "10.0.0.1", Conditions: []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionTrue}}, ContainerStatuses: []corev1.ContainerStatus{{Name: "actor", Ready: true, ContainerID: "containerd://bitcoin", ImageID: imageID, State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}}}}}}
 	f.config = &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "config", Namespace: "test"}, Immutable: &immutable, Data: map[string]string{"bitcoin.conf": "approved configuration"}}
 	f.actor.Status = networkv1alpha1.ActorStatus{Ready: true, ObservedGeneration: 1, Identity: &networkv1alpha1.ActorIdentity{ResourceName: f.actor.Name, SpecDigest: specDigest, ConfigDigest: digest, StatefulSetName: f.sts.Name, StatefulSetUID: string(f.sts.UID), ControllerRevision: "revision", PodName: f.pod.Name, PodUID: string(f.pod.UID), RuntimeImageID: imageID}}
-	for _, pair := range [][2]client.Object{{f.parent, f.policy}, {f.parent, f.actor}, {f.actor, f.sts}, {f.sts, f.pod}} {
+	for _, pair := range [][2]client.Object{{f.parent, f.root}, {f.root, f.policy}, {f.parent, f.actor}, {f.actor, f.sts}, {f.sts, f.pod}} {
 		if err := controllerutil.SetControllerReference(pair[0], pair[1], scheme); err != nil {
 			t.Fatal(err)
 		}
 	}
-	c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(f.parent, f.policy, f.actor, f.sts, f.pod, &actionv1.BitcoinBlockGeneration{}, &actionv1.BitcoinReorganization{}).WithObjects(f.parent, f.policy, f.actor, f.sts, f.pod, f.config).Build()
+	c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(f.root, f.parent, f.policy, f.actor, f.sts, f.pod, &actionv1.BitcoinBlockGeneration{}, &actionv1.BitcoinReorganization{}).WithObjects(f.root, f.parent, f.policy, f.actor, f.sts, f.pod, f.config).Build()
 	f.r = &Reconciler{Client: c, APIReader: c, RPC: f.rpc, ConfigDigest: digest, RPCTimeout: time.Second, Now: func() time.Time { return f.now }, ProcessNonce: "process-one"}
 	f.r.collectors = newCollectorPool(f.r, collectorLimit, collectorDrain)
 	t.Cleanup(func() {
@@ -129,9 +131,9 @@ func (f *productionFixture) waitCollectors(t *testing.T) {
 	}
 }
 
-func (f *productionFixture) ledger(t *testing.T) *bitcoinv1alpha1.BitcoinBlockProduction {
+func (f *productionFixture) ledger(t *testing.T) *bitcoinv1alpha1.BitcoinProductionTarget {
 	t.Helper()
-	result := &bitcoinv1alpha1.BitcoinBlockProduction{}
+	result := &bitcoinv1alpha1.BitcoinProductionTarget{}
 	if err := f.r.Get(context.Background(), client.ObjectKeyFromObject(f.policy), result); err != nil {
 		t.Fatal(err)
 	}
@@ -158,6 +160,7 @@ func TestCadenceDoesNotRequireAggregateInventory(t *testing.T) {
 		t.Fatal("early reconciliation created an extra block")
 	}
 	f.now = f.now.Add(100 * time.Second)
+	f.offer(t)
 	f.reconcile(t, context.Background())
 	if f.rpc.sends != 2 {
 		t.Fatal("missed ticks must collapse to one dispatch")
@@ -217,7 +220,7 @@ func TestAdmissionRejectsStaleOrUnapprovedTargets(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			f := fixture(t)
 			mutate(f)
-			c := fake.NewClientBuilder().WithScheme(f.r.Scheme()).WithStatusSubresource(f.parent, f.policy, f.actor, f.sts, f.pod, &actionv1.BitcoinBlockGeneration{}, &actionv1.BitcoinReorganization{}).WithObjects(f.parent, f.policy, f.actor, f.sts, f.pod, f.config).Build()
+			c := fake.NewClientBuilder().WithScheme(f.r.Scheme()).WithStatusSubresource(f.root, f.parent, f.policy, f.actor, f.sts, f.pod, &actionv1.BitcoinBlockGeneration{}, &actionv1.BitcoinReorganization{}).WithObjects(f.root, f.parent, f.policy, f.actor, f.sts, f.pod, f.config).Build()
 			f.r.Client, f.r.APIReader = c, c
 			f.reconcile(t, context.Background())
 			if f.rpc.sends != 0 {
@@ -229,7 +232,7 @@ func TestAdmissionRejectsStaleOrUnapprovedTargets(t *testing.T) {
 
 func TestAccountingIsIdempotentAndRejectsOldDispatch(t *testing.T) {
 	f := fixture(t)
-	var armed *bitcoinv1alpha1.BitcoinBlockProduction
+	var armed *bitcoinv1alpha1.BitcoinProductionTarget
 	f.rpc.generate = func(context.Context) error { armed = f.ledger(t); return nil }
 	f.reconcile(t, context.Background())
 	first := armed.DeepCopy()
@@ -240,6 +243,7 @@ func TestAccountingIsIdempotentAndRejectsOldDispatch(t *testing.T) {
 		t.Fatal("duplicate receipt counted twice")
 	}
 	f.now = f.now.Add(time.Minute)
+	f.offer(t)
 	f.reconcile(t, context.Background())
 	if err := f.r.account(context.Background(), first, receivedReceipt{hash: fmt.Sprintf("%064x", 1), completed: metav1.NewTime(f.now)}); err == nil {
 		t.Fatal("old dispatch receipt accepted after new authorization")
@@ -264,7 +268,7 @@ type uncertainStatusWriter struct {
 
 func (w *uncertainStatusWriter) Patch(ctx context.Context, object client.Object, patch client.Patch, options ...client.SubResourcePatchOption) error {
 	err := w.SubResourceWriter.Patch(ctx, object, patch, options...)
-	if policy, ok := object.(*bitcoinv1alpha1.BitcoinBlockProduction); ok && err == nil && !w.owner.failed && policy.Status.DispatchState == w.owner.state {
+	if policy, ok := object.(*bitcoinv1alpha1.BitcoinProductionTarget); ok && err == nil && !w.owner.failed && policy.Status.DispatchState == w.owner.state {
 		w.owner.failed = true
 		return fmt.Errorf("API acknowledgement lost")
 	}
@@ -341,5 +345,20 @@ func TestConcurrentProducersCompeteForOneDurableAuthorization(t *testing.T) {
 	second.collectors.workers.Wait()
 	if failed != 1 || f.rpc.sends != 1 || f.ledger(t).Status.BlocksProduced != 1 {
 		t.Fatalf("competing producers shared authorization: failures=%d sends=%d", failed, f.rpc.sends)
+	}
+}
+
+// offer publishes the next explicit policy selection for executor tests.
+func (f *productionFixture) offer(t *testing.T) {
+	t.Helper()
+	ctx := context.Background()
+	if err := f.r.Get(ctx, client.ObjectKeyFromObject(f.root), f.root); err != nil {
+		t.Fatal(err)
+	}
+	record := f.root.Ledger("bitcoin")
+	record.Offered++
+	record.Opportunity = &bitcoinv1alpha1.ProductionOpportunity{Number: record.Offered, PolicyGeneration: f.root.Generation, ExpiresAt: metav1.NewMicroTime(f.now.Add(5 * time.Second))}
+	if err := f.r.Status().Update(ctx, f.root); err != nil {
+		t.Fatal(err)
 	}
 }

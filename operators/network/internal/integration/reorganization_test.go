@@ -60,7 +60,7 @@ func verifyReorganizationAdmission(t *testing.T, ctx context.Context, c client.C
 		t.Fatalf("oversized receipt history admitted: %v", err)
 	}
 	// The served ledger rejects simultaneous reservations across the two kinds.
-	ledger := &bitcoinv1.BitcoinBlockProduction{ObjectMeta: metav1.ObjectMeta{Name: "exclusive-ledger", Namespace: testNamespace}, Spec: bitcoinv1.BitcoinBlockProductionSpec{NetworkName: "absent", NetworkUID: "network-uid", Policy: bitcoinv1.ProductionPolicy{Target: "bitcoin", Address: a.Spec.Address, IntervalSeconds: 1}}}
+	ledger := &bitcoinv1.BitcoinProductionTarget{ObjectMeta: metav1.ObjectMeta{Name: "exclusive-ledger", Namespace: testNamespace}, Spec: bitcoinv1.BitcoinProductionTargetSpec{NetworkName: "absent", NetworkUID: "network-uid", ProductionUID: "policy-uid", Policy: bitcoinv1.TargetPolicy{Target: "bitcoin", Address: a.Spec.Address, IntervalSeconds: 1}}}
 	must(t, c.Create(ctx, ledger))
 	common := bitcoinv1.ActionReservation{Name: a.Name, UID: string(a.UID), Generation: a.Generation, AdmittedAt: metav1.Now(), ExpiresAt: metav1.NewTime(time.Now().Add(time.Minute))}
 	ledger.Status.Reorganization = &bitcoinv1.ReorganizationReservation{ActionReservation: common, Spec: a.Spec}

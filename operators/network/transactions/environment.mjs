@@ -101,7 +101,7 @@ producer.data["credentials.json"] = Buffer.from(
 ).toString("base64");
 const network = doc.items.find((x) => x.kind === "StacksNetwork");
 network.spec.bitcoinNodes[0].config.configMapRef.expectedDigest = bitcoinDigest;
-network.spec.bitcoinBlockProduction.address = minerAddress;
+network.spec.bitcoinBlockProduction.targets[0].address = minerAddress;
 network.spec.bitcoinBlockProduction.paused = true;
 network.spec.bitcoinBlockProduction.intervalSeconds = 5;
 const genesis = [

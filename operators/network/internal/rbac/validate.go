@@ -136,6 +136,8 @@ func productionRules() []rbacv1.PolicyRule {
 	return []rbacv1.PolicyRule{
 		{APIGroups: []string{"bitcoin.stacks.org"}, Resources: []string{"bitcoinblockproductions"}, Verbs: []string{"get", "list", "watch", "patch"}},
 		{APIGroups: []string{"bitcoin.stacks.org"}, Resources: []string{"bitcoinblockproductions/status"}, Verbs: []string{"get", "patch"}},
+		{APIGroups: []string{"bitcoin.stacks.org"}, Resources: []string{"bitcoinproductiontargets"}, Verbs: []string{"get", "list", "watch", "create", "patch"}},
+		{APIGroups: []string{"bitcoin.stacks.org"}, Resources: []string{"bitcoinproductiontargets/status"}, Verbs: []string{"get", "patch"}},
 		{APIGroups: []string{"network.stacks.org"}, Resources: []string{"stacksnetworks"}, Verbs: []string{"get", "list", "watch"}},
 		{APIGroups: []string{"network.stacks.org"}, Resources: []string{"bitcoinnodes"}, Verbs: []string{"get"}},
 		{APIGroups: []string{""}, Resources: []string{"pods"}, Verbs: []string{"get"}},
@@ -165,7 +167,13 @@ func normalize(rules []rbacv1.PolicyRule) []rbacv1.PolicyRule {
 
 // transactionRules preserves the separate worker's read-only actor and no-Secret-API boundary.
 func transactionRules() []rbacv1.PolicyRule {
-	rules := productionRules()
+	rules := make([]rbacv1.PolicyRule, 0)
+	for _, rule := range productionRules() {
+		if rule.APIGroups[0] == "bitcoin.stacks.org" && (rule.Resources[0] == "bitcoinproductiontargets" || rule.Resources[0] == "bitcoinproductiontargets/status") {
+			continue
+		}
+		rules = append(rules, rule)
+	}
 	for i := range rules {
 		if rules[i].APIGroups[0] == "bitcoin.stacks.org" {
 			rules[i].APIGroups = []string{"stacks.stacks.org"}

@@ -85,12 +85,14 @@ func TestMarkdownLinksResolve(t *testing.T) {
 	}
 }
 
-func TestLeafCRDSchemasDoNotDeclareDefaults(t *testing.T) {
+func TestLeafAndProductionCRDSchemasDoNotDeclareDefaults(t *testing.T) {
 	root := repositoryRoot(t)
 	files := []string{
 		"network.stacks.org_bitcoinnodes.yaml",
 		"network.stacks.org_stacksnodes.yaml",
 		"network.stacks.org_stackssigners.yaml",
+		"bitcoin.stacks.org_bitcoinblockproductions.yaml",
+		"bitcoin.stacks.org_bitcoinproductiontargets.yaml",
 	}
 	checkedSchemas := 0
 	for _, name := range files {

@@ -57,13 +57,22 @@ func Compile(network *networkv1alpha1.StacksNetwork) (DesiredTopology, error) {
 		return DesiredTopology{}, fmt.Errorf("StacksNetwork is required")
 	}
 	if policy := network.Spec.BitcoinBlockProduction; policy != nil {
-		found := false
-		for _, node := range network.Spec.BitcoinNodes {
-			found = found || node.Name == policy.Target
+
+		if len(policy.Targets) < 1 || len(policy.Targets) > 8 || policy.IntervalSeconds < 1 || policy.IntervalSeconds > 86400 {
+			return DesiredTopology{}, fmt.Errorf("production requires 1..8 targets and interval 1..86400")
 		}
-		if !found || policy.IntervalSeconds < 1 || policy.IntervalSeconds > 86400 || len(policy.Address) < 14 || len(policy.Address) > 128 {
-			return DesiredTopology{}, fmt.Errorf("production requires a declared Bitcoin target, interval 1..86400 and a destination address")
+		seen := map[string]bool{}
+		for _, target := range policy.Targets {
+			found := false
+			for _, node := range network.Spec.BitcoinNodes {
+				found = found || node.Name == target.Name
+			}
+			if !found || seen[target.Name] || target.Weight < 1 || target.Weight > 1000 || len(target.Address) < 14 || len(target.Address) > 128 {
+				return DesiredTopology{}, fmt.Errorf("production requires distinct declared Bitcoin targets, weights 1..1000 and destination addresses")
+			}
+			seen[target.Name] = true
 		}
+
 	}
 	if errors := validation.IsDNS1123Label(network.Name); len(errors) > 0 {
 		return DesiredTopology{}, fmt.Errorf("StacksNetwork name %q must be a DNS label: %s", network.Name, strings.Join(errors, "; "))

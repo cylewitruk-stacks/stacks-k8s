@@ -74,11 +74,16 @@ func TestChartAuthorizedLifecycleRestart(t *testing.T) {
 	must(t, err)
 	n := &networkv1.StacksNetwork{ObjectMeta: metav1.ObjectMeta{Name: "network", Namespace: namespace}, Spec: networkv1.StacksNetworkSpec{BitcoinNodes: []networkv1.BitcoinNodeTemplate{{Name: "bitcoin", Config: networkv1.ConfigSource{Generated: &networkv1.GeneratedConfig{Profile: "bitcoin-regtest/v1"}}}}}}
 	must(t, admin.Create(ctx, n))
-	p := &bitcoinv1.BitcoinBlockProduction{ObjectMeta: metav1.ObjectMeta{Name: n.Name, Namespace: namespace}, Spec: bitcoinv1.BitcoinBlockProductionSpec{NetworkName: n.Name, NetworkUID: string(n.UID), Policy: bitcoinv1.ProductionPolicy{Target: "bitcoin", Address: "mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn", IntervalSeconds: 1}}}
-	must(t, controllerutil.SetControllerReference(n, p, scheme))
-	must(t, admin.Create(ctx, p))
-	n.Status.BitcoinProductionUID = string(p.UID)
+	policyRoot := &bitcoinv1.BitcoinBlockProduction{ObjectMeta: metav1.ObjectMeta{Name: n.Name, Namespace: namespace}, Spec: bitcoinv1.BitcoinBlockProductionSpec{NetworkName: n.Name, NetworkUID: string(n.UID), Policy: bitcoinv1.ProductionPolicy{Targets: []bitcoinv1.ProductionTarget{{Name: "bitcoin", Weight: 1, Address: "mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn"}}, IntervalSeconds: 1}}}
+	must(t, controllerutil.SetControllerReference(n, policyRoot, scheme))
+	must(t, admin.Create(ctx, policyRoot))
+	n.Status.BitcoinProductionUID = string(policyRoot.UID)
 	must(t, admin.Status().Update(ctx, n))
+	p := &bitcoinv1.BitcoinProductionTarget{ObjectMeta: metav1.ObjectMeta{Name: "network-bitcoin", Namespace: namespace}, Spec: bitcoinv1.BitcoinProductionTargetSpec{NetworkName: n.Name, NetworkUID: string(n.UID), ProductionUID: string(policyRoot.UID), Policy: *policyRoot.Spec.Policy.ExecutionPolicy("bitcoin")}}
+	must(t, controllerutil.SetControllerReference(policyRoot, p, scheme))
+	must(t, admin.Create(ctx, p))
+	policyRoot.Status.Targets = []bitcoinv1.TargetLedger{{Name: "bitcoin", ResourceName: p.Name, UID: string(p.UID)}}
+	must(t, admin.Status().Update(ctx, policyRoot))
 	a := &actionv1.BitcoinBlockGeneration{ObjectMeta: metav1.ObjectMeta{Name: "finite", Namespace: namespace}, Spec: actionv1.BitcoinBlockGenerationSpec{NetworkRef: actionv1.LocalReference{Name: n.Name}, BitcoinNodeRef: actionv1.LocalReference{Name: "network-bitcoin"}, Count: 1, IntervalSeconds: 1, Address: p.Spec.Policy.Address, Timeout: metav1.Duration{Duration: time.Minute}}}
 	must(t, admin.Create(ctx, a))
 	p.Status.DispatchState = "Armed"

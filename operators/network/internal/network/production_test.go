@@ -22,7 +22,7 @@ func productionObjects(t *testing.T) (*networkv1alpha1.StacksNetwork, *bitcoinv1
 	t.Helper()
 	parent := fixture()
 	parent.Generation = 1
-	parent.Spec.BitcoinBlockProduction = &bitcoinv1alpha1.ProductionPolicy{Target: "bitcoin", IntervalSeconds: 5, Address: "mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn"}
+	parent.Spec.BitcoinBlockProduction = &bitcoinv1alpha1.ProductionPolicy{Targets: []bitcoinv1alpha1.ProductionTarget{{Name: "bitcoin", Weight: 1, Address: "mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn"}}, IntervalSeconds: 5}
 	parent.Status.BitcoinProductionUID = "production-uid"
 	policy := &bitcoinv1alpha1.BitcoinBlockProduction{ObjectMeta: metav1.ObjectMeta{Name: parent.Name, Namespace: parent.Namespace, UID: "production-uid", Generation: 1}, Spec: bitcoinv1alpha1.BitcoinBlockProductionSpec{NetworkName: parent.Name, NetworkUID: string(parent.UID), Policy: *parent.Spec.BitcoinBlockProduction.DeepCopy()}}
 	if err := controllerutil.SetControllerReference(parent, policy, testScheme(t)); err != nil {
@@ -32,7 +32,7 @@ func productionObjects(t *testing.T) (*networkv1alpha1.StacksNetwork, *bitcoinv1
 }
 
 func TestProductionFailuresDoNotBlockActorUpdatesOrPruning(t *testing.T) {
-	for _, mode := range []string{"missing-ledger", "terminating-ledger", "foreign-ledger", "changed-target"} {
+	for _, mode := range []string{"missing-ledger", "terminating-ledger", "foreign-ledger", "changed-uid"} {
 		t.Run(mode, func(t *testing.T) {
 			parent, policy := productionObjects(t)
 			objects := []client.Object{parent}
@@ -43,8 +43,8 @@ func TestProductionFailuresDoNotBlockActorUpdatesOrPruning(t *testing.T) {
 				policy.DeletionTimestamp = &now
 			case "foreign-ledger":
 				policy.OwnerReferences = nil
-			case "changed-target":
-				policy.Spec.Policy.Target = "previous-target"
+			case "changed-uid":
+				policy.UID = "replacement"
 			}
 			if mode != "missing-ledger" {
 				objects = append(objects, policy)
@@ -130,8 +130,8 @@ func TestProductionWatchFiltersAccountingButKeepsLifecycle(t *testing.T) {
 		})
 	}
 	updated := base.DeepCopy()
-	updated.Status.BlocksProduced++
-	updated.Status.Phase = "Accounting"
+	updated.Status.Opportunities++
+	updated.Status.Phase = "Running"
 	if filter.Update(event.UpdateEvent{ObjectOld: base, ObjectNew: updated}) {
 		t.Fatal("receipt accounting triggered aggregate reconciliation")
 	}

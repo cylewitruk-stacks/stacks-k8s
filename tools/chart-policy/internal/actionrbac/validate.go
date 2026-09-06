@@ -80,7 +80,7 @@ func Validate(reader io.Reader) error {
 func expectedRules(generation, reorganization bool) []rbacv1.PolicyRule {
 	rules := []rbacv1.PolicyRule{
 		{APIGroups: []string{"network.stacks.org"}, Resources: []string{"stacksnetworks"}, Verbs: []string{"get"}},
-		{APIGroups: []string{"bitcoin.stacks.org"}, Resources: []string{"bitcoinblockproductions"}, Verbs: []string{"get"}},
+		{APIGroups: []string{"bitcoin.stacks.org"}, Resources: []string{"bitcoinblockproductions", "bitcoinproductiontargets"}, Verbs: []string{"get"}},
 		{APIGroups: []string{"coordination.k8s.io"}, Resources: []string{"leases"}, Verbs: []string{"get", "list", "watch", "create", "update", "patch", "delete"}},
 		{APIGroups: []string{""}, Resources: []string{"events"}, Verbs: []string{"create", "patch"}},
 	}

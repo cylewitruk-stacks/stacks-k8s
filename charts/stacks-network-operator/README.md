@@ -98,7 +98,8 @@ it into small, owned resources:
 | Kind | Owns |
 | ---- | ---- |
 | `StacksNetwork` | Desired actor graph, leaf CRs, aggregate readiness, admitted inventory. |
-| `BitcoinBlockProduction` | Optional fixed-interval Bitcoin baseline and durable dispatch ledger. |
+| `BitcoinBlockProduction` | Optional fixed-interval weighted Bitcoin production policy. |
+| `BitcoinProductionTarget` | Internal per-target dispatch, receipt, and action-exclusion ledger. |
 | `StacksTransactionProduction` | Optional fixed-interval STX demand and bounded account/transaction ledger. |
 | `BitcoinNode` | One Bitcoin Core StatefulSet, Service, configuration, and actor status. |
 | `StacksNode` | One Stacks node StatefulSet, Service, configuration, and actor status. |
@@ -172,13 +173,15 @@ Observation time and Kubernetes resource versions are not digest inputs.
 
 ## Uninstall
 
-Delete networks and wait for both production ledgers to disappear before
-uninstalling the controllers:
+Delete networks and wait for the Bitcoin policies, all retained Bitcoin target
+ledgers, and Stacks transaction ledgers to disappear before uninstalling the
+controllers. Continue only after the deletion wait succeeds:
 
 ```bash
 kubectl --namespace stacks-regtest delete stacksnetworks --all
 kubectl --namespace stacks-regtest wait --for=delete \
-  bitcoinblockproductions,stackstransactionproductions --all --timeout=120s
+  bitcoinblockproductions,bitcoinproductiontargets,stackstransactionproductions \
+  --all --timeout=120s
 helm --namespace stacks-regtest uninstall stacks-network-operator
 ```
 

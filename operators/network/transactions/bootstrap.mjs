@@ -33,8 +33,8 @@ const kube = (...argv) =>
     stdio: ["pipe", "pipe", "pipe"],
   });
 /** Read one network-scoped Kubernetes resource. */
-const get = (resource) =>
-  JSON.parse(kube("get", resource, setup.networkName, "-o", "json"));
+const get = (resource, name = setup.networkName) =>
+  JSON.parse(kube("get", resource, name, "-o", "json"));
 /** Change only the external bootstrap's declared parent fields. */
 const patch = (spec) =>
   kube(
@@ -163,7 +163,7 @@ try {
   });
   await forward(setup.networkName + "-bitcoin", ports.bitcoin, 18443);
   const parent = get("stacksnetwork"),
-    ledger = get("bitcoinblockproduction");
+    ledger = get("bitcoinproductiontarget", setup.networkName + "-bitcoin");
   if (
     parent.spec.bitcoinBlockProduction?.paused !== true ||
     ledger.status?.dispatchID ||

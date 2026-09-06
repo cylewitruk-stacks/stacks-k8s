@@ -19,7 +19,8 @@ StacksNetwork reconciler
 | Owner | Fields and effects |
 | ---- | ---- |
 | Aggregate reconciler | Leaf specifications and ownership; `StacksNetwork.status`. |
-| Production reconciler | UID-pinned `BitcoinBlockProduction.status`, finalizer, and typed single-block RPC effects. |
+| Production scheduler | Weighted opportunities and UID-pinned target ledgers in `BitcoinBlockProduction.status`. |
+| Production reconciler | Per-target `BitcoinProductionTarget.status`, finalizer, and typed single-block RPC effects. |
 | Bitcoin leaf reconciler | Bitcoin workload resources; `BitcoinNode.status`. |
 | Stacks node reconciler | Stacks node workload resources; `StacksNode.status`. |
 | Signer leaf reconciler | Signer workload resources; `StacksSigner.status`. |

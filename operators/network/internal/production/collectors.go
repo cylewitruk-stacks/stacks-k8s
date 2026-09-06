@@ -144,7 +144,7 @@ func (p *collectorPool) abandon(uid types.UID) {
 }
 
 // collect starts exactly one authorized send without occupying a reconcile worker.
-func (p *collectorPool) collect(armed *bitcoinv1alpha1.BitcoinBlockProduction, endpoint string) {
+func (p *collectorPool) collect(armed *bitcoinv1alpha1.BitcoinProductionTarget, endpoint string) {
 	p.mutex.Lock()
 	entry := p.entries[armed.Status.DispatchID]
 	p.mutex.Unlock()

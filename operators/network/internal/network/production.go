@@ -55,9 +55,6 @@ func (r *Reconciler) synchronizeProduction(ctx context.Context, parent *networkv
 	if !current.DeletionTimestamp.IsZero() {
 		return fmt.Errorf("production ledger is terminating; delete the owning environment to abandon it")
 	}
-	if current.Spec.Policy.Target != parent.Spec.BitcoinBlockProduction.Target {
-		return fmt.Errorf("changing the initial production target requires a fresh environment")
-	}
 	if reflect.DeepEqual(current.Spec.Policy, *parent.Spec.BitcoinBlockProduction) {
 		return nil
 	}

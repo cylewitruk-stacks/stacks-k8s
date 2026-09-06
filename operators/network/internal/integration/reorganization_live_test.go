@@ -39,6 +39,12 @@ func waitReorganization(t *testing.T, c client.Client, a *actionv1.BitcoinReorga
 // observeBitcoin executes only fixed test reads with observer credentials delivered over stdin.
 func observeBitcoin(t *testing.T, c client.Client, key types.NamespacedName, method string, args ...string) []byte {
 	t.Helper()
+	return observeBitcoinTarget(t, c, key, key.Name+"-bitcoin", method, args...)
+}
+
+// observeBitcoinTarget performs a bounded observer read on one explicit test actor.
+func observeBitcoinTarget(t *testing.T, c client.Client, key types.NamespacedName, actor, method string, args ...string) []byte {
+	t.Helper()
 	switch method {
 	case "getblockhash", "getblockheader", "getchaintips", "getblockchaininfo":
 	default:
@@ -50,7 +56,7 @@ func observeBitcoin(t *testing.T, c client.Client, key types.NamespacedName, met
 	liveMust(t, json.Unmarshal(secret.Data["credentials.json"], &credential))
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	command := []string{"--kubeconfig", requiredEnvironment(t, "STACKS_NETWORK_LIVE_KUBECONFIG"), "--context", requiredEnvironment(t, "STACKS_NETWORK_LIVE_CONTEXT"), "-n", key.Namespace, "exec", "-i", key.Name + "-bitcoin-0", "-c", "actor", "--", "bitcoin-cli", "-regtest", "-rpcport=18443", "-rpcuser=" + credential.Username, "-stdinrpcpass", method}
+	command := []string{"--kubeconfig", requiredEnvironment(t, "STACKS_NETWORK_LIVE_KUBECONFIG"), "--context", requiredEnvironment(t, "STACKS_NETWORK_LIVE_CONTEXT"), "-n", key.Namespace, "exec", "-i", actor + "-0", "-c", "actor", "--", "bitcoin-cli", "-regtest", "-rpcport=18443", "-rpcuser=" + credential.Username, "-stdinrpcpass", method}
 	cmd := exec.CommandContext(ctx, "kubectl", append(command, args...)...)
 	cmd.Stdin = strings.NewReader(credential.Password + "\n")
 	output, err := cmd.Output()
@@ -77,7 +83,7 @@ func pausedReorgEnvironment(t *testing.T) (client.Client, types.NamespacedName) 
 	})
 
 	updateNetwork(t, context.Background(), c, key, func(n *networkv1.StacksNetwork) { n.Spec.BitcoinBlockProduction.Paused = true })
-	waitProduction(t, c, key, func(p *bitcoinv1.BitcoinBlockProduction) bool {
+	waitProduction(t, c, key, func(p *bitcoinv1.BitcoinProductionTarget) bool {
 		return p.Status.Phase == "Paused" && p.Status.DispatchState == "Idle"
 	})
 	waitNetworkReady(t, context.Background(), c, key, 1)
@@ -120,7 +126,7 @@ func TestLiveReorganizationAndCompensatedDeadline(t *testing.T) {
 	if restored != b.Status.OriginalChain.Hash {
 		t.Fatal("higher-work original branch was not eligible after compensation")
 	}
-	waitProduction(t, c, key, func(p *bitcoinv1.BitcoinBlockProduction) bool {
+	waitProduction(t, c, key, func(p *bitcoinv1.BitcoinProductionTarget) bool {
 		return p.Status.Reorganization == nil && p.Status.Phase == "Paused"
 	})
 	t.Logf("deadline compensated after %d acknowledged replacement blocks", b.Status.BlocksGenerated)
@@ -139,7 +145,7 @@ func TestLiveReorganizationLostReceipt(t *testing.T) {
 	a := createReorganization(t, c, key, "lost-receipt", 2, time.Minute)
 	waitPodLog(t, key.Namespace, key.Name+"-bitcoin-0", "actor", "Bitcoin returned "+method+" receipt", "dropping response connection")
 	waitReorganization(t, c, a, func(a *actionv1.BitcoinReorganization) bool { return a.Status.Phase == "Inconclusive" })
-	p := waitProduction(t, c, key, func(p *bitcoinv1.BitcoinBlockProduction) bool {
+	p := waitProduction(t, c, key, func(p *bitcoinv1.BitcoinProductionTarget) bool {
 		return p.Status.Phase == "Blocked" && p.Status.DispatchState == "Armed"
 	})
 	dispatch := p.Status.DispatchID
@@ -165,7 +171,7 @@ func TestLiveReorganizationLostReceipt(t *testing.T) {
 	liveMust(t, c.Delete(ctx, producer))
 	eventuallyLive(t, "replacement executor with retained reorganization", func() bool { return replacementProducerReady(c, key.Namespace, producer.UID) })
 	time.Sleep(3 * time.Second)
-	liveMust(t, c.Get(ctx, key, p))
+	liveMust(t, c.Get(ctx, productionTargetKey(key), p))
 	liveMust(t, c.Get(ctx, client.ObjectKeyFromObject(a), a))
 	if p.Status.DispatchID != dispatch || p.Status.DispatchState != "Armed" || p.Status.Reorganization == nil || a.Status.BlocksGenerated != blocks || len(a.Finalizers) == 0 {
 		t.Fatal("unknown call resumed or released during restart/deletion")
@@ -174,7 +180,7 @@ func TestLiveReorganizationLostReceipt(t *testing.T) {
 	liveMust(t, c.Get(ctx, key, n))
 	liveMust(t, c.Delete(ctx, n))
 	eventuallyLive(t, "administrative abandonment removes action and ledger", func() bool {
-		return apierrors.IsNotFound(c.Get(ctx, key, p)) && apierrors.IsNotFound(c.Get(ctx, client.ObjectKeyFromObject(a), a))
+		return apierrors.IsNotFound(c.Get(ctx, productionTargetKey(key), p)) && apierrors.IsNotFound(c.Get(ctx, client.ObjectKeyFromObject(a), a))
 	})
 	t.Logf("%s receipt loss: original=%s, acknowledged replacements=%d, retained dispatch=%s; teardown passed", method, originalStatus, blocks, dispatch)
 }

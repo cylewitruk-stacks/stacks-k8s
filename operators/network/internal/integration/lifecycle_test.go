@@ -109,6 +109,7 @@ func TestManagerLifecycleAndAPIServerValidation(t *testing.T) {
 	verifyGenerationAdmission(t, ctx, direct)
 	verifyReorganizationAdmission(t, ctx, direct)
 	verifyActionCancellation(t, ctx, direct)
+	verifyMultiProduction(t, ctx, direct)
 
 	// A real API server enforces transaction target/sender immutability and ledger retention.
 	txNetwork := bitcoinNetwork("transactions")
@@ -182,44 +183,32 @@ func TestManagerLifecycleAndAPIServerValidation(t *testing.T) {
 
 	invalid := bitcoinNetwork("invalid")
 	invalidProduction := bitcoinNetwork("invalid-production")
-	invalidProduction.Spec.BitcoinBlockProduction = &bitcoinv1alpha1.ProductionPolicy{Target: "missing", IntervalSeconds: 5, Address: "mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn"}
+	invalidProduction.Spec.BitcoinBlockProduction = &bitcoinv1alpha1.ProductionPolicy{Targets: []bitcoinv1alpha1.ProductionTarget{{Name: "missing", Weight: 1, Address: "mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn"}}, IntervalSeconds: 5}
 	if err := direct.Create(ctx, invalidProduction); !apierrors.IsInvalid(err) {
 		t.Fatalf("invalid production target: %v", err)
 	}
 	productionNetwork := bitcoinNetwork("production")
-	productionNetwork.Spec.BitcoinBlockProduction = &bitcoinv1alpha1.ProductionPolicy{Target: "bitcoin", IntervalSeconds: 5, Address: "mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn"}
+	productionNetwork.Spec.BitcoinBlockProduction = &bitcoinv1alpha1.ProductionPolicy{Targets: []bitcoinv1alpha1.ProductionTarget{{Name: "bitcoin", Weight: 1, Address: "mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn"}}, IntervalSeconds: 5}
 	must(t, direct.Create(ctx, productionNetwork))
 	productionKey := client.ObjectKeyFromObject(productionNetwork)
 	productionPolicy := &bitcoinv1alpha1.BitcoinBlockProduction{}
 	eventually(t, "aggregate pins production independently of workload readiness", func() bool {
 		return direct.Get(ctx, productionKey, productionNetwork) == nil && direct.Get(ctx, productionKey, productionPolicy) == nil && productionPolicy.UID != "" && productionNetwork.Status.BitcoinProductionUID == string(productionPolicy.UID) && !productionNetwork.Status.InventoryReady
 	})
-	changedTarget := productionPolicy.DeepCopy()
-	changedTarget.Spec.Policy.Target = "other"
-	if err := direct.Update(ctx, changedTarget); !apierrors.IsInvalid(err) {
-		t.Fatalf("production target identity mutation: %v", err)
-	}
 	immutableLedgerUID := productionPolicy.UID
-	// Parent admission rejects direct retargeting before any controller runs.
-	changedParent := productionNetwork.DeepCopy()
-	otherBitcoin := changedParent.Spec.BitcoinNodes[0]
+	otherBitcoin := productionNetwork.Spec.BitcoinNodes[0]
 	otherBitcoin.Name = "other"
-	changedParent.Spec.BitcoinNodes = append(changedParent.Spec.BitcoinNodes, otherBitcoin)
-	changedParent.Spec.BitcoinBlockProduction.Target = "other"
-	if err := direct.Update(ctx, changedParent); !apierrors.IsInvalid(err) {
-		t.Fatalf("parent production target mutation: %v", err)
-	}
-	// Removing and re-adding policy cannot bypass the retained ledger's target.
-	must(t, updateNetworkWithRetry(ctx, direct, productionNetwork, func(n *networkv1alpha1.StacksNetwork) { n.Spec.BitcoinBlockProduction = nil }))
 	must(t, updateNetworkWithRetry(ctx, direct, productionNetwork, func(n *networkv1alpha1.StacksNetwork) {
 		n.Spec.BitcoinNodes = append(n.Spec.BitcoinNodes, otherBitcoin)
-		n.Spec.BitcoinBlockProduction = changedParent.Spec.BitcoinBlockProduction.DeepCopy()
+		n.Spec.BitcoinBlockProduction.Targets = append(n.Spec.BitcoinBlockProduction.Targets, bitcoinv1alpha1.ProductionTarget{Name: "other", Weight: 3, Address: n.Spec.BitcoinBlockProduction.Targets[0].Address})
 	}))
-	_, _ = (&network.Reconciler{Client: direct, APIReader: direct, Scheme: scheme, Now: time.Now}).Reconcile(ctx, ctrl.Request{NamespacedName: productionKey})
-	must(t, direct.Get(ctx, productionKey, productionPolicy))
-	if productionPolicy.UID != immutableLedgerUID || productionPolicy.Spec.Policy.Target != "bitcoin" {
-		t.Fatal("remove/re-add changed the retained ledger identity")
-	}
+	eventually(t, "target policy update retains root identity", func() bool {
+		return direct.Get(ctx, productionKey, productionPolicy) == nil && productionPolicy.UID == immutableLedgerUID && len(productionPolicy.Spec.Policy.Targets) == 2
+	})
+	must(t, updateNetworkWithRetry(ctx, direct, productionNetwork, func(n *networkv1alpha1.StacksNetwork) { n.Spec.BitcoinBlockProduction = nil }))
+	must(t, updateNetworkWithRetry(ctx, direct, productionNetwork, func(n *networkv1alpha1.StacksNetwork) {
+		n.Spec.BitcoinBlockProduction = productionPolicy.Spec.Policy.DeepCopy()
+	}))
 	must(t, direct.Delete(ctx, productionPolicy))
 	// Reconciliation may run repeatedly; a removed ledger must not acquire fresh authorization.
 	for i := 0; i < 5; i++ {

@@ -56,31 +56,57 @@ spec:
                 description: BitcoinBlockProduction optionally maintains fixed-cadence
                   regtest blocks.
                 properties:
-                  address:
-                    description: Address receives generated regtest coinbase outputs.
-                    maxLength: 128
-                    minLength: 14
-                    type: string
                   intervalSeconds:
-                    description: IntervalSeconds is the delay after a completed dispatch;
-                      missed ticks are discarded.
+                    description: IntervalSeconds bounds the fixed policy cadence,
+                      independently of receipt time.
                     format: int32
                     maximum: 86400
                     minimum: 1
                     type: integer
                   paused:
-                    description: Paused stops new dispatches without cancelling one
-                      already armed.
+                    description: Paused stops new opportunities; already authorized
+                      work may still complete.
                     type: boolean
-                  target:
-                    description: Target names a Bitcoin actor in the owning network.
-                    maxLength: 63
-                    pattern: ^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$
-                    type: string
+                  targets:
+                    description: Targets names declared actors; weights distribute
+                      the policy's total offered rate.
+                    items:
+                      description: ProductionTarget configures one weighted actor
+                        and its coinbase destination.
+                      properties:
+                        address:
+                          description: Address receives this target's generated coinbase
+                            outputs.
+                          maxLength: 128
+                          minLength: 14
+                          type: string
+                        name:
+                          description: Name identifies a Bitcoin actor declared in
+                            the owning network.
+                          maxLength: 63
+                          pattern: ^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$
+                          type: string
+                        weight:
+                          description: Weight is a relative share of generation opportunities,
+                            without availability redistribution.
+                          format: int32
+                          maximum: 1000
+                          minimum: 1
+                          type: integer
+                      required:
+                      - address
+                      - name
+                      - weight
+                      type: object
+                    maxItems: 8
+                    minItems: 1
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
                 required:
-                - address
                 - intervalSeconds
-                - target
+                - targets
                 type: object
               bitcoinNodes:
                 items:
@@ -1023,12 +1049,9 @@ spec:
               rule: '!has(oldSelf.stacksTransactionProduction) || !has(self.stacksTransactionProduction)
                 || (self.stacksTransactionProduction.target == oldSelf.stacksTransactionProduction.target
                 && self.stacksTransactionProduction.sender == oldSelf.stacksTransactionProduction.sender)'
-            - message: changing the initial production target requires a fresh environment
-              rule: '!has(oldSelf.bitcoinBlockProduction) || !has(self.bitcoinBlockProduction)
-                || self.bitcoinBlockProduction.target == oldSelf.bitcoinBlockProduction.target'
             - message: production must reference a declared Bitcoin node
-              rule: '!has(self.bitcoinBlockProduction) || self.bitcoinNodes.exists(node,
-                node.name == self.bitcoinBlockProduction.target)'
+              rule: '!has(self.bitcoinBlockProduction) || self.bitcoinBlockProduction.targets.all(target,
+                self.bitcoinNodes.exists(node, node.name == target.name))'
             - message: every Stacks node must reference a declared Bitcoin node
               rule: '!has(self.stacksNodes) || self.stacksNodes.all(node, self.bitcoinNodes.exists(bitcoin,
                 bitcoin.name == node.bitcoinNodeRef))'

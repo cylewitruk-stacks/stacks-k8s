@@ -7,12 +7,12 @@ Inspect topology and compiled actors:
   kubectl --namespace {{ .Release.Namespace }} get stacksnetworks,bitcoinnodes,stacksnodes,stackssigners
 {{ if .Values.bitcoinProduction.enabled }}
 Inspect Bitcoin baseline dispatch state:
-  kubectl --namespace {{ .Release.Namespace }} get bitcoinblockproductions
+  kubectl --namespace {{ .Release.Namespace }} get bitcoinblockproductions,bitcoinproductiontargets
 
 {{ end }}
 {{ if .Values.bitcoinGeneration.enabled }}
 Inspect finite generation and retained action reservations:
-  kubectl --namespace {{ .Release.Namespace }} get bitcoinblockgenerations,bitcoinblockproductions
+  kubectl --namespace {{ .Release.Namespace }} get bitcoinblockgenerations,bitcoinproductiontargets
 {{ end }}
 {{ if .Values.bitcoinReorganization.enabled }}
 Inspect local reorganization and cleanup evidence:
@@ -23,5 +23,5 @@ Inspect steady STX transfer evidence:
   kubectl --namespace {{ .Release.Namespace }} get stackstransactionproductions
 {{ end }}
 {{ if or .Values.bitcoinProduction.enabled .Values.stacksTransactions.enabled }}
-Delete networks and wait for both production ledgers before uninstalling this chart.
+Delete networks and wait for the Bitcoin policy, all retained Bitcoin target ledgers, and the Stacks transaction ledger before uninstalling this chart.
 {{ end }}

@@ -12,18 +12,18 @@ var GroupVersion = schema.GroupVersion{Group: "bitcoin.stacks.org", Version: "v1
 
 // AddToScheme registers Bitcoin capability resources.
 func AddToScheme(scheme *runtime.Scheme) error {
-	scheme.AddKnownTypes(GroupVersion, &BitcoinBlockProduction{}, &BitcoinBlockProductionList{})
+	scheme.AddKnownTypes(GroupVersion, &BitcoinBlockProduction{}, &BitcoinBlockProductionList{}, &BitcoinProductionTarget{}, &BitcoinProductionTargetList{})
 	metav1.AddToGroupVersion(scheme, GroupVersion)
 	return nil
 }
 
-// ProductionPolicy requests one block per interval on one declared actor.
-type ProductionPolicy struct {
+// TargetPolicy identifies one immutable actor and its current destination.
+type TargetPolicy struct {
 	// Target names a Bitcoin actor in the owning network.
 	// +kubebuilder:validation:MaxLength=63
 	// +kubebuilder:validation:Pattern=`^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$`
 	Target string `json:"target"`
-	// IntervalSeconds is the delay after a completed dispatch; missed ticks are discarded.
+	// IntervalSeconds mirrors the root policy cadence; this target has no independent timer.
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=86400
 	IntervalSeconds int32 `json:"intervalSeconds"`
@@ -35,31 +35,35 @@ type ProductionPolicy struct {
 	Paused bool `json:"paused,omitempty"`
 }
 
-// BitcoinBlockProduction maintains aggregate-owned fixed-cadence regtest production.
+// BitcoinProductionTarget retains one policy-owned execution and exclusion ledger.
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
 // +kubebuilder:printcolumn:name="Blocks",type=integer,JSONPath=`.status.blocksProduced`
-type BitcoinBlockProduction struct {
+type BitcoinProductionTarget struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
-	// Spec is compiled from the owning network.
-	Spec BitcoinBlockProductionSpec `json:"spec"`
-	// Status retains dispatch evidence for this network's production lifetime.
-	Status BitcoinBlockProductionStatus `json:"status,omitempty"`
+	// Spec is compiled by the owning production policy.
+	Spec BitcoinProductionTargetSpec `json:"spec"`
+	// Status retains dispatch evidence for this target's production lifetime.
+	Status BitcoinProductionTargetStatus `json:"status,omitempty"`
 }
 
-// BitcoinBlockProductionList contains production resources.
+// BitcoinProductionTargetList contains production resources.
 // +kubebuilder:object:root=true
-type BitcoinBlockProductionList struct {
+type BitcoinProductionTargetList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []BitcoinBlockProduction `json:"items"`
+	Items           []BitcoinProductionTarget `json:"items"`
 }
 
-// BitcoinBlockProductionSpec binds one policy to an immutable network and target.
-// +kubebuilder:validation:XValidation:rule="self.networkName == oldSelf.networkName && self.networkUID == oldSelf.networkUID && self.policy.target == oldSelf.policy.target",message="network and production target are immutable"
-type BitcoinBlockProductionSpec struct {
+// BitcoinProductionTargetSpec binds one policy to an immutable network and target.
+// +kubebuilder:validation:XValidation:rule="self.networkName == oldSelf.networkName && self.networkUID == oldSelf.networkUID && self.productionUID == oldSelf.productionUID && self.policy.target == oldSelf.policy.target",message="network, production owner and target are immutable"
+type BitcoinProductionTargetSpec struct {
+	// ProductionUID pins the owning aggregate production policy.
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=64
+	ProductionUID string `json:"productionUID"`
 	// NetworkName identifies the owning StacksNetwork.
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=63
@@ -69,12 +73,21 @@ type BitcoinBlockProductionSpec struct {
 	// +kubebuilder:validation:MaxLength=64
 	NetworkUID string `json:"networkUID"`
 	// Policy supplies the current target, cadence, destination and pause state.
-	Policy ProductionPolicy `json:"policy"`
+	Policy TargetPolicy `json:"policy"`
 }
 
-// BitcoinBlockProductionStatus is both the bounded dispatch ledger and user-facing state.
+// BitcoinProductionTargetStatus is both the bounded dispatch ledger and user-facing state.
 // +kubebuilder:validation:XValidation:rule="!(has(self.action) && has(self.reorganization))",message="only one action may reserve the executor"
-type BitcoinBlockProductionStatus struct {
+type BitcoinProductionTargetStatus struct {
+	// OpportunitiesConsumed is the latest observed target opportunity number, including skips.
+	// +kubebuilder:validation:Minimum=0
+	OpportunitiesConsumed int64 `json:"opportunitiesConsumed,omitempty"`
+	// OpportunitiesSkipped counts consumed opportunities that authorized no baseline RPC.
+	// +kubebuilder:validation:Minimum=0
+	OpportunitiesSkipped int64 `json:"opportunitiesSkipped,omitempty"`
+	// LastSkipReason reports the most recent bounded skip classification.
+	// +kubebuilder:validation:Enum=Unavailable;Reserved;Outstanding;Expired;PolicyChanged;Capacity;Unobserved
+	LastSkipReason string `json:"lastSkipReason,omitempty"`
 	// Reorganization retains the finite replacement and its cleanup obligation.
 	Reorganization *ReorganizationReservation `json:"reorganization,omitempty"`
 	// Action reserves this ledger for one bounded action through durable accounting.

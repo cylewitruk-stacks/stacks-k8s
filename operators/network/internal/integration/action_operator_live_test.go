@@ -19,7 +19,7 @@ func TestLiveIndependentActionOperator(t *testing.T) {
 	c, key := bitcoinLiveClient(t)
 	ctx := context.Background()
 	updateNetwork(t, ctx, c, key, func(n *networkv1.StacksNetwork) { n.Spec.BitcoinBlockProduction.Paused = true })
-	waitProduction(t, c, key, func(p *bitcoinv1.BitcoinBlockProduction) bool {
+	waitProduction(t, c, key, func(p *bitcoinv1.BitcoinProductionTarget) bool {
 		return p.Status.Phase == "Paused" && p.Status.Action == nil && p.Status.Reorganization == nil
 	})
 	deployments := &appsv1.DeploymentList{}
@@ -44,7 +44,7 @@ func TestLiveIndependentActionOperator(t *testing.T) {
 	eventuallyLive(t, "lifecycle replicas stopped", func() bool {
 		return c.Get(ctx, client.ObjectKeyFromObject(deployment), deployment) == nil && deployment.Status.ObservedGeneration == deployment.Generation && deployment.Status.Replicas == 0
 	})
-	p := waitProduction(t, c, key, func(p *bitcoinv1.BitcoinBlockProduction) bool {
+	p := waitProduction(t, c, key, func(p *bitcoinv1.BitcoinProductionTarget) bool {
 		return p.Status.Action != nil && p.Status.Action.BlocksGenerated == 2 && p.Status.DispatchState == "Idle"
 	})
 	liveMust(t, c.Get(ctx, client.ObjectKeyFromObject(a), a))
@@ -55,7 +55,7 @@ func TestLiveIndependentActionOperator(t *testing.T) {
 	waitGeneration(t, c, a, func(a *actionv1.BitcoinBlockGeneration) bool {
 		return a.Status.Phase == "Completed" && a.Status.BlocksGenerated == 2 && len(a.Finalizers) == 0
 	})
-	waitProduction(t, c, key, func(p *bitcoinv1.BitcoinBlockProduction) bool {
+	waitProduction(t, c, key, func(p *bitcoinv1.BitcoinProductionTarget) bool {
 		return p.Status.Action == nil && p.Status.Phase == "Paused"
 	})
 	updateNetwork(t, ctx, c, key, func(n *networkv1.StacksNetwork) { n.Spec.BitcoinBlockProduction.Paused = false })

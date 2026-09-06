@@ -17,7 +17,7 @@ Topology uses `network.stacks.org/v1alpha1`; Bitcoin production uses
 | `spec.stacksNodes` | Miner, follower, and signer-node actors. |
 | `spec.signers` | Signer actors bound one-to-one to signer-node actors. |
 | `spec.stacksTransactionProduction` | Optional fixed-interval tiny STX transfers; see the [transfer contract](stacks-production.md#policy-and-evidence). |
-| `spec.bitcoinBlockProduction` | Optional one-target fixed-cadence policy; see the [production contract](bitcoin-production.md#desired-policy-and-ownership). |
+| `spec.bitcoinBlockProduction` | Optional weighted multi-target policy at a fixed cadence; see the [production contract](bitcoin-production.md#desired-policy-and-ownership). |
 
 `status.targetDeclarations` publishes current compiled actor intent before
 workload readiness; it is not admitted inventory. `status.bitcoinProductionUID`

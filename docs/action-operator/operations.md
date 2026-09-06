@@ -3,7 +3,8 @@
 The action operator owns bounded-action status and finalizers. Generation is
 its default capability; the previously delivered local reorganization is
 optional. Each kind has its own controller. The network Bitcoin worker owns
-admission, reservations, RPC dispatch and receipts in `BitcoinBlockProduction`.
+admission, reservations, RPC dispatch and receipts in per-target
+`BitcoinProductionTarget` ledgers, owned by `BitcoinBlockProduction`.
 The operators communicate through versioned Kubernetes resources.
 
 ## Install
@@ -34,7 +35,7 @@ preserving its production credentials and other values. Create the request:
 
 ```bash
 kubectl -n "$STACKS_NAMESPACE" create -f examples/actions/bitcoin-generation.yaml
-kubectl -n "$STACKS_NAMESPACE" get bitcoinblockgenerations,bitcoinblockproductions
+kubectl -n "$STACKS_NAMESPACE" get bitcoinblockgenerations,bitcoinproductiontargets
 ```
 
 The example references network `bitcoin` and leaf `bitcoin-bitcoin`; adjust

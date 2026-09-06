@@ -17,7 +17,7 @@ import (
 )
 
 // reserveReorganization prepares immutable local-chain identity without side effects.
-func (r *Reconciler) reserveReorganization(ctx context.Context, p *bitcoinv1.BitcoinBlockProduction, n *networkv1.StacksNetwork, target admittedTarget, a *actionv1.BitcoinReorganization) (bool, error) {
+func (r *Reconciler) reserveReorganization(ctx context.Context, p *bitcoinv1.BitcoinProductionTarget, n *networkv1.StacksNetwork, target admittedTarget, a *actionv1.BitcoinReorganization) (bool, error) {
 	if a.Spec.NetworkRef.Name != n.Name || a.Spec.BitcoinNodeRef.Name != target.identity.Name || a.Status.AdmittedAt != nil || actionv1.IsTerminalPhase(a.Status.Phase) || !a.DeletionTimestamp.IsZero() || !r.Now().Before(a.CreationTimestamp.Add(a.Spec.Timeout.Duration)) {
 		return false, nil
 	}
@@ -77,13 +77,18 @@ func (r *Reconciler) reserveReorganization(ctx context.Context, p *bitcoinv1.Bit
 		return false, nil
 	}
 	before := p.DeepCopy()
+	offer, reason, err := r.opportunity(ctx, p, n)
+	if err != nil {
+		return false, err
+	}
+	consumeReserved(p, offer, reason)
 	p.Status.Reorganization = &bitcoinv1.ReorganizationReservation{ActionReservation: bitcoinv1.ActionReservation{Name: a.Name, UID: string(a.UID), Generation: a.Generation, AdmittedAt: metav1.NewTime(r.Now().UTC()), ExpiresAt: metav1.NewTime(a.CreationTimestamp.Add(a.Spec.Timeout.Duration)), Network: actionv1.NetworkIdentity{Name: n.Name, UID: string(n.UID), ObservedGeneration: n.Generation}, Target: target.identity, Policy: actionv1.PolicyIdentity{UID: string(p.UID), Generation: p.Generation, Digest: r.ConfigDigest}, CorrelationID: a.Labels["actions.stacks.org/correlation-id"]}, Spec: a.Spec, OriginalChain: tip, ForkParent: ancestor, InvalidatedHash: pivot}
 	p.Status.Phase, p.Status.Message = "Reserved", "Local suffix replacement reserved the shared executor"
 	return true, r.Status().Patch(ctx, p, client.MergeFromWithOptions(before, client.MergeFromWithOptimisticLock{}))
 }
 
 // reconcileReorganization advances known receipts and compensation under one retained reservation.
-func (r *Reconciler) reconcileReorganization(ctx context.Context, p *bitcoinv1.BitcoinBlockProduction, n *networkv1.StacksNetwork) (ctrl.Result, error) {
+func (r *Reconciler) reconcileReorganization(ctx context.Context, p *bitcoinv1.BitcoinProductionTarget, n *networkv1.StacksNetwork) (ctrl.Result, error) {
 	record := p.Status.Reorganization
 	if !r.ReorganizationEnabled {
 		return r.report(ctx, p, "Blocked", "Restore the reorganization-enabled executor to resolve retained work", 0)
@@ -219,7 +224,7 @@ func (r *Reconciler) reconcileReorganization(ctx context.Context, p *bitcoinv1.B
 }
 
 // stopReorganization records a stop or unsafe compensation fact without discarding earlier reasons.
-func (r *Reconciler) stopReorganization(ctx context.Context, p *bitcoinv1.BitcoinBlockProduction, reason string, unsafe bool) (ctrl.Result, error) {
+func (r *Reconciler) stopReorganization(ctx context.Context, p *bitcoinv1.BitcoinProductionTarget, reason string, unsafe bool) (ctrl.Result, error) {
 	before := p.DeepCopy()
 	record := p.Status.Reorganization
 	if record.StopReason == "" {
@@ -233,7 +238,7 @@ func (r *Reconciler) stopReorganization(ctx context.Context, p *bitcoinv1.Bitcoi
 }
 
 // armReorganization rechecks current identity and cancellation before one atomic authorization.
-func (r *Reconciler) armReorganization(ctx context.Context, p *bitcoinv1.BitcoinBlockProduction, n *networkv1.StacksNetwork, a *actionv1.BitcoinReorganization, target admittedTarget, step string) (ctrl.Result, error) {
+func (r *Reconciler) armReorganization(ctx context.Context, p *bitcoinv1.BitcoinProductionTarget, n *networkv1.StacksNetwork, a *actionv1.BitcoinReorganization, target admittedTarget, step string) (ctrl.Result, error) {
 	record := p.Status.Reorganization
 	if err := r.APIReader.Get(ctx, client.ObjectKeyFromObject(n), n); err != nil {
 		return ctrl.Result{}, err

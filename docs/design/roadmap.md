@@ -63,12 +63,14 @@ the separately enabled mutation controller and its limitations.
 
 ## M1: baseline and bounded Bitcoin production
 
-**Current delivery:** single-target fixed-cadence baseline, pause/cadence
+**Current delivery:** weighted multi-target baseline at a fixed policy cadence, pause/cadence
 updates, static RPC separation, and durable response-loss exclusion are
 implemented. The optional [finite generation profile](../network-operator/bitcoin-generation.md)
 adds bounded immutable actions through the independent action operator,
-sharing the network worker’s executor. Multi-target policy remains
-pending; M1 is not complete.
+sharing the network worker’s executor. Weighted target selection and retained
+per-target execution are implemented;
+jitter and broader recovery/compatibility qualification remain pending. M1 is
+not complete.
 
 **Outcome:** an ordinary regtest network advances Bitcoin through a declared
 baseline, with finite generation separately available.

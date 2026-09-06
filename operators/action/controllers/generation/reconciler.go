@@ -7,9 +7,9 @@ import (
 	"time"
 
 	actionv1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/actions/v1alpha1"
-	bitcoinv1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/bitcoin/v1alpha1"
 	networkv1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha1"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/action/internal/actionstatus"
+	"github.com/cylewitruk-stacks/stacks-k8s/operators/action/internal/productionledger"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -61,12 +61,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	if parentErr != nil && !apierrors.IsNotFound(parentErr) {
 		return ctrl.Result{}, parentErr
 	}
-	ledger := &bitcoinv1.BitcoinBlockProduction{}
-	ledgerErr := r.APIReader.Get(ctx, client.ObjectKey{Namespace: a.Namespace, Name: a.Spec.NetworkRef.Name}, ledger)
-	if ledgerErr != nil && !apierrors.IsNotFound(ledgerErr) {
+	ledger, bound, ledgerErr := productionledger.Read(ctx, r.APIReader, parent, a.Namespace, a.Spec.NetworkRef.Name, a.Spec.BitcoinNodeRef.Name)
+	if ledgerErr != nil {
 		return ctrl.Result{}, ledgerErr
 	}
-	bound := parentErr == nil && ledgerErr == nil && metav1.IsControlledBy(ledger, parent) && ledger.Spec.NetworkUID == string(parent.UID) && parent.Status.BitcoinProductionUID == string(ledger.UID)
+	bound = bound && parentErr == nil
 	reserved := bound && ledger.Status.Action != nil && ledger.Status.Action.UID == string(a.UID)
 	gone := parentErr != nil || !parent.DeletionTimestamp.IsZero() || (a.Status.AdmittedNetwork != nil && a.Status.AdmittedNetwork.UID != string(parent.UID))
 	if reserved && !gone {

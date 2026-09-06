@@ -5,7 +5,7 @@
 **Direction agreed; implementation contracts open.** The
 [M0 remediation plan](m0-remediation-plan.md) adopts this amendment as the
 current product and ownership direction. It supersedes the topology-only
-boundary and single-target production model of M0.3/M0.4. Its broader contracts
+boundary and production model of M0.3/M0.4. Its broader contracts
 remain open; the constrained [implemented Bitcoin
 baseline](../network-operator/bitcoin-production.md)
 is an initial delivery slice, not completion of this amendment.

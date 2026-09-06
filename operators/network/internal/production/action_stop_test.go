@@ -36,7 +36,7 @@ type finiteArmWriteStatus struct {
 
 // Patch delays an Armed write without changing its original resource version.
 func (w *finiteArmWriteStatus) Patch(ctx context.Context, o client.Object, p client.Patch, options ...client.SubResourcePatchOption) error {
-	if ledger, ok := o.(*bitcoinv1.BitcoinBlockProduction); ok && ledger.Status.DispatchState == "Armed" {
+	if ledger, ok := o.(*bitcoinv1.BitcoinProductionTarget); ok && ledger.Status.DispatchState == "Armed" {
 		close(w.owner.entered)
 		<-w.owner.release
 	}

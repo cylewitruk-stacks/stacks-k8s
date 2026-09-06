@@ -45,14 +45,15 @@ func TestExecutorActionPrerequisites(t *testing.T) {
 	must(t, direct.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}))
 	n := bitcoinNetwork("baseline")
 	n.Namespace = namespace
-	policy := bitcoinv1.ProductionPolicy{Target: "bitcoin", Address: "mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn", IntervalSeconds: 1, Paused: true}
+	policy := bitcoinv1.ProductionPolicy{Targets: []bitcoinv1.ProductionTarget{{Name: "bitcoin", Weight: 1, Address: "mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn"}}, IntervalSeconds: 1, Paused: true}
 	n.Spec.BitcoinBlockProduction = &policy
 	must(t, direct.Create(ctx, n))
-	ledger := &bitcoinv1.BitcoinBlockProduction{ObjectMeta: metav1.ObjectMeta{Name: n.Name, Namespace: namespace}, Spec: bitcoinv1.BitcoinBlockProductionSpec{NetworkName: n.Name, NetworkUID: string(n.UID), Policy: policy}}
-	must(t, controllerutil.SetControllerReference(n, ledger, scheme))
-	must(t, direct.Create(ctx, ledger))
-	n.Status.BitcoinProductionUID = string(ledger.UID)
+	policyRoot := &bitcoinv1.BitcoinBlockProduction{ObjectMeta: metav1.ObjectMeta{Name: n.Name, Namespace: namespace}, Spec: bitcoinv1.BitcoinBlockProductionSpec{NetworkName: n.Name, NetworkUID: string(n.UID), Policy: policy}}
+	must(t, controllerutil.SetControllerReference(n, policyRoot, scheme))
+	must(t, direct.Create(ctx, policyRoot))
+	n.Status.BitcoinProductionUID = string(policyRoot.UID)
 	must(t, direct.Status().Update(ctx, n))
+	ledger := createProductionTarget(t, ctx, direct, policyRoot)
 	newManager := func() (ctrl.Manager, *production.Reconciler) {
 		skipNames := true // These sequential managers share one test process and metric registry.
 		m, err := ctrl.NewManager(configuration, ctrl.Options{Scheme: scheme, Metrics: metricsserver.Options{BindAddress: "0"}, Cache: cache.Options{DefaultNamespaces: map[string]cache.Config{namespace: {}}}, Controller: config.Controller{SkipNameValidation: &skipNames}})

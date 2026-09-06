@@ -1,9 +1,9 @@
 # Bitcoin baseline production
 
-The initial implemented profile produces one regtest block on one declared
-Bitcoin actor per interval. It works independently of aggregate readiness,
-bounded actions, observability, Chaos Mesh, and an agent. It does not bootstrap
-Stacks or supply Stacks transaction demand.
+The implemented profile offers one regtest block per fixed policy interval,
+selecting among 1–8 declared Bitcoin targets using integer weights. Target
+execution is independent of aggregate readiness and of other targets' receipts
+or action reservations. It does not bootstrap Stacks or supply transaction demand.
 
 ## Start a disposable environment
 
@@ -34,11 +34,11 @@ helm install bitcoin charts/stacks-network-operator \
   --set bitcoinProduction.enabled=true
 
 kubectl --kubeconfig "$STACKS_KUBECONFIG" --context "$STACKS_CONTEXT" \
-  -n "$STACKS_NAMESPACE" get stacksnetworks,bitcoinblockproductions
+  -n "$STACKS_NAMESPACE" get stacksnetworks,bitcoinblockproductions,bitcoinproductiontargets
 ```
 
 The helper defaults to the pinned `bitcoin/bitcoin:31.1` image index. Its
-`--image`, `--interval-seconds`, `--name`, and `--address` flags customize the
+`--image`, `--interval-seconds`, `--name`, `--address`, and `--target-weights` flags customize the
 environment. The default coinbase destination is a test address with no
 provided spending key; supply your own regtest address when testing spending.
 The generated file contains disposable client credentials. Generate once per
@@ -50,21 +50,38 @@ The supported entry point is `StacksNetwork.spec.bitcoinBlockProduction`:
 
 ```yaml
 bitcoinBlockProduction:
-  target: bitcoin
   intervalSeconds: 5
-  address: mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn
+  targets:
+    - name: bitcoin
+      weight: 1
+      address: mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn
+    - name: bitcoin-2
+      weight: 3
+      address: mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn
   paused: false
 ```
 
-`target` is a logical name in `spec.bitcoinNodes`. The aggregate compiles a
-same-name `bitcoin.stacks.org/v1alpha1` `BitcoinBlockProduction`, owns its spec,
-and permanently pins its UID in `status.bitcoinProductionUID`. A separate
-controller owns production status and typed RPC calls. Change cadence,
-destination, or pause through the parent. Interval bounds are 1–86400 seconds.
-Changing the initial target requires a fresh environment. Removing the policy
-pauses production and retains its ledger; re-adding it reuses that ledger.
-Admission rejects direct target changes; removing and re-adding the policy
-cannot bypass the retained ledger's target identity.
+Each name references a logical actor in `spec.bitcoinNodes`. Weights are 1–1000;
+intervals are 1–86400 seconds. This example offers one opportunity every five
+seconds, with each target receiving a 1/4 or 3/4 share in expectation. Availability
+does not change these shares. There is no round-robin or exact-ratio guarantee.
+The helper's `--target-weights 1,3` creates this pair with common static RPC
+configuration and P2P peer addresses; the default `1` creates one target.
+
+The aggregate compiles a same-name `BitcoinBlockProduction` and pins its UID
+in `status.bitcoinProductionUID`. A scheduler owns that policy's status and
+creates a `BitcoinProductionTarget` named after each compiled Bitcoin leaf.
+The policy's `status.targets` permanently pins each execution ledger's UID.
+Target workers own execution status and typed RPCs. Change destinations,
+weights, membership, cadence, and pause through the parent.
+
+Removed targets retain their ledgers, outstanding RPCs, and admitted action
+cleanup obligations. Re-adding the same target reuses its ledger. Removing and
+recreating a pinned ledger never grants fresh authorization. Up to sixteen
+distinct target identities are retained per policy lifetime; an update exceeding
+that limit blocks policy scheduling until the new targets are removed or a
+fresh environment is provisioned. Individual missing, replaced, or unavailable
+ledgers otherwise affect only their own execution opportunities.
 
 `StacksNetwork.status.conditions` includes `ProductionConfigured`. Its
 `ControllerDisabled` reason explains a policy configured while chart production
@@ -74,15 +91,40 @@ not that the producer is currently healthy. Inspect the child for execution
 state. Production failures do not prevent actor updates, pruning, or readiness
 observation; unrelated actor failures likewise do not prevent policy updates.
 
-Each successful dispatch requests exactly one block with a bounded `maxtries`.
-The next interval starts after receipt collection. Missed ticks do not queue
-catch-up work. Policy updates affect future dispatches; an already authorized
-request may finish after a pause, suspension, or update.
+Each successful dispatch requests exactly one block with bounded `maxtries`.
+The scheduler persists a weighted selection and the next due time in one
+optimistic-lock status write. The first opportunity, policy updates, and resume
+start a fresh interval. Late scheduling publishes at most one opportunity from
+the current time, without catch-up. A target consumes its opportunity in the
+same status write that arms its RPC. Expired or superseded selections are
+skipped, never replayed or reassigned. Preflight failure, action reservation,
+unresolved work, or collector exhaustion also skips that target's opportunity.
 
-`BitcoinNode` configuration does not
-cause mining. Multi-target selection, jitter, weighted policies, standalone
-production and in-place recovery are not implemented. Optional
-[finite generation](bitcoin-generation.md) shares the same executor.
+`status.opportunities` on the policy counts selections. Each retained target
+entry counts `offered` selections; its execution ledger records
+`opportunitiesConsumed`, `opportunitiesSkipped`, `lastSkipReason`, and
+acknowledged `blocksProduced`. Selections made before a ledger can be pinned
+are skipped into the root’s `unassignedOpportunities` counter, with the latest
+affected name in `lastUnassignedTarget`. Thus root `opportunities` equals the
+sum of retained target `offered` counts plus `unassignedOpportunities`. Later
+registration does not transfer or replay those skipped selections.
+Earlier selections missed by the worker count
+as skipped. These are bounded current facts, not a retained scheduling journal.
+An already authorized RPC may finish after pause, suspension, or a policy edit.
+
+Admission and preflight get one attempt per opportunity. A transient failure
+forfeits that selection; successful preflight must still finish before its
+expiry. Short intervals on a slow or resource-constrained host can therefore
+mostly skip. Increase the interval or provision adequate resources when sustained
+production matters. Cumulative skips can include startup failures and policy
+interventions; `lastSkipReason` describes only the latest skip, not a breakdown
+or a measured steady-state failure rate. `PolicyChanged` and `Expired` take
+precedence over reservation/outstanding reasons when both apply.
+
+`BitcoinNode` configuration does not cause mining. Timing jitter, standalone
+production, per-target credential profiles, and in-place recovery remain
+unimplemented. Optional [finite generation](bitcoin-generation.md) and
+[reorganization](bitcoin-reorganization.md) reserve only their target's executor.
 
 ## Admission and credentials
 
@@ -122,9 +164,9 @@ the exact process that eventually executed an ambiguous request.
 | `Waiting` | Current target, policy, or RPC preflight is unavailable; no new mutation is authorized. |
 | `Collecting` | The live process is waiting for its authorized RPC response. |
 | `Accounting` | A matching receipt is retained locally pending durable accounting. |
-| `Running` | The receipt is accounted; production waits for its next interval. |
-| `Paused` | Current parent intent stops new baseline dispatches. |
-| `Reserved` | A finite action holds the shared executor between calls or pending receipt acknowledgement. |
+| `Running` | The target waits for its next weighted policy opportunity. |
+| `Paused` | Current parent intent pauses production or no longer selects this retained target. |
+| `Reserved` | A finite action holds this target’s executor between calls or pending receipt acknowledgement. |
 | `Blocked` | The ledger cannot safely authorize another request. Inspect `message` and `dispatchState`. |
 | `Abandoned` | The owning environment was removed; this is not an execution-recovery claim. |
 
@@ -133,7 +175,7 @@ dispatch ID, and admitted leaf/Pod/container identities before sending.
 Receiving one matching block hash atomically records that hash, increments
 `blocksProduced`, timestamps completion, and returns the ledger to `Idle`.
 The count measures acknowledged production, not canonical height or retained
-chain membership. Status is bounded to the latest dispatch and a counter.
+chain membership. Each target retains bounded dispatch facts and counters.
 
 A lost arm-write acknowledgement sends nothing. Once a request might have
 been sent, timeout, response loss, or restart never causes a retry. The live
@@ -147,7 +189,7 @@ a finalizer until the owning network is removed.
 
 Receipt collectors run independently of reconcile workers, without a normal
 response deadline. A process has 32 slots shared by outstanding requests and
-retained receipts; exhausted capacity stops new arming. Read-only preflight
+retained receipts; exhausted capacity skips baseline opportunities and stops new arming. Read-only preflight
 has a ten-second timeout and connections have a three-second dial timeout.
 A surviving slow response therefore remains collectible; a closed connection
 does not. Pause stops future dispatches and does not cancel a collector.
@@ -165,24 +207,39 @@ write and removes the producer's finalizer. Teardown does not wait for proof
 that an old RPC stopped. A new namespace alone does not fence IP reuse; fresh
 credentials are part of environment provisioning.
 
-Delete the `StacksNetwork` and wait for its production resource to disappear
-**before** uninstalling the chart or deleting the namespace. Its controller
-must remain available to remove the ledger finalizer. As with other Kubernetes
+Delete the `StacksNetwork` and wait for both its production policy and every
+retained target ledger to disappear **before** uninstalling the chart or deleting
+the namespace. Root deletion alone is insufficient: garbage collection can
+start target deletion afterwards, and their finalizers still need the worker.
+The controllers must remain available to remove their finalizers. As with other Kubernetes
 finalizers, removing the controller first can leave deletion pending; an
 administrator must then record abandonment and remove that finalizer during
 environment disposal. This manual removal must never be used to resume an old
-environment.
+environment. Uninstall only after every deletion wait succeeds.
 
 ```bash
+# Capture every pinned ledger, including targets removed from the current spec.
+read -r -a STACKS_BITCOIN_TARGETS <<< "$(
+  kubectl --kubeconfig "$STACKS_KUBECONFIG" --context "$STACKS_CONTEXT" \
+    -n "$STACKS_NAMESPACE" get bitcoinblockproduction bitcoin \
+    -o jsonpath='{.status.targets[*].resourceName}'
+)"
 kubectl --kubeconfig "$STACKS_KUBECONFIG" --context "$STACKS_CONTEXT" \
   -n "$STACKS_NAMESPACE" delete stacksnetwork bitcoin
 kubectl --kubeconfig "$STACKS_KUBECONFIG" --context "$STACKS_CONTEXT" \
   -n "$STACKS_NAMESPACE" wait --for=delete bitcoinblockproduction/bitcoin \
   --timeout=60s
+for target in "${STACKS_BITCOIN_TARGETS[@]}"; do
+  kubectl --kubeconfig "$STACKS_KUBECONFIG" --context "$STACKS_CONTEXT" \
+    -n "$STACKS_NAMESPACE" wait --for=delete "bitcoinproductiontarget/$target" \
+    --timeout=60s
+done
 ```
 
 ## Qualification
 
+The [multi-target review ledger](../reviews/bitcoin-multi-target-review.md#live-qualification)
+records the weighted profile’s two-node runtime qualification.
 The [initial qualification record](bitcoin-qualification.md) records the tested
 Core/platform combination, observed results, and remaining limits.
 

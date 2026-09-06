@@ -7,9 +7,9 @@ import (
 	"time"
 
 	actionv1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/actions/v1alpha1"
-	bitcoinv1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/bitcoin/v1alpha1"
 	networkv1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha1"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/action/internal/actionstatus"
+	"github.com/cylewitruk-stacks/stacks-k8s/operators/action/internal/productionledger"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -56,12 +56,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	if ne != nil && !apierrors.IsNotFound(ne) {
 		return ctrl.Result{}, ne
 	}
-	p := &bitcoinv1.BitcoinBlockProduction{}
-	pe := r.APIReader.Get(ctx, key, p)
-	if pe != nil && !apierrors.IsNotFound(pe) {
+	p, bound, pe := productionledger.Read(ctx, r.APIReader, n, a.Namespace, a.Spec.NetworkRef.Name, a.Spec.BitcoinNodeRef.Name)
+	if pe != nil {
 		return ctrl.Result{}, pe
 	}
-	bound := ne == nil && pe == nil && metav1.IsControlledBy(p, n) && p.Spec.NetworkUID == string(n.UID) && n.Status.BitcoinProductionUID == string(p.UID)
+	bound = bound && ne == nil
 	reserved := bound && p.Status.Reorganization != nil && p.Status.Reorganization.UID == string(a.UID)
 	gone := ne != nil || !n.DeletionTimestamp.IsZero() || (status.AdmittedNetwork != nil && status.AdmittedNetwork.UID != string(n.UID))
 	finish := func(phase, reason, message string) {

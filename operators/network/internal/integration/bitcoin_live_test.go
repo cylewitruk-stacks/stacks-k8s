@@ -24,17 +24,17 @@ import (
 func TestLiveBitcoinBaseline(t *testing.T) {
 	c, key := bitcoinLiveClient(t)
 	ctx := context.Background()
-	initial := waitProduction(t, c, key, func(p *bitcoinv1alpha1.BitcoinBlockProduction) bool {
+	initial := waitProduction(t, c, key, func(p *bitcoinv1alpha1.BitcoinProductionTarget) bool {
 		return p.Status.BlocksProduced >= 2 && p.Status.DispatchState == "Idle"
 	})
 	t.Logf("automatic production: %d acknowledged blocks", initial.Status.BlocksProduced)
 	updateNetwork(t, ctx, c, key, func(n *networkv1alpha1.StacksNetwork) { n.Spec.BitcoinBlockProduction.Paused = true })
-	paused := waitProduction(t, c, key, func(p *bitcoinv1alpha1.BitcoinBlockProduction) bool {
+	paused := waitProduction(t, c, key, func(p *bitcoinv1alpha1.BitcoinProductionTarget) bool {
 		return p.Status.Phase == "Paused" && p.Status.DispatchState == "Idle"
 	})
 	time.Sleep(6 * time.Second)
-	current := &bitcoinv1alpha1.BitcoinBlockProduction{}
-	liveMust(t, c.Get(ctx, key, current))
+	current := &bitcoinv1alpha1.BitcoinProductionTarget{}
+	liveMust(t, c.Get(ctx, productionTargetKey(key), current))
 	if current.Status.BlocksProduced != paused.Status.BlocksProduced {
 		t.Fatal("blocks were dispatched while paused")
 	}
@@ -47,7 +47,7 @@ func TestLiveBitcoinBaseline(t *testing.T) {
 		n := &networkv1alpha1.StacksNetwork{}
 		return c.Get(ctx, key, n) == nil && !n.Status.InventoryReady && n.Status.TargetDeclarations != nil && n.Status.TargetDeclarations.ObservedGeneration == n.Generation && len(n.Status.TargetDeclarations.Actors) == 2
 	})
-	afterFailure := waitProduction(t, c, key, func(p *bitcoinv1alpha1.BitcoinBlockProduction) bool {
+	afterFailure := waitProduction(t, c, key, func(p *bitcoinv1alpha1.BitcoinProductionTarget) bool {
 		return p.Spec.Policy.IntervalSeconds == 2 && p.Status.BlocksProduced >= paused.Status.BlocksProduced+3
 	})
 	t.Logf("production continued with an unrelated unready Stacks node: %d -> %d", paused.Status.BlocksProduced, afterFailure.Status.BlocksProduced)
@@ -69,7 +69,7 @@ func TestLiveBitcoinBaseline(t *testing.T) {
 	}
 	producer.Spec.Template.Annotations["test.stacks.org/restart"] = time.Now().UTC().Format(time.RFC3339Nano)
 	liveMust(t, c.Patch(ctx, producer, client.MergeFrom(base)))
-	waitProduction(t, c, key, func(p *bitcoinv1alpha1.BitcoinBlockProduction) bool {
+	waitProduction(t, c, key, func(p *bitcoinv1alpha1.BitcoinProductionTarget) bool {
 		return p.Status.BlocksProduced >= afterFailure.Status.BlocksProduced+3
 	})
 	eventuallyLive(t, "producer rollout completes", func() bool {
@@ -87,12 +87,12 @@ func TestLiveBitcoinBaseline(t *testing.T) {
 func TestLiveBitcoinAmbiguousReceipt(t *testing.T) {
 	c, key := bitcoinLiveClient(t)
 	waitBitcoinFixtureLog(t, key, "dropping response connection")
-	blocked := waitProduction(t, c, key, func(p *bitcoinv1alpha1.BitcoinBlockProduction) bool {
+	blocked := waitProduction(t, c, key, func(p *bitcoinv1alpha1.BitcoinProductionTarget) bool {
 		return p.Status.Phase == "Blocked" && p.Status.DispatchState == "Armed"
 	})
 	time.Sleep(12 * time.Second)
-	current := &bitcoinv1alpha1.BitcoinBlockProduction{}
-	liveMust(t, c.Get(context.Background(), key, current))
+	current := &bitcoinv1alpha1.BitcoinProductionTarget{}
+	liveMust(t, c.Get(context.Background(), productionTargetKey(key), current))
 	if current.Status.DispatchID != blocked.Status.DispatchID || current.Status.BlocksProduced != blocked.Status.BlocksProduced || current.Status.DispatchState != "Armed" {
 		t.Fatal("ambiguous request was retried or silently accounted")
 	}
@@ -102,7 +102,7 @@ func TestLiveBitcoinAmbiguousReceipt(t *testing.T) {
 		return replacementProducerReady(c, key.Namespace, producer.UID)
 	})
 	time.Sleep(5 * time.Second)
-	liveMust(t, c.Get(context.Background(), key, current))
+	liveMust(t, c.Get(context.Background(), productionTargetKey(key), current))
 	if current.Status.DispatchID != blocked.Status.DispatchID || current.Status.DispatchState != "Armed" || current.Status.Phase != "Blocked" || current.Status.BlocksProduced != 0 {
 		t.Fatal("replacement producer reopened ambiguous dispatch")
 	}
@@ -118,15 +118,15 @@ func TestLiveBitcoinInFlightShutdown(t *testing.T) { qualifyDelayedReceipt(t, tr
 // qualifyDelayedReceipt preserves the same Armed dispatch across delay and optional SIGTERM draining.
 func qualifyDelayedReceipt(t *testing.T, shutdown bool) {
 	c, key := bitcoinLiveClient(t)
-	initial := waitProduction(t, c, key, func(p *bitcoinv1alpha1.BitcoinBlockProduction) bool { return p.Status.Phase == "Paused" })
+	initial := waitProduction(t, c, key, func(p *bitcoinv1alpha1.BitcoinProductionTarget) bool { return p.Status.Phase == "Paused" })
 	if initial.Status.BlocksProduced != 0 || initial.Status.DispatchID != "" {
 		t.Fatal("delay qualification requires a fresh unused ledger")
 	}
 	producer := liveProducerPod(t, c, key.Namespace)
 	updateNetwork(t, context.Background(), c, key, func(n *networkv1alpha1.StacksNetwork) { n.Spec.BitcoinBlockProduction.Paused = false })
 	waitBitcoinFixtureLog(t, key, "delaying delivery for 15 seconds")
-	armed := &bitcoinv1alpha1.BitcoinBlockProduction{}
-	liveMust(t, c.Get(context.Background(), key, armed))
+	armed := &bitcoinv1alpha1.BitcoinProductionTarget{}
+	liveMust(t, c.Get(context.Background(), productionTargetKey(key), armed))
 	if armed.Status.DispatchState != "Armed" || armed.Status.BlocksProduced != 0 {
 		t.Fatal("receipt was not in flight at the qualification boundary")
 	}
@@ -136,7 +136,7 @@ func qualifyDelayedReceipt(t *testing.T, shutdown bool) {
 		// The actual manager drain must have observed this outstanding request.
 		waitPodLog(t, producer.Namespace, producer.Name, "manager", "Draining Bitcoin receipt collectors", "\"pending\":1")
 	}
-	completed := waitProduction(t, c, key, func(p *bitcoinv1alpha1.BitcoinBlockProduction) bool {
+	completed := waitProduction(t, c, key, func(p *bitcoinv1alpha1.BitcoinProductionTarget) bool {
 		return p.Status.DispatchState == "Idle" && p.Status.BlocksProduced == 1
 	})
 	if completed.Status.DispatchID != armed.Status.DispatchID || completed.Status.LastBlockHash == "" {
@@ -145,7 +145,7 @@ func qualifyDelayedReceipt(t *testing.T, shutdown bool) {
 	if shutdown {
 		eventuallyLive(t, "replacement producer ready after drain", func() bool { return replacementProducerReady(c, key.Namespace, producer.UID) })
 	}
-	paused := waitProduction(t, c, key, func(p *bitcoinv1alpha1.BitcoinBlockProduction) bool { return p.Status.Phase == "Paused" })
+	paused := waitProduction(t, c, key, func(p *bitcoinv1alpha1.BitcoinProductionTarget) bool { return p.Status.Phase == "Paused" })
 	if paused.Status.BlocksProduced != 1 || paused.Status.DispatchID != armed.Status.DispatchID {
 		t.Fatal("pause allowed a second dispatch")
 	}
@@ -218,14 +218,14 @@ func waitPodLog(t *testing.T, namespace, name, container string, messages ...str
 // TestLiveBitcoinAbandonment removes a dedicated ambiguous environment's owning network.
 func TestLiveBitcoinAbandonment(t *testing.T) {
 	c, key := bitcoinLiveClient(t)
-	waitProduction(t, c, key, func(p *bitcoinv1alpha1.BitcoinBlockProduction) bool {
+	waitProduction(t, c, key, func(p *bitcoinv1alpha1.BitcoinProductionTarget) bool {
 		return p.Status.DispatchState == "Armed" && p.Status.Phase == "Blocked"
 	})
 	network := &networkv1alpha1.StacksNetwork{}
 	liveMust(t, c.Get(context.Background(), key, network))
 	liveMust(t, c.Delete(context.Background(), network))
 	eventuallyLive(t, "unresolved ledger finalizer released during environment teardown", func() bool {
-		return apierrors.IsNotFound(c.Get(context.Background(), key, &bitcoinv1alpha1.BitcoinBlockProduction{}))
+		return apierrors.IsNotFound(c.Get(context.Background(), productionTargetKey(key), &bitcoinv1alpha1.BitcoinProductionTarget{}))
 	})
 	t.Log("unresolved production ledger removed after owning network deletion")
 }
@@ -244,16 +244,21 @@ func bitcoinLiveClient(t *testing.T) (client.Client, types.NamespacedName) {
 }
 
 // waitProduction waits for a specific durable production state.
-func waitProduction(t *testing.T, c client.Client, key types.NamespacedName, accept func(*bitcoinv1alpha1.BitcoinBlockProduction) bool) *bitcoinv1alpha1.BitcoinBlockProduction {
+func waitProduction(t *testing.T, c client.Client, key types.NamespacedName, accept func(*bitcoinv1alpha1.BitcoinProductionTarget) bool) *bitcoinv1alpha1.BitcoinProductionTarget {
 	t.Helper()
-	var result *bitcoinv1alpha1.BitcoinBlockProduction
+	var result *bitcoinv1alpha1.BitcoinProductionTarget
 	eventuallyLive(t, "production state", func() bool {
-		current := &bitcoinv1alpha1.BitcoinBlockProduction{}
-		if c.Get(context.Background(), key, current) == nil && accept(current) {
+		current := &bitcoinv1alpha1.BitcoinProductionTarget{}
+		if c.Get(context.Background(), productionTargetKey(key), current) == nil && accept(current) {
 			result = current
 			return true
 		}
 		return false
 	})
 	return result
+}
+
+// productionTargetKey resolves the default helper environment's execution ledger.
+func productionTargetKey(key types.NamespacedName) types.NamespacedName {
+	return types.NamespacedName{Namespace: key.Namespace, Name: key.Name + "-bitcoin"}
 }

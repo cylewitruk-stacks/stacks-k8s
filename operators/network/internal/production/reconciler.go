@@ -13,7 +13,6 @@ import (
 	bitcoinv1alpha1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/bitcoin/v1alpha1"
 	networkv1alpha1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -23,7 +22,7 @@ import (
 
 const ledgerFinalizer = "bitcoin.stacks.org/retain-production-ledger"
 
-// Reconciler authorizes at most one unresolved mutating RPC per network ledger.
+// Reconciler authorizes at most one unresolved mutating RPC per target ledger.
 type Reconciler struct {
 	// ReorganizationEnabled enables compensated local suffix replacement.
 	ReorganizationEnabled bool
@@ -80,20 +79,31 @@ func (r *Reconciler) SetupWithManager(manager ctrl.Manager, concurrency int) err
 	if err := manager.Add(r.collectors); err != nil {
 		return err
 	}
-	builder := ctrl.NewControllerManagedBy(manager).For(&bitcoinv1alpha1.BitcoinBlockProduction{}).
-		Watches(&networkv1alpha1.StacksNetwork{}, handler.EnqueueRequestsFromMapFunc(func(_ context.Context, object client.Object) []ctrl.Request {
-			return []ctrl.Request{{NamespacedName: client.ObjectKeyFromObject(object)}}
-		})).WithOptions(controller.Options{MaxConcurrentReconciles: concurrency})
+	mapNetwork := handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, object client.Object) []ctrl.Request {
+		root := &bitcoinv1alpha1.BitcoinBlockProduction{}
+		if err := r.APIReader.Get(ctx, client.ObjectKeyFromObject(object), root); err != nil {
+			return nil
+		}
+		result := make([]ctrl.Request, 0, len(root.Status.Targets))
+		for _, t := range root.Status.Targets {
+			result = append(result, ctrl.Request{NamespacedName: client.ObjectKey{Namespace: root.Namespace, Name: t.ResourceName}})
+		}
+		return result
+	})
+	builder := ctrl.NewControllerManagedBy(manager).For(&bitcoinv1alpha1.BitcoinProductionTarget{}).
+		Watches(&networkv1alpha1.StacksNetwork{}, mapNetwork).
+		Watches(&bitcoinv1alpha1.BitcoinBlockProduction{}, mapNetwork).
+		WithOptions(controller.Options{MaxConcurrentReconciles: concurrency})
 	if r.ActionsEnabled {
 		builder = builder.Watches(&actionv1.BitcoinBlockGeneration{}, handler.EnqueueRequestsFromMapFunc(func(_ context.Context, o client.Object) []ctrl.Request {
 			a := o.(*actionv1.BitcoinBlockGeneration)
-			return []ctrl.Request{{NamespacedName: client.ObjectKey{Namespace: a.Namespace, Name: a.Spec.NetworkRef.Name}}}
+			return []ctrl.Request{{NamespacedName: client.ObjectKey{Namespace: a.Namespace, Name: a.Spec.BitcoinNodeRef.Name}}}
 		}))
 	}
 	if r.ReorganizationEnabled {
 		builder = builder.Watches(&actionv1.BitcoinReorganization{}, handler.EnqueueRequestsFromMapFunc(func(_ context.Context, o client.Object) []ctrl.Request {
 			a := o.(*actionv1.BitcoinReorganization)
-			return []ctrl.Request{{NamespacedName: client.ObjectKey{Namespace: a.Namespace, Name: a.Spec.NetworkRef.Name}}}
+			return []ctrl.Request{{NamespacedName: client.ObjectKey{Namespace: a.Namespace, Name: a.Spec.BitcoinNodeRef.Name}}}
 		}))
 	}
 	return builder.Complete(r)
@@ -101,7 +111,7 @@ func (r *Reconciler) SetupWithManager(manager ctrl.Manager, concurrency int) err
 
 // Reconcile checks current intent, arms durably, then collects and accounts one receipt.
 func (r *Reconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.Result, error) {
-	policy := &bitcoinv1alpha1.BitcoinBlockProduction{}
+	policy := &bitcoinv1alpha1.BitcoinProductionTarget{}
 	if err := r.APIReader.Get(ctx, request.NamespacedName, policy); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
@@ -113,13 +123,27 @@ func (r *Reconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	if !metav1.IsControlledBy(policy, parent) || parent.Status.BitcoinProductionUID != string(policy.UID) {
+	if _, err := r.rootPolicy(ctx, policy, parent); err != nil {
 		return r.report(ctx, policy, "Waiting", "Production ledger is not bound to the owning network", time.Second)
 	}
 	if !controllerutil.ContainsFinalizer(policy, ledgerFinalizer) {
 		base := policy.DeepCopy()
 		controllerutil.AddFinalizer(policy, ledgerFinalizer)
 		return ctrl.Result{RequeueAfter: time.Millisecond}, r.Patch(ctx, policy, client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{}))
+	}
+	offer, skipReason, offerErr := r.opportunity(ctx, policy, parent)
+	if offerErr != nil {
+		return r.report(ctx, policy, "Waiting", offerErr.Error(), time.Second)
+	}
+	if offer != nil {
+		if skipReason == "" && policy.Status.DispatchState == "Armed" {
+			skipReason = "Outstanding"
+		} else if skipReason == "" && (policy.Status.Action != nil || policy.Status.Reorganization != nil) {
+			skipReason = "Reserved"
+		}
+		if skipReason != "" {
+			return r.skip(ctx, policy, offer, skipReason)
+		}
 	}
 	if policy.Status.Reorganization != nil {
 		return r.reconcileReorganization(ctx, policy, parent)
@@ -146,28 +170,24 @@ func (r *Reconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 			return ctrl.Result{RequeueAfter: time.Second}, err
 		}
 	}
+	if parent.Spec.BitcoinBlockProduction != nil && parent.Spec.BitcoinBlockProduction.Target(policy.Spec.Policy.Target) == nil {
+		return r.report(ctx, policy, "Paused", "Target is not selected by the current policy; ledger retained", 0)
+	}
 	if parent.Spec.Suspended || parent.Spec.BitcoinBlockProduction == nil || parent.Spec.BitcoinBlockProduction.Paused {
 		return r.report(ctx, policy, "Paused", "New production dispatches are paused", 0)
 	}
+	if offer == nil {
+		return r.report(ctx, policy, "Running", "Waiting for a weighted policy opportunity", time.Second)
+	}
 	target, err := r.admit(ctx, policy, parent)
 	if err != nil {
-		return r.report(ctx, policy, "Waiting", err.Error(), 2*time.Second)
-	}
-	interval := time.Duration(policy.Spec.Policy.IntervalSeconds) * time.Second
-	if interval < time.Second || interval > 24*time.Hour {
-		return r.report(ctx, policy, "Waiting", "Unsupported production interval", 0)
-	}
-	if last := policy.Status.LastCompletedAt; last != nil {
-		remaining := last.Add(interval).Sub(r.Now())
-		if remaining > 0 {
-			return r.report(ctx, policy, "Running", "Waiting for the next fixed-cadence dispatch", remaining)
-		}
+		return r.skip(ctx, policy, offer, "Unavailable")
 	}
 	preflight, cancel := context.WithTimeout(ctx, r.RPCTimeout)
 	err = r.RPC.Check(preflight, target.endpoint, policy.Spec.Policy.Address)
 	cancel()
 	if err != nil {
-		return r.report(ctx, policy, "Waiting", err.Error(), 2*time.Second)
+		return r.skip(ctx, policy, offer, "Unavailable")
 	}
 	// Preflight may have taken time. Re-read desired operation and runtime before arming.
 	if err := r.APIReader.Get(ctx, client.ObjectKeyFromObject(parent), parent); err != nil {
@@ -183,12 +203,23 @@ func (r *Reconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 	if err := ctx.Err(); err != nil {
 		return ctrl.Result{}, err
 	}
+	currentOffer, reason, err := r.opportunity(ctx, policy, parent)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	if currentOffer == nil || currentOffer.Number != offer.Number {
+		return ctrl.Result{RequeueAfter: time.Millisecond}, nil
+	}
+	if reason != "" {
+		return r.skip(ctx, policy, currentOffer, reason)
+	}
 	base := policy.DeepCopy()
+	consume(policy, offer, "")
 	policy.Status.DispatchState = "Armed"
 	policy.Status.DispatchID = fmt.Sprintf("%s/%s/%s", policy.UID, r.ProcessNonce, policy.ResourceVersion)
 	if !r.collectors.reserve(policy.Status.DispatchID, policy.UID) {
 		policy.Status = base.Status
-		return r.report(ctx, policy, "Waiting", "Receipt collector capacity is exhausted or the producer is draining", time.Second)
+		return r.skip(ctx, policy, offer, "Capacity")
 	}
 	policy.Status.TargetUID, policy.Status.PodUID, policy.Status.ContainerID = target.actorUID, target.podUID, target.containerID
 	policy.Status.Phase, policy.Status.Message, policy.Status.ObservedGeneration = "Collecting", "Collecting the authorized block receipt", policy.Generation
@@ -204,8 +235,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 var errLedgerRetired = errors.New("dispatch ledger retired or its identity changed")
 
 // account makes one idempotent accounting attempt using the original receipt timestamp.
-func (r *Reconciler) account(ctx context.Context, armed *bitcoinv1alpha1.BitcoinBlockProduction, receipt receivedReceipt) error {
-	current := &bitcoinv1alpha1.BitcoinBlockProduction{}
+func (r *Reconciler) account(ctx context.Context, armed *bitcoinv1alpha1.BitcoinProductionTarget, receipt receivedReceipt) error {
+	current := &bitcoinv1alpha1.BitcoinProductionTarget{}
 	if err := r.APIReader.Get(ctx, client.ObjectKeyFromObject(armed), current); err != nil {
 		if apierrors.IsNotFound(err) {
 			return errLedgerRetired
@@ -264,7 +295,7 @@ func (r *Reconciler) account(ctx context.Context, armed *bitcoinv1alpha1.Bitcoin
 }
 
 // report updates human-readable state without changing dispatch authorization.
-func (r *Reconciler) report(ctx context.Context, policy *bitcoinv1alpha1.BitcoinBlockProduction, phase, message string, after time.Duration) (ctrl.Result, error) {
+func (r *Reconciler) report(ctx context.Context, policy *bitcoinv1alpha1.BitcoinProductionTarget, phase, message string, after time.Duration) (ctrl.Result, error) {
 	base := policy.DeepCopy()
 	policy.Status.Phase, policy.Status.Message, policy.Status.ObservedGeneration = phase, message, policy.Generation
 	if reflect.DeepEqual(base.Status, policy.Status) {
@@ -274,10 +305,10 @@ func (r *Reconciler) report(ctx context.Context, policy *bitcoinv1alpha1.Bitcoin
 }
 
 // abandon releases only this controller's finalizer; deletion does not claim RPC quiescence.
-func (r *Reconciler) abandon(ctx context.Context, policy *bitcoinv1alpha1.BitcoinBlockProduction) (ctrl.Result, error) {
+func (r *Reconciler) abandon(ctx context.Context, policy *bitcoinv1alpha1.BitcoinProductionTarget) (ctrl.Result, error) {
 	r.collectors.abandon(policy.UID)
 	_, _ = r.report(ctx, policy, "Abandoned", "Owning environment removed; execution outcome is not a recovery claim", 0)
-	current := &bitcoinv1alpha1.BitcoinBlockProduction{}
+	current := &bitcoinv1alpha1.BitcoinProductionTarget{}
 	if err := r.APIReader.Get(ctx, client.ObjectKeyFromObject(policy), current); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}

@@ -22,6 +22,7 @@ import (
 	manageroptions "github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/manager"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/network"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/production"
+	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/productionscheduler"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/stacksnode"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/stackssigner"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/transactions"
@@ -61,6 +62,7 @@ func main() {
 			must(fmt.Errorf("producer username and password are required"))
 		}
 		must((&production.Reconciler{Client: manager.GetClient(), APIReader: manager.GetAPIReader(), RPC: production.NewBitcoinRPC(credentials), ConfigDigest: credentials.ConfigDigest, ActionsEnabled: options.GenerationEnabled, ReorganizationEnabled: options.ReorganizationEnabled}).SetupWithManager(manager, options.Concurrency))
+		must((&productionscheduler.Reconciler{Client: manager.GetClient(), APIReader: manager.GetAPIReader()}).SetupWithManager(manager))
 	} else {
 		must((&network.Reconciler{Client: manager.GetClient(), APIReader: manager.GetAPIReader(), Scheme: manager.GetScheme(), ProductionEnabled: options.ProductionEnabled, TransactionsEnabled: options.TransactionsEnabled}).SetupWithManager(manager, options.Concurrency))
 		must((&bitcoinnode.Reconciler{Client: manager.GetClient(), APIReader: manager.GetAPIReader(), Scheme: manager.GetScheme()}).SetupWithManager(manager, options.Concurrency))

@@ -138,11 +138,11 @@ preservation through unrelated actor failures. Complete inventory semantics
 remain unchanged. This does not close admission for every future capability.
 
 The [initial Bitcoin baseline](../network-operator/bitcoin-production.md) now
-implements one-target fixed-cadence production with separated static RPC
-permissions, a UID-pinned durable production ledger, bounded work, and explicit
-response-loss behavior. Its CRD status provides exclusion for this sole enabled
-mutation owner. The [finite generation profile](../network-operator/bitcoin-generation.md)
-now extends that ledger with a shared action reservation and bounded lifecycle.
+implements weighted multi-target production at one fixed policy cadence with
+separated static RPC permissions, UID-pinned target ledgers, bounded work, and
+explicit response-loss behavior. Each target ledger provides exclusion for its
+sole mutation executor. The [finite generation profile](../network-operator/bitcoin-generation.md)
+adds per-target action reservations and a bounded lifecycle.
 R1–R3 stay open for wider capability contracts. The initial
 [reorganization/R4 profile](bitcoin-reorganization.md) defines bounded local
 replacement with retained uncertainty and acknowledged compensation; broader
@@ -387,10 +387,12 @@ The current contract is
 Keep `BitcoinBlockGeneration` finite and immutable, with immediate, fixed,
 uniform-random, or explicit-sequence cadence. Keep `BitcoinBlockProduction`
 mutable and outside the action lifecycle. Its revised policy separates timing
-from selection among neutral `BitcoinNode` references. Freeze multi-target list bounds,
-destination mapping, cadence bounds, weights, update/pause behavior, conflict
-rules, and status before implementation; keep the production policy separate from node
-configuration.
+from selection among neutral `BitcoinNode` references. The implemented
+[weighted baseline profile](../network-operator/bitcoin-production.md) bounds
+active targets to eight, retained identities to sixteen, and weights to 1–1000.
+It uses one fixed policy cadence with per-target destinations, durable selection,
+explicit skips, mutable membership, and retained action exclusion. Jitter,
+additional finite cadence modes, and broader qualification remain open.
 
 ## Requirement 10: Attributable Bitcoin generation
 
