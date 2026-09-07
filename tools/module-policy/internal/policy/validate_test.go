@@ -11,9 +11,9 @@ func TestValidate(t *testing.T) {
 		modules string
 		wantErr bool
 	}{
-		{name: "minimal API graph", modules: "example.test/api\nk8s.io/api v0.36.4\nk8s.io/apimachinery v0.36.4\n"},
-		{name: "controller runtime", modules: "sigs.k8s.io/controller-runtime v0.24.1\n", wantErr: true},
-		{name: "client go", modules: "k8s.io/client-go v0.36.4\n", wantErr: true},
+		{name: "minimal API graph", modules: "example.test/api\nk8s.io/api v0.37.0\nk8s.io/apimachinery v0.37.0\n"},
+		{name: "controller runtime", modules: "sigs.k8s.io/controller-runtime v0.25.0\n", wantErr: true},
+		{name: "client go", modules: "k8s.io/client-go v0.37.0\n", wantErr: true},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

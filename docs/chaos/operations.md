@@ -13,7 +13,20 @@ The checked-in values disable the dashboard and DNS service and enable upstream
 namespace filtering. Version and runtime assumptions are recorded in the
 [qualification matrix](qualification.md).
 
-Download and verify the pinned upstream chart before installation:
+For the repository's running `stacks-k8s` cluster, use:
+
+```bash
+make cluster-chaos-install
+```
+
+This verifies and installs the pinned chart with the values below using
+`tools/local-cluster/kubeconfig` and context `kind-stacks-k8s`. It does not enroll
+workload namespaces or install their fault profiles. Repeated calls reconcile
+the same release to the repository's values. The [1.37 live qualification](../local-cluster-qualification.md)
+records passing native-fault checks and an unresolved Stacks protocol-recovery failure.
+
+For another explicitly selected cluster, download and verify the pinned upstream
+chart before installation:
 
 ```bash
 helm pull chaos-mesh --repo https://charts.chaos-mesh.org \

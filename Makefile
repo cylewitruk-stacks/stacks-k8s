@@ -9,13 +9,14 @@ MODULE_DIRS := \
 	operators/observability \
 	operators/observability/tools \
 	tools/chart-policy \
-	tools/module-policy
+	tools/module-policy \
+	tools/local-cluster
 
 .PHONY: api-verify docker-build docker-check fmt generate helm-verify module-policy-verify modules-verify rbac-verify test \
 	test-integration test-race verify verify-chart-policy verify-network \
 	verify-observability verify-action vuln
 
-verify: modules-verify module-policy-verify verify-chart-policy verify-network verify-observability verify-action
+verify: verify-local-cluster modules-verify module-policy-verify verify-chart-policy verify-network verify-observability verify-action
 	$(MAKE) -C charts/stacks-chaos-profile verify
 
 api-verify:
@@ -107,3 +108,11 @@ docker-build:
 	docker build --file operators/network/Dockerfile --tag stacks-network-operator:verify .
 	docker build --file operators/observability/Dockerfile --tag stacks-observability-operator:verify .
 	docker build --file operators/action/Dockerfile --tag stacks-action-operator:verify .
+
+.PHONY: cluster-create cluster-start cluster-stop cluster-destroy cluster-chaos-install verify-local-cluster
+cluster-create cluster-start cluster-stop cluster-destroy cluster-chaos-install:
+	$(MAKE) -C tools/local-cluster $(patsubst cluster-%,%,$@)
+
+verify-local-cluster:
+	GOWORK=off $(GO) -C tools/local-cluster vet ./...
+	GOWORK=off $(GO) -C tools/local-cluster test ./...

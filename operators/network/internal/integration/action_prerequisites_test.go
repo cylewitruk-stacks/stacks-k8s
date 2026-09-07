@@ -30,7 +30,7 @@ import (
 // TestExecutorActionPrerequisites exercises discovery before startup and actual cache synchronization.
 func TestExecutorActionPrerequisites(t *testing.T) {
 	root := filepath.Join("..", "..", "..", "..")
-	environment := &envtest.Environment{CRDDirectoryPaths: []string{filepath.Join(root, "charts/stacks-network-operator/crds")}, ErrorIfCRDPathMissing: true, DownloadBinaryAssets: true, DownloadBinaryAssetsVersion: "1.36", BinaryAssetsDirectory: filepath.Join(os.TempDir(), "stacks-network-operator-envtest")}
+	environment := &envtest.Environment{CRDDirectoryPaths: []string{filepath.Join(root, "charts/stacks-network-operator/crds")}, ErrorIfCRDPathMissing: true, DownloadBinaryAssets: true, DownloadBinaryAssetsVersion: "1.37.0", BinaryAssetsDirectory: filepath.Join(os.TempDir(), "stacks-network-operator-envtest")}
 	configuration, err := environment.Start()
 	must(t, err)
 	t.Cleanup(func() { must(t, environment.Stop()) })

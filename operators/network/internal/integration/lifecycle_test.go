@@ -50,7 +50,7 @@ func TestManagerLifecycleAndAPIServerValidation(t *testing.T) {
 		), filepath.Join("..", "..", "..", "..", "charts", "stacks-action-operator", "crds")},
 		ErrorIfCRDPathMissing:       true,
 		DownloadBinaryAssets:        true,
-		DownloadBinaryAssetsVersion: "1.36",
+		DownloadBinaryAssetsVersion: "1.37.0",
 		BinaryAssetsDirectory:       filepath.Join(os.TempDir(), "stacks-network-operator-envtest"),
 		ControlPlaneStartTimeout:    60 * time.Second,
 		ControlPlaneStopTimeout:     60 * time.Second,

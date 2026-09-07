@@ -29,5 +29,6 @@
 - [Authoritative M0 remediation plan](design/m0-remediation-plan.md)
 - [Steady-state operation and review gates](design/steady-state-operation.md)
 - [Development](development.md)
+- [Local Kubernetes 1.37 qualification](local-cluster-qualification.md)
 - [Operations](operations.md)
 - [Releases](releases.md)

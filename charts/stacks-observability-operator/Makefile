@@ -13,7 +13,7 @@ verify:
 	$(MAKE) workload-verify
 
 helm-verify:
-	$(HELM) lint .
+	$(HELM) lint . --kube-version 1.37.0
 	$(HELM) template verify . --namespace stacks-observation-system >/dev/null
 	@if $(HELM) template verify . --namespace stacks-observation-system --set-json image=null >/dev/null 2>&1; then \
 		echo "null image configuration unexpectedly rendered" >&2; exit 1; \

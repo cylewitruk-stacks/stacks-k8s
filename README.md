@@ -61,6 +61,13 @@ runtime implementation.
 
 ## Quick start
 
+The current development and API-server test target is Kubernetes **1.37.0**; see
+[compatibility and qualification limits](docs/development.md#kubernetes-compatibility).
+
+For a local three-node kind cluster, run `make cluster-create`; see the
+[local lifecycle commands](docs/development.md#local-kind-cluster) for access,
+start, stop, and destruction.
+
 The chart defaults reference release images. Before the first published
 release, build and load both operator and actor images as described in the
 [network chart guide](charts/stacks-network-operator/README.md).

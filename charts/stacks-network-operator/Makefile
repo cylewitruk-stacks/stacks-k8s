@@ -17,7 +17,7 @@ verify:
 helm-verify:
 	@if $(HELM) template verify . --set bitcoinReorganization.enabled=true >/dev/null 2>&1; then echo "reorganization without executor unexpectedly rendered" >&2; exit 1; fi
 	@if $(HELM) template verify . --set bitcoinGeneration.enabled=true >/dev/null 2>&1; then echo "generation without executor unexpectedly rendered" >&2; exit 1; fi
-	$(HELM) lint .
+	$(HELM) lint . --kube-version 1.37.0
 	$(HELM) template verify . --namespace stacks-network-system >/dev/null
 	@if $(HELM) template verify . --namespace stacks-network-system --set-json image=null >/dev/null 2>&1; then \
 		echo "null image configuration unexpectedly rendered" >&2; exit 1; \

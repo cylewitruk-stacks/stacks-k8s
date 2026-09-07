@@ -16,7 +16,7 @@ helm-verify:
 	@if $(HELM) template verify . --namespace stacks-action-system --set bitcoinGeneration.enabled=false --set bitcoinReorganization.enabled=false >/dev/null 2>&1; then \
 		echo "render with no enabled action kinds unexpectedly succeeded" >&2; exit 1; \
 	fi
-	$(HELM) lint .
+	$(HELM) lint . --kube-version 1.37.0
 	$(HELM) template verify . --namespace stacks-action-system >/dev/null
 	@if $(HELM) template verify . --namespace stacks-action-system --set-json image=null >/dev/null 2>&1; then \
 		echo "null image configuration unexpectedly rendered" >&2; exit 1; \

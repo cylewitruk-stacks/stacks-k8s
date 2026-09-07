@@ -91,6 +91,7 @@ jobs:
             tools/module-policy/go.sum
       - run: make modules-verify
       - run: make module-policy-verify
+      - run: make verify-local-cluster
 
   containers:
     name: Container builds

@@ -45,7 +45,7 @@ func testNativeFaultAdmission(t *testing.T, delay, partition bool) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	environment := &envtest.Environment{CRDDirectoryPaths: []string{schema}, ErrorIfCRDPathMissing: true, DownloadBinaryAssets: true, DownloadBinaryAssetsVersion: "1.36", BinaryAssetsDirectory: filepath.Join(os.TempDir(), "stacks-network-operator-envtest")}
+	environment := &envtest.Environment{CRDDirectoryPaths: []string{schema}, ErrorIfCRDPathMissing: true, DownloadBinaryAssets: true, DownloadBinaryAssetsVersion: "1.37.0", BinaryAssetsDirectory: filepath.Join(os.TempDir(), "stacks-network-operator-envtest")}
 	config, err := environment.Start()
 	if err != nil {
 		t.Fatal(err)

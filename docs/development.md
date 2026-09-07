@@ -9,8 +9,72 @@
 
 No committed `go.work` is required. The modules are intentionally verified in
 isolation so local workspace state cannot hide a missing dependency or combine
-the API/runtime Kubernetes 0.36 graphs with controller-tools' Kubernetes 0.37
-graph.
+the independently versioned API, runtime, and generator dependency graphs.
+
+## Kubernetes compatibility
+
+The development target is Kubernetes **1.37.0**. API and runtime modules pin
+`k8s.io/*` release modules to **v0.37.0** and operators use
+[controller-runtime v0.25.0](https://github.com/kubernetes-sigs/controller-runtime/releases/tag/v0.25.0).
+Generators remain at controller-tools **v0.22.0**, which already uses the
+Kubernetes 0.37 family. Keep these module families aligned when updating pins.
+Go 1.27.1 and the existing container build toolchain satisfy their requirements.
+
+All envtest suites download **1.37.0** API-server assets by default, including
+the Chaos Mesh admission tests. Their explicit download configuration selects
+the pinned assets. Envtest verifies API-server behavior, not kubelet, CNI,
+storage, or native fault injection. Helm lint also targets 1.37.0 in every chart.
+
+Use the selected standalone kind cluster for live testing, with fresh namespaces
+and explicit kubeconfig/context selection. Cluster creation is separate from
+repository verification. The Helm `kubeVersion` constraints are API minimums,
+not a tested-version matrix. Earlier qualification records retain their original
+Kubernetes versions. See the [1.37 live qualification](local-cluster-qualification.md)
+for cross-node native fault results and the unresolved Stacks recovery limit.
+
+## Local kind cluster
+
+The lifecycle helpers use standalone **kind 0.33.0** (or a compatible newer
+version), Docker, and kubectl. Start the Docker engine first. They use your
+current Docker connection; set `DOCKER_CONTEXT=desktop-linux` explicitly when
+using Docker Desktop. Docker Desktop's built-in Kubernetes provisioner is not
+used. The checked-in configuration pins Kubernetes **1.37.0** by image digest
+with one control-plane node and two workers.
+
+From the repository root:
+
+```bash
+make cluster-create  # Create stacks-k8s; an existing cluster is left intact.
+make cluster-stop   # Stop its node containers, retaining their data.
+make cluster-start  # Resume existing containers and wait for node readiness.
+make cluster-destroy # Delete stacks-k8s and all data stored in its nodes.
+```
+
+Create and start write `tools/local-cluster/kubeconfig`, which is ignored by Git,
+with context `kind-stacks-k8s`. Your global kubeconfig is unchanged. To use it:
+
+```bash
+export KUBECONFIG="$PWD/tools/local-cluster/kubeconfig"
+kubectl --context kind-stacks-k8s get nodes
+```
+
+Optionally install the pinned **Chaos Mesh 2.8.4** chart with Helm 3 and `shasum`:
+
+```bash
+make cluster-chaos-install
+```
+
+This verifies the chart SHA-256, installs or reconciles release `chaos-mesh` in
+namespace `chaos-mesh`, and waits for readiness. Repeated calls reapply the
+repository's values, including containerd support, namespace filtering, and a
+disabled dashboard/DNS service. It uses the local kubeconfig and never creates
+or starts the cluster. Namespace enrollment, fault profiles, workloads, and
+qualification remain separate; see [native faults](chaos/operations.md#install).
+Successful installation does not qualify live fault injection on Kubernetes 1.37.
+
+Stop/start preserves disk data, not uninterrupted workload execution.
+`make verify-local-cluster` tests command behavior with fake CLIs and does not
+touch a cluster.
 
 ## Common commands
 

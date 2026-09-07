@@ -34,7 +34,7 @@ import (
 func TestChartAuthorizedLifecycleRestart(t *testing.T) {
 	ctx := context.Background()
 	root := filepath.Join("..", "..", "..", "..")
-	environment := &envtest.Environment{CRDDirectoryPaths: []string{filepath.Join(root, "charts/stacks-network-operator/crds"), filepath.Join(root, "charts/stacks-action-operator/crds")}, ErrorIfCRDPathMissing: true, DownloadBinaryAssets: true, DownloadBinaryAssetsVersion: "1.36", BinaryAssetsDirectory: filepath.Join(os.TempDir(), "stacks-network-operator-envtest")}
+	environment := &envtest.Environment{CRDDirectoryPaths: []string{filepath.Join(root, "charts/stacks-network-operator/crds"), filepath.Join(root, "charts/stacks-action-operator/crds")}, ErrorIfCRDPathMissing: true, DownloadBinaryAssets: true, DownloadBinaryAssetsVersion: "1.37.0", BinaryAssetsDirectory: filepath.Join(os.TempDir(), "stacks-network-operator-envtest")}
 	config, err := environment.Start()
 	must(t, err)
 	t.Cleanup(func() { must(t, environment.Stop()) })
