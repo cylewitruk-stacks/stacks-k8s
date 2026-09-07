@@ -38,6 +38,21 @@ func TestRenderedProfileAndExactRBAC(t *testing.T) {
 	if err := Validate(objects); err != nil {
 		t.Fatal(err)
 	}
+	for _, flags := range [][]string{
+		{"--set", "networkPartition.enabled=true"},
+		{"--set", "networkPartition.enabled=true", "--set", "networkDelay.enabled=true"},
+	} {
+		if _, err := render(flags...); err == nil {
+			t.Fatal("partition accepted without dependency acknowledgement")
+		}
+		enabled, err := render(append(flags, "--set", "chaosMesh.externalVersion="+Version)...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := Validate(enabled); err != nil {
+			t.Fatal(err)
+		}
+	}
 	for _, mode := range []string{"wildcard", "status-write", "namespace", "quota", "warn-only", "token", "binding", "create-only", "other-resource", "extra-rule", "exclude-rule", "object-selector", "cluster-scope"} {
 		changed := make([]*unstructured.Unstructured, len(objects))
 		for i, o := range objects {

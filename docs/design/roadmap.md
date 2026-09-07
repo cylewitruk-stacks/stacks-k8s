@@ -45,8 +45,8 @@ M0.4 have reviewed initial contracts and implementations for independent target
 admission, multi-target cadence, static authority separation, and bounded
 cleanup. Broader recovery and credential profiles remain explicitly deferred.
 
-M0.5 now has an initial [native delay profile](../chaos/operations.md); broader
-fault and traffic qualification remains open. M0.6 covers bootstrap, transaction
+M0.5 now has an initial [native delay/partition profile](../chaos/operations.md); broader
+kind/platform qualification and passive correlation remain open. M0.6 covers bootstrap, transaction
 demand and actor capabilities; M0.7 covers observability/access; M0.8 covers
 packaging/release alignment.
 The final consistency/security/roadmap audit is **M0 closeout**, not M0.9.

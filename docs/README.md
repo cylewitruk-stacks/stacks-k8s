@@ -17,8 +17,9 @@
 ## Native faults
 
 - [Optional Chaos Mesh profile](../charts/stacks-chaos-profile/README.md)
-- [Native delay operations](chaos/operations.md)
+- [Native network fault operations](chaos/operations.md)
 - [Native delay qualification](chaos/qualification.md)
+- [Native partition qualification](chaos/partition-qualification.md)
 
 ## Repository
 

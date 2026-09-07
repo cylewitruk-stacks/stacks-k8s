@@ -127,6 +127,12 @@ make vuln
 make docker-check
 ```
 
+Reuse an existing explicitly selected qualification cluster by default. Use
+fresh namespaces and environment identities for independent experiments; create
+a separate cluster when testing cluster components or requiring cluster-wide
+isolation. Preserve failed fixtures and evidence for investigation. Record which
+environments are retained and clean up superseded fixtures in documented order.
+
 Do not weaken, skip, or make tests vacuous to obtain a passing result. Add unit
 tests for controller logic and envtest coverage for API-server or lifecycle
 semantics.

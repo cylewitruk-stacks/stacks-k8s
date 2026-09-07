@@ -63,12 +63,17 @@ adds bounded suffix replacement and explicit compensation obligations.
 
 ## Native infrastructure faults
 
-The optional [native delay profile](../chaos/operations.md) supplies static CEL,
+The optional [native fault profile](../chaos/operations.md) supplies static CEL,
 namespace enrollment, narrow agent RBAC, one-object quota, and direct
 `NetworkChaos` examples. Chaos Mesh 2.8.4 remains an external installation.
-The [qualified matrix](../chaos/qualification.md) covers directed delay between
-Bitcoin actors with producer RPC access preserved, cancellation, and expiry.
-Other fault modes and passive native-fault history remain unimplemented.
+The [delay matrix](../chaos/qualification.md) and
+[partition matrix](../chaos/partition-qualification.md) cover Bitcoin peers and
+miner-to-Bitcoin traffic with producer access preserved, cancellation/expiry,
+reconnection and observed productive recovery. A repeat Stacks run stalled at a
+reward-cycle transition after native cleanup; reliable Stacks recovery remains
+an open qualification item. Separate administrator-only control-path
+loss retains unresolved dispatches across producer replacement. Other fault
+modes and passive native-fault history remain unimplemented.
 
 ## Implemented observation
 
@@ -106,7 +111,7 @@ Git, runs repository build logic, or constructs an image.
 | Bitcoin lifecycle | Broader branch observation and recovery. Weighted baseline with jitter, all four finite generation cadence modes, and constrained local reorganization are implemented. |
 | Steady transaction demand | Multi-account/ingress profiles, overrides and wider signing lifecycle support. One-account fixed-interval demand is implemented. |
 | Protocol bootstrap | General image/epoch compatibility, PoX-5 transitions and reusable bounded APIs. External PoX-4 bootstrap and renewal are implemented for one local profile. |
-| Generic faults | Wider native kinds, traffic/platform combinations, and passive correlation. One bounded directed NetworkChaos delay profile is implemented. |
+| Generic faults | Wider native kinds, traffic/platform combinations, and passive correlation. Bounded NetworkChaos delay and bidirectional actor partitions are implemented. |
 | Protocol actions | Signer/miner behavior controls, application clock offset, bounded input behaviors, and portable storage pressure. |
 | Continuous observation | Mutation history, protocol telemetry, logs, metrics, resource telemetry, rolling retention, and capture-gap reporting. |
 | Agent access | Machine-readable capability discovery, efficient query API, and consistent cross-resource status vocabulary. |

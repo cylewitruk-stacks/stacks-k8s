@@ -43,7 +43,7 @@ func Decode(reader io.Reader) ([]*unstructured.Unstructured, error) {
 	}
 }
 
-// Validate requires exactly the native-delay policy, bounded quota and namespaced agent permissions.
+// Validate requires exactly the native-network policy, bounded quota and namespaced agent permissions.
 func Validate(objects []*unstructured.Unstructured) error {
 	if len(objects) != 6 {
 		return fmt.Errorf("expected six profile resources")
@@ -74,7 +74,7 @@ func Validate(objects []*unstructured.Unstructured) error {
 	}
 	expected := []rbacv1.PolicyRule{{APIGroups: []string{"chaos-mesh.org"}, Resources: []string{"networkchaos"}, Verbs: []string{"get", "list", "watch", "create", "delete"}}}
 	if !reflect.DeepEqual(role.Rules, expected) {
-		return fmt.Errorf("agent Role differs from exact native-delay permissions")
+		return fmt.Errorf("agent Role differs from exact native-network permissions")
 	}
 	if role.Namespace == "" || binding.Namespace != role.Namespace || account.Namespace != role.Namespace || quota.Namespace != role.Namespace {
 		return fmt.Errorf("namespace mismatch")

@@ -1,8 +1,8 @@
-{{- if .Values.networkDelay.enabled }}
+{{- if or .Values.networkDelay.enabled .Values.networkPartition.enabled }}
 {{- if ne .Values.chaosMesh.externalVersion "2.8.4" }}
-{{- fail "networkDelay requires the explicitly installed Chaos Mesh externalVersion 2.8.4" }}
+{{- fail "native network faults require the explicitly installed Chaos Mesh externalVersion 2.8.4" }}
 {{- end }}
-{{- $name := printf "stacks-network-delay-%s" .Release.Namespace }}
+{{- $name := printf "stacks-network-faults-%s" .Release.Namespace }}
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicy
 metadata:
@@ -20,11 +20,11 @@ spec:
     - expression: >-
         oldObject != null || (has(namespaceObject.metadata.labels) &&
         'network.stacks.org/chaos-profile' in namespaceObject.metadata.labels &&
-        namespaceObject.metadata.labels['network.stacks.org/chaos-profile'] == 'network-delay-v1' &&
+        namespaceObject.metadata.labels['network.stacks.org/chaos-profile'] == 'network-faults-v1' &&
         has(namespaceObject.metadata.annotations) &&
         'chaos-mesh.org/inject' in namespaceObject.metadata.annotations &&
         namespaceObject.metadata.annotations['chaos-mesh.org/inject'] == 'enabled')
-      message: namespace must be explicitly enrolled for network-delay-v1
+      message: namespace must be explicitly enrolled for network-faults-v1
     - expression: >-
         oldObject != null || !has(object.metadata.annotations) ||
         !('experiment.chaos-mesh.org/pause' in object.metadata.annotations)
@@ -39,21 +39,24 @@ spec:
       message: native controller lifecycle fields must not be supplied at creation
     - expression: oldObject == null || object.spec == oldObject.spec
       message: native fault specs are immutable; delete and create a new fault
-    - expression: oldObject != null || (object.spec.action == 'delay' && object.spec.mode == 'one' && object.spec.direction == 'to')
-      message: only one-source directed network delay is supported
+    - expression: >-
+        oldObject != null || (object.spec.mode == 'one' &&
+        (({{ .Values.networkDelay.enabled }} && object.spec.action == 'delay' && object.spec.direction == 'to') ||
+        ({{ .Values.networkPartition.enabled }} && object.spec.action == 'partition' && object.spec.direction == 'both')))
+      message: fault mode must be enabled; delay is directed to one actor, partition is bidirectional
     - expression: >-
         oldObject != null || (
         has(object.spec.duration) && object.spec.duration.matches('^[1-9][0-9]{0,2}s$') &&
         duration(object.spec.duration) <= duration('120s'))
       message: duration must be an integer number of seconds in 1..120
     - expression: >-
-        oldObject != null || (
-        has(object.spec.delay) && object.spec.delay.latency.matches('^[1-9][0-9]{0,3}ms$') &&
+        oldObject != null || (object.spec.action == 'partition' ? !has(object.spec.delay) :
+        (has(object.spec.delay) && object.spec.delay.latency.matches('^[1-9][0-9]{0,3}ms$') &&
         duration(object.spec.delay.latency) <= duration('1s') &&
         (!has(object.spec.delay.jitter) || object.spec.delay.jitter == '0ms') &&
         (!has(object.spec.delay.correlation) || object.spec.delay.correlation == '0') &&
-        !has(object.spec.delay.reorder))
-      message: latency must be 1..1000ms without jitter, correlation or reordering
+        !has(object.spec.delay.reorder)))
+      message: delay requires 1..1000ms without jitter, correlation or reordering; partition forbids delay parameters
     - expression: >-
         oldObject != null || (
         !has(object.spec.remoteCluster) && !has(object.spec.externalTargets) &&

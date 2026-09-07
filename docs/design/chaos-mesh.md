@@ -15,8 +15,8 @@ project's supported agent workflow.
 
 ## Supported native resources
 
-The [implemented initial profile](../chaos/operations.md) qualifies only directed
-`NetworkChaos` delay. The following broader scope remains planned:
+The [implemented initial profile](../chaos/operations.md) qualifies directed
+`NetworkChaos` delay and bidirectional actor partitions. The following broader scope remains planned:
 
 | Chaos Mesh kind | Use |
 | --- | --- |
@@ -86,9 +86,14 @@ separate resources created by the agent.
 ## Protocol faults and production control
 
 Qualification distinguishes Bitcoin P2P traffic, Stacks-to-Bitcoin RPC,
-and producer-to-Bitcoin RPC. The first profile delays actor-to-actor traffic
-without port filtering; only the two-Bitcoin-actor/control-path combination is
-[qualified](../chaos/qualification.md). A partial protocol partition should preserve the
+and producer-to-Bitcoin RPC. The profile delays or partitions actor-to-actor
+traffic without port filtering. [Delay](../chaos/qualification.md) and
+[partition evidence](../chaos/partition-qualification.md) qualify Bitcoin peer
+separation and miner-to-Bitcoin disruption with independent producer progress,
+plus separate administrator-only control-path loss. Native cleanup does not
+promise Stacks progress: a repeated expiry case stalled at a reward-cycle
+transition and remains an open fixture/protocol investigation. A partial
+protocol partition should preserve the
 central producer's management path when continued block production is part of
 the declared experiment. Source/target selection and direction matter: Stacks
 clients and the producer can use the same Bitcoin RPC port. A separate Service
@@ -231,7 +236,7 @@ inseparable.
 ## Open decisions
 
 1. Availability/failure policy for dynamic enrolled-target admission.
-2. Broader traffic and platform qualification beyond the initial delay matrix.
+2. Broader traffic and platform qualification beyond the initial delay/partition matrix.
 3. Which additional native kinds are safe on arm64 and each supported runtime/CNI.
 
 ## References

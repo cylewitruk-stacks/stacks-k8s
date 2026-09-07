@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -25,8 +26,20 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 )
 
-// TestNativeDelayAdmission exercises static bounds and the real API authorizer.
-func TestNativeDelayAdmission(t *testing.T) {
+// TestNativeFaultAdmission exercises each profile against real admission and RBAC.
+func TestNativeFaultAdmission(t *testing.T) {
+	for _, profile := range []struct {
+		name             string
+		delay, partition bool
+	}{
+		{"delay", true, false}, {"partition", false, true}, {"combined", true, true},
+	} {
+		t.Run(profile.name, func(t *testing.T) { testNativeFaultAdmission(t, profile.delay, profile.partition) })
+	}
+}
+
+// testNativeFaultAdmission shares lifecycle and selector checks across enabled mechanisms.
+func testNativeFaultAdmission(t *testing.T, delay, partition bool) {
 	ctx := context.Background()
 	schema, err := chaosprofile.Schema(ctx)
 	if err != nil {
@@ -50,11 +63,11 @@ func TestNativeDelayAdmission(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "profile-test", Labels: map[string]string{"network.stacks.org/chaos-profile": "network-delay-v1"}, Annotations: map[string]string{"chaos-mesh.org/inject": "enabled"}}}
+	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "profile-test", Labels: map[string]string{"network.stacks.org/chaos-profile": "network-faults-v1"}, Annotations: map[string]string{"chaos-mesh.org/inject": "enabled"}}}
 	if err := admin.Create(ctx, ns); err != nil {
 		t.Fatal(err)
 	}
-	data, err := exec.Command("helm", "template", "test", "../../../../charts/stacks-chaos-profile", "--namespace", ns.Name, "--set", "networkDelay.enabled=true", "--set", "chaosMesh.externalVersion="+chaosprofile.Version).CombinedOutput()
+	data, err := exec.Command("helm", "template", "test", "../../../../charts/stacks-chaos-profile", "--namespace", ns.Name, "--set", "networkDelay.enabled="+strconv.FormatBool(delay), "--set", "networkPartition.enabled="+strconv.FormatBool(partition), "--set", "chaosMesh.externalVersion="+chaosprofile.Version).CombinedOutput()
 	if err != nil {
 		t.Fatalf("render: %s: %v", data, err)
 	}
@@ -65,7 +78,11 @@ func TestNativeDelayAdmission(t *testing.T) {
 	if err := chaosprofile.Validate(objects); err != nil {
 		t.Fatal(err)
 	}
-	raw, err := os.ReadFile("../../../../examples/chaos/network-delay.yaml")
+	mechanism := "delay"
+	if !delay {
+		mechanism = "partition"
+	}
+	raw, err := os.ReadFile("../../../../examples/chaos/network-" + mechanism + ".yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,6 +101,7 @@ func TestNativeDelayAdmission(t *testing.T) {
 	// runs in envtest; subsequent writes model its API-level cleanup obligations.
 	legacyDelay := valid.DeepCopy()
 	legacyDelay.SetName("legacy-delay")
+	_ = unstructured.SetNestedField(legacyDelay.Object, "delay", "spec", "action")
 	_ = unstructured.SetNestedField(legacyDelay.Object, "all", "spec", "mode")
 	_ = unstructured.SetNestedField(legacyDelay.Object, "both", "spec", "direction")
 	_ = unstructured.SetNestedField(legacyDelay.Object, "5m", "spec", "duration")
@@ -113,7 +131,7 @@ func TestNativeDelayAdmission(t *testing.T) {
 		}
 	}
 	bad := valid.DeepCopy()
-	_ = unstructured.SetNestedField(bad.Object, "partition", "spec", "action")
+	_ = unstructured.SetNestedField(bad.Object, "all", "spec", "mode")
 	deadline := time.Now().Add(15 * time.Second)
 	for {
 		err := admin.Create(ctx, bad.DeepCopy(), client.DryRunAll)
@@ -173,14 +191,16 @@ func TestNativeDelayAdmission(t *testing.T) {
 	if err := admin.Create(ctx, defaulted, client.DryRunAll); err != nil {
 		t.Fatalf("upstream webhook empty status default rejected: %v", err)
 	}
-	for _, edge := range []struct{ latency, duration string }{{"1ms", "1s"}, {"1000ms", "120s"}} {
-		o := valid.DeepCopy()
-		_ = unstructured.SetNestedField(o.Object, edge.latency, "spec", "delay", "latency")
-		_ = unstructured.SetNestedField(o.Object, edge.duration, "spec", "duration")
-		unstructured.RemoveNestedField(o.Object, "spec", "delay", "jitter")
-		unstructured.RemoveNestedField(o.Object, "spec", "delay", "correlation")
-		if err := admin.Create(ctx, o, client.DryRunAll); err != nil {
-			t.Fatalf("valid profile boundary rejected: %v", err)
+	if delay {
+		for _, edge := range []struct{ latency, duration string }{{"1ms", "1s"}, {"1000ms", "120s"}} {
+			o := valid.DeepCopy()
+			_ = unstructured.SetNestedField(o.Object, edge.latency, "spec", "delay", "latency")
+			_ = unstructured.SetNestedField(o.Object, edge.duration, "spec", "duration")
+			unstructured.RemoveNestedField(o.Object, "spec", "delay", "jitter")
+			unstructured.RemoveNestedField(o.Object, "spec", "delay", "correlation")
+			if err := admin.Create(ctx, o, client.DryRunAll); err != nil {
+				t.Fatalf("valid profile boundary rejected: %v", err)
+			}
 		}
 	}
 	cases := []struct {
@@ -196,7 +216,7 @@ func TestNativeDelayAdmission(t *testing.T) {
 		{"finalizer", []string{"metadata", "finalizers"}, []any{"test.example/hold"}},
 		{"managed", []string{"metadata", "labels", "managed-by"}, "workflow"},
 		{"paused", []string{"metadata", "annotations", "experiment.chaos-mesh.org/pause"}, "true"},
-		{"action", []string{"spec", "action"}, "partition"}, {"all", []string{"spec", "mode"}, "all"}, {"reverse", []string{"spec", "direction"}, "from"},
+		{"all", []string{"spec", "mode"}, "all"}, {"reverse", []string{"spec", "direction"}, "from"},
 		{"target-all", []string{"spec", "target", "mode"}, "all"}, {"other-network", []string{"spec", "target", "selector", "labelSelectors", "network.stacks.org/network"}, "other"},
 		{"same-actor", []string{"spec", "target", "selector", "labelSelectors", "network.stacks.org/actor"}, "bitcoin"},
 		{"cross-namespace", []string{"spec", "target", "selector", "namespaces"}, []any{"other"}},
@@ -217,6 +237,9 @@ func TestNativeDelayAdmission(t *testing.T) {
 		}
 	}
 	for _, c := range cases {
+		if !delay && len(c.path) > 1 && c.path[0] == "spec" && c.path[1] == "delay" {
+			continue
+		}
 		t.Run(c.name, func(t *testing.T) {
 			o := valid.DeepCopy()
 			if err := unstructured.SetNestedField(o.Object, c.value, c.path...); err != nil {
@@ -227,6 +250,51 @@ func TestNativeDelayAdmission(t *testing.T) {
 			}
 		})
 	}
+	// A complete valid alternate mechanism must be accepted only when enabled.
+	for _, action := range []string{"delay", "partition"} {
+		o := valid.DeepCopy()
+		_ = unstructured.SetNestedField(o.Object, action, "spec", "action")
+		unstructured.RemoveNestedField(o.Object, "spec", "delay")
+		direction := "both"
+		enabled := partition
+		if action == "delay" {
+			direction, enabled = "to", delay
+			_ = unstructured.SetNestedField(o.Object, map[string]any{"latency": "100ms"}, "spec", "delay")
+		}
+		_ = unstructured.SetNestedField(o.Object, direction, "spec", "direction")
+		err := admin.Create(ctx, o.DeepCopy(), client.DryRunAll)
+		if enabled && err != nil || !enabled && !policyDenied(err) {
+			t.Fatalf("%s enabled=%v: %v", action, enabled, err)
+		}
+		if action == "partition" && enabled {
+			for _, duration := range []string{"1s", "120s"} {
+				edge := o.DeepCopy()
+				_ = unstructured.SetNestedField(edge.Object, duration, "spec", "duration")
+				if err := admin.Create(ctx, edge, client.DryRunAll); err != nil {
+					t.Fatal(err)
+				}
+			}
+			for _, direction := range []string{"to", "from"} {
+				bad := o.DeepCopy()
+				_ = unstructured.SetNestedField(bad.Object, direction, "spec", "direction")
+				if err := admin.Create(ctx, bad, client.DryRunAll); !policyDenied(err) {
+					t.Fatalf("partition direction %s: %v", direction, err)
+				}
+			}
+			_ = unstructured.SetNestedField(o.Object, map[string]any{"latency": "100ms"}, "spec", "delay")
+			if err := admin.Create(ctx, o, client.DryRunAll); !policyDenied(err) {
+				t.Fatalf("mixed mechanisms: %v", err)
+			}
+		}
+	}
+	for _, path := range [][]string{{"spec", "selector", "labelSelectors"}, {"spec", "target", "selector", "labelSelectors"}} {
+		o := valid.DeepCopy()
+		_ = unstructured.SetNestedStringMap(o.Object, map[string]string{"app.kubernetes.io/name": "bitcoin-production"}, path...)
+		if err := admin.Create(ctx, o, client.DryRunAll); !policyDenied(err) {
+			t.Fatalf("producer selector accepted: %v", err)
+		}
+	}
+
 	for _, path := range [][]string{{"spec", "duration"}, {"spec", "target"}, {"metadata", "labels", "actions.stacks.org/correlation-id"}, {"spec", "selector", "labelSelectors", "network.stacks.org/network"}} {
 		o := valid.DeepCopy()
 		unstructured.RemoveNestedField(o.Object, path...)

@@ -103,6 +103,7 @@ docker-check:
 	docker build --check --file operators/action/Dockerfile .
 
 docker-build:
+	docker build --file operators/network/transactions/Dockerfile --tag stacks-transaction-worker:verify .
 	docker build --file operators/network/Dockerfile --tag stacks-network-operator:verify .
 	docker build --file operators/observability/Dockerfile --tag stacks-observability-operator:verify .
 	docker build --file operators/action/Dockerfile --tag stacks-action-operator:verify .

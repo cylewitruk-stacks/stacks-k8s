@@ -49,7 +49,10 @@ func TestLiveNativeDelay(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
 	defer cancel()
-	const ns = "chaos-live"
+	ns := os.Getenv("STACKS_CHAOS_DELAY_NAMESPACE")
+	if ns == "" {
+		ns = "chaos-live"
+	}
 	native := func(name string) *unstructured.Unstructured {
 		o := &unstructured.Unstructured{}
 		o.SetGroupVersionKind(schema.GroupVersionKind{Group: "chaos-mesh.org", Version: "v1alpha1", Kind: "NetworkChaos"})
@@ -150,7 +153,7 @@ func TestLiveNativeDelay(t *testing.T) {
 	// The type-checking controller is present here, but absent from envtest.
 	wait("current CEL type checking", func() bool {
 		policy := &admissionv1.ValidatingAdmissionPolicy{}
-		if err := admin.Get(ctx, client.ObjectKey{Name: "stacks-network-delay-" + ns}, policy); err != nil {
+		if err := admin.Get(ctx, client.ObjectKey{Name: "stacks-network-faults-" + ns}, policy); err != nil {
 			t.Fatal(err)
 		}
 		if policy.Status.ObservedGeneration != policy.Generation || policy.Status.TypeChecking == nil {
@@ -174,6 +177,10 @@ func TestLiveNativeDelay(t *testing.T) {
 			t.Fatal(err)
 		}
 		fault := faults[0]
+		fault.SetNamespace(ns)
+		for _, path := range [][]string{{"spec", "selector", "namespaces"}, {"spec", "target", "selector", "namespaces"}} {
+			_ = unstructured.SetNestedStringSlice(fault.Object, []string{ns}, path...)
+		}
 		name := "qualification-" + mode
 		fault.SetName(name)
 		// Leave enough time for receipt progress and three measured delayed requests.
@@ -204,6 +211,10 @@ func TestLiveNativeDelay(t *testing.T) {
 			t.Fatal(err)
 		}
 		extra := fresh[0]
+		extra.SetNamespace(ns)
+		for _, path := range [][]string{{"spec", "selector", "namespaces"}, {"spec", "target", "selector", "namespaces"}} {
+			_ = unstructured.SetNestedStringSlice(extra.Object, []string{ns}, path...)
+		}
 		extra.SetName("qualification-extra")
 		if err := admin.Create(ctx, extra, client.DryRunAll); err == nil || !strings.Contains(err.Error(), "exceeded quota") {
 			t.Fatalf("one-object quota not enforced: %v", err)

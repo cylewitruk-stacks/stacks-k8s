@@ -79,7 +79,7 @@ qualification, with relevant cases exercised in earlier vertical slices.
 | M0.2 | Complete | 2–5, 8, 13 | Freeze the typed, immutable, bounded atomic-action contract and structural anti-orchestration checks. |
 | M0.3 | Contract complete | 9–12; R1–R4 | Initial scope: reviewed finite cadence and reorganization profiles implemented; broader recovery remains deferred. |
 | M0.4 | Contract complete | Extends 9–11; R1–R3 | Initial scope: reviewed weighted/jittered baseline, policy updates, bounded status, and exclusion implemented. |
-| M0.5 | In progress | 6–8, 16 | Initial native delay admission, access, bounds and kind/containerd qualification implemented; broader fault, traffic and observation evidence remains open. |
+| M0.5 | In progress | 6–8, 16 | Native delay/partition admission, access, bounds and kind/containerd qualification implemented; broader kinds/platforms and observation evidence remain open. |
 | M0.6 | In progress | 14, 15, 26 | Define bootstrap, steady transaction demand, baseline/override composition, and instrumented-actor support. |
 | M0.7 | Planned | 12, 17–23 | Reconcile RPC observation authority, Kubernetes-authenticated agent access, passive observation, journal, query, export, and evidence contracts. |
 | M0.8 | In progress | 24–27 | Align layout, fixtures, validation, packaging, roadmap, examples, and the final M0 acceptance record. |
@@ -326,13 +326,18 @@ action.
 
 ## Requirement 6: Static Chaos Mesh admission first
 
-**Slice:** M0.5. **Status:** Initial delay profile implemented; broader qualification open.
+**Slice:** M0.5. **Status:** Delay and actor partitions implemented; broader qualification open.
 
-The [native delay profile](../chaos/operations.md) supplies a disabled-by-default
+The [native fault profile](../chaos/operations.md) supplies a disabled-by-default
 chart with static CEL, exact agent RBAC, one-object quota, and a pinned external
-Chaos Mesh version. [Evidence](../chaos/qualification.md) covers directed actor
-RPC delay, continued producer receipts, cancellation and duration recovery.
-Other kinds, Stacks traffic combinations and management-path loss remain open.
+Chaos Mesh version. [Delay](../chaos/qualification.md) and
+[partition evidence](../chaos/partition-qualification.md) cover actor disruption,
+continued producer receipts, cancellation/expiry, Bitcoin chain reconvergence
+and an initial productive Stacks recovery. A later reward-cycle transition
+stalled after cleanup; general Stacks recovery remains unqualified.
+Separate administrator-only control-path loss
+checks preflight refusal and retained ambiguity after producer replacement.
+Other kinds, traffic/platform combinations and passive correlation remain open.
 
 The v1 ValidatingAdmissionPolicy enforces only static constraints:
 
@@ -374,7 +379,7 @@ policy.
 ## Requirement 8: Action safety bounds
 
 **Slices:** M0.2–M0.5. **Status:** Conservative action bounds are designed;
-native delay has fixed 1–120 s duration, 1–1000 ms latency, one actor per side,
+native delay/partition has fixed 1–120 s duration, delay latency 1–1000 ms, one actor per side,
 and one native object per namespace. Other Chaos Mesh limits and policy elevation
 remain deferred.
 

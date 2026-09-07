@@ -1,8 +1,8 @@
-# Native network delay
+# Native network faults
 
-The first native profile delays traffic from one logical actor to another using
-Chaos Mesh directly. It adds no action CRD or controller to stacks-k8s. Other
-native kinds and network mechanisms remain unqualified and ungranted.
+The profile supports directed delay and bidirectional partition between two
+logical actors using Chaos Mesh directly. It adds no action CRD or controller
+to stacks-k8s. Other native kinds and mechanisms remain unqualified and ungranted.
 
 ## Install
 
@@ -47,12 +47,13 @@ Enroll the namespace and install its profile:
 
 ```bash
 kubectl --kubeconfig "$task_kubeconfig" --context "$task_context" \
-  label namespace chaos-live network.stacks.org/chaos-profile=network-delay-v1
+  label namespace chaos-live network.stacks.org/chaos-profile=network-faults-v1
 kubectl --kubeconfig "$task_kubeconfig" --context "$task_context" \
   annotate namespace chaos-live chaos-mesh.org/inject=enabled
 helm install profile charts/stacks-chaos-profile \
   --kubeconfig "$task_kubeconfig" --kube-context "$task_context" \
   --namespace chaos-live --set networkDelay.enabled=true \
+  --set networkPartition.enabled=true \
   --set chaosMesh.externalVersion=2.8.4
 ```
 
@@ -65,7 +66,8 @@ an experiment agent.
 
 ## Submit and observe
 
-Submit [the native example](../../examples/chaos/network-delay.yaml) through the
+Submit either the [delay](../../examples/chaos/network-delay.yaml) or
+[partition](../../examples/chaos/network-partition.yaml) example through the
 agent's Kubernetes identity. Both selectors use logical actor labels; the
 qualified example has source `bitcoin` and destination `bitcoin-2`.
 
@@ -86,8 +88,13 @@ search hints; native resource UID is the fault identity.
 is not a port-specific P2P filter. The producer is an unselected source Pod, so
 its Bitcoin RPC path remains outside this fault. Live qualification measures
 slower actor RPCs and continued destination production receipts during injection.
-It does not establish every Stacks-to-Bitcoin, partition, Service-routing, or
-CNI combination.
+`direction: both` partitions both directions between the same two selected Pods.
+The [partition qualification](partition-qualification.md) also covers Bitcoin
+peer chain separation and miner-to-Bitcoin disruption, cancellation/expiry and
+an initial productive reconnection. A repeat Stacks case failed to regain
+protocol progress after native cleanup; see the recorded recovery limit.
+This is a kind/containerd/kindnet result, not a claim
+about every Service-routing or CNI combination.
 
 Inspect native `Selected`, `AllInjected`, and `AllRecovered` conditions and
 container records alongside actual before/during/after measurements. Upstream
@@ -130,9 +137,65 @@ have no Chaos Mesh dependency. Follow the
 fixture, including retained target ledgers; deleting this task's entire kind
 cluster is also valid for its disposable environment.
 
+## Partition qualification fixtures
+
+Reuse an explicitly selected qualification cluster with fresh namespaces and
+credentials for independent environments. Reserve separate clusters for changes
+to cluster components or faults that require cluster isolation. The opt-in
+partition tests default to `partition-bitcoin` / network `chaos` (two Bitcoin actors,
+weights `1,1`, fixed 3 s cadence) and `partition-stacks` / network `stacks` (the
+[productive Stacks fixture](../network-operator/stacks-production.md), normal
+node image, fixed 5 s Bitcoin cadence and 10 s transfer demand). Bootstrap and
+confirm Stacks production before testing. Install the combined profile and
+`network-faults-v1` enrollment in both namespaces. Neither suite needs the action
+operator. The tests use administrator observer/proxy access for measurements;
+that authority is not part of the agent Role. Set `STACKS_CHAOS_BITCOIN_NAMESPACE`
+and `STACKS_CHAOS_STACKS_NAMESPACE` to qualify fresh namespaces without replacing
+the preserved fixtures or changing the default kubeconfig context.
+
+```bash
+STACKS_CHAOS_PARTITION_LIVE=1 \
+STACKS_CHAOS_KUBECONFIG="$task_kubeconfig" \
+STACKS_CHAOS_CONTEXT="$task_context" \
+GOWORK=off go -C tools/chart-policy test -tags=live \
+  -run 'TestLive(BitcoinPartition|StacksBitcoinPartition)$' -count=1 -v ./internal/integration
+```
+
+The Bitcoin test pauses/resumes aggregate production to compare stable chain
+tips and leaves it paused. The Stacks test requires a still-active signer lock,
+requires a new confirmation after the test starts, leaves production running,
+and does not claim immediate proposal stoppage during
+a partition. Pause both desired production policies after collecting evidence,
+or maintain the fixture's bounded signer enrollment while continuing work.
+
+Both Bitcoin RPC directions are probed before, during and after injection.
+These are round-trip reachability checks; they do not independently establish
+packet-level blocking in each direction. Stacks tests log Core height and both
+nodes' public PoX cycle IDs, lengths, boundaries, countdowns and activity before
+injection, after injection, after native cleanup, after protocol recovery and on
+wait timeout. The phase label is derived from each node's reported boundaries;
+node heights can lag Core. Samples are sequential, not atomic. Missing telemetry
+is logged as a gap and does not override the test result. No reward-cycle phases
+are avoided to obtain a passing qualification.
+
+The separate administrator-only control-loss test uses a fresh namespace named
+by `STACKS_CHAOS_CONTROL_NAMESPACE` (default `partition-control`), network
+`control`, one Bitcoin actor, and the existing `bitcoin-receipt-delay` fixture
+image. Generate isolated credentials with the Bitcoin helper, set desired
+production paused before creation, install the network chart with Bitcoin
+production, and enable only the upstream namespace injection annotation.
+Do **not** enroll this namespace in the public fault profile. The test selects
+the producer directly, which public admission rejects. It first proves preflight
+loss does not authorize a mutation, then interrupts a held real receipt and
+normally deletes the producer Pod to exhaust its drain. Run it with the same
+opt-in variables and `-run '^TestLiveProducerControlLoss$'`. It requires an unused
+height-zero fixture and leaves the unresolved target closed. Each repeat needs
+a new namespace and fresh credentials; restoring connectivity is not readmission.
+The 15 s receipt hold belongs solely to the test image, not production behavior.
+
 ## Repeat qualification
 
-The live test requires this exact disposable fixture and refuses implicit
+The delay live test requires this exact disposable fixture and refuses implicit
 kubeconfig/context selection or a namespace already containing native faults:
 
 ```bash
@@ -142,6 +205,9 @@ STACKS_CHAOS_CONTEXT="$task_context" \
 GOWORK=off go -C tools/chart-policy test -tags=live \
   -run TestLiveNativeDelay -count=1 -v ./internal/integration
 ```
+
+Set `STACKS_CHAOS_DELAY_NAMESPACE` to use a different namespace containing the
+same `chaos` network and actors.
 
 It reads the observer Secret as the qualification administrator, passes the
 password to Bitcoin CLI through stdin, and never logs credential bytes.

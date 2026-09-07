@@ -143,7 +143,7 @@ when permissions, dependencies, or failure domains materially differ.
 | Decision | Status | Resolution |
 | --- | --- | --- |
 | Orchestration owner | Direction | External agent only. |
-| Generic faults | Implemented | Initial directed-delay profile: native NetworkChaos, static admission and bounded agent access; broader kinds and passive correlation remain planned. |
+| Generic faults | Implemented | Initial directed-delay and bidirectional-partition profile: native NetworkChaos, static admission and bounded agent access; broader kinds and passive correlation remain planned. |
 | Forced Bitcoin reorganization | Recommended | Bounded action resource, not `StacksNetwork` state. |
 | Natural Bitcoin reorganization | Direction | Emergent behavior to observe; no action resource required. |
 | Baseline Bitcoin production | Direction | Aggregate-owned policy separates timing from selection among neutral Bitcoin nodes; exact schema open. |
