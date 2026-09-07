@@ -94,9 +94,12 @@ or execute selected build scripts. An external agent or CI system:
 
 1. checks out the chosen repository/revision;
 2. builds and scans the image outside operator trust;
-3. pushes it to an accessible registry;
-4. resolves an immutable digest; and
+3. pushes it to an accessible registry, or loads it into the selected local kind cluster;
+4. records its content identity (pinning published images by digest); and
 5. patches the relevant actor image and configuration reference.
+
+See the [local actor image workflow](../network-operator/actor-images.md) for
+revision selection, unique local tags and mixed-version updates.
 
 The observation journal may record declared source metadata and image digest,
 but operators do not attest that metadata matches image contents unless a

@@ -122,10 +122,17 @@ signing contracts remain open.
 ## Provision and bootstrap
 
 Build the normal network operator image and the separate transfer worker from
-the repository root. Select a dedicated cluster and load both images there.
+the repository root. Reuse an explicitly selected cluster and load both images
+there. **Use a fresh namespace and network identity for each independent
+experiment.** A shared cluster does not make existing fixtures reusable as fresh
+bootstrap environments.
 The Stacks node image must provide `stacks-node` and `stacks-signer` and support
 the qualified configuration and native transaction endpoint. See the
-[qualification record](stacks-qualification.md) for the tested image.
+[qualification record](stacks-qualification.md) for the tested image. For specific
+Git revisions, local builds and per-actor overrides, follow the
+[custom actor image guide](actor-images.md). The defaults below select the local
+`stacks-k8s` cluster; for another cluster, set its name, kubeconfig and context
+together before running these commands.
 
 ```bash
 docker build -f operators/network/Dockerfile -t stacks-network-operator:local .
@@ -133,10 +140,14 @@ docker build -f operators/network/transactions/Dockerfile \
   -t stacks-transaction-worker:local .
 npm --prefix operators/network/transactions ci --ignore-scripts
 
-export STACKS_KUBECONFIG=/absolute/path/to/dedicated-kubeconfig
-export STACKS_CONTEXT=kind-YOUR_DEDICATED_CLUSTER
-export STACKS_NAMESPACE=stacks-baseline
-export STACKS_IMAGE=YOUR_QUALIFIED_STACKS_IMAGE
+export STACKS_KIND_CLUSTER="${STACKS_KIND_CLUSTER:-stacks-k8s}"
+export STACKS_KUBECONFIG="${STACKS_KUBECONFIG:-$PWD/tools/local-cluster/kubeconfig}"
+export STACKS_CONTEXT="${STACKS_CONTEXT:-kind-$STACKS_KIND_CLUSTER}"
+export STACKS_NAMESPACE=stacks-baseline # Choose an unused namespace.
+export STACKS_IMAGE="${STACKS_IMAGE:-YOUR_QUALIFIED_STACKS_IMAGE}"
+
+kind load docker-image stacks-network-operator:local stacks-transaction-worker:local \
+  --name "$STACKS_KIND_CLUSTER"
 
 kubectl --kubeconfig "$STACKS_KUBECONFIG" --context "$STACKS_CONTEXT" \
   apply -f charts/stacks-network-operator/crds
