@@ -16,6 +16,7 @@ MODULE_DIRS := \
 	verify-observability verify-action vuln
 
 verify: modules-verify module-policy-verify verify-chart-policy verify-network verify-observability verify-action
+	$(MAKE) -C charts/stacks-chaos-profile verify
 
 api-verify:
 	$(MAKE) -C apis/network verify
@@ -27,8 +28,10 @@ module-policy-verify:
 
 verify-chart-policy:
 	GOWORK=off $(GO) -C tools/chart-policy vet ./...
+	GOWORK=off $(GO) -C tools/chart-policy vet -tags=integration,live ./internal/integration
 	GOWORK=off $(GO) -C tools/chart-policy test ./...
 	GOWORK=off $(GO) -C tools/chart-policy test -race ./...
+	GOWORK=off $(GO) -C tools/chart-policy test -tags=integration -count=1 ./internal/integration
 
 verify-network:
 	$(MAKE) -C charts/stacks-network-operator verify
@@ -63,10 +66,12 @@ test-race:
 	GOWORK=off $(GO) -C tools/chart-policy test -race ./...
 
 test-integration:
+	GOWORK=off $(GO) -C tools/chart-policy test -tags=integration -count=1 ./internal/integration
 	$(MAKE) -C operators/network test-integration
 	$(MAKE) -C operators/action test-integration
 
 helm-verify:
+	$(MAKE) -C charts/stacks-chaos-profile helm-verify
 	$(MAKE) -C charts/stacks-network-operator helm-verify workload-verify
 	$(MAKE) -C charts/stacks-observability-operator helm-verify workload-verify
 	$(MAKE) -C charts/stacks-action-operator helm-verify workload-verify
@@ -84,6 +89,7 @@ modules-verify:
 	done
 
 vuln:
+	GOWORK=off $(GO) -C tools/chart-policy run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
 	npm --prefix operators/network/transactions audit --omit=dev
 	GOWORK=off $(GO) -C apis/network run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
 	GOWORK=off $(GO) -C operators/network run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...

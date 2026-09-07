@@ -15,6 +15,19 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  chart-policy:
+    name: Chart policy and native admission
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: tools/chart-policy/go.mod
+          cache-dependency-path: tools/chart-policy/go.sum
+      - uses: azure/setup-helm@v5
+      - run: make verify-chart-policy
+      - run: make -C charts/stacks-chaos-profile verify
+
   network:
     name: Network operator
     runs-on: ubuntu-latest
@@ -74,6 +87,8 @@ jobs:
             operators/action/go.sum
             operators/observability/go.sum
             operators/observability/tools/go.sum
+            tools/chart-policy/go.sum
+            tools/module-policy/go.sum
       - run: make modules-verify
       - run: make module-policy-verify
 

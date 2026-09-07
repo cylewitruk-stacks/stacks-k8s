@@ -31,6 +31,8 @@ The initial [Stacks transfer profile](docs/network-operator/stacks-production.md
 adds isolated, fixed-interval STX demand and external bootstrap/signing helpers.
 Finite generation supports immediate, fixed, uniform, and explicit-delay cadence.
 Broader recovery and compatibility profiles remain design work.
+An optional [native Chaos Mesh profile](docs/chaos/operations.md) adds bounded
+actor-to-actor delay with static admission and separate agent access.
 
 The repository currently provides:
 

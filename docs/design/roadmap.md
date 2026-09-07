@@ -41,11 +41,14 @@ unsupported requests explicitly.
 hidden in code.
 
 M0.1 shared APIs and M0.2 common action vocabulary remain complete. M0.3 and
-M0.4 are reopened for independent target admission, multi-target production,
-RPC quiescence, authority separation, and cleanup.
+M0.4 have reviewed initial contracts and implementations for independent target
+admission, multi-target cadence, static authority separation, and bounded
+cleanup. Broader recovery and credential profiles remain explicitly deferred.
 
-M0.5 covers native faults, M0.6 bootstrap/transaction demand and actor
-capabilities, M0.7 observability/access, and M0.8 packaging/release alignment.
+M0.5 now has an initial [native delay profile](../chaos/operations.md); broader
+fault and traffic qualification remains open. M0.6 covers bootstrap, transaction
+demand and actor capabilities; M0.7 covers observability/access; M0.8 covers
+packaging/release alignment.
 The final consistency/security/roadmap audit is **M0 closeout**, not M0.9.
 
 **Done:** affected schemas, ownership, bounds, status, endpoint identity,

@@ -1,0 +1,29 @@
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: actor-delay
+  namespace: chaos-live
+  labels:
+    network.stacks.org/network: chaos
+    actions.stacks.org/correlation-id: network-delay-check
+spec:
+  action: delay
+  mode: one
+  direction: to
+  duration: 30s
+  selector:
+    namespaces: [chaos-live]
+    labelSelectors:
+      network.stacks.org/network: chaos
+      network.stacks.org/actor: bitcoin
+  target:
+    mode: one
+    selector:
+      namespaces: [chaos-live]
+      labelSelectors:
+        network.stacks.org/network: chaos
+        network.stacks.org/actor: bitcoin-2
+  delay:
+    latency: 500ms
+    jitter: 0ms
+    correlation: "0"

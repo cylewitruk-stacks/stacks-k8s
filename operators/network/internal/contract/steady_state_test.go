@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-// TestSteadyStateDesignAuthority keeps reopened designs distinct from implementation contracts.
+// TestSteadyStateDesignAuthority keeps broader designs distinct from reviewed initial contracts.
 func TestSteadyStateDesignAuthority(t *testing.T) {
 	root := repositoryRoot(t)
 	content, err := os.ReadFile(filepath.Join(root, "contracts", "steady-state-operation-v1.json"))
@@ -82,9 +82,21 @@ func TestSteadyStateDesignAuthority(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	for _, limitation := range []string{"R1–R3 stay open for wider capability contracts", "Standalone policies,", "in-place recovery", "are explicitly deferred"} {
+		if !strings.Contains(string(plan), limitation) {
+			t.Errorf("M0 plan omits wider capability limitation %q", limitation)
+		}
+	}
 	for _, slice := range []string{"M0.3", "M0.4"} {
-		if !strings.Contains(string(plan), "| "+slice+" | Reopened |") {
-			t.Errorf("M0 plan does not mark %s reopened", slice)
+		row := ""
+		for _, line := range strings.Split(string(plan), "\n") {
+			if strings.HasPrefix(line, "| "+slice+" |") {
+				row = line
+				break
+			}
+		}
+		if !strings.Contains(row, "| Contract complete |") || !strings.Contains(row, "Initial scope:") {
+			t.Errorf("M0 plan does not limit %s completion to the initial contract", slice)
 		}
 	}
 }

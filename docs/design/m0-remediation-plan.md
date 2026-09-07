@@ -7,7 +7,7 @@ review of the architecture design package. It is the authoritative M0 plan.
 Where it conflicts with another document under `docs/design/`, this plan takes
 precedence until that document is revised. This plan adopts the
 [steady-state operation amendment](steady-state-operation.md), including its
-R1–R8 review ledger. M0.3 and M0.4 are reopened; the capability profiles define their
+R1–R8 review ledger. M0.3 and M0.4 have reviewed initial contracts; the capability profiles define their
 implemented scope.
 
 M0 changes design, packaging, and repository foundations. It does not add an
@@ -77,9 +77,9 @@ qualification, with relevant cases exercised in earlier vertical slices.
 | --- | --- | --- | --- |
 | M0.1 | Complete | 1 | Extract the shared network API module and make generation, module verification, and container builds work across the module boundary. |
 | M0.2 | Complete | 2–5, 8, 13 | Freeze the typed, immutable, bounded atomic-action contract and structural anti-orchestration checks. |
-| M0.3 | Reopened | 9–12; R1–R4 | Initial finite cadence and reorganization contracts implemented; scope closure awaits cadence review. |
-| M0.4 | Reopened | Extends 9–11; R1–R3 | Weighted/jittered baseline, policy updates, bounded status, and exclusion implemented; scope closure awaits cadence review. |
-| M0.5 | Planned | 6–8, 16 | Define and qualify native admission, protocol/control traffic separation, limits, and the initial platform matrix. |
+| M0.3 | Contract complete | 9–12; R1–R4 | Initial scope: reviewed finite cadence and reorganization profiles implemented; broader recovery remains deferred. |
+| M0.4 | Contract complete | Extends 9–11; R1–R3 | Initial scope: reviewed weighted/jittered baseline, policy updates, bounded status, and exclusion implemented. |
+| M0.5 | In progress | 6–8, 16 | Initial native delay admission, access, bounds and kind/containerd qualification implemented; broader fault, traffic and observation evidence remains open. |
 | M0.6 | In progress | 14, 15, 26 | Define bootstrap, steady transaction demand, baseline/override composition, and instrumented-actor support. |
 | M0.7 | Planned | 12, 17–23 | Reconcile RPC observation authority, Kubernetes-authenticated agent access, passive observation, journal, query, export, and evidence contracts. |
 | M0.8 | In progress | 24–27 | Align layout, fixtures, validation, packaging, roadmap, examples, and the final M0 acceptance record. |
@@ -92,7 +92,7 @@ Supporting requirements such as safety bounds, evidence integrity, repository
 layout, and roadmap alignment may be updated by an earlier slice. Their final
 owner remains the primary slice listed above.
 
-### Reopened Bitcoin scope
+### Reviewed initial Bitcoin scope
 
 M0.3 and M0.4 retain the separation between mutable desired production and
 bounded immutable actions. Use the direction in [Bitcoin lifecycle](bitcoin-lifecycle.md):
@@ -109,8 +109,9 @@ bounded immutable actions. Use the direction in [Bitcoin lifecycle](bitcoin-life
 - separate observation/mutation authority and complete reorganization cleanup.
 
 The initial profiles now define schemas, limits, destinations, precedence,
-and execution. M0.3/M0.4 closure awaits review of the
-[cadence delivery](../reviews/bitcoin-cadence-review.md). Standalone policies,
+and execution. Independent review accepted the
+[cadence delivery](../reviews/bitcoin-cadence-review.md), committed as `6de2a10`.
+This closes the initial M0.3/M0.4 contracts. Standalone policies,
 temporary override CRDs, per-target credential profiles, and in-place recovery
 are explicitly deferred; no served feature depends on them. M0.5 owns
 management-path qualification under protocol faults. Autonomous local fallback
@@ -325,7 +326,13 @@ action.
 
 ## Requirement 6: Static Chaos Mesh admission first
 
-**Slice:** M0.5. **Status:** Planned.
+**Slice:** M0.5. **Status:** Initial delay profile implemented; broader qualification open.
+
+The [native delay profile](../chaos/operations.md) supplies a disabled-by-default
+chart with static CEL, exact agent RBAC, one-object quota, and a pinned external
+Chaos Mesh version. [Evidence](../chaos/qualification.md) covers directed actor
+RPC delay, continued producer receipts, cancellation and duration recovery.
+Other kinds, Stacks traffic combinations and management-path loss remain open.
 
 The v1 ValidatingAdmissionPolicy enforces only static constraints:
 
@@ -343,11 +350,12 @@ path. Separate Service names or port-only rules are not proof of isolation.
 
 Package the policy behind an explicit, disabled-by-default chart value. Its
 installation requires Chaos Mesh to be installed or explicitly declared as an
-external dependency. Match only namespaces enrolled for stacks-k8s use.
+external dependency. Bind each installed profile to its namespace name and require enrollment for
+new faults. De-enrollment must not remove validation or obstruct existing cleanup.
 
 ## Requirement 7: Defer dynamic enrollment admission
 
-**Slice:** M0.5. **Status:** Planned.
+**Slice:** M0.5. **Status:** Explicitly deferred for the initial static profile.
 
 A parameterized admission policy may later compare the requested actor with a
 `StacksNetwork` inventory. The vacuous-success form for unrelated network
@@ -366,7 +374,9 @@ policy.
 ## Requirement 8: Action safety bounds
 
 **Slices:** M0.2–M0.5. **Status:** Conservative action bounds are designed;
-Chaos Mesh limits remain for M0.5 and policy elevation remains deferred.
+native delay has fixed 1–120 s duration, 1–1000 ms latency, one actor per side,
+and one native object per namespace. Other Chaos Mesh limits and policy elevation
+remain deferred.
 
 Each numeric bound must be classified as either:
 
@@ -382,7 +392,7 @@ coordination layer over otherwise independent actions.
 
 ## Requirement 9: Consolidated Bitcoin generation API
 
-**Slices:** M0.3 and M0.4. **Status:** Reopened.
+**Slices:** M0.3 and M0.4. **Status:** Initial contract complete.
 
 The current contract is
 [Bitcoin lifecycle](bitcoin-lifecycle.md) and
@@ -398,12 +408,12 @@ It uses fixed or symmetric uniform-jitter intervals with per-target destinations
 durable selection, explicit skips, mutable membership, and retained action
 exclusion. All four finite cadence modes are implemented with receipt-relative
 durable timing. See the [cadence contract](../network-operator/bitcoin-generation.md#cadence).
-The implementation and M0.3/M0.4 scope reconciliation await independent review;
+Independent cadence review accepted the initial implementation and scope;
 broader recovery and compatibility qualification remain open.
 
 ## Requirement 10: Attributable Bitcoin generation
 
-**Slices:** M0.3 and M0.4. **Status:** Reopened; R2.
+**Slices:** M0.3 and M0.4. **Status:** Initial contract complete; broader R2 recovery deferred.
 
 Only successful mutation RPC responses support acknowledged attribution.
 Observed chain tips alone do not establish which producer caused an effect.
@@ -419,7 +429,7 @@ observation owns retained history and independently collected chain facts.
 
 ## Requirement 11: Bitcoin action serialization
 
-**Slices:** M0.3 and M0.4. **Status:** Reopened; R1, R2, R4.
+**Slices:** M0.3 and M0.4. **Status:** Initial contract complete; broader R1/R2/R4 capabilities deferred.
 
 Require shared target-scoped exclusion across production and finite actions,
 one serialized owner of reservation writes, uncached admitted-identity checks,
@@ -822,12 +832,12 @@ sections above.
       and passes its module, generation, container, and dependency checks.
 - [x] **M0.2:** the shared action lifecycle, vocabulary, immutability,
       time-bound behavior, and anti-orchestration contracts are frozen.
-- [ ] **M0.3:** finite Bitcoin generation and reorganization have bounded,
+- [x] **M0.3:** finite Bitcoin generation and reorganization have bounded,
       attributable, credentialed, serialized, implementation-ready designs.
-      Initial profiles implemented; cadence closure review pending.
-- [ ] **M0.4:** multi-target baseline production, policy updates, finite cadence,
+      Initial profiles implemented and independently reviewed; wider capability deferrals remain.
+- [x] **M0.4:** multi-target baseline production, policy updates, finite cadence,
       bounded status, action priority, and safe exclusion are reconciled.
-      Initial profiles implemented; cadence closure review pending.
+      Initial profiles implemented and independently reviewed; wider capability deferrals remain.
 - [ ] **M0.5:** static Chaos Mesh admission and initial native-fault/platform
       qualification require no mandatory webhook.
 - [ ] **M0.6:** protocol bootstrap, steady transaction demand, overrides, and the

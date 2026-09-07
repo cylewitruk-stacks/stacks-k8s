@@ -15,7 +15,8 @@ project's supported agent workflow.
 
 ## Supported native resources
 
-Initial qualification should cover:
+The [implemented initial profile](../chaos/operations.md) qualifies only directed
+`NetworkChaos` delay. The following broader scope remains planned:
 
 | Chaos Mesh kind | Use |
 | --- | --- |
@@ -42,15 +43,15 @@ metadata:
     actions.stacks.org/correlation-id: investigation-42
 spec:
   action: delay
-  mode: all
+  mode: one
   selector:
     namespaces: [stacks-regtest]
     labelSelectors:
       network.stacks.org/network: mixed-network
       network.stacks.org/actor: follower-a
-  direction: both
+  direction: to
   target:
-    mode: all
+    mode: one
     selector:
       namespaces: [stacks-regtest]
       labelSelectors:
@@ -58,8 +59,8 @@ spec:
         network.stacks.org/actor: bitcoin-c
   delay:
     latency: 750ms
-    jitter: 100ms
-    correlation: "25"
+    jitter: 0ms
+    correlation: "0"
   duration: 30s
 ```
 
@@ -84,8 +85,10 @@ separate resources created by the agent.
 
 ## Protocol faults and production control
 
-The qualified profile distinguishes Bitcoin P2P traffic, Stacks-to-Bitcoin RPC,
-and producer-to-Bitcoin RPC. A partial protocol partition should preserve the
+Qualification distinguishes Bitcoin P2P traffic, Stacks-to-Bitcoin RPC,
+and producer-to-Bitcoin RPC. The first profile delays actor-to-actor traffic
+without port filtering; only the two-Bitcoin-actor/control-path combination is
+[qualified](../chaos/qualification.md). A partial protocol partition should preserve the
 central producer's management path when continued block production is part of
 the declared experiment. Source/target selection and direction matter: Stacks
 clients and the producer can use the same Bitcoin RPC port. A separate Service
@@ -114,7 +117,7 @@ create a new named object for a materially different fault.
 it. An admission policy caps duration and target scope. Deletion remains the
 manual cancellation path.
 
-The observability operator records requested spec, API admission result,
+The planned observability integration records requested spec, API admission result,
 resolved Pods when available, conditions, injection/recovery timestamps, and
 capture gaps. It does not decide that the intended network effect occurred
 solely because Chaos Mesh reports completion.
@@ -146,7 +149,7 @@ without wrapping the upstream mechanism.
 
 Therefore the exact-identity guarantee is deliberately narrower for native
 faults: their immutable spec and requested logical labels are pinned, while
-passive observation records selected Pod UIDs and any replacement as
+planned passive observation records selected Pod UIDs and any replacement as
 `TargetIdentityDiverged`. Evidence after divergence is not attributed to the
 original Pod. Agents requiring exact Pod identity must cancel on divergence or
 use a purpose-built action whose mechanism supports UID pinning.
@@ -228,8 +231,8 @@ inseparable.
 ## Open decisions
 
 1. Availability/failure policy for dynamic enrolled-target admission.
-2. Initial platform matrix and qualified Chaos Mesh version.
-3. Which native kinds are safe on arm64 and each supported runtime/CNI.
+2. Broader traffic and platform qualification beyond the initial delay matrix.
+3. Which additional native kinds are safe on arm64 and each supported runtime/CNI.
 
 ## References
 

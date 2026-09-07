@@ -1,0 +1,6 @@
+apiVersion: v2
+name: stacks-chaos-profile
+description: Optional static admission and agent access for native Chaos Mesh network delay.
+type: application
+version: 0.1.0
+kubeVersion: '>=1.30.0-0'

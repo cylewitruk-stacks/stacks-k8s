@@ -41,7 +41,7 @@ must distinguish implemented behavior from proposed or unavailable features.
 
 | Label | Meaning |
 | --- | --- |
-| Implemented | Present in the committed operators. |
+| Implemented | Present in repository code or packaging; installation and qualification limits remain component-specific. |
 | Contract complete | Reviewed design and contract baseline is complete; runtime and served API availability require separate implementation. |
 | Reopened | A reviewed capability contract needs further design before broader implementation. |
 | Direction | Agreed architectural constraint. |
@@ -127,7 +127,7 @@ when permissions, dependencies, or failure domains materially differ.
 | `StacksNetwork`, `BitcoinNode`, `StacksNode`, `StacksSigner` | Implemented; extend | [Topology](topology.md) |
 | `NetworkObservation` | Implemented compatibility API | [Current state](current-state.md) |
 | `ActionSafetyPolicy` | Recommended for custom actions | [Atomic actions](actions.md) |
-| `BitcoinBlockProduction` | Weighted multi-target fixed/jittered profile implemented; M0.4 closure review pending | [Bitcoin baseline](../network-operator/bitcoin-production.md) |
+| `BitcoinBlockProduction` | Weighted multi-target fixed/jittered profile implemented; initial M0.4 contract reviewed | [Bitcoin baseline](../network-operator/bitcoin-production.md) |
 | `BitcoinBlockGeneration`, `BitcoinReorganization` | Initial bounded profiles implemented; broader execution and recovery contracts open | [Bitcoin lifecycle](bitcoin-lifecycle.md) |
 | `StacksTransactionProduction` | Direction; working name and schema open | [Steady-state operation](steady-state-operation.md) |
 | `SignerBehavior`, `MinerBehavior` | Recommended | [Protocol actions](protocol-actions.md) |
@@ -143,7 +143,7 @@ when permissions, dependencies, or failure domains materially differ.
 | Decision | Status | Resolution |
 | --- | --- | --- |
 | Orchestration owner | Direction | External agent only. |
-| Generic faults | Direction | Use native Chaos Mesh CRDs directly. |
+| Generic faults | Implemented | Initial directed-delay profile: native NetworkChaos, static admission and bounded agent access; broader kinds and passive correlation remain planned. |
 | Forced Bitcoin reorganization | Recommended | Bounded action resource, not `StacksNetwork` state. |
 | Natural Bitcoin reorganization | Direction | Emergent behavior to observe; no action resource required. |
 | Baseline Bitcoin production | Direction | Aggregate-owned policy separates timing from selection among neutral Bitcoin nodes; exact schema open. |

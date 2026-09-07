@@ -61,6 +61,15 @@ requests, cancellation, and receipt attribution. The optional
 [`BitcoinReorganization`](../network-operator/bitcoin-reorganization.md) profile
 adds bounded suffix replacement and explicit compensation obligations.
 
+## Native infrastructure faults
+
+The optional [native delay profile](../chaos/operations.md) supplies static CEL,
+namespace enrollment, narrow agent RBAC, one-object quota, and direct
+`NetworkChaos` examples. Chaos Mesh 2.8.4 remains an external installation.
+The [qualified matrix](../chaos/qualification.md) covers directed delay between
+Bitcoin actors with producer RPC access preserved, cancellation, and expiry.
+Other fault modes and passive native-fault history remain unimplemented.
+
 ## Implemented observation
 
 `observation.stacks.org/v1alpha1` provides `NetworkObservation`, a one-shot,
@@ -97,7 +106,7 @@ Git, runs repository build logic, or constructs an image.
 | Bitcoin lifecycle | Broader branch observation and recovery. Weighted baseline with jitter, all four finite generation cadence modes, and constrained local reorganization are implemented. |
 | Steady transaction demand | Multi-account/ingress profiles, overrides and wider signing lifecycle support. One-account fixed-interval demand is implemented. |
 | Protocol bootstrap | General image/epoch compatibility, PoX-5 transitions and reusable bounded APIs. External PoX-4 bootstrap and renewal are implemented for one local profile. |
-| Generic faults | Native Chaos Mesh installation guidance, safe direct targeting, correlation, and observation. |
+| Generic faults | Wider native kinds, traffic/platform combinations, and passive correlation. One bounded directed NetworkChaos delay profile is implemented. |
 | Protocol actions | Signer/miner behavior controls, application clock offset, bounded input behaviors, and portable storage pressure. |
 | Continuous observation | Mutation history, protocol telemetry, logs, metrics, resource telemetry, rolling retention, and capture-gap reporting. |
 | Agent access | Machine-readable capability discovery, efficient query API, and consistent cross-resource status vocabulary. |

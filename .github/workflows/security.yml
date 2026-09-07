@@ -7,6 +7,8 @@ on:
       - Makefile
       - apis/**
       - operators/**
+      - tools/**
+      - charts/**
   push:
     branches:
       - main
@@ -15,6 +17,8 @@ on:
       - Makefile
       - apis/**
       - operators/**
+      - tools/**
+      - charts/**
   schedule:
     - cron: "17 4 * * 1"
   workflow_dispatch:
@@ -38,4 +42,6 @@ jobs:
             apis/network/go.sum
             operators/network/go.sum
             operators/observability/go.sum
+            operators/action/go.sum
+            tools/chart-policy/go.sum
       - run: make vuln

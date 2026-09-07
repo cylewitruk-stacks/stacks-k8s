@@ -14,6 +14,12 @@
   - [Installation and operations](action-operator/operations.md)
 - [Stacks observability operator](../charts/stacks-observability-operator/README.md)
 
+## Native faults
+
+- [Optional Chaos Mesh profile](../charts/stacks-chaos-profile/README.md)
+- [Native delay operations](chaos/operations.md)
+- [Native delay qualification](chaos/qualification.md)
+
 ## Repository
 
 - [Architecture](architecture.md)
