@@ -41,6 +41,15 @@ or observability controllers. Deployment, chart, API-module, and ServiceAccount
 ownership remain packaging decisions. Standalone capability resources need
 explicit ownership/overlap rules before becoming a supported advanced API.
 
+## Network genesis and configuration
+
+Each provisioned network carries an immutable public genesis snapshot: accounts,
+balances, test-genesis selection, epoch schedule and PoX parameters. External Go
+provisioning may copy a reusable immutable `StacksGenesisProfile`; controllers
+do not look it up or bootstrap the chain. One Go TOML renderer supplies node and
+signer configurations. SDK adapters only encode keys and sign transactions.
+See [configuration ownership](../network-operator/configuration.md).
+
 ## Bitcoin production
 
 Emission timing and target selection are separate dimensions. Intended

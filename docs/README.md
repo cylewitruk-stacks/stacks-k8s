@@ -32,3 +32,6 @@
 - [Local Kubernetes 1.37 qualification](local-cluster-qualification.md)
 - [Operations](operations.md)
 - [Releases](releases.md)
+
+See [network configuration and genesis](network-operator/configuration.md) for immutable shared inputs
+and Go-owned provisioning/bootstrap.

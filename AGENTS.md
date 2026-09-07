@@ -77,9 +77,11 @@ integrity. See the
   Keep Kubernetes APIs, reconciliation, admission, production nonce ownership,
   submission/recovery, and evidence accounting in Go.
 - JavaScript is a narrow Stacks SDK integration exception, confined to
-  `operators/network/transactions`: offline transaction signing, external
-  SDK-dependent provisioning/bootstrap/renewal helpers, and their focused tests.
-  External helpers may sequence bootstrap; they must not become controllers.
+  `operators/network/transactions`: offline key encoding and transfer/PoX
+  transaction signing, with focused tests.
+  It must not render actor configuration, build Kubernetes resources, query
+  clusters, submit transactions, or sequence bootstrap/renewal. External Go
+  commands own provisioning, bootstrap and renewal; controllers never bootstrap.
 - Keep repository wire-contract fixtures in `contracts/` and their production
   decoding/digest implementations in the respective Go consumers. Do not move
   or duplicate these contracts into JavaScript fixtures or modules.

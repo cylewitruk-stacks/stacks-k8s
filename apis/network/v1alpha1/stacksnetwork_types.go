@@ -38,6 +38,7 @@ type StacksNetworkList struct {
 // +kubebuilder:validation:XValidation:rule="!has(self.signers) || self.signers.all(signer, self.signers.exists_one(other, other.index == signer.index))",message="signer indices must be unique"
 // +kubebuilder:validation:XValidation:rule="!has(self.stacksNodes) || self.stacksNodes.all(node, !has(node.serviceRefs) || node.serviceRefs.all(ref, self.bitcoinNodes.exists(actor, actor.name == ref) || (has(self.stacksNodes) && self.stacksNodes.exists(actor, actor.name == ref)) || (has(self.signers) && self.signers.exists(actor, actor.name == ref))))",message="Stacks node serviceRefs must name declared actors"
 // +kubebuilder:validation:XValidation:rule="!has(self.signers) || self.signers.all(signer, !has(signer.serviceRefs) || signer.serviceRefs.all(ref, self.bitcoinNodes.exists(actor, actor.name == ref) || (has(self.stacksNodes) && self.stacksNodes.exists(actor, actor.name == ref)) || (has(self.signers) && self.signers.exists(actor, actor.name == ref))))",message="signer serviceRefs must name declared actors"
+// +kubebuilder:validation:XValidation:rule="has(self.genesis) == has(oldSelf.genesis)",message="genesis cannot be added or removed; create a fresh network"
 type StacksNetworkSpec struct {
 	// StacksTransactionProduction optionally maintains fixed-interval STX transfers.
 	StacksTransactionProduction *stacksv1alpha1.TransferPolicy `json:"stacksTransactionProduction,omitempty"`
@@ -45,7 +46,9 @@ type StacksNetworkSpec struct {
 	BitcoinBlockProduction *bitcoinv1alpha1.ProductionPolicy `json:"bitcoinBlockProduction,omitempty"`
 	Suspended              bool                              `json:"suspended,omitempty"`
 	Defaults               NetworkDefaults                   `json:"defaults"`
-	Genesis                *GenesisSpec                      `json:"genesis,omitempty"`
+	// Genesis is the immutable, resolved chain configuration; profiles are copied at provisioning time.
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="genesis is immutable; create a fresh network"
+	Genesis *GenesisSpec `json:"genesis,omitempty"`
 	// +kubebuilder:validation:MinItems=1
 	// +kubebuilder:validation:MaxItems=32
 	// +listType=map
@@ -59,21 +62,6 @@ type StacksNetworkSpec struct {
 	// +listType=map
 	// +listMapKey=name
 	Signers []StacksSignerTemplate `json:"signers,omitempty"`
-}
-
-// GenesisSpec contains network-wide values included by generated node profiles.
-type GenesisSpec struct {
-	// +kubebuilder:validation:MaxItems=1000
-	// +listType=map
-	// +listMapKey=address
-	Balances []GenesisBalance `json:"balances,omitempty"`
-}
-
-// GenesisBalance grants one address an initial micro-STX balance.
-type GenesisBalance struct {
-	Address string `json:"address"`
-	// +kubebuilder:validation:Minimum=1
-	Amount int64 `json:"amount"`
 }
 
 // BitcoinNodeTemplate is the aggregate declaration for one Bitcoin node.

@@ -1,0 +1,24 @@
+apiVersion: network.stacks.org/v1alpha1
+kind: StacksGenesisProfile
+metadata:
+  name: regtest-pox4
+spec:
+  useTestGenesisChainstate: true
+  pox:
+    prepareLength: 5
+    rewardCycleLength: 20
+  epochs:
+    - {name: "1.0", startHeight: 0}
+    - {name: "2.0", startHeight: 0}
+    - {name: "2.05", startHeight: 203}
+    - {name: "2.1", startHeight: 204}
+    - {name: "2.2", startHeight: 206}
+    - {name: "2.3", startHeight: 207}
+    - {name: "2.4", startHeight: 208}
+    - {name: "2.5", startHeight: 209}
+    - {name: "3.0", startHeight: 223}
+    - {name: "3.1", startHeight: 224}
+    - {name: "3.2", startHeight: 225}
+    - {name: "3.3", startHeight: 226}
+    - {name: "3.4", startHeight: 227}
+    - {name: "4.0", startHeight: 1000005}

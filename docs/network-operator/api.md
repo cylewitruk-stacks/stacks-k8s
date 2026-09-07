@@ -2,7 +2,16 @@
 
 Topology uses `network.stacks.org/v1alpha1`; Bitcoin production uses
 `bitcoin.stacks.org/v1alpha1`; transfer production uses
-`stacks.stacks.org/v1alpha1`. All resources are namespaced.
+`stacks.stacks.org/v1alpha1`. All resources are namespaced. The network CRDs
+require Kubernetes 1.32+ for shared genesis admission rules.
+
+## StacksGenesisProfile
+
+An immutable, namespaced public recipe with a `spec` matching `StacksNetwork.spec.genesis`.
+The external provisioning command copies its values into a new network; it is
+not a controller or live reference. Export a profile with `kubectl get ... -o yaml`
+and pass it through `--genesis-profile`. A new profile revision uses a new resource
+name. See [configuration and genesis](configuration.md).
 
 ## StacksNetwork
 
@@ -12,7 +21,7 @@ Topology uses `network.stacks.org/v1alpha1`; Bitcoin production uses
 | ---- | ---- |
 | `spec.suspended` | Scale every compiled actor to zero. |
 | `spec.defaults` | Default images, pull behavior, storage, resources, and placement. |
-| `spec.genesis` | Public genesis balances included in generated Stacks profiles. |
+| `spec.genesis` | Immutable public genesis balances, named accounts, epoch schedule and PoX cycle lengths. |
 | `spec.bitcoinNodes` | Bitcoin Core actors and their directed peer graph. |
 | `spec.stacksNodes` | Miner, follower, and signer-node actors. |
 | `spec.signers` | Signer actors bound one-to-one to signer-node actors. |

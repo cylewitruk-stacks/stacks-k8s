@@ -11,6 +11,7 @@ replace github.com/cylewitruk-stacks/stacks-k8s/operators/action => ../action
 require (
 	github.com/cylewitruk-stacks/stacks-k8s/apis/network v0.1.0
 	github.com/cylewitruk-stacks/stacks-k8s/operators/action v0.1.0
+	github.com/pelletier/go-toml/v2 v2.4.3
 	k8s.io/api v0.37.0
 	k8s.io/apiextensions-apiserver v0.37.0
 	k8s.io/apimachinery v0.37.0

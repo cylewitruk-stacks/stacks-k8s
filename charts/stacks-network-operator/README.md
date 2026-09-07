@@ -8,7 +8,9 @@ higher-level test system own deployment-specific connectivity and containment.
 
 ## Install
 
-Run source-checkout commands from the repository root.
+CRD admission requires Kubernetes 1.32+ for bounded genesis account-name
+validation. Live qualification uses Kubernetes 1.37.0. Run source-checkout
+commands from the repository root.
 
 The default `0.1.0` image reference becomes usable when that release is
 published. For an unpublished checkout, use the local-image procedure below.
@@ -218,3 +220,7 @@ Baseline-only installation needs no action chart or action CRDs.
 Baseline `jitterSeconds` and finite generation cadence are API fields, not Helm
 scheduling settings. See the [baseline](../../docs/network-operator/bitcoin-production.md)
 and [finite cadence](../../docs/network-operator/bitcoin-generation.md#cadence) contracts.
+
+The chart also installs `StacksGenesisProfile`, an immutable public recipe for
+external provisioning. It has no controller or runtime profile lookup. Network
+genesis snapshots are immutable; see [configuration and genesis](../../docs/network-operator/configuration.md).

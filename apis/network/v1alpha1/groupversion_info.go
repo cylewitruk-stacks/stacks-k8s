@@ -20,6 +20,8 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 		GroupVersion,
 		&BitcoinNode{},
 		&BitcoinNodeList{},
+		&StacksGenesisProfile{},
+		&StacksGenesisProfileList{},
 		&StacksNetwork{},
 		&StacksNetworkList{},
 		&StacksNode{},

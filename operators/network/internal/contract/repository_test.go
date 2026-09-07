@@ -17,6 +17,7 @@ import (
 
 	networkv1alpha1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha1"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/network"
+	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/profiles"
 )
 
 func TestExamplesCompile(t *testing.T) {
@@ -33,6 +34,25 @@ func TestExamplesCompile(t *testing.T) {
 			content, err := os.ReadFile(path)
 			if err != nil {
 				t.Fatal(err)
+			}
+			var header struct {
+				Kind string `json:"kind"`
+			}
+			if err := yaml.Unmarshal(content, &header); err != nil {
+				t.Fatal(err)
+			}
+			if header.Kind == "StacksGenesisProfile" {
+				var profile networkv1alpha1.StacksGenesisProfile
+				if err := yaml.UnmarshalStrict(content, &profile); err != nil {
+					t.Fatal(err)
+				}
+				if profile.APIVersion != networkv1alpha1.GroupVersion.String() {
+					t.Fatal("unexpected profile API version")
+				}
+				if _, err := profiles.ResolveGenesis(&profile.Spec); err != nil {
+					t.Fatal(err)
+				}
+				return
 			}
 			value := &networkv1alpha1.StacksNetwork{}
 			if err := yaml.UnmarshalStrict(content, value); err != nil {

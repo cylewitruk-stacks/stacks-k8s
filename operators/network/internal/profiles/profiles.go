@@ -1,158 +1,130 @@
-// Package profiles renders bounded public regtest configuration profiles.
+// Package profiles renders typed, deterministic regtest actor configurations.
 package profiles
 
 import (
+	"bytes"
 	"crypto/sha256"
+	"embed"
 	"encoding/hex"
 	"fmt"
 	"sort"
 	"strings"
+	"text/template"
+	"unicode/utf8"
 
-	networkv1alpha1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha1"
+	network "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha1"
+	"github.com/pelletier/go-toml/v2"
 )
 
-// StacksContext supplies topology values needed by a generated Stacks profile.
+//go:embed templates/*.tmpl
+var templates embed.FS
+
+// StacksContext supplies public topology and optional externally provisioned credentials.
 type StacksContext struct {
-	Network        string
-	Actor          string
-	Role           networkv1alpha1.StacksNodeRole
-	BitcoinService string
-	BitcoinRPCPort int32
-	BitcoinP2PPort int32
-	SignerService  string
-	SignerIndex    int32
-	Genesis        *networkv1alpha1.GenesisSpec
-	Generated      networkv1alpha1.GeneratedConfig
+	// Network and Actor identify the node within its environment.
+	Network, Actor string
+	// Role selects miner, follower or signer ingress behavior.
+	Role network.StacksNodeRole
+	// BitcoinService and ports locate this node's burnchain source.
+	BitcoinService                 string
+	BitcoinRPCPort, BitcoinP2PPort int32
+	// SignerService names the event destination without its port.
+	SignerService string
+	// Genesis supplies the common network chain parameters.
+	Genesis *network.GenesisSpec
+	// Generated supplies public profile overrides.
+	Generated network.GeneratedConfig
+	// RPCUser, RPCPassword and AuthToken are provided only to the actor that needs them.
+	RPCUser, RPCPassword, AuthToken string
+	// MiningPublicKey is the uncompressed Bitcoin wallet public key.
+	MiningPublicKey string
 }
 
-// Bitcoin renders a deterministic Bitcoin Core regtest configuration.
+// nodeTemplate is the fully resolved input to the common node template.
+type nodeTemplate struct {
+	StacksContext
+	Seed, Bootstrap          string
+	Miner, Stacker, Blocking bool
+	Genesis                  network.GenesisSpec
+}
+
+// SignerContext supplies the signer-only key and its node's paired authentication token.
+type SignerContext struct {
+	PrivateKey, NodeHost, AuthToken string
+}
+
+// Bitcoin renders the public development-only Bitcoin profile.
 func Bitcoin(rpcPort int32) string {
 	return fmt.Sprintf("regtest=1\nprinttoconsole=1\nserver=1\ntxindex=1\ndiscover=0\ndnsseed=0\nlistenonion=0\nfallbackfee=0.00001\n\n[regtest]\nrpcbind=0.0.0.0:%d\nrpcallowip=0.0.0.0/0\nrpcuser=devnet\nrpcpassword=devnet\n", rpcPort)
 }
 
-// Stacks renders a deterministic non-secret Nakamoto regtest node configuration.
-func Stacks(context StacksContext) string {
+// Stacks renders and parses a complete node TOML document from shared genesis values.
+func Stacks(context StacksContext) (string, error) {
+	if context.Role == network.StacksNodeMiner && context.MiningPublicKey == "" {
+		return "", fmt.Errorf("miner configuration requires a mining public key")
+	}
+	genesis, err := ResolveGenesis(context.Genesis)
+	if err != nil {
+		return "", err
+	}
 	seed := context.Generated.Seed
 	if seed == "" {
-		digest := sha256.Sum256([]byte(context.Network + ":" + context.Actor))
-		seed = hex.EncodeToString(digest[:])
+		sum := sha256.Sum256([]byte(context.Network + ":" + context.Actor))
+		seed = hex.EncodeToString(sum[:])
 	}
-	dispatcher := context.Generated.EventDispatcher
-	if dispatcher == "" {
-		dispatcher = "queued"
+	peers := append([]string(nil), context.Generated.BootstrapPeers...)
+	sort.Strings(peers)
+	if context.RPCUser == "" {
+		context.RPCUser = "devnet"
+		context.RPCPassword = "devnet"
 	}
-	bootstrap := append([]string(nil), context.Generated.BootstrapPeers...)
-	sort.Strings(bootstrap)
-	bootstrapLine := ""
-	if len(bootstrap) > 0 {
-		bootstrapLine = fmt.Sprintf("bootstrap_node = %q\n", strings.Join(bootstrap, ","))
+	if context.AuthToken == "" {
+		context.AuthToken = "12345"
 	}
-	observer := ""
 	if context.SignerService != "" {
-		observer = fmt.Sprintf("\n[[events_observer]]\nendpoint = %q\nevents_keys = [\"stackerdb\", \"block_proposal\", \"burn_blocks\"]\n", context.SignerService+":30000")
+		context.SignerService += ":30000"
 	}
-	return fmt.Sprintf(`[node]
-name = %q
-rpc_bind = "0.0.0.0:20443"
-p2p_bind = "0.0.0.0:20444"
-data_url = "http://__NODE_IP__:20443"
-p2p_address = "__NODE_IP__:20444"
-prometheus_bind = "0.0.0.0:20446"
-working_dir = "/data/node"
-seed = %q
-local_peer_seed = %q
-miner = %t
-stacker = %t
-event_dispatcher_blocking = %t
-event_dispatcher_queue_size = 1000
-use_test_genesis_chainstate = true
-pox_sync_sample_secs = 0
-wait_time_for_blocks = 0
-wait_time_for_microblocks = 0
-mine_microblocks = false
-%s
-[connection_options]
-public_ip_address = "__NODE_IP__:20444"
-private_neighbors = true
-walk_interval = 5
-inv_sync_interval = 5
-download_interval = 1
-auth_token = "12345"
-%s
-[burnchain]
-chain = "bitcoin"
-mode = "nakamoto-neon"
-poll_time_secs = 1
-magic_bytes = "T3"
-pox_prepare_length = 5
-pox_reward_length = 20
-burn_fee_cap = 20000
-peer_host = %q
-peer_port = %d
-rpc_port = %d
-rpc_ssl = false
-username = "devnet"
-password = "devnet"
-timeout = 30
-%s%s`, "regtest-"+context.Actor, seed, seed, context.Role == networkv1alpha1.StacksNodeMiner,
-		context.Role == networkv1alpha1.StacksNodeSigner, dispatcher == "blocking", bootstrapLine, observer,
-		context.BitcoinService, context.BitcoinP2PPort, context.BitcoinRPCPort, epochs, genesis(context.Genesis))
+	return render("stacks-node.toml.tmpl", nodeTemplate{StacksContext: context, Seed: seed, Bootstrap: strings.Join(peers, ","), Miner: context.Role == network.StacksNodeMiner, Stacker: context.Role == network.StacksNodeSigner, Blocking: context.Generated.EventDispatcher == "blocking", Genesis: genesis})
 }
 
-func genesis(value *networkv1alpha1.GenesisSpec) string {
-	if value == nil {
-		return ""
+// Signer renders and parses a complete signer TOML document.
+func Signer(context SignerContext) (string, error) { return render("stacks-signer.toml.tmpl", context) }
+
+// render rejects missing template fields and invalid TOML without exposing credential bytes.
+func render(name string, value any) (string, error) {
+	t, err := template.New("profiles").Option("missingkey=error").Funcs(template.FuncMap{"q": quoteTOML}).ParseFS(templates, "templates/*.tmpl")
+	if err != nil {
+		return "", fmt.Errorf("parse built-in configuration templates: %w", err)
 	}
-	balances := append([]networkv1alpha1.GenesisBalance(nil), value.Balances...)
-	sort.Slice(balances, func(i, j int) bool { return balances[i].Address < balances[j].Address })
-	var result strings.Builder
-	for _, balance := range balances {
-		fmt.Fprintf(&result, "\n[[ustx_balance]]\naddress = %q\namount = %d\n", balance.Address, balance.Amount)
+	var out bytes.Buffer
+	if err = t.ExecuteTemplate(&out, name, value); err != nil {
+		return "", fmt.Errorf("render %s: %w", name, err)
 	}
-	return result.String()
+	var parsed map[string]any
+	if err = toml.Unmarshal(out.Bytes(), &parsed); err != nil {
+		return "", fmt.Errorf("rendered %s is not valid TOML", name)
+	}
+	return out.String(), nil
 }
 
-const epochs = `
-[[burnchain.epochs]]
-epoch_name = "1.0"
-start_height = 0
-[[burnchain.epochs]]
-epoch_name = "2.0"
-start_height = 0
-[[burnchain.epochs]]
-epoch_name = "2.05"
-start_height = 203
-[[burnchain.epochs]]
-epoch_name = "2.1"
-start_height = 204
-[[burnchain.epochs]]
-epoch_name = "2.2"
-start_height = 206
-[[burnchain.epochs]]
-epoch_name = "2.3"
-start_height = 207
-[[burnchain.epochs]]
-epoch_name = "2.4"
-start_height = 208
-[[burnchain.epochs]]
-epoch_name = "2.5"
-start_height = 209
-[[burnchain.epochs]]
-epoch_name = "3.0"
-start_height = 223
-[[burnchain.epochs]]
-epoch_name = "3.1"
-start_height = 224
-[[burnchain.epochs]]
-epoch_name = "3.2"
-start_height = 225
-[[burnchain.epochs]]
-epoch_name = "3.3"
-start_height = 226
-[[burnchain.epochs]]
-epoch_name = "3.4"
-start_height = 227
-[[burnchain.epochs]]
-epoch_name = "4.0"
-start_height = 1000005
-`
+// quoteTOML encodes a TOML 1.0 basic string, including Unicode escapes for controls.
+func quoteTOML(value string) (string, error) {
+	if !utf8.ValidString(value) {
+		return "", fmt.Errorf("configuration string is not valid UTF-8")
+	}
+	var out strings.Builder
+	out.WriteByte('"')
+	for _, r := range value {
+		switch {
+		case r == '"' || r == '\\':
+			out.WriteByte('\\')
+			out.WriteRune(r)
+		case r < 0x20 || r == 0x7f:
+			fmt.Fprintf(&out, "\\u%04X", r)
+		default:
+			out.WriteRune(r)
+		}
+	}
+	out.WriteByte('"')
+	return out.String(), nil
+}

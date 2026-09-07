@@ -16,6 +16,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/stacksrpc"
+
 	stacksv1alpha1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/stacks/v1alpha1"
 )
 
@@ -179,17 +181,8 @@ func (r *submissionRejection) Error() string { return "ingress rejected submissi
 func (r *NodeRPC) Submit(ctx context.Context, endpoint string, tx SignedTransfer) error {
 	raw, _ := hex.DecodeString(tx.Bytes)
 	code, data, err := r.request(ctx, "POST", endpoint+"/v2/transactions", raw)
-	if err == nil && code == http.StatusBadRequest {
-		var rejection struct {
-			TxID   string `json:"txid"`
-			Error  string `json:"error"`
-			Reason string `json:"reason"`
-		}
-		if json.Unmarshal(data, &rejection) == nil && strings.TrimPrefix(rejection.TxID, "0x") == tx.TxID && rejection.Error == "transaction rejected" && rejection.Reason != "" {
-			reason := rejection.Reason
-			if reason != "FeeTooLow" && reason != "BadNonce" {
-				reason = "Other"
-			}
+	if err == nil {
+		if reason := stacksrpc.RejectionReason(code, data, tx.TxID); reason != "" {
 			return &submissionRejection{reason: reason}
 		}
 	}

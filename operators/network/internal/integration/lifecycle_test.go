@@ -106,6 +106,7 @@ func TestManagerLifecycleAndAPIServerValidation(t *testing.T) {
 		}
 	})
 
+	verifyGenesisAdmission(t, ctx, direct)
 	verifyGenerationAdmission(t, ctx, direct)
 	verifyReorganizationAdmission(t, ctx, direct)
 	verifyActionCancellation(t, ctx, direct)

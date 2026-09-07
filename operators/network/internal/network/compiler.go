@@ -13,6 +13,7 @@ import (
 	networkv1alpha1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha1"
 	operatorlabels "github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/labels"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/naming"
+	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/profiles"
 )
 
 const defaultDependencyImage = "busybox:1.36.1@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662"
@@ -55,6 +56,9 @@ type object struct {
 func Compile(network *networkv1alpha1.StacksNetwork) (DesiredTopology, error) {
 	if network == nil {
 		return DesiredTopology{}, fmt.Errorf("StacksNetwork is required")
+	}
+	if _, err := profiles.ResolveGenesis(network.Spec.Genesis); err != nil {
+		return DesiredTopology{}, err
 	}
 	if policy := network.Spec.BitcoinBlockProduction; policy != nil {
 

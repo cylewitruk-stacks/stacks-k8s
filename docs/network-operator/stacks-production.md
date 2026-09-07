@@ -141,7 +141,7 @@ export STACKS_IMAGE=YOUR_QUALIFIED_STACKS_IMAGE
 kubectl --kubeconfig "$STACKS_KUBECONFIG" --context "$STACKS_CONTEXT" \
   apply -f charts/stacks-network-operator/crds
 umask 077
-node operators/network/transactions/environment.mjs \
+go -C operators/network run ./cmd/stacks-environment \
   --namespace="$STACKS_NAMESPACE" --stacks-image="$STACKS_IMAGE" \
   > /tmp/stacks-environment.json
 kubectl --kubeconfig "$STACKS_KUBECONFIG" --context "$STACKS_CONTEXT" \
@@ -152,12 +152,14 @@ helm install stacks charts/stacks-network-operator \
   --set image.repository=stacks-network-operator --set image.tag=local \
   --set bitcoinProduction.enabled=true --set stacksTransactions.enabled=true \
   --set stacksTransactions.image.tag=local
-node operators/network/transactions/bootstrap.mjs \
+go -C operators/network run ./cmd/stacks-bootstrap \
   --manifest=/tmp/stacks-environment.json \
   --kubeconfig="$STACKS_KUBECONFIG" --context="$STACKS_CONTEXT"
 ```
 
-The generator also needs Go to invoke the existing Bitcoin environment helper.
+The Go generator shares the Bitcoin provisioning library and the operator’s TOML
+templates. Node.js is used only for offline SDK key encoding and signing.
+See [network configuration and genesis](configuration.md) for reusable profiles.
 Its output has an additional local `bootstrap` document; `kubectl create` applies
 only the Kubernetes List items. No bootstrap credential Secret is mounted in
 actor Pods. The external helper exclusively initializes a height-zero Bitcoin
@@ -181,8 +183,8 @@ on Bitcoin progress and reward-cycle boundaries. For longer experiments, run the
 helper through an explicitly forwarded signer-node RPC endpoint:
 
 ```bash
-node operators/network/transactions/maintain-signers.mjs \
-  --manifest=/tmp/stacks-environment.json --url=http://127.0.0.1:20443 \
+go -C operators/network run ./cmd/stacks-maintain-signers \
+  --manifest=/tmp/stacks-environment.json --stacks-port=20443 \
   --duration-seconds=3600
 ```
 

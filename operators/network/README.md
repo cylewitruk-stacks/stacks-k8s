@@ -70,3 +70,7 @@ shared executor and requires `bitcoinProduction.enabled`. Provision the helper's
 explicit `--reorganization` RPC profile in a fresh environment first.
 See the [operating guide](../../docs/network-operator/bitcoin-reorganization.md)
 for depth/boundary limits, retained cleanup, cancellation, and teardown.
+
+External Go commands `stacks-environment`, `stacks-bootstrap` and
+`stacks-maintain-signers` own provisioning and bootstrap. Shared TOML templates
+and immutable network genesis are described in [configuration](../../docs/network-operator/configuration.md).

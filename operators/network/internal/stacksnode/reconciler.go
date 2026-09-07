@@ -75,18 +75,19 @@ func describe(actor *networkv1alpha1.StacksNode) (workload.Descriptor, error) {
 		if config.Generated.Profile != "nakamoto-regtest-node/v1" {
 			return workload.Descriptor{}, fmt.Errorf("unsupported Stacks profile %q", config.Generated.Profile)
 		}
-		signerService, signerIndex := "", int32(0)
+		signerService := ""
 		if actor.Spec.SignerRef != nil {
 			signerService = actor.Spec.SignerRef.Name
 		}
-		if actor.Spec.SignerIndex != nil {
-			signerIndex = *actor.Spec.SignerIndex
-		}
-		config = networkv1alpha1.ConfigSource{Inline: &networkv1alpha1.InlineConfig{Key: "config.toml", Data: profiles.Stacks(profiles.StacksContext{
+		rendered, renderErr := profiles.Stacks(profiles.StacksContext{
 			Network: actor.Spec.NetworkRef.Name, Actor: actor.Spec.ActorName, Role: actor.Spec.Role,
 			BitcoinService: actor.Spec.BitcoinNodeRef.Name, BitcoinRPCPort: 18443, BitcoinP2PPort: 18444,
-			SignerService: signerService, SignerIndex: signerIndex, Genesis: actor.Spec.Genesis, Generated: *config.Generated,
-		})}}
+			SignerService: signerService, Genesis: actor.Spec.Genesis, Generated: *config.Generated,
+		})
+		if renderErr != nil {
+			return workload.Descriptor{}, renderErr
+		}
+		config = networkv1alpha1.ConfigSource{Inline: &networkv1alpha1.InlineConfig{Key: "config.toml", Data: rendered}}
 	}
 	dependencies := []workload.Dependency{{Host: actor.Spec.BitcoinNodeRef.Name, Port: 18443}}
 	if actor.Spec.SignerRef != nil {

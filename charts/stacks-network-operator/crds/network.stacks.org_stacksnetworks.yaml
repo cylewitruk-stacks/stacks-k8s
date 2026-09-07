@@ -469,20 +469,35 @@ spec:
                     type: object
                 type: object
               genesis:
-                description: GenesisSpec contains network-wide values included by
-                  generated node profiles.
+                description: Genesis is the immutable, resolved chain configuration;
+                  profiles are copied at provisioning time.
                 properties:
                   balances:
+                    description: |-
+                      Balances grants initial funds. Named entries may be selected by provisioning and bootstrap.
+                      A name-keyed map rejects duplicates within the CEL cost budget (Kubernetes 1.32+).
                     items:
-                      description: GenesisBalance grants one address an initial micro-STX
-                        balance.
+                      description: GenesisBalance grants one public address an initial
+                        micro-STX balance.
                       properties:
                         address:
+                          description: Address is the public Stacks principal; private
+                            keys belong in Secrets.
+                          maxLength: 64
+                          minLength: 1
                           type: string
                         amount:
+                          description: Amount is the initial balance in micro-STX,
+                            not an ongoing funding instruction.
                           format: int64
                           minimum: 1
                           type: integer
+                        name:
+                          description: Name optionally identifies an account for external
+                            tooling.
+                          maxLength: 63
+                          pattern: ^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                          type: string
                       required:
                       - address
                       - amount
@@ -492,7 +507,94 @@ spec:
                     x-kubernetes-list-map-keys:
                     - address
                     x-kubernetes-list-type: map
+                    x-kubernetes-validations:
+                    - message: nonempty balance names must be unique
+                      rule: '[self.filter(b, has(b.name) && b.name != '''')].all(named,
+                        size(named.transformMapEntry(i, b, {b.name: i})) == size(named))'
+                  epochs:
+                    description: |-
+                      Epochs is the shared activation schedule; omission selects the built-in regtest schedule.
+                      Empty or omitted epochs select the built-in schedule; an explicit schedule must be complete.
+                    items:
+                      description: GenesisEpoch declares one epoch's Bitcoin activation
+                        height.
+                      properties:
+                        name:
+                          description: Name is the protocol epoch understood by the
+                            selected Stacks binary.
+                          enum:
+                          - "1.0"
+                          - "2.0"
+                          - "2.05"
+                          - "2.1"
+                          - "2.2"
+                          - "2.3"
+                          - "2.4"
+                          - "2.5"
+                          - "3.0"
+                          - "3.1"
+                          - "3.2"
+                          - "3.3"
+                          - "3.4"
+                          - "4.0"
+                          type: string
+                        startHeight:
+                          description: StartHeight is the first burn height assigned
+                            to this epoch.
+                          format: int64
+                          minimum: 0
+                          type: integer
+                      required:
+                      - name
+                      - startHeight
+                      type: object
+                    maxItems: 14
+                    type: array
+                    x-kubernetes-list-type: atomic
+                    x-kubernetes-validations:
+                    - message: epochs must contain the complete supported schedule
+                        in order
+                      rule: size(self) == 0 || self.map(e, e.name) == ['1.0','2.0','2.05','2.1','2.2','2.3','2.4','2.5','3.0','3.1','3.2','3.3','3.4','4.0']
+                    - message: epoch heights must be nondecreasing
+                      rule: size(self) != 14 || [0,1,2,3,4,5,6,7,8,9,10,11,12].all(i,
+                        self[i].startHeight <= self[i+1].startHeight)
+                    - message: epochs 1.0 and 2.0 must start at zero
+                      rule: size(self) != 14 || (self[0].startHeight == 0 && self[1].startHeight
+                        == 0)
+                  pox:
+                    description: PoX defines the shared regtest cycle lengths.
+                    properties:
+                      prepareLength:
+                        description: PrepareLength is the prepare phase duration in
+                          Bitcoin blocks.
+                        format: int32
+                        maximum: 100000
+                        minimum: 1
+                        type: integer
+                      rewardCycleLength:
+                        description: RewardCycleLength is the complete cycle length,
+                          including its prepare phase.
+                        format: int32
+                        maximum: 100000
+                        minimum: 2
+                        type: integer
+                    required:
+                    - prepareLength
+                    - rewardCycleLength
+                    type: object
+                    x-kubernetes-validations:
+                    - message: prepare phase must be shorter than the complete reward
+                        cycle
+                      rule: self.prepareLength < self.rewardCycleLength
+                  useTestGenesisChainstate:
+                    description: |-
+                      UseTestGenesisChainstate includes the selected binary's test genesis allocations in addition to Balances.
+                      Omission selects true in the built-in regtest renderer.
+                    type: boolean
                 type: object
+                x-kubernetes-validations:
+                - message: genesis is immutable; create a fresh network
+                  rule: self == oldSelf
               signers:
                 items:
                   description: StacksSignerTemplate is the aggregate declaration for
@@ -1088,6 +1190,8 @@ spec:
                 == ref) || (has(self.stacksNodes) && self.stacksNodes.exists(actor,
                 actor.name == ref)) || (has(self.signers) && self.signers.exists(actor,
                 actor.name == ref))))'
+            - message: genesis cannot be added or removed; create a fresh network
+              rule: has(self.genesis) == has(oldSelf.genesis)
           status:
             description: StacksNetworkStatus aggregates leaf readiness and admitted
               identity.

@@ -21,6 +21,17 @@ test-race:
 vet:
 	$(GO_ISOLATED) vet ./...
 
-verify: fmt vet test test-race test-integration
+verify: fmt vet test test-race test-integration test-cli test-sdk
+
+.PHONY: test-sdk
+test-sdk:
 	npm --prefix transactions ci --ignore-scripts
 	npm --prefix transactions test
+	$(GO_ISOLATED) test -tags=sdk ./internal/environment ./internal/bootstrap
+	$(GO_ISOLATED) test -race -tags=sdk ./internal/environment ./internal/bootstrap
+
+.PHONY: test-cli
+test-cli:
+	@set -eu; for command in stacks-environment stacks-bootstrap stacks-maintain-signers; do \
+		$(GO_ISOLATED) run ./cmd/$$command --help >/dev/null 2>&1; \
+	done
