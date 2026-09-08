@@ -136,11 +136,16 @@ make vuln
 make docker-check
 ```
 
-Reuse an existing explicitly selected qualification cluster by default. Use
-fresh namespaces and environment identities for independent experiments; create
-a separate cluster when testing cluster components or requiring cluster-wide
-isolation. Preserve failed fixtures and evidence for investigation. Record which
-environments are retained and clean up superseded fixtures in documented order.
+Use the existing `stacks-k8s` kind cluster for development and qualification by
+default, and leave it running. Install, upgrade or uninstall charts as needed;
+use fresh namespaces and environment identities for independent experiments.
+Create another cluster only for cluster lifecycle tests or incompatible
+cluster-wide configuration that requires isolation.
+
+For now, do not preserve failed fixtures automatically. Capture the failure and
+a small relevant set of logs/status, then clean up the test namespace in the
+documented order. Retain a failed environment only for an active investigation
+or when the user explicitly requests it; record any retained environments.
 
 Do not weaken, skip, or make tests vacuous to obtain a passing result. Add unit
 tests for controller logic and envtest coverage for API-server or lifecycle
