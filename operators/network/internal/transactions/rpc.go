@@ -216,3 +216,16 @@ func (r *NodeRPC) Inclusion(ctx context.Context, endpoint, id string) (Inclusion
 	}
 	return Inclusion{Found: true, Success: tx.Result == "(ok true)", BlockID: tx.BlockID}, nil
 }
+
+// Height observes a complete testnet burn height before delayed transfer admission.
+func (r *NodeRPC) Height(ctx context.Context, endpoint string) (int64, error) {
+	code, data, err := r.request(ctx, "GET", endpoint+"/v2/info", nil)
+	var info struct {
+		NetworkID uint32 `json:"network_id"`
+		Height    *int64 `json:"burn_block_height"`
+	}
+	if err != nil || code != 200 || json.Unmarshal(data, &info) != nil || info.NetworkID != 0x80000000 || info.Height == nil || *info.Height < 0 {
+		return 0, fmt.Errorf("testnet burn height unavailable")
+	}
+	return *info.Height, nil
+}

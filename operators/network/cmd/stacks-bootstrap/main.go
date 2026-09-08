@@ -1,4 +1,4 @@
-// Command stacks-bootstrap initializes a fresh provisioned PoX-4 regtest network.
+// Command stacks-bootstrap initializes a fresh provisioned direct-staking regtest network.
 package main
 
 import (
@@ -20,6 +20,7 @@ func main() {
 	flags.StringVar(&options.Context, "context", "", "Explicit context (required).")
 	flags.StringVar(&options.SDKDirectory, "sdk-directory", "transactions", "Directory containing offline SDK adapters.")
 	flags.StringVar(&options.Evidence, "evidence", "", "New public evidence path; existing files are rejected.")
+	flags.StringVar(&options.SBTCContracts, "sbtc-contracts", "", "Pinned external sBTC contracts/contracts directory (PoX-5 only).")
 	flags.IntVar(&options.BitcoinPort, "bitcoin-port", 19443, "Loopback Bitcoin forwarding port.")
 	flags.IntVar(&options.StacksPort, "stacks-port", 20443, "Loopback Stacks forwarding port.")
 	flags.Parse(os.Args[1:])

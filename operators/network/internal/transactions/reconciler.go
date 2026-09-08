@@ -9,6 +9,8 @@ import (
 
 	stacksv1alpha1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/stacks/v1alpha1"
 	networkv1alpha1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha1"
+	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/execution"
+	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/ledgerlifecycle"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -17,10 +19,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 )
 
-const ledgerFinalizer = "stacks.stacks.org/retain-transaction-ledger"
+const ledgerFinalizer = ledgerlifecycle.TransferFinalizer
 
 // Reconciler owns one exclusive account ledger; actors never receive its signing key.
 type Reconciler struct {
+	// Binding selects the only capability this process may execute.
+	Binding execution.Binding
 	// Client writes only this capability's resources.
 	client.Client
 	// APIReader provides current ownership and admission reads.
@@ -46,7 +50,7 @@ func (r *Reconciler) SetupWithManager(manager ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(manager).For(&stacksv1alpha1.StacksTransactionProduction{}).
 		Watches(&networkv1alpha1.StacksNetwork{}, handler.EnqueueRequestsFromMapFunc(func(_ context.Context, o client.Object) []ctrl.Request {
 			return []ctrl.Request{{NamespacedName: client.ObjectKeyFromObject(o)}}
-		})).Complete(r)
+		})).Complete(r.Binding.Wrap(r.APIReader, &stacksv1alpha1.StacksTransactionProduction{}, r))
 }
 
 // Reconcile never rebuilds or resends an outstanding transaction, including after restart.

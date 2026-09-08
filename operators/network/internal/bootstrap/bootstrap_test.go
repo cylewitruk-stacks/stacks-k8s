@@ -23,12 +23,12 @@ import (
 func TestBootstrapRejectsGenesisAndAccountDrift(t *testing.T) {
 	genesis := profiles.DefaultGenesis()
 	genesis.Balances = []network.GenesisBalance{{Name: "stacker", Address: "STTEST", Amount: 1000}}
-	parent := &network.StacksNetwork{Spec: network.StacksNetworkSpec{Genesis: &genesis}}
+	parent := &network.StacksNetwork{Spec: network.StacksNetworkSpec{Genesis: &genesis, Signers: []network.StacksSignerTemplate{{Name: "signer", PublicKey: "key"}}}}
 	digest, err := environment.GenesisDigest(&genesis)
 	if err != nil {
 		t.Fatal(err)
 	}
-	setup := environment.Bootstrap{GenesisDigest: digest, SignerAccount: "stacker", Signer: environment.SignerAccount{Address: "STTEST"}}
+	setup := environment.Bootstrap{GenesisDigest: digest, Participants: []environment.StackingParticipant{{Signer: "signer", AccountName: "stacker", Stacker: environment.AccountKey{Address: "STTEST"}, Consensus: environment.AccountKey{Address: "STCONSENSUS", PublicKey: "key"}, Administrator: environment.AccountKey{Address: "STADMIN"}}}}
 	if err = ValidateGenesis(setup, parent); err != nil {
 		t.Fatal(err)
 	}
@@ -37,11 +37,11 @@ func TestBootstrapRejectsGenesisAndAccountDrift(t *testing.T) {
 	if ValidateGenesis(setup, changed) == nil {
 		t.Fatal("changed genesis accepted")
 	}
-	setup.Signer.Address = "OTHER"
+	setup.Participants[0].Stacker.Address = "OTHER"
 	if ValidateGenesis(setup, parent) == nil {
 		t.Fatal("unfunded bootstrap identity accepted")
 	}
-	setup.Signer.Address = "STTEST"
+	setup.Participants[0].Stacker.Address = "STTEST"
 	changed = parent.DeepCopy()
 	changed.Spec.Genesis.Epochs[13].StartHeight = 228
 	setup.GenesisDigest, _ = environment.GenesisDigest(changed.Spec.Genesis)

@@ -20,6 +20,7 @@ import (
 // verifyGenesisAdmission checks immutable recipe/snapshot behavior against the real API server.
 func verifyGenesisAdmission(t *testing.T, ctx context.Context, c client.Client) {
 	verifyGenesisShapeAdmission(t, ctx, c)
+	verifyPoX5BindingsAdmission(t, ctx, c)
 	profile := &network.StacksGenesisProfile{ObjectMeta: meta.ObjectMeta{Name: "genesis-recipe", Namespace: testNamespace}, Spec: profiles.DefaultGenesis()}
 	profile.Spec.Balances = []network.GenesisBalance{{Name: "funded", Address: "STTEST", Amount: 123456}}
 	must(t, c.Create(ctx, profile))
@@ -175,6 +176,48 @@ func verifyGenesisShapeAdmission(t *testing.T, ctx context.Context, c client.Cli
 				}
 				must(t, c.Delete(ctx, object))
 			})
+		}
+	}
+}
+
+// verifyPoX5BindingsAdmission checks shared protocol fields and immutable snapshots on both CRDs.
+func verifyPoX5BindingsAdmission(t *testing.T, ctx context.Context, c client.Client) {
+	principal := "ST000000000000000000002AMW42H"
+	bindings := &network.GenesisPoX5{SBTCContract: principal + ".sbtc-token", SBTCRegistryContract: principal + ".sbtc-registry", BondAdmin: principal, PauseAdmin: principal}
+	for _, kind := range []string{"network", "profile"} {
+		for _, valid := range []bool{true, false} {
+			spec := profiles.DefaultGenesis()
+			v := *bindings
+			spec.PoX5 = &v
+			if !valid {
+				spec.PoX5.SBTCContract = "not-a-contract"
+			}
+			var object client.Object
+			if kind == "profile" {
+				object = &network.StacksGenesisProfile{ObjectMeta: meta.ObjectMeta{Name: fmt.Sprintf("pox5-%s-%t", kind, valid), Namespace: testNamespace}, Spec: spec}
+			} else {
+				n := bitcoinNetwork(fmt.Sprintf("pox5-%s-%t", kind, valid))
+				n.Spec.Genesis = &spec
+				object = n
+			}
+			err := c.Create(ctx, object)
+			if !valid {
+				if !apierrors.IsInvalid(err) {
+					t.Fatalf("%s accepted invalid PoX-5 binding: %v", kind, err)
+				}
+				continue
+			}
+			must(t, err)
+			base := object.DeepCopyObject().(client.Object)
+			if n, ok := object.(*network.StacksNetwork); ok {
+				n.Spec.Genesis.PoX5.SBTCContract = principal + ".replacement"
+			} else {
+				object.(*network.StacksGenesisProfile).Spec.PoX5.SBTCContract = principal + ".replacement"
+			}
+			if err = c.Patch(ctx, object, client.MergeFrom(base)); !apierrors.IsInvalid(err) {
+				t.Fatalf("%s accepted PoX-5 binding mutation: %v", kind, err)
+			}
+			must(t, c.Delete(ctx, base))
 		}
 	}
 }

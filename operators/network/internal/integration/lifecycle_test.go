@@ -32,6 +32,7 @@ import (
 	bitcoinv1alpha1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/bitcoin/v1alpha1"
 	stacksv1alpha1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/stacks/v1alpha1"
 	networkv1alpha1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha1"
+	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/accountledger"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/bitcoinnode"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/canonical"
 	operatorlabels "github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/labels"
@@ -80,6 +81,7 @@ func TestManagerLifecycleAndAPIServerValidation(t *testing.T) {
 	})
 	must(t, err)
 	must(t, (&network.Reconciler{Client: manager.GetClient(), APIReader: manager.GetAPIReader(), Scheme: scheme}).SetupWithManager(manager, 1))
+	must(t, (&accountledger.Reconciler{Client: manager.GetClient(), Reader: manager.GetAPIReader()}).SetupWithManager(manager))
 	must(t, (&bitcoinnode.Reconciler{Client: manager.GetClient(), APIReader: manager.GetAPIReader(), Scheme: scheme}).SetupWithManager(manager, 1))
 	must(t, (&stacksnode.Reconciler{Client: manager.GetClient(), APIReader: manager.GetAPIReader(), Scheme: scheme}).SetupWithManager(manager, 1))
 	must(t, (&stackssigner.Reconciler{Client: manager.GetClient(), APIReader: manager.GetAPIReader(), Scheme: scheme}).SetupWithManager(manager, 1))
@@ -107,6 +109,7 @@ func TestManagerLifecycleAndAPIServerValidation(t *testing.T) {
 	})
 
 	verifyGenesisAdmission(t, ctx, direct)
+	verifyManagedOperation(t, ctx, direct)
 	verifyGenerationAdmission(t, ctx, direct)
 	verifyReorganizationAdmission(t, ctx, direct)
 	verifyActionCancellation(t, ctx, direct)

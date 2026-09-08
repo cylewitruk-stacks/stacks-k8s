@@ -94,6 +94,9 @@ func (r *BitcoinRPC) Generate(ctx context.Context, endpoint, address, id string)
 
 // call avoids replayable request bodies and bounds response memory; errors omit server response bodies.
 func (r *BitcoinRPC) call(ctx context.Context, endpoint, id, method string, params []any, result any) error {
+	if params == nil {
+		params = []any{}
+	}
 	body, err := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": id, "method": method, "params": params})
 	if err != nil {
 		return err

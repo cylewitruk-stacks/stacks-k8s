@@ -71,7 +71,7 @@ func (r *Reconciler) productionCondition(parent *networkv1alpha1.StacksNetwork, 
 	} else if err != nil {
 		status, reason, message = metav1.ConditionFalse, "PolicyUnavailable", err.Error()
 	} else if !r.ProductionEnabled {
-		status, reason, message = metav1.ConditionFalse, "ControllerDisabled", "Enable bitcoinProduction.enabled in the network chart to run the compiled policy"
+		status, reason, message = metav1.ConditionFalse, "ProvisioningDisabled", "Worker provisioning is disabled; existing workers may continue. Use network pause policy to stop new work"
 	}
 	return condition(parent.Generation, status, "ProductionConfigured", reason, message)
 }

@@ -1,17 +1,15 @@
+{{- $scoped := ne .Values.controller.watchNamespace "" }}
+{{- $name := include "stacks-network-operator.fullname" . }}
 apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
+kind: {{ ternary "Role" "ClusterRole" $scoped }}
 metadata:
-  name: {{ include "stacks-network-operator.fullname" . }}
-  namespace: {{ .Release.Namespace }}
+  name: {{ $name }}
+  {{- if $scoped }}
+  namespace: {{ .Values.controller.watchNamespace }}
+  {{- end }}
   labels:
-    {{- include "stacks-network-operator.labels" . | nindent 4 }}
+    app.kubernetes.io/component: operator
 rules:
-  - apiGroups: ["stacks.stacks.org"]
-    resources: ["stackstransactionproductions"]
-    verbs: ["get", "list", "watch", "create", "patch"]
-  - apiGroups: ["bitcoin.stacks.org"]
-    resources: ["bitcoinblockproductions"]
-    verbs: ["get", "list", "watch", "create", "patch"]
   - apiGroups: ["network.stacks.org"]
     resources: ["stacksnetworks"]
     verbs: ["get", "list", "watch"]
@@ -21,26 +19,83 @@ rules:
   - apiGroups: ["network.stacks.org"]
     resources: ["stacksnetworks/status", "bitcoinnodes/status", "stacksnodes/status", "stackssigners/status"]
     verbs: ["get", "update", "patch"]
+  - apiGroups: ["stacks.stacks.org"]
+    resources: ["stackstransactionproductions", "stacksaccounts", "stackscontractsets", "stacksstackingparticipants"]
+    verbs: ["get", "list", "watch", "create", "patch"]
+  - apiGroups: ["stacks.stacks.org"]
+    resources: ["stackstransactionproductions/status", "stacksaccounts/status", "stackscontractsets/status", "stacksstackingparticipants/status"]
+    verbs: ["get", "patch"]
+  - apiGroups: ["bitcoin.stacks.org"]
+    resources: ["bitcoinblockproductions", "bitcoinproductiontargets"]
+    verbs: ["get", "list", "watch", "create", "patch"]
+  - apiGroups: ["bitcoin.stacks.org"]
+    resources: ["bitcoinblockproductions/status", "bitcoinproductiontargets/status"]
+    verbs: ["get", "patch"]
+  {{- if .Values.bitcoinGeneration.enabled }}
+  - apiGroups: ["actions.stacks.org"]
+    resources: ["bitcoinblockgenerations"]
+    verbs: ["get", "list", "watch"]
+  {{- end }}
+  {{- if .Values.bitcoinReorganization.enabled }}
+  - apiGroups: ["actions.stacks.org"]
+    resources: ["bitcoinreorganizations"]
+    verbs: ["get", "list", "watch"]
+  {{- end }}
   - apiGroups: [""]
     resources: ["configmaps", "services"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
   - apiGroups: [""]
     resources: ["pods"]
     verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["serviceaccounts"]
+    verbs: ["get", "list", "watch", "create", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "create", "patch"]
   - apiGroups: ["apps"]
     resources: ["statefulsets"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["roles", "rolebindings"]
+    verbs: ["get", "list", "watch", "create", "patch"]
   - apiGroups: ["coordination.k8s.io"]
     resources: ["leases"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+    verbs: ["get", "create", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: {{ ternary "RoleBinding" "ClusterRoleBinding" $scoped }}
+metadata:
+  name: {{ $name }}
+  {{- if $scoped }}
+  namespace: {{ .Values.controller.watchNamespace }}
+  {{- end }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "stacks-network-operator.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: {{ ternary "Role" "ClusterRole" $scoped }}
+  name: {{ $name }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $name }}-leader
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/component: leader
+rules:
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "create", "update"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: {{ include "stacks-network-operator.fullname" . }}
+  name: {{ $name }}-leader
   namespace: {{ .Release.Namespace }}
-  labels:
-    {{- include "stacks-network-operator.labels" . | nindent 4 }}
 subjects:
   - kind: ServiceAccount
     name: {{ include "stacks-network-operator.serviceAccountName" . }}
@@ -48,4 +103,4 @@ subjects:
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: {{ include "stacks-network-operator.fullname" . }}
+  name: {{ $name }}-leader

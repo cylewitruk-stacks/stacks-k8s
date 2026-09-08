@@ -2,10 +2,14 @@ package profiles
 
 import (
 	"fmt"
+	"regexp"
 	"sort"
 
 	network "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha1"
 )
+
+// PoX5ActivationHeight places Epoch 4.0 inside the reward phase after the Nakamoto transition cycle.
+const PoX5ActivationHeight int64 = 244
 
 // DefaultGenesis returns an independent copy of the qualified PoX-4 regtest schedule.
 // Epoch 4.0 activation remains deferred pending sBTC contract provisioning.
@@ -32,9 +36,21 @@ func ResolveGenesis(value *network.GenesisSpec) (network.GenesisSpec, error) {
 		if len(value.Epochs) > 0 {
 			result.Epochs = append([]network.GenesisEpoch(nil), value.Epochs...)
 		}
+		if value.PoX5 != nil {
+			v := *value.PoX5
+			result.PoX5 = &v
+		}
 		if value.PoX != nil {
 			pox := *value.PoX
 			result.PoX = &pox
+		}
+	}
+	if result.PoX5 != nil {
+		contract := regexp.MustCompile(`^S[NT][0-9A-HJKMNP-TV-Z]{26,39}\.[a-zA-Z][a-zA-Z0-9_-]{0,39}$`)
+		principal := regexp.MustCompile(`^S[NT][0-9A-HJKMNP-TV-Z]{26,39}(\.[a-zA-Z][a-zA-Z0-9_-]{0,39})?$`)
+		v := result.PoX5
+		if !contract.MatchString(v.SBTCContract) || !contract.MatchString(v.SBTCRegistryContract) || !principal.MatchString(v.BondAdmin) || !principal.MatchString(v.PauseAdmin) {
+			return result, fmt.Errorf("invalid non-mainnet PoX-5 bindings")
 		}
 	}
 	expected := DefaultGenesis().Epochs

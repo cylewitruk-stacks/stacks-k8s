@@ -10,7 +10,7 @@ test:
 	$(GO_ISOLATED) test ./...
 
 test-integration:
-	$(GO_ISOLATED) test -tags=integration -count=1 ./internal/integration
+	$(GO_ISOLATED) test -p=1 -tags=integration -count=1 ./internal/integration ./internal/workerintegration ./internal/ledgerlifecycle ./internal/workers
 
 test-live:
 	$(GO_ISOLATED) test -tags=live -count=1 -v ./internal/integration

@@ -18,7 +18,7 @@ export async function signPoX(input) {
   const common = {
     contract: input.contract,
     poxAddress: input.account.poxAddress,
-    signerKey: input.account.publicKey,
+    signerKey: input.consensus.publicKey,
     authId: BigInt(input.authID),
     maxAmount,
   };
@@ -27,7 +27,7 @@ export async function signPoX(input) {
     rewardCycle: Number(input.rewardCycle),
     poxAddress: common.poxAddress,
     period: Number(input.cycles),
-    signerPrivateKey: input.account.privateKey,
+    signerPrivateKey: input.consensus.privateKey,
     authId: common.authId,
     maxAmount,
   });

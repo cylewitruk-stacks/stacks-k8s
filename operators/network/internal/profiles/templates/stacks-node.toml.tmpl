@@ -11,6 +11,12 @@ local_peer_seed = {{q .Seed}}
 miner = {{.Miner}}
 stacker = {{.Stacker}}
 use_test_genesis_chainstate = {{.Genesis.UseTestGenesisChainstate}}
+{{with .Genesis.PoX5}}
+pox_5_sbtc_contract = {{q .SBTCContract}}
+pox_5_sbtc_registry_contract = {{q .SBTCRegistryContract}}
+pox_5_bond_admin = {{q .BondAdmin}}
+pox_5_pause_admin = {{q .PauseAdmin}}
+{{end}}
 txindex = true
 pox_sync_sample_secs = 0
 wait_time_for_blocks = 0
@@ -37,6 +43,11 @@ auth_token = {{q .AuthToken}}
 [[events_observer]]
 endpoint = {{q .SignerService}}
 events_keys = ["stackerdb", "block_proposal", "burn_blocks"]
+{{end}}
+{{if .ReceiptService}}
+[[events_observer]]
+endpoint = {{q .ReceiptService}}
+events_keys = ["*"]
 {{end}}
 [burnchain]
 chain = "bitcoin"

@@ -28,7 +28,9 @@ The first [Bitcoin baseline profile](docs/network-operator/bitcoin-production.md
 is implemented: weighted targets, fixed or jittered cadence, pause, and independent
 durable execution ledgers.
 The initial [Stacks transfer profile](docs/network-operator/stacks-production.md)
-adds isolated, fixed-interval STX demand and external bootstrap/signing helpers.
+adds isolated, fixed-interval STX demand and controller-managed protocol
+initialization and renewal. Genesis funding and managed account enrollment are
+separate declarations.
 Finite generation supports immediate, fixed, uniform, and explicit-delay cadence.
 Broader recovery and compatibility profiles remain design work.
 An optional [native Chaos Mesh profile](docs/chaos/operations.md) adds bounded
@@ -59,6 +61,11 @@ runtime implementation.
 | [`examples/`](examples/) | Example topology and observation resources. |
 | [`operators/`](operators/) | Independent controller-runtime modules and operator Dockerfiles. |
 
+Helm installs the network operator once, independently of individual networks.
+It watches `StacksNetwork` resources across namespaces and provisions actors and
+capability-owned execution workloads. See the
+[installation and workload model](docs/design/operator-workloads.md).
+
 ## Quick start
 
 The current development and API-server test target is Kubernetes **1.37.0**; see
@@ -72,23 +79,24 @@ The chart defaults reference release images. Before the first published
 release, build and load both operator and actor images as described in the
 [network chart guide](charts/stacks-network-operator/README.md).
 
-After the required images are available, install the topology operator and
+After the required images are available, install the network operator once and
 create the minimal network:
 
 ```bash
 helm upgrade --install stacks-network-operator \
   charts/stacks-network-operator \
-  --namespace stacks-regtest \
+  --namespace stacks-network-system \
   --create-namespace
 
+kubectl create namespace stacks-regtest
 kubectl --namespace stacks-regtest apply --filename examples/network/minimal.yaml
 ```
 
 The topology-only quick start requires an external Bitcoin mining client.
-For automatic blocks, use the separately enabled
+For automatic blocks, declare production using the
 [Bitcoin production guide](docs/network-operator/bitcoin-production.md).
 For a productive miner/signer network with tiny STX transfers, follow the
-[Stacks bootstrap and transfer guide](docs/network-operator/stacks-production.md).
+[Stacks initialization and transfer guide](docs/network-operator/stacks-production.md).
 Stacks RPC readiness may depend on advancing the Bitcoin chain. See the
 [readiness guidance](docs/network-operator/operations.md#readiness).
 

@@ -426,3 +426,42 @@ func TestNonceMismatchIsReevaluatedWithoutAdoptingAnotherNonce(t *testing.T) {
 		t.Fatal("exact nonce match did not resume production")
 	}
 }
+
+// heightRPC allows transfer admission to observe an independently changing burn height.
+type heightRPC struct {
+	*fakeRPC
+	height int64
+}
+
+func (r *heightRPC) Height(context.Context, string) (int64, error) { return r.height, nil }
+
+// TestMinimumBurnHeightHoldsNewWorkButNotReceipts pins the new admission-only gate.
+func TestMinimumBurnHeightHoldsNewWorkButNotReceipts(t *testing.T) {
+	f := fixture(t)
+	ctx := context.Background()
+	f.parent.Spec.StacksTransactionProduction.MinimumBurnHeight = 224
+	if err := f.r.Update(ctx, f.parent); err != nil {
+		t.Fatal(err)
+	}
+	f.policy.Spec.Policy.MinimumBurnHeight = 224
+	if err := f.r.Update(ctx, f.policy); err != nil {
+		t.Fatal(err)
+	}
+	rpc := &heightRPC{fakeRPC: f.rpc, height: 223}
+	f.r.RPC = rpc
+	f.reconcile(t)
+	if f.rpc.sends != 0 || f.ledger(t).Status.Outstanding {
+		t.Fatal("transfer authorized before configured activation")
+	}
+	rpc.height = 224
+	f.reconcile(t)
+	if f.rpc.sends != 1 || !f.ledger(t).Status.Outstanding {
+		t.Fatal("transfer did not start at configured activation")
+	}
+	rpc.height = 200
+	f.rpc.inclusion = Inclusion{Found: true, Success: true, BlockID: strings.Repeat("b", 64)}
+	f.reconcile(t)
+	if f.rpc.sends != 1 || f.ledger(t).Status.Outstanding || f.ledger(t).Status.Confirmed != 1 {
+		t.Fatal("height gate obstructed existing receipt accounting")
+	}
+}

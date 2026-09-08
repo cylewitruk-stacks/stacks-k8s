@@ -10,7 +10,7 @@ post-M0 order and supersedes the earlier journal-first sequence.
 - Ship independently useful capabilities with explicit dependencies.
 - Keep ordinary regtest operation available without agents, bounded actions,
   Chaos Mesh, or observability.
-- Let external clients sequence bootstrap and investigations.
+- Let capability controllers maintain declared protocol prerequisites; external clients sequence investigations.
 - Qualify reliability, liveness, resilience, performance/efficiency, and
   defensive investigation use cases; do not claim deterministic execution.
 - Update schemas, examples, permissions, operations, compatibility, and release
@@ -110,17 +110,19 @@ use before prioritizing in-place recovery.
 ## M2: bootstrap primitives and steady transaction demand
 
 **Current delivery:** the [initial Stacks profile](../network-operator/stacks-production.md)
-implements external PoX-4 bootstrap/renewal and an isolated one-account transfer
-worker. Native inclusion, pause/update, backpressure and pending-worker recovery
+implements managed direct PoX-4/PoX-5 initialization/renewal and an isolated
+one-account transfer worker. The [PoX-5 profile](../network-operator/pox5.md)
+uses real sBTC contracts with explicit test registry initialization. Native
+inclusion, pause/update, backpressure and pending-worker recovery
 are qualified on a local normal image. Multi-profile compatibility, overrides,
 and wider rotation/revocation remain open; M2 is not complete.
 
 **Outcome:** supported Stacks images reach productive operation with explicit
 bootstrap inputs and ongoing offered traffic.
 
-- Expose reviewed bounded bootstrap primitives or an external helper for
+- Expose separate controller-managed desired-state capabilities for
   funding, coinbase maturity, signer authorization/registration, and reward
-  activation. The external client sequences them.
+  activation. Controllers reconcile these prerequisites from declared state.
 - Implement the reviewed steady transaction producer capability, provisionally
   `StacksTransactionProduction`, through owned baseline declarations.
 - Enforce account/nonce ownership, bounded in-flight work, funding assumptions,
@@ -134,7 +136,7 @@ bootstrap inputs and ongoing offered traffic.
 **Done:** a documented ordinary-use profile produces Bitcoin progress,
 transaction demand, and observed Stacks progress without a chaos agent or
 observation operator. Stalled bootstrap and submission failure remain
-distinguishable; no controller becomes a bootstrap workflow.
+distinguishable; the aggregate compiles resources and never becomes an experiment planner.
 
 ## M3: multi-actor topology and independent upgrades
 

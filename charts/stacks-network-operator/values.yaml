@@ -10,6 +10,8 @@ controller:
   maxConcurrentReconciles: 2
   leaderElection: true
   logLevel: info
+  # Empty watches all namespaces; set one namespace for a scoped installation.
+  watchNamespace: ""
 
 bitcoinReorganization:
   enabled: false
@@ -18,8 +20,7 @@ bitcoinGeneration:
   enabled: false
 
 bitcoinProduction:
-  enabled: false
-  credentialsSecret: stacks-bitcoin-production-rpc
+  enabled: true
 
 serviceAccount:
   create: true
@@ -45,10 +46,13 @@ resources:
     cpu: 500m
     memory: 256Mi
 
-# Separate STX signing worker; provision the account Secret before enabling.
+# Capability controllers create these workers on demand in each network namespace.
 stacksTransactions:
-  enabled: false
-  credentialsSecret: stacks-transaction-account
-  image:
+  enabled: true
+stacksOperation:
+  enabled: true
+workers:
+  pullSecrets: []
+  sdkImage:
     repository: stacks-transaction-worker
     tag: "0.1.0"

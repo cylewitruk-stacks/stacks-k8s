@@ -13,6 +13,7 @@ test("PoX enrollment and extension sign offline with explicit account and nonce"
   const [key] = JSON.parse(execFileSync(process.execPath, [fileURLToPath(new URL("./keys.mjs", import.meta.url))], { input: JSON.stringify([seed]), encoding: "utf8" }));
   const input = {
     account: { privateKey: seed + "01", address: key.address, publicKey: key.publicKey, poxAddress: key.bitcoinAddress },
+    consensus: { privateKey: seed + "01", publicKey: key.publicKey },
     contract: "ST000000000000000000002AMW42H.pox-4", fee: "4321", nonce: "0", burnHeight: "210", rewardCycle: "10", amount: "20000000000000", authID: "1", cycles: "12",
   };
   for (const operation of ["enroll", "extend"]) {

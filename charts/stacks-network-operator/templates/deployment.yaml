@@ -40,9 +40,17 @@ spec:
           image: {{ printf "%s:%s" .Values.image.repository .Values.image.tag | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           args:
-            - --watch-namespace={{ .Release.Namespace }}
+            - --watch-namespace={{ .Values.controller.watchNamespace }}
+            - --leader-namespace={{ .Release.Namespace }}
+            - --worker-image={{ printf "%s:%s" .Values.image.repository .Values.image.tag }}
+            - --sdk-worker-image={{ printf "%s:%s" .Values.workers.sdkImage.repository .Values.workers.sdkImage.tag }}
+            - {{ printf "--worker-pull-secrets=%s" (join "," .Values.workers.pullSecrets) | quote }}
+            - --worker-pull-policy={{ .Values.image.pullPolicy }}
+            - --bitcoin-generation-enabled={{ .Values.bitcoinGeneration.enabled }}
+            - --bitcoin-reorganization-enabled={{ .Values.bitcoinReorganization.enabled }}
             - --bitcoin-production-enabled={{ .Values.bitcoinProduction.enabled }}
             - --stacks-transactions-enabled={{ .Values.stacksTransactions.enabled }}
+            - --stacks-operation-enabled={{ .Values.stacksOperation.enabled }}
             - --max-concurrent-reconciles={{ .Values.controller.maxConcurrentReconciles }}
             - --leader-elect={{ .Values.controller.leaderElection }}
             - --zap-log-level={{ .Values.controller.logLevel }}

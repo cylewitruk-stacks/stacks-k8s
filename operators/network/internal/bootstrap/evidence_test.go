@@ -24,8 +24,8 @@ func evidenceManifest(t *testing.T) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	parent := &network.StacksNetwork{TypeMeta: meta.TypeMeta{Kind: "StacksNetwork"}, ObjectMeta: meta.ObjectMeta{Name: "test", Namespace: "test"}, Spec: network.StacksNetworkSpec{Genesis: &genesis}}
-	doc := environment.Document{Items: []any{parent}, Bootstrap: environment.Bootstrap{NetworkName: "test", Namespace: "test", GenesisDigest: digest, SignerAccount: "stacker", Signer: environment.SignerAccount{Address: "STTEST"}}}
+	parent := &network.StacksNetwork{TypeMeta: meta.TypeMeta{Kind: "StacksNetwork"}, ObjectMeta: meta.ObjectMeta{Name: "test", Namespace: "test"}, Spec: network.StacksNetworkSpec{Genesis: &genesis, Signers: []network.StacksSignerTemplate{{Name: "signer", PublicKey: "key"}}}}
+	doc := environment.Document{Items: []any{parent}, Bootstrap: environment.Bootstrap{NetworkName: "test", Namespace: "test", GenesisDigest: digest, Participants: []environment.StackingParticipant{{Signer: "signer", AccountName: "stacker", Stacker: environment.AccountKey{Address: "STTEST"}, Consensus: environment.AccountKey{Address: "STCONSENSUS", PublicKey: "key"}, Administrator: environment.AccountKey{Address: "STADMIN"}}}}}
 	data, err := json.Marshal(doc)
 	if err != nil {
 		t.Fatal(err)

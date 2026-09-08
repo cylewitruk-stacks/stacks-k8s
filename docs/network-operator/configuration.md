@@ -14,7 +14,7 @@ The CRDs require Kubernetes 1.32+ for cost-bounded account-name uniqueness.
 
 `useTestGenesisChainstate: true` includes the selected Stacks binary’s built-in
 test allocations in addition to the declared balances. The image therefore also
-contributes to genesis identity; bootstrap records the observed genesis hash.
+contributes to genesis identity; retain its image identity with chain evidence.
 
 ## Reusable profiles
 
@@ -34,10 +34,11 @@ kubectl --kubeconfig "$STACKS_KUBECONFIG" --context "$STACKS_CONTEXT" \
 umask 077
 go -C operators/network run ./cmd/stacks-environment \
   --namespace=my-network --stacks-image=YOUR_QUALIFIED_STACKS_IMAGE \
-  --genesis-profile=/tmp/genesis-profile.yaml > /tmp/my-network.json
+  --genesis-profile=/tmp/genesis-profile.yaml \
+  --sbtc-contracts=/path/to/sbtc/contracts/contracts > /tmp/my-network.json
 ```
 
-The output is a private Kubernetes List plus external bootstrap inputs. It
+The output is a private Kubernetes List plus retained provisioning identities. It
 contains credentials; keep it outside Git. Profile resources contain public
 addresses and allocations only, never private keys.
 
@@ -69,54 +70,51 @@ does not read private files to verify their genesis semantics. Network genesis
 immutability alone does not validate independently supplied raw TOML. The Go
 provisioning path owns and verifies its generated configuration bytes.
 
-Network genesis contains public account identities and balances. Provisioning
-selects the transfer sender from that same snapshot and binds the worker's
-separate credential to the ingress configuration digest. Bootstrap selects the
-named stacker and verifies the network's genesis digest before mutation. Actor
-Pods never receive the transfer key or Bitcoin bootstrap capability.
+Network genesis contains public account identities and balances. Management is
+separately declared in `spec.operation`: funding an account does not enroll it.
+Each managed account pins its designated key Secret, ingress configuration and
+capability consumer. Holder, manager administrator, consensus signer, bridge
+and transfer roles remain separate. Actor Pods receive only their own keys.
 
-## Bootstrap and maintenance
+## Initialization and maintenance
 
-`cmd/stacks-environment`, `cmd/stacks-bootstrap` and `cmd/stacks-maintain-signers`
-are external Go commands. They share provisioning/configuration code; Kubernetes
-controllers do not run them. Follow the [production guide](stacks-production.md#provision-and-bootstrap)
-for the deployment sequence. Node.js remains necessary only for the Stacks SDK's
-offline key encoding and signing adapters in `transactions/`.
+`stacks-environment` renders resources; it does not monitor heights or submit
+transactions. Install the separate Bitcoin, transfer and managed-operation
+workers and apply the declaration as shown in the
+[production guide](stacks-production.md#provision-and-bootstrap).
+Capability controllers own initial contract deployment, direct stacking and
+renewal. The aggregate controller only compiles their resources.
 
-Go bootstrap selects an explicit kubeconfig/context; maintenance uses an
-explicit existing loopback port-forward. Go owns reads, bounded waits, transaction submission and
-public evidence. The SDK receives explicit account, nonce, fee and protocol
-inputs over stdin, returns signed bytes, and performs no network discovery.
-Go independently checks the transaction hash and requires an exact TxID receipt.
-An uncertain submission exits without replay. Only one external helper may own
-the bootstrap/stacking account at a time; evidence records authorization before
-submission. Maintenance never reenrolls an expired lock.
+Go owns protocol observations, account nonce authorization, submission and
+receipt accounting. JavaScript remains an offline Stacks SDK adapter for
+explicit key/transaction inputs. Unknown submissions are observed by their
+recorded TxID and never automatically resubmitted. The account remains reserved
+until its consumer durably acknowledges execution evidence.
 
-Each invocation exclusively claims a new evidence file before any mutation,
-including direct calls to the Go library. Defaults are
-`<manifest>.bootstrap-evidence.json` and `<manifest>.renewal-evidence.json`.
-Existing files are preserved and cause an error; use a fresh `--evidence` path
-for each subsequent invocation. Records atomically replace that invocation's
-snapshot with owner-only permissions. Evidence files do not provide account
-locking or permission to retry a prior uncertain mutation.
+The standard provisioner always includes the five pinned sBTC sources and
+separate deployer identities. Its default schedule activates Epoch 3.4 at height
+227 and Epoch 4.0 at 244, with 20-block reward cycles and five prepare blocks.
+Explicit epoch schedules are preserved, including schedules that defer 4.0.
+The lower-level default genesis recipe still defers 4.0 to 1,000,005; it does
+not itself install contract capabilities. There is no PoX-5 provisioning mode.
 
-A native HTTP 400 rejection must match the submitted TxID and rejection envelope
-to report `FeeTooLow`, `BadNonce`, or `Other`. Raw server detail is discarded.
-Other failed responses remain unconfirmed. Both outcomes stop the helper
-without retry; an ingress rejection does not prove permanent non-execution.
-
-This delivery retains the qualified PoX-4 schedule: Epoch 3.4 at burn height 227,
-Epoch 4.0 at 1,000,005, 20-block reward cycles including a five-block prepare
-phase. Configuration can represent other schedules; the external bootstrap
-rejects schedules outside this qualified profile before mutation.
-
-The next delivery must provision the required sBTC contracts and qualified
-contract principals, activate Epoch 4.0 after 3.4, and verify PoX-5 activation
-before qualifying faults. Changing the activation height alone is insufficient.
+Full custom schedules and images require qualification: language activation,
+initial enrollment windows and Nakamoto/PoX-5 transition cycles must permit the
+declared prerequisites. A readiness hold reports the unmet prerequisite without
+rewriting desired pause settings. See [managed operation](../design/managed-network-operation.md).
 
 ## Verification
 
-Normal Go tests cover rendering, shared-value validation and bootstrap receipt
+Normal Go tests cover rendering, shared-value validation and managed receipt
 handling. `make -C operators/network test-sdk` installs the pinned npm dependencies,
 runs offline signing tests, and exercises the Go provisioner against the SDK.
 `make verify` includes this target and real API-server immutability tests.
+
+## PoX-5 bindings
+
+Optional `spec.genesis.pox5` sets `sbtcContract`, `sbtcRegistryContract`,
+`bondAdmin`, and `pauseAdmin` identically on generated nodes. These are immutable
+protocol principals; `spec.operation` separately declares the contract and
+participation capabilities. See [direct PoX-5 operation](pox5.md). Manually supplied
+complete node configurations must use the same
+network-level genesis and PoX-5 bindings.

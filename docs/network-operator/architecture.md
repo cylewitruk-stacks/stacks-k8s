@@ -6,12 +6,17 @@ Every reconcile reads current state and moves it toward declared state; no
 controller depends on the event that caused the request.
 
 ```text
-StacksNetwork reconciler
-└── compiles and owns leaf custom resources
-    ├── BitcoinNode reconciler
-    ├── StacksNode reconciler
-    └── StacksSigner reconciler
-        └── shared workload lifecycle collaborator
+Helm installation: one network operator
+├── StacksNetwork → owned actor and capability resources
+├── Actor controllers → StatefulSets
+├── Bitcoin scheduler → weighted opportunities and target ledgers
+├── Account lifecycle → retained authority and administrative disposal
+└── Capability workload controllers → owned Deployments
+    ├── Bitcoin target execution
+    ├── STX transfer production
+    ├── Contract deployment and observation
+    ├── Stacking administration
+    └── Network-scoped legacy receipt collection
 ```
 
 ## Ownership
@@ -20,6 +25,7 @@ StacksNetwork reconciler
 | ---- | ---- |
 | Aggregate reconciler | Leaf specifications and ownership; `StacksNetwork.status`. |
 | Production scheduler | Weighted opportunities and UID-pinned target ledgers in `BitcoinBlockProduction.status`. |
+| Capability workload controllers | Owned Deployments, Services, ServiceAccounts, Roles and RoleBindings; `WorkerReady` conditions. |
 | Production reconciler | Per-target `BitcoinProductionTarget.status`, finalizer, and typed single-block RPC effects. |
 | Bitcoin leaf reconciler | Bitcoin workload resources; `BitcoinNode.status`. |
 | Stacks node reconciler | Stacks node workload resources; `StacksNode.status`. |
@@ -142,3 +148,12 @@ The aggregate compiles the optional same-name `StacksTransactionProduction`
 and pins its UID. A separate Deployment and ServiceAccount own signing, nonce
 reservation and native inclusion reads. Bitcoin funding and signer enrollment
 remain external clients. See the [transfer contract](stacks-production.md).
+
+## Installation scope
+
+The operator watches all namespaces by default; a namespace-scoped installation
+is optional. Networks and their credentials are independent of Helm releases.
+The operator has no Secret API permission and does not sign or submit protocol
+transactions. Execution workers bind to a capability UID, mount only assigned
+credentials, and retain the existing CAS/receipt guarantees across Pod replacement.
+See [operator workloads](../design/operator-workloads.md) for the full boundary.

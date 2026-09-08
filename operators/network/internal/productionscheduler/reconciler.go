@@ -11,6 +11,7 @@ import (
 	bitcoinv1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/bitcoin/v1alpha1"
 	networkv1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha1"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/cadence"
+	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/ledgerlifecycle"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/naming"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -20,7 +21,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 )
 
-const finalizer = "bitcoin.stacks.org/retain-production-policy"
+const finalizer = ledgerlifecycle.PolicyFinalizer
 
 // Reconciler owns aggregate scheduling and target ledger identities.
 type Reconciler struct {

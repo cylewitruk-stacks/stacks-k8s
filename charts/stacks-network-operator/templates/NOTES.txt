@@ -1,27 +1,16 @@
 The Stacks network operator is installed in {{ .Release.Namespace }}.
+{{ if .Values.controller.watchNamespace }}
+It watches namespace {{ .Values.controller.watchNamespace }}.
+{{ else }}
+It watches StacksNetwork resources across namespaces.
+{{ end }}
+Create each environment's namespace and apply its network/configuration resources.
+No additional network-operator Helm release is needed per environment.
 
-Create a network:
-  kubectl --namespace {{ .Release.Namespace }} apply -f examples/network/minimal.yaml
+Inspect networks and their independently owned workers:
+  kubectl get stacksnetworks --all-namespaces
+  kubectl --namespace YOUR_NETWORK_NAMESPACE get deployments,bitcoinproductiontargets,stackstransactionproductions,stackscontractsets,stacksstackingparticipants,stacksaccounts
 
-Inspect topology and compiled actors:
-  kubectl --namespace {{ .Release.Namespace }} get stacksnetworks,bitcoinnodes,stacksnodes,stackssigners
-{{ if .Values.bitcoinProduction.enabled }}
-Inspect Bitcoin baseline dispatch state:
-  kubectl --namespace {{ .Release.Namespace }} get bitcoinblockproductions,bitcoinproductiontargets
-
-{{ end }}
-{{ if .Values.bitcoinGeneration.enabled }}
-Inspect finite generation and retained action reservations:
-  kubectl --namespace {{ .Release.Namespace }} get bitcoinblockgenerations,bitcoinproductiontargets
-{{ end }}
-{{ if .Values.bitcoinReorganization.enabled }}
-Inspect local reorganization and cleanup evidence:
-  kubectl --namespace {{ .Release.Namespace }} get bitcoinreorganizations,bitcoinblockproductions
-{{ end }}
-{{ if .Values.stacksTransactions.enabled }}
-Inspect steady STX transfer evidence:
-  kubectl --namespace {{ .Release.Namespace }} get stackstransactionproductions
-{{ end }}
-{{ if or .Values.bitcoinProduction.enabled .Values.stacksTransactions.enabled }}
-Delete networks and wait for the Bitcoin policy, all retained Bitcoin target ledgers, and the Stacks transaction ledger before uninstalling this chart.
-{{ end }}
+Pause production through the owning StacksNetwork. Keep the operator and workers
+running until retained ledgers have been released during environment deletion.
+Uninstall the shared operator only after disposing of all managed environments.

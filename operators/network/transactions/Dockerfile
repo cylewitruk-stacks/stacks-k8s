@@ -15,6 +15,7 @@ WORKDIR /opt/stacks-transactions
 COPY operators/network/transactions/package.json operators/network/transactions/package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
 COPY operators/network/transactions/sign.mjs ./
+COPY operators/network/transactions/keys.mjs operators/network/transactions/pox-sign.mjs operators/network/transactions/contract-sign.mjs ./
 COPY --from=builder /manager /manager
 USER 65532:65532
 ENTRYPOINT ["/manager"]

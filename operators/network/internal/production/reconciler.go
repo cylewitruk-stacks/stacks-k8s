@@ -13,6 +13,8 @@ import (
 	bitcoinv1alpha1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/bitcoin/v1alpha1"
 	networkv1alpha1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha1"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/cadence"
+	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/execution"
+	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/ledgerlifecycle"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -22,10 +24,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 )
 
-const ledgerFinalizer = "bitcoin.stacks.org/retain-production-ledger"
+const ledgerFinalizer = ledgerlifecycle.BitcoinFinalizer
 
 // Reconciler authorizes at most one unresolved mutating RPC per target ledger.
 type Reconciler struct {
+	// Binding selects the only capability this process may execute.
+	Binding execution.Binding
 	// ReorganizationEnabled enables compensated local suffix replacement.
 	ReorganizationEnabled bool
 	// ActionsEnabled enables finite generation selection on the shared executor.
@@ -108,7 +112,7 @@ func (r *Reconciler) SetupWithManager(manager ctrl.Manager, concurrency int) err
 			return []ctrl.Request{{NamespacedName: client.ObjectKey{Namespace: a.Namespace, Name: a.Spec.BitcoinNodeRef.Name}}}
 		}))
 	}
-	return builder.Complete(r)
+	return builder.Complete(r.Binding.Wrap(r.APIReader, &bitcoinv1alpha1.BitcoinProductionTarget{}, r))
 }
 
 // Reconcile checks current intent, arms durably, then collects and accounts one receipt.
@@ -178,17 +182,27 @@ func (r *Reconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 	if parent.Spec.Suspended || parent.Spec.BitcoinBlockProduction == nil || parent.Spec.BitcoinBlockProduction.Paused {
 		return r.report(ctx, policy, "Paused", "New production dispatches are paused", 0)
 	}
-	if offer == nil {
+	initializing, err := r.initialize(ctx, policy, parent)
+	if err != nil {
+		return r.report(ctx, policy, "Waiting", err.Error(), time.Second)
+	}
+	if offer == nil && !initializing {
 		return r.report(ctx, policy, "Running", "Waiting for a weighted policy opportunity", time.Second)
 	}
 	target, err := r.admit(ctx, policy, parent)
 	if err != nil {
+		if offer == nil {
+			return r.report(ctx, policy, "Waiting", "Initialization target is unavailable", time.Second)
+		}
 		return r.skip(ctx, policy, offer, "Unavailable")
 	}
 	preflight, cancel := context.WithTimeout(ctx, r.RPCTimeout)
 	err = r.RPC.Check(preflight, target.endpoint, policy.Spec.Policy.Address)
 	cancel()
 	if err != nil {
+		if offer == nil {
+			return r.report(ctx, policy, "Waiting", "Initialization preflight is unavailable", time.Second)
+		}
 		return r.skip(ctx, policy, offer, "Unavailable")
 	}
 	// Preflight may have taken time. Re-read desired operation and runtime before arming.
@@ -209,18 +223,32 @@ func (r *Reconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	if currentOffer == nil || currentOffer.Number != offer.Number {
-		return ctrl.Result{RequeueAfter: time.Millisecond}, nil
-	}
-	if reason != "" {
+	if currentOffer != nil && reason != "" {
 		return r.skip(ctx, policy, currentOffer, reason)
 	}
+	// Revalidate initialization after preflight as well: height and desired policy may have changed.
+	if initializing || parent.Spec.Operation != nil {
+		initializing, err = r.initialize(ctx, policy, parent)
+		if err != nil {
+			return r.report(ctx, policy, "Waiting", err.Error(), time.Second)
+		}
+	}
+	if !initializing && (currentOffer == nil || offer == nil || currentOffer.Number != offer.Number) {
+		return ctrl.Result{RequeueAfter: time.Millisecond}, nil
+	}
+	// Initialization may proceed without an offer, but only the current selection can be consumed.
+	offer = currentOffer
 	base := policy.DeepCopy()
-	consume(policy, offer, "")
+	if offer != nil {
+		consume(policy, offer, "")
+	}
 	policy.Status.DispatchState = "Armed"
 	policy.Status.DispatchID = fmt.Sprintf("%s/%s/%s", policy.UID, r.ProcessNonce, policy.ResourceVersion)
 	if !r.collectors.reserve(policy.Status.DispatchID, policy.UID) {
 		policy.Status = base.Status
+		if offer == nil {
+			return r.report(ctx, policy, "Waiting", "Initialization is waiting for receipt capacity", time.Second)
+		}
 		return r.skip(ctx, policy, offer, "Capacity")
 	}
 	policy.Status.TargetUID, policy.Status.PodUID, policy.Status.ContainerID = target.actorUID, target.podUID, target.containerID

@@ -22,8 +22,13 @@ integrity. See the
 - Treat each operator as an independently deployable and versioned product.
 - `StacksNetwork` declares baseline topology and supported ongoing behavior.
   The aggregate controller compiles owned resources; separate capability
-  controllers perform production. It does not execute an experiment or
-  bootstrap plan. Follow the [steady-state design](docs/design/steady-state-operation.md).
+  controllers perform initialization, production and protocol maintenance.
+  Initialization is convergence toward declared network state, not an external
+  experiment plan. Follow the [steady-state design](docs/design/steady-state-operation.md).
+- Install the network operator independently of individual networks. The aggregate
+  compiles capability resources; capability workload controllers provision scoped
+  execution Deployments in each network namespace. Keep signing keys out of the
+  operator process and consensus signer administration outside signer Pods.
 - `BitcoinNode` describes a Bitcoin Core instance without a mining role.
   `BitcoinBlockProduction` and bounded actions own block generation;
   `StacksNode` retains its mining role.
@@ -77,11 +82,13 @@ integrity. See the
   Keep Kubernetes APIs, reconciliation, admission, production nonce ownership,
   submission/recovery, and evidence accounting in Go.
 - JavaScript is a narrow Stacks SDK integration exception, confined to
-  `operators/network/transactions`: offline key encoding and transfer/PoX
+  `operators/network/transactions`: offline key encoding and transfer/PoX/contract
   transaction signing, with focused tests.
   It must not render actor configuration, build Kubernetes resources, query
-  clusters, submit transactions, or sequence bootstrap/renewal. External Go
-  commands own provisioning, bootstrap and renewal; controllers never bootstrap.
+  clusters, submit transactions, or sequence bootstrap/renewal. Go capability
+  controllers own declared initialization and ongoing protocol maintenance.
+  Provisioning commands render declarations; they are not required to sequence
+  a running network. Funded genesis accounts do not imply managed participation.
 - Keep repository wire-contract fixtures in `contracts/` and their production
   decoding/digest implementations in the respective Go consumers. Do not move
   or duplicate these contracts into JavaScript fixtures or modules.

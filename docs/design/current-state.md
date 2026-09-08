@@ -17,10 +17,10 @@ The `network.stacks.org/v1alpha1` API provides:
 
 | Resource | Implemented behavior | Important limit |
 | --- | --- | --- |
-| `StacksNetwork` | Compiles topology and optional Bitcoin/STX production; publishes declarations and admitted actor identity. | Does not bootstrap protocol state or issue mining RPCs itself. |
+| `StacksNetwork` | Compiles topology and optional Bitcoin/STX/protocol capabilities; publishes declarations and admitted actor identity. | Does not bootstrap protocol state or issue mining RPCs itself. |
 | `BitcoinNode` | Runs one Bitcoin Core instance with explicit peers. | Block generation requires production or action resources. |
 | `StacksNode` | Runs one miner, follower, or signer-node bound to one Bitcoin node. | Protocol readiness is not independently established. |
-| `StacksSigner` | Runs one signer bound to one signer-node with index and weight. | Registration and reward-cycle participation are external. |
+| `StacksSigner` | Runs one signer bound to one signer-node with index and weight. | Registration and renewal belong to a separate stacking capability. |
 
 The separate `bitcoin.stacks.org/v1alpha1` `BitcoinBlockProduction` API now
 supports an aggregate-owned, weighted multi-target baseline at fixed or bounded
@@ -33,7 +33,12 @@ The separate `stacks.stacks.org/v1alpha1` `StacksTransactionProduction` API
 supports one exclusive account, fixed-interval tiny STX transfers, bounded
 pending work, and exact native inclusion accounting. The
 [initial Stacks profile](../network-operator/stacks-production.md) provides
-external Bitcoin funding, PoX-4 enrollment and renewal helpers. A local normal
+controller-managed wallet initialization and PoX-4 enrollment/renewal. The
+[PoX-5 profile](../network-operator/pox5.md) adds real sBTC deployment, explicit
+registry initialization, minimal managers and direct staking. `StacksAccount`,
+`StacksContractSet` and `StacksStackingParticipant` are independently reconciled
+capabilities compiled from `spec.operation`. Genesis funding alone does not
+enroll an account. A local normal
 Stacks image is qualified; this is not a general image compatibility claim.
 
 The aggregate accepts 1–32 Bitcoin nodes and up to 100 Stacks nodes and 100
@@ -110,7 +115,7 @@ Git, runs repository build logic, or constructs an image.
 | --- | --- |
 | Bitcoin lifecycle | Broader branch observation and recovery. Weighted baseline with jitter, all four finite generation cadence modes, and constrained local reorganization are implemented. |
 | Steady transaction demand | Multi-account/ingress profiles, overrides and wider signing lifecycle support. One-account fixed-interval demand is implemented. |
-| Protocol bootstrap | General image/epoch compatibility, PoX-5 transitions and reusable bounded APIs. External PoX-4 bootstrap and renewal are implemented for one local profile. |
+| Protocol bootstrap | General image/epoch compatibility and reusable bounded APIs. Managed direct PoX-4/PoX-5 initialization and renewal are implemented; delegated pools and live sBTC bridge daemons remain outside the profile. |
 | Generic faults | Wider native kinds, traffic/platform combinations, and passive correlation. Bounded NetworkChaos delay and bidirectional actor partitions are implemented. |
 | Protocol actions | Signer/miner behavior controls, application clock offset, bounded input behaviors, and portable storage pressure. |
 | Continuous observation | Mutation history, protocol telemetry, logs, metrics, resource telemetry, rolling retention, and capture-gap reporting. |
@@ -166,9 +171,10 @@ The following historical structures must not return:
 
 1. Which Stacks images and additional Bitcoin/platform combinations extend the
    initial Bitcoin Core 31.1 Linux/arm64 baseline qualification?
-2. Which signer-registration and stacking actions belong in this repository
-   rather than an external bootstrap tool?
+2. Which additional participation and delegated-pool profiles should extend the
+   managed direct-stacking capabilities?
 3. Is sBTC in the first actor-expansion release or a later extension?
 4. Which managed Kubernetes providers expose usable audit streams?
 5. Which additional transaction profiles merit support? Initial Bitcoin and STX
-   production use separate Deployments and ServiceAccounts in the network chart.
+   production use capability-owned Deployments and ServiceAccounts; the chart
+   installs their provisioning controllers independently of individual networks.

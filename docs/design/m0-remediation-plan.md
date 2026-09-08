@@ -515,8 +515,8 @@ controller, such as an activated testing hook with its own absolute expiry.
 **Slice:** M0.6. **Status:** In progress (initial profile implemented).
 
 The [initial Stacks profile](../network-operator/stacks-production.md) delivers
-external PoX-4 bootstrap/renewal and one-account steady STX transfers without
-a controller workflow. Its static signing isolation, explicit nonce ownership,
+managed direct PoX-4/PoX-5 initialization/renewal and one-account steady STX transfers without
+an experiment workflow. Its static signing isolation, explicit nonce ownership,
 backpressure and restart evidence are qualified on one local normal image.
 Initial withdrawal/rotation requires terminating the designated worker and
 using a fresh account/environment; no hot rotation or server-side revocation is
@@ -534,9 +534,10 @@ productive:
 - reward-cycle advancement; and
 - Nakamoto readiness verification.
 
-Expose bounded atomic resources or an external helper CLI. The external agent
-sequences one-time bootstrap operations. Do not build an in-cluster bootstrap
-workflow.
+The [managed-operation contract](managed-network-operation.md) assigns these
+prerequisites to focused capability controllers compiled by `StacksNetwork`.
+Initialization is convergence toward declared state; external agents sequence
+experiments, not mandatory network startup.
 
 Also define steady transaction demand as an independently reconciled baseline
 capability, provisionally `StacksTransactionProduction`. Cover versioned
@@ -544,7 +545,8 @@ workload profiles, funding/signing, ingress, per-account nonce ownership,
 offered rate, bounded in-flight work, backpressure, pause/update, and ambiguous
 submission. It must work without action or observation controllers. Define
 single-writer composition with temporary overrides and latest-baseline
-restoration; one-time bootstrap remains distinct from ongoing demand.
+restoration; protocol initialization and maintenance remain distinct from
+transaction demand.
 
 Transaction signing authority is an implementation gate for this capability.
 Before M0.6 closes, define administrator-selected account/credential profiles,

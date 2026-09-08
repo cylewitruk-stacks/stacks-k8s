@@ -1,5 +1,7 @@
 # Documentation
 
+[Operator installation and execution workloads](design/operator-workloads.md)
+
 ## Operators
 
 - [Stacks network operator](../charts/stacks-network-operator/README.md)
@@ -8,6 +10,7 @@
   - [Operations](network-operator/operations.md)
   - [Bitcoin baseline production](network-operator/bitcoin-production.md)
   - [Custom Stacks actor images and mixed-version upgrades](network-operator/actor-images.md)
+  - [Direct PoX-4/PoX-5 operation](network-operator/pox5.md)
   - [Stacks bootstrap and steady transfers](network-operator/stacks-production.md)
   - [Stacks qualification evidence](network-operator/stacks-qualification.md)
   - [Hacknet migration](network-operator/migration.md)

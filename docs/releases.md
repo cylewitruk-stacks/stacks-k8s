@@ -52,7 +52,25 @@ each observability release.
 
 The optional `stacks-transaction-worker` image is built from
 `operators/network/transactions/Dockerfile` and configured independently through
-`stacksTransactions.image`. Qualify it with the network API/chart version and
+`workers.sdkImage`. Qualify it with the network API/chart version and
 selected actor image. Include its locked npm dependencies in release scanning
 and provenance; the local [Stacks qualification](network-operator/stacks-qualification.md)
 is not a published image support matrix.
+
+## Unpublished network chart value changes
+
+The local chart remains `0.1.0` before its first publication. The workload refactor
+removes these previously accepted values; the strict schema rejects old values
+files rather than silently ignoring them.
+
+| Removed value | Replacement |
+| --- | --- |
+| `bitcoinProduction.credentialsSecret` | `StacksNetwork.spec.bitcoinBlockProduction.credentialsSecret` |
+| `stacksTransactions.credentialsSecret` | `StacksNetwork.spec.stacksTransactionProduction.credentialsSecret` |
+| `stacksTransactions.image` | `workers.sdkImage` |
+| `stacksOperation.image` | `workers.sdkImage` |
+
+The chart now installs one shared operator, while capabilities own their workers.
+See the [upgrade procedure](../charts/stacks-network-operator/README.md#upgrading-execution-workers)
+before replacing images in an existing installation. Published chart versions
+must describe incompatible value changes in their release notes.

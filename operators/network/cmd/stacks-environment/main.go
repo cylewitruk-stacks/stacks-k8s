@@ -1,4 +1,4 @@
-// Command stacks-environment provisions a fresh suspended regtest Stacks network.
+// Command stacks-environment provisions a fresh managed regtest Stacks network.
 package main
 
 import (
@@ -18,9 +18,10 @@ func main() {
 	flag.StringVar(&options.Name, "name", "stacks", "Network name.")
 	flag.StringVar(&options.Image, "stacks-image", "", "Explicit Stacks node/signer image (required).")
 	flag.StringVar(&options.SDKDirectory, "sdk-directory", "transactions", "Directory containing the offline SDK adapters.")
+	flag.StringVar(&options.SBTCContracts, "sbtc-contracts", "", "Pinned checkout contracts/contracts directory (required).")
 	interval := flag.Int("interval-seconds", 10, "Baseline transfer interval.")
 	profile := flag.String("genesis-profile", "", "Optional local StacksGenesisProfile YAML/JSON, or an exported CR.")
-	keys := flag.String("account-keys", "", "Private JSON map of stacker/transfer seeds for predeclared profile accounts.")
+	keys := flag.String("account-keys", "", "Private JSON map of stacker/transfer/manager-admin/sbtc-deployer seeds for predeclared profile accounts.")
 	flag.Parse()
 	if *keys != "" {
 		data, err := os.ReadFile(*keys)

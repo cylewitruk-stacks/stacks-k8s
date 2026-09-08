@@ -106,7 +106,7 @@ func TestConfiguredProductionReportsDisabledController(t *testing.T) {
 	}
 	mustGet(t, context.Background(), kube, parent.Name, parent)
 	condition := meta.FindStatusCondition(parent.Status.Conditions, "ProductionConfigured")
-	if condition == nil || condition.Status != metav1.ConditionFalse || condition.Reason != "ControllerDisabled" {
+	if condition == nil || condition.Status != metav1.ConditionFalse || condition.Reason != "ProvisioningDisabled" {
 		t.Fatalf("disabled producer was not explained: %#v", condition)
 	}
 }

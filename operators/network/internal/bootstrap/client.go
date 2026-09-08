@@ -1,4 +1,4 @@
-// Package bootstrap implements bounded external provisioning and PoX-4 maintenance.
+// Package bootstrap implements bounded external provisioning and direct PoX-4/PoX-5 maintenance.
 // It is never imported by an operator controller.
 package bootstrap
 
@@ -21,13 +21,16 @@ import (
 // Options selects one explicit environment and its external SDK adapter.
 type Options struct {
 	Manifest, Kubeconfig, Context, SDKDirectory, Evidence string
-	BitcoinPort, StacksPort                               int
+	// SBTCContracts is the external checksum-pinned contracts directory.
+	SBTCContracts           string
+	BitcoinPort, StacksPort int
 }
 
 // session owns all subprocesses and bounded HTTP access for one bootstrap invocation.
 type session struct {
 	options    Options
 	namespace  string
+	networkUID string
 	forwarders []*exec.Cmd
 	http       *http.Client
 	events     []map[string]any

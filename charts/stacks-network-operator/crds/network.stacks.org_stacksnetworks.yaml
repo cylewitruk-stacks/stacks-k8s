@@ -56,6 +56,41 @@ spec:
                 description: BitcoinBlockProduction optionally offers fixed or jittered
                   regtest block production.
                 properties:
+                  credentialsSecret:
+                    description: |-
+                      CredentialsSecret names the same-namespace immutable worker credential document.
+                      Bitcoin uses credentials.json; transfers use account.json.
+                    maxLength: 253
+                    pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                    type: string
+                  initialization:
+                    description: Initialization prepares a watch-only miner wallet
+                      and an initial regtest chain floor.
+                    properties:
+                      initialHeight:
+                        description: InitialHeight is the initial regtest chain floor,
+                          not an ongoing height target.
+                        format: int64
+                        maximum: 201
+                        minimum: 1
+                        type: integer
+                      target:
+                        description: Target names the production target whose wallet
+                          funds the initial miner.
+                        maxLength: 63
+                        pattern: ^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$
+                        type: string
+                      wallet:
+                        description: Wallet names the watch-only descriptor wallet
+                          used by Stacks miners.
+                        maxLength: 63
+                        pattern: ^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$
+                        type: string
+                    required:
+                    - initialHeight
+                    - target
+                    - wallet
+                    type: object
                   intervalSeconds:
                     description: IntervalSeconds is the central policy interval, independently
                       of receipt time.
@@ -119,6 +154,10 @@ spec:
                 - message: jitter must keep intervals within 1 to 86400 seconds
                   rule: '!has(self.jitterSeconds) || (self.jitterSeconds < self.intervalSeconds
                     && self.intervalSeconds + self.jitterSeconds <= 86400)'
+                - message: initial wallet preparation requires one matching production
+                    target
+                  rule: '!has(self.initialization) || (size(self.targets) == 1 &&
+                    self.targets[0].name == self.initialization.target)'
               bitcoinNodes:
                 items:
                   description: BitcoinNodeTemplate is the aggregate declaration for
@@ -586,6 +625,38 @@ spec:
                     - message: prepare phase must be shorter than the complete reward
                         cycle
                       rule: self.prepareLength < self.rewardCycleLength
+                  pox5:
+                    description: PoX5 binds non-mainnet PoX-5 to the same contracts
+                      and administrators on every node.
+                    properties:
+                      bondAdmin:
+                        description: BondAdmin is the test-network bond administrator.
+                        maxLength: 128
+                        pattern: ^S[NT][0-9A-HJKMNP-TV-Z]{26,39}(\.[a-zA-Z][a-zA-Z0-9_-]{0,39})?$
+                        type: string
+                      pauseAdmin:
+                        description: PauseAdmin is the test-network pause administrator.
+                        maxLength: 128
+                        pattern: ^S[NT][0-9A-HJKMNP-TV-Z]{26,39}(\.[a-zA-Z][a-zA-Z0-9_-]{0,39})?$
+                        type: string
+                      sbtcContract:
+                        description: SBTCContract identifies the deployed sBTC token
+                          contract.
+                        maxLength: 128
+                        pattern: ^S[NT][0-9A-HJKMNP-TV-Z]{26,39}\.[a-zA-Z][a-zA-Z0-9_-]{0,39}$
+                        type: string
+                      sbtcRegistryContract:
+                        description: SBTCRegistryContract identifies the registry
+                          whose aggregate key is read by PoX-5.
+                        maxLength: 128
+                        pattern: ^S[NT][0-9A-HJKMNP-TV-Z]{26,39}\.[a-zA-Z][a-zA-Z0-9_-]{0,39}$
+                        type: string
+                    required:
+                    - bondAdmin
+                    - pauseAdmin
+                    - sbtcContract
+                    - sbtcRegistryContract
+                    type: object
                   useTestGenesisChainstate:
                     description: |-
                       UseTestGenesisChainstate includes the selected binary's test genesis allocations in addition to Balances.
@@ -595,6 +666,348 @@ spec:
                 x-kubernetes-validations:
                 - message: genesis is immutable; create a fresh network
                   rule: self == oldSelf
+              operation:
+                description: Operation optionally manages contract prerequisites and
+                  ongoing stacking participation.
+                properties:
+                  accounts:
+                    description: Accounts explicitly opts funded accounts into exclusive
+                      controller management.
+                    items:
+                      description: ManagedAccountPolicy assigns an exclusive account
+                        to one declared capability.
+                      properties:
+                        address:
+                          description: Address is the funded testnet principal; declaring
+                            funding alone does not manage it.
+                          maxLength: 41
+                          pattern: ^ST[0-9A-HJKMNP-TV-Z]{26,39}$
+                          type: string
+                        configDigest:
+                          description: ConfigDigest approves the ingress configuration
+                            independently of its image.
+                          maxLength: 71
+                          pattern: ^sha256:[0-9a-f]{64}$
+                          type: string
+                        consumer:
+                          description: Consumer names that capability within this
+                            network.
+                          maxLength: 63
+                          pattern: ^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$
+                          type: string
+                        consumerKind:
+                          description: ConsumerKind identifies the only capability
+                            allowed to reserve this account.
+                          enum:
+                          - StacksContractSet
+                          - StacksStackingParticipant
+                          type: string
+                        keySecretRef:
+                          description: KeySecretRef contains the offline signing key;
+                            it is never mounted into an actor.
+                          properties:
+                            digest:
+                              description: Digest binds the exact bytes read before
+                                use.
+                              maxLength: 71
+                              pattern: ^sha256:[0-9a-f]{64}$
+                              type: string
+                            key:
+                              description: Key identifies the entry within the object.
+                              maxLength: 253
+                              minLength: 1
+                              pattern: ^[a-zA-Z0-9._-]+$
+                              type: string
+                            name:
+                              description: Name identifies the object containing the
+                                entry.
+                              maxLength: 63
+                              pattern: ^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$
+                              type: string
+                          required:
+                          - digest
+                          - key
+                          - name
+                          type: object
+                        name:
+                          description: Name is the account's stable name within its
+                            network.
+                          maxLength: 63
+                          pattern: ^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$
+                          type: string
+                        target:
+                          description: Target names the declared ingress actor.
+                          maxLength: 63
+                          pattern: ^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$
+                          type: string
+                      required:
+                      - address
+                      - configDigest
+                      - consumer
+                      - consumerKind
+                      - keySecretRef
+                      - name
+                      - target
+                      type: object
+                    maxItems: 32
+                    minItems: 1
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
+                  contractSets:
+                    description: ContractSets declares contract prerequisites independently
+                      of epoch activation.
+                    items:
+                      description: ContractSetPolicy declares desired contract sources
+                        and optional bridge initialization.
+                      properties:
+                        account:
+                          description: Account names the exclusively assigned managed
+                            deployer account.
+                          maxLength: 63
+                          pattern: ^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$
+                          type: string
+                        bridge:
+                          description: Bridge initializes the standard sBTC registry
+                            after its declared contracts exist.
+                          properties:
+                            aggregatePublicKey:
+                              description: AggregatePublicKey is an explicit test
+                                key, not a DKG result.
+                              maxLength: 66
+                              pattern: ^(02|03)[0-9a-f]{64}$
+                              type: string
+                            signerPublicKeys:
+                              description: SignerPublicKeys are the retained bridge
+                                keys, independent of consensus signers.
+                              items:
+                                maxLength: 66
+                                pattern: ^(02|03)[0-9a-f]{64}$
+                                type: string
+                              maxItems: 2
+                              minItems: 2
+                              type: array
+                              x-kubernetes-list-type: set
+                          required:
+                          - aggregatePublicKey
+                          - signerPublicKeys
+                          type: object
+                        contracts:
+                          description: Contracts are immutable named artifacts, not
+                            an imperative transaction plan.
+                          items:
+                            description: ContractArtifact declares one immutable contract
+                              and its dependency names.
+                            properties:
+                              clarityVersion:
+                                description: ClarityVersion determines the earliest
+                                  supported language runtime.
+                                enum:
+                                - 3
+                                - 6
+                                format: int32
+                                type: integer
+                              dependsOn:
+                                description: DependsOn names contracts in this set
+                                  that must be observed first.
+                                items:
+                                  maxLength: 40
+                                  type: string
+                                maxItems: 16
+                                type: array
+                                x-kubernetes-list-type: set
+                              name:
+                                description: Name is the contract name under the set's
+                                  deployer principal.
+                                maxLength: 40
+                                pattern: ^[a-zA-Z][a-zA-Z0-9_-]{0,39}$
+                                type: string
+                              sourceRef:
+                                description: SourceRef selects exact source bytes
+                                  from a same-namespace ConfigMap.
+                                properties:
+                                  digest:
+                                    description: Digest binds the exact bytes read
+                                      before use.
+                                    maxLength: 71
+                                    pattern: ^sha256:[0-9a-f]{64}$
+                                    type: string
+                                  key:
+                                    description: Key identifies the entry within the
+                                      object.
+                                    maxLength: 253
+                                    minLength: 1
+                                    pattern: ^[a-zA-Z0-9._-]+$
+                                    type: string
+                                  name:
+                                    description: Name identifies the object containing
+                                      the entry.
+                                    maxLength: 63
+                                    pattern: ^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$
+                                    type: string
+                                required:
+                                - digest
+                                - key
+                                - name
+                                type: object
+                            required:
+                            - clarityVersion
+                            - name
+                            - sourceRef
+                            type: object
+                          maxItems: 16
+                          minItems: 1
+                          type: array
+                          x-kubernetes-list-map-keys:
+                          - name
+                          x-kubernetes-list-type: map
+                        name:
+                          description: Name is the capability name within the network.
+                          maxLength: 63
+                          pattern: ^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$
+                          type: string
+                        paused:
+                          description: Paused prevents new authorizations; existing
+                            receipts remain observable.
+                          type: boolean
+                      required:
+                      - account
+                      - contracts
+                      - name
+                      type: object
+                      x-kubernetes-validations:
+                      - message: contract dependencies must name another contract
+                          in the set
+                        rule: self.contracts.all(c, !has(c.dependsOn) || c.dependsOn.all(d,
+                          d != c.name && self.contracts.exists(other, other.name ==
+                          d)))
+                      - message: bridge initialization requires the complete standard
+                          contract set
+                        rule: '!has(self.bridge) || [''sbtc-registry'', ''sbtc-token'',
+                          ''sbtc-bootstrap-signers'', ''sbtc-deposit'', ''sbtc-withdrawal''].all(n,
+                          self.contracts.exists(c, c.name == n))'
+                    maxItems: 8
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
+                  participants:
+                    description: Participants declares maintained stacking independently
+                      of actor existence.
+                    items:
+                      description: StackingPolicy maintains one explicitly declared
+                        direct stacking participant.
+                      properties:
+                        administratorAccount:
+                          description: AdministratorAccount names the manager's exclusive
+                            deployment/registration account.
+                          maxLength: 63
+                          pattern: ^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$
+                          type: string
+                        amountMicroSTX:
+                          description: |-
+                            AmountMicroSTX applies to new enrollments; it does not resize an existing lock.
+                            PoX-4 enrollment also satisfies the observed dynamic threshold.
+                          format: int64
+                          maximum: 9007199254740991
+                          minimum: 50000000000
+                          type: integer
+                        consensusKeySecretRef:
+                          description: ConsensusKeySecretRef supplies offline PoX
+                            authorizations separately from holder spending.
+                          properties:
+                            digest:
+                              description: Digest binds the exact bytes read before
+                                use.
+                              maxLength: 71
+                              pattern: ^sha256:[0-9a-f]{64}$
+                              type: string
+                            key:
+                              description: Key identifies the entry within the object.
+                              maxLength: 253
+                              minLength: 1
+                              pattern: ^[a-zA-Z0-9._-]+$
+                              type: string
+                            name:
+                              description: Name identifies the object containing the
+                                entry.
+                              maxLength: 63
+                              pattern: ^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$
+                              type: string
+                          required:
+                          - digest
+                          - key
+                          - name
+                          type: object
+                        holderAccount:
+                          description: HolderAccount names the managed funded holder.
+                          maxLength: 63
+                          pattern: ^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$
+                          type: string
+                        lockCycles:
+                          description: LockCycles is the enrollment horizon; renewal
+                            maintains this horizon in bounded extensions.
+                          format: int32
+                          maximum: 12
+                          minimum: 2
+                          type: integer
+                        name:
+                          description: Name is the participant name within the network.
+                          maxLength: 63
+                          pattern: ^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$
+                          type: string
+                        paused:
+                          description: Paused stops new enrollment and renewal, without
+                            unlocking an existing stake.
+                          type: boolean
+                        signer:
+                          description: Signer names the consensus signer actor independently
+                            of its holder.
+                          maxLength: 63
+                          pattern: ^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$
+                          type: string
+                      required:
+                      - administratorAccount
+                      - amountMicroSTX
+                      - consensusKeySecretRef
+                      - holderAccount
+                      - lockCycles
+                      - name
+                      - signer
+                      type: object
+                      x-kubernetes-validations:
+                      - message: holder and administrator accounts must be distinct
+                        rule: self.holderAccount != self.administratorAccount
+                    maxItems: 16
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
+                  paused:
+                    description: Paused stops new protocol transactions while preserving
+                      desired policies and receipt observation.
+                    type: boolean
+                required:
+                - accounts
+                type: object
+                x-kubernetes-validations:
+                - message: managed account addresses must be unique
+                  rule: self.accounts.all(a, self.accounts.exists_one(b, b.address
+                    == a.address))
+                - message: contract sets require their exclusive managed deployer
+                    account
+                  rule: '!has(self.contractSets) || self.contractSets.all(c, self.accounts.exists(a,
+                    a.name == c.account && a.consumerKind == ''StacksContractSet''
+                    && a.consumer == c.name))'
+                - message: participants require separate exclusive holder and administrator
+                    accounts
+                  rule: '!has(self.participants) || self.participants.all(p, p.holderAccount
+                    != p.administratorAccount && self.accounts.exists(a, a.name ==
+                    p.holderAccount && a.consumerKind == ''StacksStackingParticipant''
+                    && a.consumer == p.name) && self.accounts.exists(a, a.name ==
+                    p.administratorAccount && a.consumerKind == ''StacksStackingParticipant''
+                    && a.consumer == p.name))'
               signers:
                 items:
                   description: StacksSignerTemplate is the aggregate declaration for
@@ -1108,6 +1521,13 @@ spec:
                     maximum: 1000000
                     minimum: 1
                     type: integer
+                  credentialsSecret:
+                    description: |-
+                      CredentialsSecret names the same-namespace immutable worker credential document.
+                      Bitcoin uses credentials.json; transfers use account.json.
+                    maxLength: 253
+                    pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                    type: string
                   feeMicroSTX:
                     description: FeeMicroSTX is explicit; no automatic fee escalation
                       occurs.
@@ -1122,17 +1542,26 @@ spec:
                     maximum: 86400
                     minimum: 1
                     type: integer
+                  minimumBurnHeight:
+                    description: MinimumBurnHeight holds new transfers until the ingress
+                      observes this burn height.
+                    format: int64
+                    maximum: 9007199254740991
+                    minimum: 0
+                    type: integer
                   paused:
                     description: Paused stops new signing/dispatch while outstanding
                       evidence remains observable.
                     type: boolean
                   recipient:
                     description: Recipient receives the offered micro-STX amount.
+                    maxLength: 42
                     pattern: ^ST[0-9A-HJKMNP-TV-Z]{20,40}$
                     type: string
                   sender:
                     description: Sender identifies the administrator-provisioned exclusive
                       test account.
+                    maxLength: 42
                     pattern: ^ST[0-9A-HJKMNP-TV-Z]{20,40}$
                     type: string
                   target:
@@ -1192,6 +1621,23 @@ spec:
                 actor.name == ref))))'
             - message: genesis cannot be added or removed; create a fresh network
               rule: has(self.genesis) == has(oldSelf.genesis)
+            - message: managed accounts require a declared Stacks ingress
+              rule: '!has(self.operation) || (has(self.stacksNodes) && self.operation.accounts.all(a,
+                self.stacksNodes.exists(n, n.name == a.target)))'
+            - message: managed account authority must not overlap the transfer producer
+              rule: '!has(self.operation) || !has(self.stacksTransactionProduction)
+                || self.operation.accounts.all(a, a.address != self.stacksTransactionProduction.sender)'
+            - message: managed participants require a declared consensus signer
+              rule: '!has(self.operation) || !has(self.operation.participants) ||
+                (has(self.signers) && self.operation.participants.all(p, self.signers.exists(s,
+                s.name == p.signer)))'
+            - message: managed bridge deployment must match immutable genesis contract
+                bindings
+              rule: '!has(self.operation) || !has(self.operation.contractSets) ||
+                self.operation.contractSets.all(c, !has(c.bridge) || (has(self.genesis)
+                && has(self.genesis.pox5) && self.operation.accounts.exists(a, a.name
+                == c.account && self.genesis.pox5.sbtcContract == a.address + ''.sbtc-token''
+                && self.genesis.pox5.sbtcRegistryContract == a.address + ''.sbtc-registry'')))'
           status:
             description: StacksNetworkStatus aggregates leaf readiness and admitted
               identity.
@@ -1252,6 +1698,42 @@ spec:
                 description: BitcoinProductionUID permanently pins the production
                   ledger for this network incarnation.
                 type: string
+              capabilities:
+                description: Capabilities retains ledger and consumer identities across
+                  declaration removal.
+                items:
+                  description: CapabilityIdentity pins a managed child incarnation
+                    across removal and re-addition.
+                  properties:
+                    kind:
+                      description: Kind identifies the managed capability API kind.
+                      enum:
+                      - StacksAccount
+                      - StacksContractSet
+                      - StacksStackingParticipant
+                      type: string
+                    name:
+                      description: Name is the compiled same-namespace resource name.
+                      maxLength: 63
+                      minLength: 1
+                      type: string
+                    uid:
+                      description: UID permanently identifies this ledger or consumer
+                        for the network incarnation.
+                      maxLength: 64
+                      minLength: 1
+                      type: string
+                  required:
+                  - kind
+                  - name
+                  - uid
+                  type: object
+                maxItems: 64
+                type: array
+                x-kubernetes-list-map-keys:
+                - kind
+                - name
+                x-kubernetes-list-type: map
               children:
                 items:
                   description: ChildStatus summarizes one compiled topology resource.

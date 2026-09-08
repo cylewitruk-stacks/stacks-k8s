@@ -30,6 +30,8 @@ type StacksContext struct {
 	BitcoinRPCPort, BitcoinP2PPort int32
 	// SignerService names the event destination without its port.
 	SignerService string
+	// ReceiptService optionally receives canonical execution events for legacy transactions.
+	ReceiptService string
 	// Genesis supplies the common network chain parameters.
 	Genesis *network.GenesisSpec
 	// Generated supplies public profile overrides.

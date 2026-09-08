@@ -21,7 +21,7 @@ name. See [configuration and genesis](configuration.md).
 | ---- | ---- |
 | `spec.suspended` | Scale every compiled actor to zero. |
 | `spec.defaults` | Default images, pull behavior, storage, resources, and placement. |
-| `spec.genesis` | Immutable public genesis balances, named accounts, epoch schedule and PoX cycle lengths. |
+| `spec.genesis` | Immutable public genesis balances, named accounts, epoch schedule, PoX cycle lengths and optional PoX-5 contract/admin bindings. |
 | `spec.bitcoinNodes` | Bitcoin Core actors and their directed peer graph. |
 | `spec.stacksNodes` | Miner, follower, and signer-node actors. |
 | `spec.signers` | Signer actors bound one-to-one to signer-node actors. |
@@ -155,3 +155,71 @@ operator-owned names cannot be overridden: `POD_IP`, `STACKS_ACTOR`,
 rejection for the last `txID`, using only `FeeTooLow`, `BadNonce`, or `Other`.
 It does not release the reserved nonce or prove permanent non-execution. See the
 [policy and evidence contract](stacks-production.md#policy-and-evidence).
+
+## Managed protocol operation
+
+`spec.operation` compiles three types in `stacks.stacks.org/v1alpha1`:
+
+| Resource | Desired state | Retained identity |
+| --- | --- | --- |
+| `StacksAccount` | Exclusive consumer, address, ingress/configuration digest and key Secret reference | Immutable account authority; monotonic operation ordinal, TxID, nonce and execution receipt |
+| `StacksContractSet` | Exact ConfigMap-backed sources, dependencies and optional initial bridge state | Immutable contract artifacts and deployer; mutable pause |
+| `StacksStackingParticipant` | Direct holder/admin accounts, declared signer, consensus authorization, stake amount and renewal horizon | Immutable role bindings; mutable enrollment amount, horizon and pause |
+
+Artifact references contain `name`, `key` and exact `sha256:` digest. Public
+status contains no private keys or source response detail. Account receipts
+identify `NativeIndex` or `LegacyEvent` evidence. Consumers acknowledge a receipt
+before another account operation is authorized. Removed capability identities
+remain pinned in `StacksNetwork.status.capabilities`; removal is not a nonce reset.
+
+`Operational` reports managed prerequisites separately from topology `Ready`.
+It is not a guarantee of sustained consensus progress. Account phases are
+`Idle`, `Pending`, `Ambiguous`, `Blocked`, `Executed`, and `Abandoned`;
+capabilities use `Waiting`, `Pending`, `Paused`, `Ready`, and `Blocked`.
+
+`BitcoinBlockProduction.policy.initialization` optionally names one target,
+watch-only wallet and initial height (1–201). It requires a single target and
+uses the same generation ledger. Target `walletReady`, `observedHeight` and
+`protocolStage` expose startup observations; stages latch completed dependencies.
+`StacksTransactionProduction.policy.minimumBurnHeight` optionally delays new
+transfers without suppressing outstanding receipt collection.
+
+See [managed operation](../design/managed-network-operation.md) and
+[PoX-5 operation](pox5.md) for scope and recovery boundaries.
+
+## Capability execution placement
+
+One network-operator installation watches networks across namespaces. Capability
+controllers create separately owned execution Deployments; their Pods bind to the
+capability namespace/name/UID. Bitcoin target execution, STX demand, contract
+maintenance and stacking administration have independent ServiceAccounts. The
+operator schedules Bitcoin opportunities and manages account-ledger disposal.
+
+`spec.bitcoinBlockProduction.credentialsSecret` and
+`spec.stacksTransactionProduction.credentialsSecret` select same-namespace worker
+credentials. They mount `credentials.json` and `account.json`, respectively.
+Omitting a reference preserves API compatibility for declarations but cannot
+provision that capability's execution worker. Managed account and consensus
+artifact references select exact key mounts with existing digest checks.
+
+See [operator workloads](../design/operator-workloads.md). Native Deployment
+readiness describes the worker process; capability status and chain observations
+describe protocol progress. Pod replacement never resets execution ledgers.
+
+### Worker readiness conditions
+
+`BitcoinProductionTarget`, `StacksTransactionProduction`, `StacksContractSet`
+and `StacksStackingParticipant` expose `status.conditions` with `WorkerReady`.
+It reports the current capability generation and the owned Deployment's observed
+availability, separately from the capability's protocol phase.
+
+| Reason | Meaning |
+| --- | --- |
+| `Available` | The Deployment observes its current generation with one updated, available replica. |
+| `Starting` | The owned Deployment has not reached that availability state. |
+| `ConfigurationUnavailable` | Required references, ownership or configuration cannot be established. |
+| `WorkloadUnavailable` | Execution resources could not be reconciled; inspect operator logs. |
+
+The network-owned receipt worker has no `WorkerReady` condition. Inspect its
+native Deployment status. Neither readiness source authorizes protocol effects
+or guarantees consensus progress.

@@ -53,6 +53,14 @@ docker build --platform linux/arm64 \
 kind load docker-image "$STACKS_IMAGE" --name "$STACKS_KIND_CLUSTER"
 ```
 
+If kind reports missing content while importing an image from Docker's
+multi-platform store, export just the node platform and load that archive:
+
+```bash
+docker image save --platform linux/arm64 -o /tmp/stacks-actor-image.tar "$STACKS_IMAGE"
+kind load image-archive /tmp/stacks-actor-image.tar --name "$STACKS_KIND_CLUSTER"
+```
+
 The worktree selects the actual source revision. An image label or build argument
 only records metadata; it does not perform a checkout. Older revisions may need
 a different build recipe or toolchain. Keep the selected revision's build
@@ -97,8 +105,8 @@ The parent also supports these fields:
 | `spec.defaults.imagePullPolicy` | Shared actor pull policy; defaults to `IfNotPresent`. |
 
 For a fresh mixed-version network, edit the complete generated document before
-applying it, retaining each actor's other fields. Use that same edited document
-for bootstrap so its declaration checks see the intended topology.
+applying it, retaining each actor's other fields and the managed capability
+references. Controllers compile and admit the declared topology.
 
 For an existing network, edit the parent with the selected kubeconfig/context,
 from the stacks-k8s repository root:
@@ -141,5 +149,5 @@ any RPC endpoints required by enabled production capabilities. Arbitrary
 historical or modified revisions are not automatically compatible or qualified.
 
 An image change does not require changing genesis. A changed genesis requires a
-fresh network and chain data. The external bootstrap currently qualifies only
-the documented PoX-4 schedule; see [configuration and genesis](configuration.md).
+fresh network and chain data. Managed initialization requires compatible epoch,
+contract and receipt capabilities; see [configuration and genesis](configuration.md).

@@ -1,7 +1,7 @@
 # Steady Stacks transfers
 
 The initial profile combines the existing Bitcoin baseline with a funded
-Stacks miner, one signer-node and signer, external PoX-4 enrollment, and a
+Stacks miner, one signer-node and signer, managed PoX-4/5 enrollment, and a
 separate `StacksTransactionProduction` worker. It offers one small STX transfer
 per configured interval without requiring actions, Chaos Mesh, or observability.
 
@@ -11,6 +11,7 @@ Declare the policy through `StacksNetwork.spec.stacksTransactionProduction`:
 
 ```yaml
 stacksTransactionProduction:
+  credentialsSecret: stacks-transaction-account
   target: signer-node
   sender: ST_YOUR_PROVISIONED_ACCOUNT
   recipient: ST_YOUR_RECIPIENT
@@ -89,8 +90,9 @@ never sent can remain unresolved indefinitely; use a fresh environment.
 
 ## Signing and admission
 
-The administrator selects the worker image and account Secret through chart
-values, not public capability specs. The immutable `account.json` binds a
+The administrator selects the worker image through `workers.sdkImage` in the
+operator chart. The network policy selects its same-namespace `credentialsSecret`.
+The immutable `account.json` binds a
 single sender to a network name and an approved ingress configuration digest.
 The helper generates a fresh account used only for transfer demand. It is
 separate from miner keys, signer/enrollment keys, Bitcoin RPC principals, and
@@ -111,9 +113,11 @@ indexing and available account state before signing. Kubernetes readiness alone
 is not protocol readiness. The profile trusts the selected disposable node's
 RPC facts; it does not prove server-process identity cryptographically.
 
-Disable `stacksTransactions.enabled` and wait for the worker Pod to terminate
-to withdraw further worker access to the key. Existing signed transactions may
-still execute. Initial rotation means a fresh account and isolated environment;
+Pause the network policy to stop new signing while retaining receipt observation.
+The operator recreates a deleted worker Deployment while its capability exists.
+Disabling capability workload reconciliation does not revoke existing workers.
+Existing signed transactions may still execute. Initial rotation means a fresh
+account and isolated environment;
 there is no in-place key rotation, protocol-level key revocation, or claim that
 Pod deletion fences a paused former process. Never reuse an old namespace,
 account, data, or credential profile for recovery. Wider rotation and delegated
@@ -121,18 +125,14 @@ signing contracts remain open.
 
 ## Provision and bootstrap
 
-Build the normal network operator image and the separate transfer worker from
-the repository root. Reuse an explicitly selected cluster and load both images
-there. **Use a fresh namespace and network identity for each independent
-experiment.** A shared cluster does not make existing fixtures reusable as fresh
-bootstrap environments.
-The Stacks node image must provide `stacks-node` and `stacks-signer` and support
-the qualified configuration and native transaction endpoint. See the
-[qualification record](stacks-qualification.md) for the tested image. For specific
-Git revisions, local builds and per-actor overrides, follow the
-[custom actor image guide](actor-images.md). The defaults below select the local
-`stacks-k8s` cluster; for another cluster, set its name, kubeconfig and context
-together before running these commands.
+Reuse an explicitly selected cluster and **a fresh namespace for each independent
+environment**. Build/load the operator and SDK worker images, and choose a Stacks
+image that supports the configured epochs and native transaction index. See
+[custom actor images](actor-images.md) and the
+[managed-operation qualification](managed-operation-qualification.md).
+
+Obtain the pinned upstream sources described in [PoX-5 operation](pox5.md).
+Then, from the repository root:
 
 ```bash
 docker build -f operators/network/Dockerfile -t stacks-network-operator:local .
@@ -145,75 +145,65 @@ export STACKS_KUBECONFIG="${STACKS_KUBECONFIG:-$PWD/tools/local-cluster/kubeconf
 export STACKS_CONTEXT="${STACKS_CONTEXT:-kind-$STACKS_KIND_CLUSTER}"
 export STACKS_NAMESPACE=stacks-baseline # Choose an unused namespace.
 export STACKS_IMAGE="${STACKS_IMAGE:-YOUR_QUALIFIED_STACKS_IMAGE}"
+export STACKS_SBTC_CONTRACTS=/path/to/sbtc/contracts/contracts
+export STACKS_MANIFEST=/tmp/stacks-environment.json
 
 kind load docker-image stacks-network-operator:local stacks-transaction-worker:local \
   --name "$STACKS_KIND_CLUSTER"
-
 kubectl --kubeconfig "$STACKS_KUBECONFIG" --context "$STACKS_CONTEXT" \
   apply -f charts/stacks-network-operator/crds
 umask 077
 go -C operators/network run ./cmd/stacks-environment \
   --namespace="$STACKS_NAMESPACE" --stacks-image="$STACKS_IMAGE" \
-  > /tmp/stacks-environment.json
+  --sbtc-contracts="$STACKS_SBTC_CONTRACTS" > "$STACKS_MANIFEST"
 kubectl --kubeconfig "$STACKS_KUBECONFIG" --context "$STACKS_CONTEXT" \
-  create -f /tmp/stacks-environment.json
-helm install stacks charts/stacks-network-operator \
+  create -f "$STACKS_MANIFEST"
+# Install once per cluster, independently of the environment namespace.
+helm upgrade --install stacks charts/stacks-network-operator \
   --kubeconfig "$STACKS_KUBECONFIG" --kube-context "$STACKS_CONTEXT" \
-  --namespace "$STACKS_NAMESPACE" \
+  --namespace stacks-network-system --create-namespace \
   --set image.repository=stacks-network-operator --set image.tag=local \
-  --set bitcoinProduction.enabled=true --set stacksTransactions.enabled=true \
-  --set stacksTransactions.image.tag=local
-go -C operators/network run ./cmd/stacks-bootstrap \
-  --manifest=/tmp/stacks-environment.json \
-  --kubeconfig="$STACKS_KUBECONFIG" --context="$STACKS_CONTEXT"
+  --set workers.sdkImage.tag=local
 ```
 
-The Go generator shares the Bitcoin provisioning library and the operator’s TOML
-templates. Node.js is used only for offline SDK key encoding and signing.
-See [network configuration and genesis](configuration.md) for reusable profiles.
-Its output has an additional local `bootstrap` document; `kubectl create` applies
-only the Kubernetes List items. No bootstrap credential Secret is mounted in
-actor Pods. The external helper exclusively initializes a height-zero Bitcoin
-node while the never-used production ledger is paused: create a watch-only
-miner wallet, import its destination descriptor, and generate 201 blocks in one
-bounded call. Those startup blocks are recorded separately from baseline counts.
-Do not edit production or run another bootstrap client concurrently. An
-interrupted or ambiguous bootstrap must be investigated; the helper refuses to
-repeat initialization on an already-advanced chain.
+For subsequent networks, repeat only provisioning and `kubectl create` in a fresh
+namespace; do not repeat Helm installation. No bootstrap or maintenance command
+follows resource creation. Controllers prepare
+the watch-only miner wallet, advance the initial chain on the existing Bitcoin
+executor, enroll PoX-4 participation, deploy contract prerequisites and maintain
+PoX-5 participation. Initial blocks are included in `blocksProduced`; scheduler
+opportunities remain separate accounting. Transfers start at the declared
+`minimumBurnHeight`, after Nakamoto activation in this profile.
 
-The helper then enables the actors, resumes Bitcoin, submits one PoX-4
-registration, observes its lock, and enables transfers. Completion requires an
-exact confirmed transfer. It has bounded waits and writes separate bootstrap
-evidence; it is an external client, not a workflow embedded in a reconciler.
+The private manifest retains a local `bootstrap` identity record for inspection;
+`kubectl create` applies its Kubernetes List items. It is not an execution plan.
+Managed keys are placed in separate immutable Secrets. The older external Go
+bootstrap/maintenance commands reject managed declarations, and the provisioner
+no longer creates a competing Bitcoin bootstrap credential.
 
-The compressed profile starts Nakamoto epochs around Bitcoin height 223 and
-holds Epoch 4/PoX-5 outside its initial operating window. The initial signer
-lock covers 12 reward cycles of 20 Bitcoin blocks each: approximately 20 minutes
-at the default five-second Bitcoin interval. Actual wall-clock duration depends
-on Bitcoin progress and reward-cycle boundaries. For longer experiments, run the external renewal
-helper through an explicitly forwarded signer-node RPC endpoint:
-
-```bash
-go -C operators/network run ./cmd/stacks-maintain-signers \
-  --manifest=/tmp/stacks-environment.json --stacks-port=20443 \
-  --duration-seconds=3600
-```
-
-It offers one six-cycle extension when the remaining lock horizon is at most
-six cycles (approximately 10 minutes remaining at the default cadence), records
-the submitted TxID and observed unlock-height increase, and
-stops on ambiguous submission or timeout. Only one enrollment/renewal helper
-may own the signer account at a time. Stopping it eventually lets the signer
-lock expire; transfer traffic alone cannot maintain signer participation.
-PoX-5 transitions and automatic re-enrollment are not part of this profile.
+Inspect `StacksAccount`, `StacksContractSet`, `StacksStackingParticipant`, and
+`StacksTransactionProduction` status. `StacksNetwork` reports `Operational`
+separately from topology readiness. Ready capability status does not prove
+sustained consensus progress; observe native chain tips and confirmations over
+time. See [configuration ownership](configuration.md) and [PoX-5 operation](pox5.md).
 
 ## Teardown
 
-Delete the parent and wait for the Stacks transaction ledger, Bitcoin production
-policy, and **all retained Bitcoin target ledgers** to disappear before
-uninstalling the chart or deleting the namespace. Follow the
-[Bitcoin teardown procedure](bitcoin-production.md#dispatch-state-and-recovery)
-to include targets removed from the current policy. Controllers release
-their own ledger finalizers during explicit environment abandonment. This does
-not cancel already-signed transfers or prove Bitcoin RPC quiescence. Removing
-controllers first can strand finalizers and requires administrator disposal.
+Capture the Bitcoin target names and managed account names before deleting the
+network, including retained resources removed from current desired policy.
+Delete the parent and wait for its Stacks account ledgers, transaction ledger,
+Bitcoin production policy and **all retained Bitcoin target ledgers** to disappear
+before removing the environment namespace. Keep the shared operator installed for
+other networks; uninstall it only after disposing of all managed environments. Follow the
+[Bitcoin teardown procedure](bitcoin-production.md#dispatch-state-and-recovery).
+
+Controllers record administrative abandonment and release their own finalizers.
+This does not cancel an already signed transaction or prove Bitcoin RPC
+quiescence. Keep the workers running until ledger removal completes.
+
+## PoX-5 support
+
+The [direct PoX-5 capabilities](pox5.md) use the epoch schedule to select protocol
+behavior. Standard provisioning always includes sBTC deployment artifacts;
+there is no `--pox5` switch. Real bridge daemons and delegated pool administration
+remain separate, unimplemented capabilities.

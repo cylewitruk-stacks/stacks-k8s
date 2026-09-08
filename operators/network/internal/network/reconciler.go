@@ -38,6 +38,8 @@ type Reconciler struct {
 	ProductionEnabled bool
 	// TransactionsEnabled reports deployment of the separately credentialed transfer worker.
 	TransactionsEnabled bool
+	// OperationEnabled reports deployment of the separate protocol-maintenance worker.
+	OperationEnabled bool
 }
 
 // Reconcile moves one aggregate network toward its compiled leaf topology.
@@ -72,12 +74,14 @@ func (r *Reconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 	}
 	productionErr := r.synchronizeProduction(ctx, network)
 	transactionErr := r.synchronizeTransactions(ctx, network)
+	operationErr := r.synchronizeOperation(ctx, network)
 	patchBase = network.DeepCopy()
 	status, result, topologyErr := r.reconcileTopology(ctx, network, desired)
 	meta.SetStatusCondition(&status.Conditions, r.productionCondition(network, productionErr))
 	meta.SetStatusCondition(&status.Conditions, r.transactionCondition(network, transactionErr))
+	meta.SetStatusCondition(&status.Conditions, r.operationCondition(ctx, network, operationErr))
 	statusErr := r.updateStatus(ctx, network, patchBase, status)
-	return result, errors.Join(topologyErr, productionErr, transactionErr, statusErr)
+	return result, errors.Join(topologyErr, productionErr, transactionErr, operationErr, statusErr)
 }
 
 // reconcileTopology converges actors independently of optional capability errors.
@@ -117,6 +121,9 @@ func (r *Reconciler) SetupWithManager(manager ctrl.Manager, concurrency int) err
 		Owns(&networkv1alpha1.StacksSigner{}).
 		Owns(&bitcoinv1alpha1.BitcoinBlockProduction{}, builder.WithPredicates(productionLifecyclePredicate())).
 		Owns(&stacksv1alpha1.StacksTransactionProduction{}, builder.WithPredicates(productionLifecyclePredicate())).
+		Owns(&stacksv1alpha1.StacksAccount{}, builder.WithPredicates(productionLifecyclePredicate())).
+		Owns(&stacksv1alpha1.StacksContractSet{}).
+		Owns(&stacksv1alpha1.StacksStackingParticipant{}).
 		WithOptions(controller.Options{MaxConcurrentReconciles: concurrency}).
 		Complete(r)
 }
@@ -483,6 +490,7 @@ func condition(generation int64, status metav1.ConditionStatus, kind, reason, me
 func (r *Reconciler) updateStatus(ctx context.Context, network, patchBase *networkv1alpha1.StacksNetwork, desired networkv1alpha1.StacksNetworkStatus) error {
 	desired.BitcoinProductionUID = network.Status.BitcoinProductionUID
 	desired.TransactionProductionUID = network.Status.TransactionProductionUID
+	desired.Capabilities = append([]networkv1alpha1.CapabilityIdentity(nil), network.Status.Capabilities...)
 	if catalog := network.Status.TargetDeclarations; catalog != nil && catalog.NetworkUID == string(network.UID) && catalog.ObservedGeneration == network.Generation {
 		desired.TargetDeclarations = catalog.DeepCopy()
 	}

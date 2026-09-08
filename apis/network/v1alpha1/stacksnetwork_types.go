@@ -39,7 +39,13 @@ type StacksNetworkList struct {
 // +kubebuilder:validation:XValidation:rule="!has(self.stacksNodes) || self.stacksNodes.all(node, !has(node.serviceRefs) || node.serviceRefs.all(ref, self.bitcoinNodes.exists(actor, actor.name == ref) || (has(self.stacksNodes) && self.stacksNodes.exists(actor, actor.name == ref)) || (has(self.signers) && self.signers.exists(actor, actor.name == ref))))",message="Stacks node serviceRefs must name declared actors"
 // +kubebuilder:validation:XValidation:rule="!has(self.signers) || self.signers.all(signer, !has(signer.serviceRefs) || signer.serviceRefs.all(ref, self.bitcoinNodes.exists(actor, actor.name == ref) || (has(self.stacksNodes) && self.stacksNodes.exists(actor, actor.name == ref)) || (has(self.signers) && self.signers.exists(actor, actor.name == ref))))",message="signer serviceRefs must name declared actors"
 // +kubebuilder:validation:XValidation:rule="has(self.genesis) == has(oldSelf.genesis)",message="genesis cannot be added or removed; create a fresh network"
+// +kubebuilder:validation:XValidation:rule="!has(self.operation) || (has(self.stacksNodes) && self.operation.accounts.all(a, self.stacksNodes.exists(n, n.name == a.target)))",message="managed accounts require a declared Stacks ingress"
+// +kubebuilder:validation:XValidation:rule="!has(self.operation) || !has(self.stacksTransactionProduction) || self.operation.accounts.all(a, a.address != self.stacksTransactionProduction.sender)",message="managed account authority must not overlap the transfer producer"
+// +kubebuilder:validation:XValidation:rule="!has(self.operation) || !has(self.operation.participants) || (has(self.signers) && self.operation.participants.all(p, self.signers.exists(s, s.name == p.signer)))",message="managed participants require a declared consensus signer"
+// +kubebuilder:validation:XValidation:rule="!has(self.operation) || !has(self.operation.contractSets) || self.operation.contractSets.all(c, !has(c.bridge) || (has(self.genesis) && has(self.genesis.pox5) && self.operation.accounts.exists(a, a.name == c.account && self.genesis.pox5.sbtcContract == a.address + '.sbtc-token' && self.genesis.pox5.sbtcRegistryContract == a.address + '.sbtc-registry')))",message="managed bridge deployment must match immutable genesis contract bindings"
 type StacksNetworkSpec struct {
+	// Operation optionally manages contract prerequisites and ongoing stacking participation.
+	Operation *NetworkOperation `json:"operation,omitempty"`
 	// StacksTransactionProduction optionally maintains fixed-interval STX transfers.
 	StacksTransactionProduction *stacksv1alpha1.TransferPolicy `json:"stacksTransactionProduction,omitempty"`
 	// BitcoinBlockProduction optionally offers fixed or jittered regtest block production.
@@ -129,6 +135,12 @@ type StacksSignerTemplate struct {
 
 // StacksNetworkStatus aggregates leaf readiness and admitted identity.
 type StacksNetworkStatus struct {
+	// Capabilities retains ledger and consumer identities across declaration removal.
+	// +kubebuilder:validation:MaxItems=64
+	// +listType=map
+	// +listMapKey=kind
+	// +listMapKey=name
+	Capabilities []CapabilityIdentity `json:"capabilities,omitempty"`
 	// TransactionProductionUID permanently pins the exclusive account ledger.
 	TransactionProductionUID string `json:"transactionProductionUID,omitempty"`
 	// BitcoinProductionUID permanently pins the production ledger for this network incarnation.

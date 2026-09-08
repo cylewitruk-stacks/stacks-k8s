@@ -19,6 +19,11 @@ func AddToScheme(scheme *runtime.Scheme) error {
 
 // TargetPolicy identifies one immutable actor and its current destination.
 type TargetPolicy struct {
+	// CredentialsSecret names the same-namespace immutable worker credential document.
+	// Bitcoin uses credentials.json; transfers use account.json.
+	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$`
+	CredentialsSecret string `json:"credentialsSecret,omitempty"`
 	// Target names a Bitcoin actor in the owning network.
 	// +kubebuilder:validation:MaxLength=63
 	// +kubebuilder:validation:Pattern=`^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$`
@@ -79,6 +84,19 @@ type BitcoinProductionTargetSpec struct {
 // BitcoinProductionTargetStatus is both the bounded dispatch ledger and user-facing state.
 // +kubebuilder:validation:XValidation:rule="!(has(self.action) && has(self.reorganization))",message="only one action may reserve the executor"
 type BitcoinProductionTargetStatus struct {
+	// Conditions includes WorkerReady, independently of protocol execution evidence.
+	// +kubebuilder:validation:MaxItems=8
+	// +listType=map
+	// +listMapKey=type
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+	// ProtocolStage retains completed startup prerequisites; later actor degradation does not pause baseline mining.
+	// +kubebuilder:validation:Enum=PoX4;Contracts;PoX5
+	ProtocolStage string `json:"protocolStage,omitempty"`
+	// ObservedHeight records the last initialization/prerequisite observation.
+	// +kubebuilder:validation:Minimum=0
+	ObservedHeight int64 `json:"observedHeight,omitempty"`
+	// WalletReady reports observed watch-only wallet and descriptor prerequisites.
+	WalletReady bool `json:"walletReady,omitempty"`
 	// OpportunitiesConsumed is the latest observed target opportunity number, including skips.
 	// +kubebuilder:validation:Minimum=0
 	OpportunitiesConsumed int64 `json:"opportunitiesConsumed,omitempty"`

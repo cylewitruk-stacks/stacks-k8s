@@ -146,9 +146,10 @@ must prepopulate the npm cache with the exact locked packages and set
 `npm_config_offline=true`; Go modules/toolchains and envtest assets must also
 already be available. `make vuln` requires access to the npm advisory registry
 and Go vulnerability database for a current audit. The separate worker Dockerfile
-is `operators/network/transactions/Dockerfile`; external bootstrap/renewal
-scripts are checkout tools and are not installed in the worker image. See the
-[qualification commands](network-operator/stacks-qualification.md).
+is `operators/network/transactions/Dockerfile`; it packages offline SDK adapters
+and the Go manager for separate transfer and managed-operation Deployments.
+Controllers own managed initialization and renewal. See the
+[qualification record](network-operator/managed-operation-qualification.md).
 
 ## Native-fault contract verification
 

@@ -1,8 +1,8 @@
 # Operator development
 
-The Go module contains one aggregate controller, three leaf controllers, separately
-deployed Bitcoin and Stacks transaction controllers, and a shared workload
-collaborator. See the chart's
+The Go module contains aggregate and actor controllers, capability workload
+controllers, and independently scoped execution workers. One installation serves
+network declarations across namespaces. See the chart's
 [architecture document](../../docs/network-operator/architecture.md).
 Development requires Go 1.27.1 and Node.js 24 or newer with npm. Network API
 types and the matching isolated generator toolchain live under `../../apis/network`.
@@ -10,7 +10,7 @@ types and the matching isolated generator toolchain live under `../../apis/netwo
 The [Bitcoin baseline guide](../../docs/network-operator/bitcoin-production.md)
 covers static credential provisioning and real Core 31.1 acceptance tests.
 The [Stacks transfer guide](../../docs/network-operator/stacks-production.md)
-covers the separate SDK worker and external PoX-4 helpers; its
+covers capability-owned SDK workers and managed direct PoX-4/PoX-5 participation; its
 [qualification record](../../docs/network-operator/stacks-qualification.md)
 includes commands for the opt-in live transfer tests.
 
@@ -71,6 +71,8 @@ explicit `--reorganization` RPC profile in a fresh environment first.
 See the [operating guide](../../docs/network-operator/bitcoin-reorganization.md)
 for depth/boundary limits, retained cleanup, cancellation, and teardown.
 
-External Go commands `stacks-environment`, `stacks-bootstrap` and
-`stacks-maintain-signers` own provisioning and bootstrap. Shared TOML templates
+The Go `stacks-environment` command renders a managed declaration. Separate
+capability workers own initialization, contract deployment and stacking renewal.
+Enable `stacksOperation.enabled` alongside Bitcoin and transfer production.
+Shared TOML templates
 and immutable network genesis are described in [configuration](../../docs/network-operator/configuration.md).

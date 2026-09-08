@@ -1,4 +1,4 @@
-// Command stacks-maintain-signers maintains one externally provisioned PoX-4 stacker.
+// Command stacks-maintain-signers maintains externally provisioned direct PoX-4/PoX-5 stackers.
 package main
 
 import (

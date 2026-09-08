@@ -4,7 +4,15 @@ import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 // ProductionPolicy offers one opportunity per interval across a bounded weighted target set.
 // +kubebuilder:validation:XValidation:rule="!has(self.jitterSeconds) || (self.jitterSeconds < self.intervalSeconds && self.intervalSeconds + self.jitterSeconds <= 86400)",message="jitter must keep intervals within 1 to 86400 seconds"
+// +kubebuilder:validation:XValidation:rule="!has(self.initialization) || (size(self.targets) == 1 && self.targets[0].name == self.initialization.target)",message="initial wallet preparation requires one matching production target"
 type ProductionPolicy struct {
+	// CredentialsSecret names the same-namespace immutable worker credential document.
+	// Bitcoin uses credentials.json; transfers use account.json.
+	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$`
+	CredentialsSecret string `json:"credentialsSecret,omitempty"`
+	// Initialization prepares a watch-only miner wallet and an initial regtest chain floor.
+	Initialization *RegtestInitialization `json:"initialization,omitempty"`
 	// Targets names declared actors; weights distribute the policy's total offered rate.
 	// +kubebuilder:validation:MinItems=1
 	// +kubebuilder:validation:MaxItems=8
@@ -154,7 +162,7 @@ func (p *ProductionPolicy) ExecutionPolicy(name string) *TargetPolicy {
 	if t == nil {
 		return nil
 	}
-	return &TargetPolicy{Target: name, Address: t.Address, IntervalSeconds: p.IntervalSeconds, Paused: p.Paused}
+	return &TargetPolicy{CredentialsSecret: p.CredentialsSecret, Target: name, Address: t.Address, IntervalSeconds: p.IntervalSeconds, Paused: p.Paused}
 }
 
 // Binds verifies the root's retained UID pin and target ownership.

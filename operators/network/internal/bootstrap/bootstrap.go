@@ -7,7 +7,9 @@ import (
 	"net/http"
 	"os"
 	"reflect"
+	"regexp"
 	"strconv"
+	"strings"
 
 	bitcoin "github.com/cylewitruk-stacks/stacks-k8s/apis/network/bitcoin/v1alpha1"
 	stacks "github.com/cylewitruk-stacks/stacks-k8s/apis/network/stacks/v1alpha1"
@@ -69,22 +71,64 @@ func ValidateGenesis(setup environment.Bootstrap, parent *network.StacksNetwork)
 	if digest != setup.GenesisDigest {
 		return fmt.Errorf("bootstrap genesis digest mismatch")
 	}
-	found := false
-	for _, a := range parent.Spec.Genesis.Balances {
-		if a.Name == setup.SignerAccount && a.Address == setup.Signer.Address {
-			found = true
-		}
+	if len(setup.Participants) == 0 || len(setup.Participants) != len(parent.Spec.Signers) {
+		return fmt.Errorf("bootstrap requires one participant per declared signer")
 	}
-	if !found {
-		return fmt.Errorf("bootstrap account is absent from network genesis")
+	seen := map[string]bool{}
+	for _, p := range setup.Participants {
+		found, actor := false, false
+		for _, a := range parent.Spec.Genesis.Balances {
+			if a.Name == p.AccountName && a.Address == p.Stacker.Address {
+				found = true
+			}
+		}
+		for _, declared := range parent.Spec.Signers {
+			if declared.Name == p.Signer && declared.PublicKey == p.Consensus.PublicKey {
+				actor = true
+			}
+		}
+		if !found || !actor || seen[p.Signer] || p.Stacker.Address == p.Consensus.Address || p.Administrator.Address == p.Stacker.Address || p.Administrator.Address == p.Consensus.Address {
+			return fmt.Errorf("bootstrap participant identity or genesis allocation mismatch")
+		}
+		if setup.Bridge != nil {
+			funded := false
+			for _, a := range parent.Spec.Genesis.Balances {
+				if a.Address == p.Administrator.Address {
+					funded = true
+				}
+			}
+			prefix := p.Administrator.Address + "."
+			if !funded || !strings.HasPrefix(p.Manager, prefix) || !regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_-]{0,39}$`).MatchString(strings.TrimPrefix(p.Manager, prefix)) {
+				return fmt.Errorf("manager administration is not bound to a funded genesis identity")
+			}
+		}
+		seen[p.Signer] = true
 	}
 	expected := profiles.DefaultGenesis()
+	if setup.Bridge != nil {
+		expected.Epochs[13].StartHeight = profiles.PoX5ActivationHeight
+		bridge, bindings := setup.Bridge, parent.Spec.Genesis.PoX5
+		funded := false
+		for _, a := range parent.Spec.Genesis.Balances {
+			if a.Address == bridge.Deployer.Address {
+				funded = true
+			}
+		}
+		if !funded {
+			return fmt.Errorf("bridge deployer is absent from genesis")
+		}
+		if bindings == nil || bindings.SBTCContract != bridge.Deployer.Address+".sbtc-token" || bindings.SBTCRegistryContract != bridge.Deployer.Address+".sbtc-registry" || bindings.BondAdmin != bridge.Deployer.Address || bindings.PauseAdmin != bridge.Deployer.Address || len(bridge.Signers) != 2 || bridge.Threshold != 2 {
+			return fmt.Errorf("bootstrap bridge/genesis binding mismatch")
+		}
+	} else if parent.Spec.Genesis.PoX5 != nil {
+		return fmt.Errorf("PoX-5 requires explicit bridge initialization inputs")
+	}
 	resolved, err := profiles.ResolveGenesis(parent.Spec.Genesis)
 	if err != nil {
 		return err
 	}
 	if !reflect.DeepEqual(resolved.UseTestGenesisChainstate, expected.UseTestGenesisChainstate) || !reflect.DeepEqual(resolved.Epochs, expected.Epochs) || !reflect.DeepEqual(resolved.PoX, expected.PoX) {
-		return fmt.Errorf("external bootstrap currently supports only the qualified PoX-4 regtest schedule")
+		return fmt.Errorf("external bootstrap requires the selected built-in regtest schedule")
 	}
 	return nil
 }
@@ -95,11 +139,24 @@ func Run(ctx context.Context, options Options) error {
 	if err != nil {
 		return err
 	}
+	if declared.Spec.Operation != nil {
+		return fmt.Errorf("managed networks are initialized by their capability controllers")
+	}
+	var contracts []contractSource
+	if setup.Bridge != nil {
+		contracts, err = loadContracts(options.SBTCContracts)
+		if err != nil {
+			return err
+		}
+	}
 	if options.Kubeconfig == "" || options.Context == "" || options.BitcoinPort < 1 || options.BitcoinPort > 65535 || options.StacksPort < 1 || options.StacksPort > 65535 || options.StacksPort == options.BitcoinPort {
 		return fmt.Errorf("explicit kubeconfig/context and distinct valid loopback ports are required")
 	}
 	s := &session{options: options, namespace: setup.Namespace, http: &http.Client{Transport: &http.Transport{DisableKeepAlives: true}, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}
 	if err = s.claimEvidence("bootstrap"); err != nil {
+		return err
+	}
+	if err = environment.ValidateBootstrapKeys(setup, options.SDKDirectory); err != nil {
 		return err
 	}
 	defer s.close()
@@ -152,6 +209,7 @@ func Run(ctx context.Context, options Options) error {
 			return fmt.Errorf("bootstrap requires initially suspended signers")
 		}
 	}
+	s.networkUID = string(parent.UID)
 	// Persist the experiment identity before mutation; failure is not automatically replayed.
 	if err = s.record("BootstrapStarted", map[string]any{"network": parent.Name, "networkUID": string(parent.UID), "genesisDigest": setup.GenesisDigest}); err != nil {
 		return err
@@ -216,41 +274,48 @@ func Run(ctx context.Context, options Options) error {
 	if err = wait(ctx, "PoX-4 activation", 180, func() bool { return s.stacks(ctx, "/v2/pox", &pox) == nil && pox.Contract == pox4 }); err != nil {
 		return err
 	}
-	account, err := s.account(ctx, setup.Signer.Address)
-	if err != nil {
-		return err
-	}
-	amount := pox.NextCycle.MinThreshold + pox.NextCycle.MinThreshold/2
-	if amount < 1 || account.Balance < amount {
-		return fmt.Errorf("signer genesis balance is insufficient")
-	}
-	tx, err := s.sign(ctx, setup, "enroll", pox, account, amount, 12, 1)
-	if err != nil {
-		return err
-	}
-	if err = s.record("SignerEnrollmentAuthorized", map[string]any{"txid": tx.TxID, "nonce": account.Nonce}); err != nil {
-		return err
-	}
-	if err = s.submit(ctx, tx); err != nil {
-		return err
-	}
-	if err = s.record("SignerEnrollmentSubmitted", map[string]any{"txid": tx.TxID}); err != nil {
-		return err
-	}
-	if err = wait(ctx, "signer lock confirmation", 180, func() bool {
-		var readErr error
-		account, readErr = s.account(ctx, setup.Signer.Address)
-		return readErr == nil && account.Locked > 0
-	}); err != nil {
-		return err
-	}
-	if err = s.record("SignerEnrollmentLocked", map[string]any{"unlockHeight": account.UnlockHeight}); err != nil {
-		return err
+	for _, participant := range setup.Participants {
+		account, err := s.account(ctx, participant.Stacker.Address)
+		if err != nil {
+			return err
+		}
+		amount := pox.NextCycle.MinThreshold + pox.NextCycle.MinThreshold/2
+		if amount < 1 || account.Balance < amount {
+			return fmt.Errorf("signer genesis balance is insufficient")
+		}
+		tx, err := s.sign(ctx, participant, "enroll", pox, account, amount, 12, 1)
+		if err != nil {
+			return err
+		}
+		if err = s.record("SignerEnrollmentAuthorized", map[string]any{"txid": tx.TxID, "nonce": account.Nonce}); err != nil {
+			return err
+		}
+		if err = s.submit(ctx, tx); err != nil {
+			return err
+		}
+		if err = s.record("SignerEnrollmentSubmitted", map[string]any{"txid": tx.TxID}); err != nil {
+			return err
+		}
+		if err = wait(ctx, "signer lock confirmation", 180, func() bool {
+			var readErr error
+			account, readErr = s.account(ctx, participant.Stacker.Address)
+			return readErr == nil && account.Locked > 0
+		}); err != nil {
+			return err
+		}
+		if err = s.record("SignerEnrollmentLocked", map[string]any{"unlockHeight": account.UnlockHeight}); err != nil {
+			return err
+		}
 	}
 	if err = wait(ctx, "Nakamoto activation", 240, func() bool {
 		return s.stacks(ctx, "/v2/info", &info) == nil && info.BurnHeight >= 230 && info.StacksHeight > 0
 	}); err != nil {
 		return err
+	}
+	if setup.Bridge != nil {
+		if err = s.pauseBitcoin(ctx, setup); err != nil {
+			return err
+		}
 	}
 	if err = s.patch(ctx, parent.Name, map[string]any{"stacksTransactionProduction": map[string]any{"paused": false}}); err != nil {
 		return err
@@ -260,6 +325,23 @@ func Run(ctx context.Context, options Options) error {
 		return s.get(ctx, "stackstransactionproduction", parent.Name, &production) == nil && production.Status.Confirmed > 0
 	}); err != nil {
 		return err
+	}
+	if setup.Bridge != nil {
+		if err = s.initializeBridge(ctx, setup, contracts); err != nil {
+			return err
+		}
+		if err = s.enterPoX5(ctx, setup); err != nil {
+			return err
+		}
+		if err = s.get(ctx, "stackstransactionproduction", parent.Name, &production); err != nil {
+			return err
+		}
+		before := production.Status.Confirmed
+		if err = wait(ctx, "fresh transfer in PoX-5 reward cycle", 180, func() bool {
+			return s.get(ctx, "stackstransactionproduction", parent.Name, &production) == nil && production.Status.Confirmed > before
+		}); err != nil {
+			return err
+		}
 	}
 	if err = s.stacks(ctx, "/v2/info", &info); err != nil {
 		return err

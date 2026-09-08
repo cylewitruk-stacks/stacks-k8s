@@ -15,39 +15,43 @@ commands from the repository root.
 The default `0.1.0` image reference becomes usable when that release is
 published. For an unpublished checkout, use the local-image procedure below.
 
-The chart watches only its release namespace.
+The chart installs one operator, watching all namespaces by default. Set
+`controller.watchNamespace` to a single namespace for a scoped installation.
+Leader election remains in the Helm release namespace. Install once, then create
+network declarations and their referenced Secrets/ConfigMaps in fresh namespaces.
+Do not run overlapping operator installations.
 
-Optional [Bitcoin baseline production](../../docs/network-operator/bitcoin-production.md)
-runs in a separate Deployment and ServiceAccount. Set
-`bitcoinProduction.enabled=true` after provisioning its immutable static RPC
-profile and `bitcoinProduction.credentialsSecret` (default
-`stacks-bitcoin-production-rpc`). Production has its own leader election and a
-45-second shutdown grace period. The default chart remains topology-only.
-The chart also passes this setting to the topology controller so a configured
-policy reports `ProductionConfigured=False` / `ControllerDisabled` when disabled.
-This condition describes configuration, not producer health. The producer's
-32 receipt slots and 25-second drain are fixed initial-profile limits. Its
-ConfigMap `list` permission is required by the API-readiness probe.
+Capability controllers create worker Deployments on demand. Bitcoin execution
+uses the operator image; Stacks execution uses `workers.sdkImage`. Network
+production policies select their same-namespace `credentialsSecret`, rather than
+putting network credentials in Helm values. See the
+[workload architecture](../../docs/design/operator-workloads.md).
 
-Optional [Stacks transfers](../../docs/network-operator/stacks-production.md)
-use `stacksTransactions.enabled=true`, a separate worker image configured under
-`stacksTransactions.image`, and an immutable `stacksTransactions.credentialsSecret`
-(default `stacks-transaction-account`). Its own ServiceAccount can read admitted
-actor identity and update only its capability ledger; it cannot read Secrets
-through the API or mutate workloads. Only that Deployment mounts the signing
-account. `TransactionsConfigured` reports whether this capability is compiled
-and enabled. The worker uses one replica with `Recreate` and independent leader
-election. ConfigMap `list` is required by its API-readiness probe.
+`bitcoinProduction.enabled`, `stacksTransactions.enabled` and
+`stacksOperation.enabled` default to true and control capability reconciliation.
+Disabling them stops the corresponding provisioning controllers; the Bitcoin
+switch also stops new baseline scheduling. It does not revoke existing workers.
+An existing Bitcoin worker can still perform declared initialization up to
+`initialHeight` without a scheduled opportunity; network pause stops new
+initialization dispatches as well as baseline production. Use the network's explicit pause policy to stop new
+production while allowing outstanding evidence collection. A topology-only
+network creates no production workers without capability declarations.
+
+Workers have individual ServiceAccounts, namespace-bounded reads and named ledger
+writes. They cannot read Secrets through the API or mutate workloads. Only the
+assigned workers mount signing/RPC keys. Bitcoin receipt collection retains the
+existing 25-second drain inside a 45-second Pod termination grace period.
 
 Leader election is enabled by default and is required when `replicaCount` is
 greater than one. If explicitly disabled for a single-replica installation,
-the Deployment uses `Recreate` so an upgrade cannot overlap two writers.
+the Deployment uses `Recreate` to reduce process overlap during an upgrade;
+ledger admission remains the execution authority.
 `controller.logLevel` accepts `debug`, `info`, `error`, or `panic`.
 
 ```bash
 helm upgrade --install stacks-network-operator \
   charts/stacks-network-operator \
-  --namespace stacks-regtest \
+  --namespace stacks-network-system \
   --create-namespace
 ```
 
@@ -59,18 +63,20 @@ docker build \
   -t stacks-network-operator:local \
   .
 
-kind load docker-image stacks-network-operator:local --name attacknet
+docker build -f operators/network/transactions/Dockerfile -t stacks-transaction-worker:local .
+kind load docker-image stacks-network-operator:local stacks-transaction-worker:local --name stacks-k8s
 
 helm upgrade --install stacks-network-operator \
   charts/stacks-network-operator \
-  --namespace stacks-regtest \
+  --namespace stacks-network-system \
   --create-namespace \
   --set image.repository=stacks-network-operator \
   --set image.tag=local \
+  --set workers.sdkImage.tag=local \
   --set image.pullPolicy=Never
 ```
 
-Use the actual kind cluster name in place of `attacknet`.
+Use the explicitly selected kind cluster name in place of `stacks-k8s`.
 
 The topology examples also reference actor images. Build and load
 `stacks-core-network:local`, or edit the example to use an immutable image
@@ -79,9 +85,10 @@ available to the cluster, before applying it.
 ## Create a network
 
 Edit the actor image in [the minimal example](../../examples/network/minimal.yaml), then
-apply it:
+create its namespace and apply it:
 
 ```bash
+kubectl create namespace stacks-regtest
 kubectl --namespace stacks-regtest apply \
   --filename examples/network/minimal.yaml
 
@@ -184,7 +191,7 @@ kubectl --namespace stacks-regtest delete stacksnetworks --all
 kubectl --namespace stacks-regtest wait --for=delete \
   bitcoinblockproductions,bitcoinproductiontargets,stackstransactionproductions \
   --all --timeout=120s
-helm --namespace stacks-regtest uninstall stacks-network-operator
+helm --namespace stacks-network-system uninstall stacks-network-operator
 ```
 
 Helm intentionally does not delete installed CRDs. Remove them only after all
@@ -224,3 +231,44 @@ and [finite cadence](../../docs/network-operator/bitcoin-generation.md#cadence) 
 The chart also installs `StacksGenesisProfile`, an immutable public recipe for
 external provisioning. It has no controller or runtime profile lookup. Network
 genesis snapshots are immutable; see [configuration and genesis](../../docs/network-operator/configuration.md).
+
+## Managed protocol worker
+
+`StacksContractSet` and `StacksStackingParticipant` each own a separate Go worker
+Deployment using `workers.sdkImage`. They mount only their declared account keys;
+stacking also mounts the consensus authorization key. The consensus signer binary
+continues to run in its independently owned actor StatefulSet.
+
+Each managed network owns a keyless legacy receipt Deployment and Service named
+`<network>-receipts` (long names use the shared naming hash). Generated ingress
+configuration points to this service. Custom ingress configurations must provide
+the same callback destination and native transaction indexing. The receiver
+checks network UID, exact transaction bytes, current ingress Pod identity and
+canonical legacy ancestry before accounting an existing authorization.
+
+See [managed operation](../../docs/design/managed-network-operation.md) and
+[PoX-5 operation](../../docs/network-operator/pox5.md). Keep the shared operator
+installed until all networks and retained ledgers have been disposed of.
+
+### Worker registry credentials
+
+Set `workers.pullSecrets` to image-pull Secret names provisioned in each network
+namespace. `image.pullSecrets` applies to the operator installation namespace.
+The operator references these Secrets without reading or copying their contents.
+Worker resource requests, limits and placement currently use built-in defaults;
+operator chart scheduling settings apply only to the operator Pod.
+
+### Upgrading execution workers
+
+The operator image also runs Bitcoin and receipt workers. Changing it can roll
+those workers across every managed namespace; changing `workers.sdkImage` rolls
+transfer, contract and stacking workers. Before such upgrades, pause managed
+operation and transfers through each network's policies, leave Bitcoin running
+until outstanding transactions are accounted, then pause Bitcoin and wait for
+outstanding dispatch receipts. Keep the operator and workers running during drain.
+
+Upgrade only after the ledgers have reached acknowledged boundaries. An unknown
+outcome cannot be drained into certainty; retain its evidence and follow the
+capability's documented recovery model. Resume the latest desired policies after
+the new workloads are available. Pod replacement and the 25-second Bitcoin drain
+limit do not establish server-side quiescence.

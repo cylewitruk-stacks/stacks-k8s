@@ -11,21 +11,30 @@ var GroupVersion = schema.GroupVersion{Group: "stacks.stacks.org", Version: "v1a
 
 // AddToScheme registers transaction-production resources.
 func AddToScheme(scheme *runtime.Scheme) error {
-	scheme.AddKnownTypes(GroupVersion, &StacksTransactionProduction{}, &StacksTransactionProductionList{})
+	scheme.AddKnownTypes(GroupVersion, &StacksTransactionProduction{}, &StacksTransactionProductionList{},
+		&StacksAccount{}, &StacksAccountList{}, &StacksContractSet{}, &StacksContractSetList{},
+		&StacksStackingParticipant{}, &StacksStackingParticipantList{})
 	metav1.AddToGroupVersion(scheme, GroupVersion)
 	return nil
 }
 
 // TransferPolicy offers one tiny STX transfer at a time through one declared ingress.
 type TransferPolicy struct {
+	// CredentialsSecret names the same-namespace immutable worker credential document.
+	// Bitcoin uses credentials.json; transfers use account.json.
+	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$`
+	CredentialsSecret string `json:"credentialsSecret,omitempty"`
 	// Target names the declared Stacks ingress actor.
 	// +kubebuilder:validation:MaxLength=63
 	// +kubebuilder:validation:Pattern=`^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$`
 	Target string `json:"target"`
 	// Sender identifies the administrator-provisioned exclusive test account.
+	// +kubebuilder:validation:MaxLength=42
 	// +kubebuilder:validation:Pattern=`^ST[0-9A-HJKMNP-TV-Z]{20,40}$`
 	Sender string `json:"sender"`
 	// Recipient receives the offered micro-STX amount.
+	// +kubebuilder:validation:MaxLength=42
 	// +kubebuilder:validation:Pattern=`^ST[0-9A-HJKMNP-TV-Z]{20,40}$`
 	Recipient string `json:"recipient"`
 	// AmountMicroSTX bounds each ordinary transfer to at most one STX.
@@ -40,6 +49,10 @@ type TransferPolicy struct {
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=86400
 	IntervalSeconds int32 `json:"intervalSeconds"`
+	// MinimumBurnHeight holds new transfers until the ingress observes this burn height.
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=9007199254740991
+	MinimumBurnHeight int64 `json:"minimumBurnHeight,omitempty"`
 	// Paused stops new signing/dispatch while outstanding evidence remains observable.
 	Paused bool `json:"paused,omitempty"`
 }
@@ -83,6 +96,11 @@ type StacksTransactionProductionSpec struct {
 
 // StacksTransactionProductionStatus is a bounded ledger, not a transaction indexer.
 type StacksTransactionProductionStatus struct {
+	// Conditions includes WorkerReady, independently of protocol execution evidence.
+	// +kubebuilder:validation:MaxItems=8
+	// +listType=map
+	// +listMapKey=type
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
 	// ObservedGeneration identifies the declaration inspected by the controller.
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 	// Phase is Waiting, Paused, Pending, Ambiguous, Running, Blocked, or Abandoned.

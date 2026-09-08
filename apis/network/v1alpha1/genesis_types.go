@@ -42,6 +42,8 @@ type GenesisSpec struct {
 	// +kubebuilder:validation:XValidation:rule="size(self) != 14 || (self[0].startHeight == 0 && self[1].startHeight == 0)",message="epochs 1.0 and 2.0 must start at zero"
 	// +listType=atomic
 	Epochs []GenesisEpoch `json:"epochs,omitempty"`
+	// PoX5 binds non-mainnet PoX-5 to the same contracts and administrators on every node.
+	PoX5 *GenesisPoX5 `json:"pox5,omitempty"`
 	// PoX defines the shared regtest cycle lengths.
 	PoX *GenesisPoX `json:"pox,omitempty"`
 }
@@ -82,4 +84,24 @@ type GenesisPoX struct {
 	// +kubebuilder:validation:Minimum=2
 	// +kubebuilder:validation:Maximum=100000
 	RewardCycleLength int32 `json:"rewardCycleLength"`
+}
+
+// GenesisPoX5 contains immutable non-mainnet protocol bindings, not bridge signer membership.
+type GenesisPoX5 struct {
+	// SBTCContract identifies the deployed sBTC token contract.
+	// +kubebuilder:validation:MaxLength=128
+	// +kubebuilder:validation:Pattern=`^S[NT][0-9A-HJKMNP-TV-Z]{26,39}\.[a-zA-Z][a-zA-Z0-9_-]{0,39}$`
+	SBTCContract string `json:"sbtcContract"`
+	// SBTCRegistryContract identifies the registry whose aggregate key is read by PoX-5.
+	// +kubebuilder:validation:MaxLength=128
+	// +kubebuilder:validation:Pattern=`^S[NT][0-9A-HJKMNP-TV-Z]{26,39}\.[a-zA-Z][a-zA-Z0-9_-]{0,39}$`
+	SBTCRegistryContract string `json:"sbtcRegistryContract"`
+	// BondAdmin is the test-network bond administrator.
+	// +kubebuilder:validation:MaxLength=128
+	// +kubebuilder:validation:Pattern=`^S[NT][0-9A-HJKMNP-TV-Z]{26,39}(\.[a-zA-Z][a-zA-Z0-9_-]{0,39})?$`
+	BondAdmin string `json:"bondAdmin"`
+	// PauseAdmin is the test-network pause administrator.
+	// +kubebuilder:validation:MaxLength=128
+	// +kubebuilder:validation:Pattern=`^S[NT][0-9A-HJKMNP-TV-Z]{26,39}(\.[a-zA-Z][a-zA-Z0-9_-]{0,39})?$`
+	PauseAdmin string `json:"pauseAdmin"`
 }

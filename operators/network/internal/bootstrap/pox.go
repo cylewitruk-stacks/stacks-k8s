@@ -1,21 +1,17 @@
 package bootstrap
 
 import (
-	"bytes"
 	"context"
-	"crypto/sha512"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os/exec"
-	"path/filepath"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/environment"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/stacksrpc"
+	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/stackstx"
 )
 
 // poxFee is the explicit micro-STX fee for external enrollment and renewal.
@@ -61,45 +57,22 @@ func (s *session) account(ctx context.Context, address string) (accountState, er
 }
 
 // signedTransaction is one exact SDK-signed transaction, independently hash-checked in Go.
-type signedTransaction struct {
-	TxID  string `json:"txid"`
-	Bytes string `json:"bytes"`
-}
+type signedTransaction = stackstx.Transaction
 
 // sign requests offline encoding, with explicit nonce and protocol observations.
-func (s *session) sign(ctx context.Context, setup environment.Bootstrap, operation string, pox poxInfo, account accountState, amount, cycles, authID int64) (signedTransaction, error) {
+func (s *session) sign(ctx context.Context, participant environment.StackingParticipant, operation string, pox poxInfo, account accountState, amount, cycles, authID int64) (signedTransaction, error) {
+	if pox.Contract == pox5 {
+		return s.signPoX5(ctx, participant, operation, pox, account, amount, cycles)
+	}
 	if pox.Contract != pox4 || pox.BurnHeight < 0 || pox.RewardCycle < 0 || pox.CycleLength <= 0 {
 		return signedTransaction{}, fmt.Errorf("unsupported PoX observation")
 	}
-	input := map[string]any{"fee": poxFee, "account": setup.Signer, "operation": operation, "contract": pox.Contract, "nonce": strconv.FormatInt(account.Nonce, 10), "burnHeight": strconv.FormatInt(pox.BurnHeight, 10), "rewardCycle": strconv.FormatInt(pox.RewardCycle, 10), "amount": strconv.FormatInt(amount, 10), "authID": strconv.FormatInt(authID, 10), "cycles": strconv.FormatInt(cycles, 10)}
-	data, err := json.Marshal(input)
-	if err != nil {
-		return signedTransaction{}, err
-	}
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, "node", filepath.Join(s.options.SDKDirectory, "pox-sign.mjs"))
-	cmd.Stdin = bytes.NewReader(data)
-	out, err := cmd.Output()
-	if err != nil {
-		return signedTransaction{}, fmt.Errorf("offline PoX signing failed")
-	}
-	var tx signedTransaction
-	if json.Unmarshal(out, &tx) != nil || !validTransaction(tx) {
-		return tx, fmt.Errorf("invalid signed PoX transaction")
-	}
-	return tx, nil
+	input := map[string]any{"fee": poxFee, "account": participant.Stacker, "consensus": participant.Consensus, "operation": operation, "contract": pox.Contract, "nonce": strconv.FormatInt(account.Nonce, 10), "burnHeight": strconv.FormatInt(pox.BurnHeight, 10), "rewardCycle": strconv.FormatInt(pox.RewardCycle, 10), "amount": strconv.FormatInt(amount, 10), "authID": strconv.FormatInt(authID, 10), "cycles": strconv.FormatInt(cycles, 10)}
+	return s.offline(ctx, "pox-sign.mjs", input)
 }
 
 // validTransaction verifies the exact wire identity without trusting adapter output.
-func validTransaction(tx signedTransaction) bool {
-	raw, err := hex.DecodeString(tx.Bytes)
-	if err != nil || len(raw) < 100 || len(raw) > 4096 {
-		return false
-	}
-	sum := sha512.Sum512_256(raw)
-	return tx.TxID == hex.EncodeToString(sum[:])
-}
+func validTransaction(tx signedTransaction) bool { return stackstx.Valid(tx) }
 
 // submit makes exactly one attempt and requires acknowledgement of the reserved transaction ID.
 func (s *session) submit(ctx context.Context, tx signedTransaction) error {

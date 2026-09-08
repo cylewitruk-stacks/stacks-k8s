@@ -308,6 +308,38 @@ spec:
                     - message: prepare phase must be shorter than the complete reward
                         cycle
                       rule: self.prepareLength < self.rewardCycleLength
+                  pox5:
+                    description: PoX5 binds non-mainnet PoX-5 to the same contracts
+                      and administrators on every node.
+                    properties:
+                      bondAdmin:
+                        description: BondAdmin is the test-network bond administrator.
+                        maxLength: 128
+                        pattern: ^S[NT][0-9A-HJKMNP-TV-Z]{26,39}(\.[a-zA-Z][a-zA-Z0-9_-]{0,39})?$
+                        type: string
+                      pauseAdmin:
+                        description: PauseAdmin is the test-network pause administrator.
+                        maxLength: 128
+                        pattern: ^S[NT][0-9A-HJKMNP-TV-Z]{26,39}(\.[a-zA-Z][a-zA-Z0-9_-]{0,39})?$
+                        type: string
+                      sbtcContract:
+                        description: SBTCContract identifies the deployed sBTC token
+                          contract.
+                        maxLength: 128
+                        pattern: ^S[NT][0-9A-HJKMNP-TV-Z]{26,39}\.[a-zA-Z][a-zA-Z0-9_-]{0,39}$
+                        type: string
+                      sbtcRegistryContract:
+                        description: SBTCRegistryContract identifies the registry
+                          whose aggregate key is read by PoX-5.
+                        maxLength: 128
+                        pattern: ^S[NT][0-9A-HJKMNP-TV-Z]{26,39}\.[a-zA-Z][a-zA-Z0-9_-]{0,39}$
+                        type: string
+                    required:
+                    - bondAdmin
+                    - pauseAdmin
+                    - sbtcContract
+                    - sbtcRegistryContract
+                    type: object
                   useTestGenesisChainstate:
                     description: |-
                       UseTestGenesisChainstate includes the selected binary's test genesis allocations in addition to Balances.

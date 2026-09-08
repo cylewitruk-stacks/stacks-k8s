@@ -24,6 +24,8 @@ const DefaultBitcoinImage = "bitcoin/bitcoin:31.1@sha256:da25cedc66b1daefff9f412
 type BitcoinOptions struct {
 	// Namespace, Name, Image and Address select the environment and coinbase destination.
 	Namespace, Name, Image, Address string
+	// InitializeWallet grants idempotent watch-only miner wallet preparation to the producer.
+	InitializeWallet bool
 	// Reorganization grants the optional bounded reorganization method profile.
 	Reorganization bool
 	// Interval is the total baseline opportunity interval in seconds.
@@ -49,6 +51,9 @@ type BitcoinEnvironment struct {
 func Bitcoin(options BitcoinOptions) (BitcoinEnvironment, error) {
 	producer, observer := token(), token()
 	producerMethods := "getblockchaininfo,validateaddress,generatetoaddress"
+	if options.InitializeWallet {
+		producerMethods += ",listwallets,listwalletdir,loadwallet,createwallet,getwalletinfo,getdescriptorinfo,listdescriptors,importdescriptors"
+	}
 	observerMethods := "getblockchaininfo,getblockcount,getbestblockhash"
 	if options.Reorganization {
 		producerMethods += ",getblockheader,getblockhash,getchaintips,invalidateblock,reconsiderblock"
@@ -100,7 +105,7 @@ func Bitcoin(options BitcoinOptions) (BitcoinEnvironment, error) {
 	parent := &networkv1alpha1.StacksNetwork{TypeMeta: metav1.TypeMeta{APIVersion: networkv1alpha1.GroupVersion.String(), Kind: "StacksNetwork"}, ObjectMeta: metav1.ObjectMeta{Name: options.Name, Namespace: options.Namespace}, Spec: networkv1alpha1.StacksNetworkSpec{
 		Defaults:               networkv1alpha1.NetworkDefaults{BitcoinImage: options.Image},
 		BitcoinNodes:           nodes,
-		BitcoinBlockProduction: &bitcoinv1alpha1.ProductionPolicy{Targets: targets, IntervalSeconds: int32(options.Interval)},
+		BitcoinBlockProduction: &bitcoinv1alpha1.ProductionPolicy{CredentialsSecret: "stacks-bitcoin-production-rpc", Targets: targets, IntervalSeconds: int32(options.Interval)},
 	}}
 	objects := []any{
 		&corev1.Namespace{TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "Namespace"}, ObjectMeta: metav1.ObjectMeta{Name: options.Namespace}},

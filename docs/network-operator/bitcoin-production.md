@@ -3,13 +3,14 @@
 The implemented profile offers one regtest block per fixed or jittered policy interval,
 selecting among 1–8 declared Bitcoin targets using integer weights. Target
 execution is independent of aggregate readiness and of other targets' receipts
-or action reservations. It does not bootstrap Stacks or supply transaction demand.
+or action reservations. Optional wallet/initial-height preparation shares this
+executor; Stacks contracts, participation and demand have separate controllers.
 
 ## Start a disposable environment
 
 Build and load the network operator image using the
-[chart guide](../../charts/stacks-network-operator/README.md). Select an isolated
-cluster and a **new namespace**. Install the CRDs, then generate fresh static
+[chart guide](../../charts/stacks-network-operator/README.md). Reuse an explicitly selected
+cluster and choose a **new namespace**. Install the CRDs, then generate fresh static
 credentials and an immutable Bitcoin configuration:
 
 ```bash
@@ -27,15 +28,19 @@ GOWORK=off go -C operators/network run ./cmd/bitcoin-environment \
 kubectl --kubeconfig "$STACKS_KUBECONFIG" --context "$STACKS_CONTEXT" \
   create -f /tmp/bitcoin-environment.json
 
-helm install bitcoin charts/stacks-network-operator \
+helm upgrade --install stacks charts/stacks-network-operator \
   --kubeconfig "$STACKS_KUBECONFIG" --kube-context "$STACKS_CONTEXT" \
-  --namespace "$STACKS_NAMESPACE" \
+  --namespace stacks-network-system --create-namespace \
   --set image.repository=stacks-network-operator --set image.tag=local \
-  --set bitcoinProduction.enabled=true
+  --set stacksTransactions.enabled=false --set stacksOperation.enabled=false
 
 kubectl --kubeconfig "$STACKS_KUBECONFIG" --context "$STACKS_CONTEXT" \
   -n "$STACKS_NAMESPACE" get stacksnetworks,bitcoinblockproductions,bitcoinproductiontargets
 ```
+
+Install the operator once. If it is already installed, omit the Helm command and
+create only the new environment's resources. Each `BitcoinProductionTarget` owns
+its RPC worker; the operator performs weighted scheduling without RPC credentials.
 
 The helper defaults to the pinned `bitcoin/bitcoin:31.1` image index. Its
 `--image`, `--interval-seconds`, `--name`, `--address`, and `--target-weights` flags customize the
@@ -50,6 +55,7 @@ The supported entry point is `StacksNetwork.spec.bitcoinBlockProduction`:
 
 ```yaml
 bitcoinBlockProduction:
+  credentialsSecret: stacks-bitcoin-production-rpc
   intervalSeconds: 5
   targets:
     - name: bitcoin
@@ -103,8 +109,9 @@ fresh environment is provisioned. Individual missing, replaced, or unavailable
 ledgers otherwise affect only their own execution opportunities.
 
 `StacksNetwork.status.conditions` includes `ProductionConfigured`. Its
-`ControllerDisabled` reason explains a policy configured while chart production
-is disabled; `PolicyUnavailable` reports compilation or ledger problems.
+`ProvisioningDisabled` reason explains disabled worker provisioning and baseline
+scheduling; existing execution may continue until network policy pauses it.
+`PolicyUnavailable` reports compilation or ledger problems.
 `PolicyReady` means the policy is compiled and the deployment option is enabled,
 not that the producer is currently healthy. Inspect the child for execution
 state. Production failures do not prevent actor updates, pruning, or readiness
@@ -297,3 +304,20 @@ existing generic `live` suite remains separate.
 
 Cadence validation and qualification limits are recorded in the
 [cadence review ledger](../reviews/bitcoin-cadence-review.md).
+
+## Managed network initialization
+
+`policy.initialization` optionally declares one target, a watch-only descriptor
+wallet and an initial height up to 201. Initial advancement uses the existing
+single-block dispatch/receipt mechanism and is included in `blocksProduced`.
+It can proceed without a timing opportunity until the floor is reached;
+scheduler offered/consumed/skipped counters still describe only actual offers.
+No second mining script or generation credential is introduced.
+
+A network with managed protocol capabilities has startup prerequisite holds for
+initial PoX-4 enrollment, contract deployment and first PoX-5 participation.
+`BitcoinProductionTarget.status.protocolStage` retains completed startup stages.
+These acknowledgements survive worker restarts and later protocol degradation;
+ongoing Stacks health does not become an implicit Bitcoin pause. Explicit user
+production pause and target identity admission continue to apply.
+See [managed operation](../design/managed-network-operation.md).

@@ -29,6 +29,9 @@ configured, and externally driven networks remain valid uses.
 | `StacksSigner` | Run a signer with its configured identity and behavior. |
 | `BitcoinBlockProduction` | Apply emission timing and target-selection policy across referenced Bitcoin nodes. |
 | `StacksTransactionProduction` | Ongoing Stacks demand; one-account fixed-interval transfers through one ingress are implemented. |
+| `StacksAccount` | Retain exclusive transaction authority and exact execution evidence for one managed account. |
+| `StacksContractSet` | Establish exact contract artifacts and declared initial bridge state. |
+| `StacksStackingParticipant` | Maintain declared direct stacking and signer-manager registration independently of the signer Pod. |
 | Bounded action/override | Apply one temporary, independently observable intervention. |
 
 The aggregate controller compiles owned resources; it does not issue mining
@@ -44,9 +47,11 @@ explicit ownership/overlap rules before becoming a supported advanced API.
 ## Network genesis and configuration
 
 Each provisioned network carries an immutable public genesis snapshot: accounts,
-balances, test-genesis selection, epoch schedule and PoX parameters. External Go
+balances, test-genesis selection, epoch schedule, PoX parameters and optional
+PoX-5 contract/admin principals. External Go
 provisioning may copy a reusable immutable `StacksGenesisProfile`; controllers
-do not look it up or bootstrap the chain. One Go TOML renderer supplies node and
+use the copied snapshot rather than looking up a mutable recipe. One Go TOML
+renderer supplies node and
 signer configurations. SDK adapters only encode keys and sign transactions.
 See [configuration ownership](../network-operator/configuration.md).
 
@@ -93,7 +98,9 @@ proposal or block in every interval.
 The [initial transfer profile](../network-operator/stacks-production.md) implements
 a separately deployed worker, one exclusive account/ingress, fixed offered
 intervals, and exact inclusion accounting. External helpers own funding and
-PoX-4 enrollment/renewal. Its static account isolation is qualified; rotation
+direct PoX-4/PoX-5 enrollment and renewal with separate holder, manager
+administrator and consensus-signer identities. See the
+[PoX-5 profile](../network-operator/pox5.md). Its static account isolation is qualified; rotation
 means withdrawal followed by a fresh account/environment, with no hot rotation
 or protocol revocation claim. Broader contracts below remain open.
 
@@ -112,8 +119,9 @@ production; signing material never enters public specs, status, or evidence.
 
 Distinguish submitted, accepted, rejected, pending, and confirmed transactions.
 Do not increase offered traffic automatically to conceal a throughput drop.
-Funding and signer registration need their own bounded primitives or external
-helpers; transaction production does not acquire a bootstrap workflow.
+Contract initialization and signer registration/renewal use separate desired-state
+capabilities compiled from `StacksNetwork.spec.operation`; transaction production
+remains independent. See [managed network operation](managed-network-operation.md).
 
 ## Temporary interventions
 

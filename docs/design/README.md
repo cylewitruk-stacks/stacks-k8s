@@ -168,3 +168,7 @@ name the single owner of every field and side effect, and provide a negative
 test demonstrating that the controller cannot expand into scenario
 orchestration. Unresolved decisions remain explicit; they must not be silently
 chosen during implementation.
+
+The [managed network operation contract](managed-network-operation.md) defines
+controller-owned initialization and participation independently of experiment
+orchestration and consensus-signer workload placement.
