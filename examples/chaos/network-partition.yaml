@@ -1,0 +1,25 @@
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: actor-partition
+  namespace: chaos-live
+  labels:
+    network.stacks.org/network: chaos
+    actions.stacks.org/correlation-id: network-partition-check
+spec:
+  action: partition
+  mode: one
+  direction: both
+  duration: 30s
+  selector:
+    namespaces: [chaos-live]
+    labelSelectors:
+      network.stacks.org/network: chaos
+      network.stacks.org/actor: bitcoin
+  target:
+    mode: one
+    selector:
+      namespaces: [chaos-live]
+      labelSelectors:
+        network.stacks.org/network: chaos
+        network.stacks.org/actor: bitcoin-2

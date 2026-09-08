@@ -1,0 +1,7 @@
+The Stacks observability operator is installed in {{ .Release.Namespace }}.
+
+Create a one-shot identity observation:
+  kubectl --namespace {{ .Release.Namespace }} apply -f examples/observability/identity.yaml
+
+Inspect the result:
+  kubectl --namespace {{ .Release.Namespace }} get networkobservations

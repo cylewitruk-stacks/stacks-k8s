@@ -1,0 +1,1920 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.22.0
+  name: stacksnetworks.network.stacks.org
+spec:
+  group: network.stacks.org
+  names:
+    kind: StacksNetwork
+    listKind: StacksNetworkList
+    plural: stacksnetworks
+    singular: stacksnetwork
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - description: Ready actors
+      jsonPath: .status.readyActors
+      name: Ready
+      type: integer
+    - description: Desired actors
+      jsonPath: .status.desiredActors
+      name: Desired
+      type: integer
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: StacksNetwork declares the desired topology of one Stacks regtest
+          network.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: StacksNetworkSpec defines an aggregate regtest topology.
+            properties:
+              bitcoinBlockProduction:
+                description: BitcoinBlockProduction optionally offers fixed or jittered
+                  regtest block production.
+                properties:
+                  credentialsSecret:
+                    description: |-
+                      CredentialsSecret names the same-namespace immutable worker credential document.
+                      Bitcoin uses credentials.json; transfers use account.json.
+                    maxLength: 253
+                    pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                    type: string
+                  initialization:
+                    description: Initialization prepares a watch-only miner wallet
+                      and an initial regtest chain floor.
+                    properties:
+                      initialHeight:
+                        description: InitialHeight is the initial regtest chain floor,
+                          not an ongoing height target.
+                        format: int64
+                        maximum: 201
+                        minimum: 1
+                        type: integer
+                      target:
+                        description: Target names the production target whose wallet
+                          funds the initial miner.
+                        maxLength: 63
+                        pattern: ^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$
+                        type: string
+                      wallet:
+                        description: Wallet names the watch-only descriptor wallet
+                          used by Stacks miners.
+                        maxLength: 63
+                        pattern: ^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$
+                        type: string
+                    required:
+                    - initialHeight
+                    - target
+                    - wallet
+                    type: object
+                  intervalSeconds:
+                    description: IntervalSeconds is the central policy interval, independently
+                      of receipt time.
+                    format: int32
+                    maximum: 86400
+                    minimum: 1
+                    type: integer
+                  jitterSeconds:
+                    description: JitterSeconds samples integer delays uniformly in
+                      intervalSeconds plus or minus this bound.
+                    format: int32
+                    maximum: 43199
+                    minimum: 0
+                    type: integer
+                  paused:
+                    description: Paused stops new opportunities; already authorized
+                      work may still complete.
+                    type: boolean
+                  targets:
+                    description: Targets names declared actors; weights distribute
+                      the policy's total offered rate.
+                    items:
+                      description: ProductionTarget configures one weighted actor
+                        and its coinbase destination.
+                      properties:
+                        address:
+                          description: Address receives this target's generated coinbase
+                            outputs.
+                          maxLength: 128
+                          minLength: 14
+                          type: string
+                        name:
+                          description: Name identifies a Bitcoin actor declared in
+                            the owning network.
+                          maxLength: 63
+                          pattern: ^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$
+                          type: string
+                        weight:
+                          description: Weight is a relative share of generation opportunities,
+                            without availability redistribution.
+                          format: int32
+                          maximum: 1000
+                          minimum: 1
+                          type: integer
+                      required:
+                      - address
+                      - name
+                      - weight
+                      type: object
+                    maxItems: 8
+                    minItems: 1
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
+                required:
+                - intervalSeconds
+                - targets
+                type: object
+                x-kubernetes-validations:
+                - message: jitter must keep intervals within 1 to 86400 seconds
+                  rule: '!has(self.jitterSeconds) || (self.jitterSeconds < self.intervalSeconds
+                    && self.intervalSeconds + self.jitterSeconds <= 86400)'
+                - message: initial wallet preparation requires one matching production
+                    target
+                  rule: '!has(self.initialization) || (size(self.targets) == 1 &&
+                    self.targets[0].name == self.initialization.target)'
+              bitcoinNodes:
+                items:
+                  description: BitcoinNodeTemplate is the aggregate declaration for
+                    one Bitcoin node.
+                  properties:
+                    config:
+                      description: ConfigSource selects generated, inline, ConfigMap,
+                        or Secret configuration.
+                      properties:
+                        configMapRef:
+                          description: ConfigObjectRef identifies one complete configuration
+                            file.
+                          properties:
+                            expectedDigest:
+                              description: ExpectedDigest triggers a restart and verifies
+                                mounted bytes before actor startup.
+                              pattern: ^sha256:[0-9a-f]{64}$
+                              type: string
+                            key:
+                              type: string
+                            mountPath:
+                              type: string
+                            name:
+                              minLength: 1
+                              type: string
+                          required:
+                          - name
+                          type: object
+                        generated:
+                          description: GeneratedConfig selects one bounded built-in
+                            configuration profile.
+                          properties:
+                            bootstrapPeers:
+                              items:
+                                type: string
+                              maxItems: 64
+                              type: array
+                              x-kubernetes-list-type: set
+                            eventDispatcher:
+                              enum:
+                              - queued
+                              - blocking
+                              type: string
+                            profile:
+                              enum:
+                              - bitcoin-regtest/v1
+                              - nakamoto-regtest-node/v1
+                              type: string
+                            seed:
+                              description: Seed pins a generated Stacks node identity.
+                                Empty derives from network and actor names.
+                              type: string
+                          required:
+                          - profile
+                          type: object
+                        inline:
+                          description: InlineConfig contains public, non-secret actor
+                            configuration.
+                          properties:
+                            data:
+                              minLength: 1
+                              type: string
+                            key:
+                              type: string
+                            mountPath:
+                              type: string
+                          required:
+                          - data
+                          type: object
+                        secretRef:
+                          description: ConfigObjectRef identifies one complete configuration
+                            file.
+                          properties:
+                            expectedDigest:
+                              description: ExpectedDigest triggers a restart and verifies
+                                mounted bytes before actor startup.
+                              pattern: ^sha256:[0-9a-f]{64}$
+                              type: string
+                            key:
+                              type: string
+                            mountPath:
+                              type: string
+                            name:
+                              minLength: 1
+                              type: string
+                          required:
+                          - name
+                          type: object
+                      type: object
+                      x-kubernetes-validations:
+                      - message: exactly one configuration source is required
+                        rule: '(has(self.generated) ? 1 : 0) + (has(self.inline) ?
+                          1 : 0) + (has(self.configMapRef) ? 1 : 0) + (has(self.secretRef)
+                          ? 1 : 0) == 1'
+                    container:
+                      description: |-
+                        ContainerOverride exposes explicit process controls for version-specific images.
+                        Operator-owned environment names are reserved and cannot be overridden.
+                      properties:
+                        args:
+                          items:
+                            type: string
+                          maxItems: 128
+                          type: array
+                        command:
+                          items:
+                            type: string
+                          maxItems: 32
+                          minItems: 1
+                          type: array
+                        env:
+                          additionalProperties:
+                            type: string
+                          maxProperties: 128
+                          type: object
+                        workingDir:
+                          type: string
+                      type: object
+                      x-kubernetes-validations:
+                      - message: container environment must not override operator-owned
+                          variables
+                        rule: '!has(self.env) || !self.env.exists(key, key in [''POD_IP'',
+                          ''STACKS_ACTOR'', ''STACKS_ACTOR_ROLE'', ''STACKS_CONFIG_RENDERED'',
+                          ''STACKS_CONFIG_TEMPLATE'', ''STACKS_NETWORK'', ''STACKS_SERVICE_MAP''])'
+                    image:
+                      type: string
+                    name:
+                      maxLength: 63
+                      pattern: ^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$
+                      type: string
+                    peerRefs:
+                      items:
+                        type: string
+                      maxItems: 31
+                      type: array
+                      x-kubernetes-list-type: set
+                    suspended:
+                      type: boolean
+                    workload:
+                      description: WorkloadSpec contains shared resource, storage,
+                        and scheduling controls.
+                      properties:
+                        nodeSelector:
+                          additionalProperties:
+                            type: string
+                          type: object
+                        resources:
+                          description: ResourceSpec contains CPU and memory requests
+                            and limits for one actor.
+                          properties:
+                            limits:
+                              description: ResourceValues contains Kubernetes quantity
+                                strings for CPU and memory.
+                              properties:
+                                cpu:
+                                  type: string
+                                memory:
+                                  type: string
+                              type: object
+                            requests:
+                              description: ResourceValues contains Kubernetes quantity
+                                strings for CPU and memory.
+                              properties:
+                                cpu:
+                                  type: string
+                                memory:
+                                  type: string
+                              type: object
+                          type: object
+                        storage:
+                          description: StorageSpec configures an actor data volume.
+                          properties:
+                            accessModes:
+                              items:
+                                type: string
+                              type: array
+                              x-kubernetes-list-type: set
+                            enabled:
+                              type: boolean
+                            mountPath:
+                              type: string
+                            retainOnDelete:
+                              type: boolean
+                            size:
+                              pattern: ^[0-9]+(?:Ei|Pi|Ti|Gi|Mi|Ki|E|P|T|G|M|K)?$
+                              type: string
+                            storageClassName:
+                              type: string
+                          type: object
+                        terminationGracePeriodSeconds:
+                          format: int64
+                          minimum: 0
+                          type: integer
+                        tolerations:
+                          items:
+                            description: TolerationSpec is the bounded subset of Pod
+                              toleration fields used by actors.
+                            properties:
+                              effect:
+                                enum:
+                                - NoSchedule
+                                - PreferNoSchedule
+                                - NoExecute
+                                type: string
+                              key:
+                                type: string
+                              operator:
+                                description: A toleration operator is the set of operators
+                                  that can be used in a toleration.
+                                enum:
+                                - Exists
+                                - Equal
+                                type: string
+                              tolerationSeconds:
+                                format: int64
+                                type: integer
+                              value:
+                                type: string
+                            type: object
+                          type: array
+                      type: object
+                  required:
+                  - config
+                  - name
+                  type: object
+                maxItems: 32
+                minItems: 1
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
+              defaults:
+                description: NetworkDefaults supplies values inherited by compiled
+                  leaf resources.
+                properties:
+                  bitcoinImage:
+                    type: string
+                  dependencyImage:
+                    type: string
+                  imagePullPolicy:
+                    description: PullPolicy describes a policy for if/when to pull
+                      a container image
+                    type: string
+                  imagePullSecrets:
+                    items:
+                      description: |-
+                        LocalObjectReference contains enough information to let you locate the
+                        referenced object inside the same namespace.
+                      properties:
+                        name:
+                          default: ""
+                          description: |-
+                            Name of the referent.
+                            This field is effectively required, but due to backwards compatibility is
+                            allowed to be empty. Instances of this type with an empty value here are
+                            almost certainly wrong.
+                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                          type: string
+                      type: object
+                      x-kubernetes-map-type: atomic
+                    type: array
+                  stacksNodeImage:
+                    type: string
+                  stacksSignerImage:
+                    type: string
+                  workload:
+                    description: WorkloadSpec contains shared resource, storage, and
+                      scheduling controls.
+                    properties:
+                      nodeSelector:
+                        additionalProperties:
+                          type: string
+                        type: object
+                      resources:
+                        description: ResourceSpec contains CPU and memory requests
+                          and limits for one actor.
+                        properties:
+                          limits:
+                            description: ResourceValues contains Kubernetes quantity
+                              strings for CPU and memory.
+                            properties:
+                              cpu:
+                                type: string
+                              memory:
+                                type: string
+                            type: object
+                          requests:
+                            description: ResourceValues contains Kubernetes quantity
+                              strings for CPU and memory.
+                            properties:
+                              cpu:
+                                type: string
+                              memory:
+                                type: string
+                            type: object
+                        type: object
+                      storage:
+                        description: StorageSpec configures an actor data volume.
+                        properties:
+                          accessModes:
+                            items:
+                              type: string
+                            type: array
+                            x-kubernetes-list-type: set
+                          enabled:
+                            type: boolean
+                          mountPath:
+                            type: string
+                          retainOnDelete:
+                            type: boolean
+                          size:
+                            pattern: ^[0-9]+(?:Ei|Pi|Ti|Gi|Mi|Ki|E|P|T|G|M|K)?$
+                            type: string
+                          storageClassName:
+                            type: string
+                        type: object
+                      terminationGracePeriodSeconds:
+                        format: int64
+                        minimum: 0
+                        type: integer
+                      tolerations:
+                        items:
+                          description: TolerationSpec is the bounded subset of Pod
+                            toleration fields used by actors.
+                          properties:
+                            effect:
+                              enum:
+                              - NoSchedule
+                              - PreferNoSchedule
+                              - NoExecute
+                              type: string
+                            key:
+                              type: string
+                            operator:
+                              description: A toleration operator is the set of operators
+                                that can be used in a toleration.
+                              enum:
+                              - Exists
+                              - Equal
+                              type: string
+                            tolerationSeconds:
+                              format: int64
+                              type: integer
+                            value:
+                              type: string
+                          type: object
+                        type: array
+                    type: object
+                type: object
+              genesis:
+                description: Genesis is the immutable, resolved chain configuration;
+                  profiles are copied at provisioning time.
+                properties:
+                  balances:
+                    description: |-
+                      Balances grants initial funds. Named entries may be selected by provisioning and bootstrap.
+                      A name-keyed map rejects duplicates within the CEL cost budget (Kubernetes 1.32+).
+                    items:
+                      description: GenesisBalance grants one public address an initial
+                        micro-STX balance.
+                      properties:
+                        address:
+                          description: Address is the public Stacks principal; private
+                            keys belong in Secrets.
+                          maxLength: 64
+                          minLength: 1
+                          type: string
+                        amount:
+                          description: Amount is the initial balance in micro-STX,
+                            not an ongoing funding instruction.
+                          format: int64
+                          minimum: 1
+                          type: integer
+                        name:
+                          description: Name optionally identifies an account for external
+                            tooling.
+                          maxLength: 63
+                          pattern: ^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                          type: string
+                      required:
+                      - address
+                      - amount
+                      type: object
+                    maxItems: 1000
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - address
+                    x-kubernetes-list-type: map
+                    x-kubernetes-validations:
+                    - message: nonempty balance names must be unique
+                      rule: '[self.filter(b, has(b.name) && b.name != '''')].all(named,
+                        size(named.transformMapEntry(i, b, {b.name: i})) == size(named))'
+                  epochs:
+                    description: |-
+                      Epochs is the shared activation schedule; omission selects the built-in regtest schedule.
+                      Empty or omitted epochs select the built-in schedule; an explicit schedule must be complete.
+                    items:
+                      description: GenesisEpoch declares one epoch's Bitcoin activation
+                        height.
+                      properties:
+                        name:
+                          description: Name is the protocol epoch understood by the
+                            selected Stacks binary.
+                          enum:
+                          - "1.0"
+                          - "2.0"
+                          - "2.05"
+                          - "2.1"
+                          - "2.2"
+                          - "2.3"
+                          - "2.4"
+                          - "2.5"
+                          - "3.0"
+                          - "3.1"
+                          - "3.2"
+                          - "3.3"
+                          - "3.4"
+                          - "4.0"
+                          type: string
+                        startHeight:
+                          description: StartHeight is the first burn height assigned
+                            to this epoch.
+                          format: int64
+                          minimum: 0
+                          type: integer
+                      required:
+                      - name
+                      - startHeight
+                      type: object
+                    maxItems: 14
+                    type: array
+                    x-kubernetes-list-type: atomic
+                    x-kubernetes-validations:
+                    - message: epochs must contain the complete supported schedule
+                        in order
+                      rule: size(self) == 0 || self.map(e, e.name) == ['1.0','2.0','2.05','2.1','2.2','2.3','2.4','2.5','3.0','3.1','3.2','3.3','3.4','4.0']
+                    - message: epoch heights must be nondecreasing
+                      rule: size(self) != 14 || [0,1,2,3,4,5,6,7,8,9,10,11,12].all(i,
+                        self[i].startHeight <= self[i+1].startHeight)
+                    - message: epochs 1.0 and 2.0 must start at zero
+                      rule: size(self) != 14 || (self[0].startHeight == 0 && self[1].startHeight
+                        == 0)
+                  pox:
+                    description: PoX defines the shared regtest cycle lengths.
+                    properties:
+                      prepareLength:
+                        description: PrepareLength is the prepare phase duration in
+                          Bitcoin blocks.
+                        format: int32
+                        maximum: 100000
+                        minimum: 1
+                        type: integer
+                      rewardCycleLength:
+                        description: RewardCycleLength is the complete cycle length,
+                          including its prepare phase.
+                        format: int32
+                        maximum: 100000
+                        minimum: 2
+                        type: integer
+                    required:
+                    - prepareLength
+                    - rewardCycleLength
+                    type: object
+                    x-kubernetes-validations:
+                    - message: prepare phase must be shorter than the complete reward
+                        cycle
+                      rule: self.prepareLength < self.rewardCycleLength
+                  pox5:
+                    description: PoX5 binds non-mainnet PoX-5 to the same contracts
+                      and administrators on every node.
+                    properties:
+                      bondAdmin:
+                        description: BondAdmin is the test-network bond administrator.
+                        maxLength: 128
+                        pattern: ^S[NT][0-9A-HJKMNP-TV-Z]{26,39}(\.[a-zA-Z][a-zA-Z0-9_-]{0,39})?$
+                        type: string
+                      pauseAdmin:
+                        description: PauseAdmin is the test-network pause administrator.
+                        maxLength: 128
+                        pattern: ^S[NT][0-9A-HJKMNP-TV-Z]{26,39}(\.[a-zA-Z][a-zA-Z0-9_-]{0,39})?$
+                        type: string
+                      sbtcContract:
+                        description: SBTCContract identifies the deployed sBTC token
+                          contract.
+                        maxLength: 128
+                        pattern: ^S[NT][0-9A-HJKMNP-TV-Z]{26,39}\.[a-zA-Z][a-zA-Z0-9_-]{0,39}$
+                        type: string
+                      sbtcRegistryContract:
+                        description: SBTCRegistryContract identifies the registry
+                          whose aggregate key is read by PoX-5.
+                        maxLength: 128
+                        pattern: ^S[NT][0-9A-HJKMNP-TV-Z]{26,39}\.[a-zA-Z][a-zA-Z0-9_-]{0,39}$
+                        type: string
+                    required:
+                    - bondAdmin
+                    - pauseAdmin
+                    - sbtcContract
+                    - sbtcRegistryContract
+                    type: object
+                  useTestGenesisChainstate:
+                    description: |-
+                      UseTestGenesisChainstate includes the selected binary's test genesis allocations in addition to Balances.
+                      Omission selects true in the built-in regtest renderer.
+                    type: boolean
+                type: object
+                x-kubernetes-validations:
+                - message: genesis is immutable; create a fresh network
+                  rule: self == oldSelf
+              operation:
+                description: Operation optionally manages contract prerequisites and
+                  ongoing stacking participation.
+                properties:
+                  accounts:
+                    description: Accounts explicitly opts funded accounts into exclusive
+                      controller management.
+                    items:
+                      description: ManagedAccountPolicy assigns an exclusive account
+                        to one declared capability.
+                      properties:
+                        address:
+                          description: Address is the funded testnet principal; declaring
+                            funding alone does not manage it.
+                          maxLength: 41
+                          pattern: ^ST[0-9A-HJKMNP-TV-Z]{26,39}$
+                          type: string
+                        configDigest:
+                          description: ConfigDigest approves the ingress configuration
+                            independently of its image.
+                          maxLength: 71
+                          pattern: ^sha256:[0-9a-f]{64}$
+                          type: string
+                        consumer:
+                          description: Consumer names that capability within this
+                            network.
+                          maxLength: 63
+                          pattern: ^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$
+                          type: string
+                        consumerKind:
+                          description: ConsumerKind identifies the only capability
+                            allowed to reserve this account.
+                          enum:
+                          - StacksContractSet
+                          - StacksStackingParticipant
+                          type: string
+                        keySecretRef:
+                          description: KeySecretRef contains the offline signing key;
+                            it is never mounted into an actor.
+                          properties:
+                            digest:
+                              description: Digest binds the exact bytes read before
+                                use.
+                              maxLength: 71
+                              pattern: ^sha256:[0-9a-f]{64}$
+                              type: string
+                            key:
+                              description: Key identifies the entry within the object.
+                              maxLength: 253
+                              minLength: 1
+                              pattern: ^[a-zA-Z0-9._-]+$
+                              type: string
+                            name:
+                              description: Name identifies the object containing the
+                                entry.
+                              maxLength: 63
+                              pattern: ^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$
+                              type: string
+                          required:
+                          - digest
+                          - key
+                          - name
+                          type: object
+                        name:
+                          description: Name is the account's stable name within its
+                            network.
+                          maxLength: 63
+                          pattern: ^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$
+                          type: string
+                        target:
+                          description: Target names the declared ingress actor.
+                          maxLength: 63
+                          pattern: ^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$
+                          type: string
+                      required:
+                      - address
+                      - configDigest
+                      - consumer
+                      - consumerKind
+                      - keySecretRef
+                      - name
+                      - target
+                      type: object
+                    maxItems: 32
+                    minItems: 1
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
+                  contractSets:
+                    description: ContractSets declares contract prerequisites independently
+                      of epoch activation.
+                    items:
+                      description: ContractSetPolicy declares desired contract sources
+                        and optional bridge initialization.
+                      properties:
+                        account:
+                          description: Account names the exclusively assigned managed
+                            deployer account.
+                          maxLength: 63
+                          pattern: ^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$
+                          type: string
+                        bridge:
+                          description: Bridge initializes the standard sBTC registry
+                            after its declared contracts exist.
+                          properties:
+                            aggregatePublicKey:
+                              description: AggregatePublicKey is an explicit test
+                                key, not a DKG result.
+                              maxLength: 66
+                              pattern: ^(02|03)[0-9a-f]{64}$
+                              type: string
+                            signerPublicKeys:
+                              description: SignerPublicKeys are the retained bridge
+                                keys, independent of consensus signers.
+                              items:
+                                maxLength: 66
+                                pattern: ^(02|03)[0-9a-f]{64}$
+                                type: string
+                              maxItems: 2
+                              minItems: 2
+                              type: array
+                              x-kubernetes-list-type: set
+                          required:
+                          - aggregatePublicKey
+                          - signerPublicKeys
+                          type: object
+                        contracts:
+                          description: Contracts are immutable named artifacts, not
+                            an imperative transaction plan.
+                          items:
+                            description: ContractArtifact declares one immutable contract
+                              and its dependency names.
+                            properties:
+                              clarityVersion:
+                                description: ClarityVersion determines the earliest
+                                  supported language runtime.
+                                enum:
+                                - 3
+                                - 6
+                                format: int32
+                                type: integer
+                              dependsOn:
+                                description: DependsOn names contracts in this set
+                                  that must be observed first.
+                                items:
+                                  maxLength: 40
+                                  type: string
+                                maxItems: 16
+                                type: array
+                                x-kubernetes-list-type: set
+                              name:
+                                description: Name is the contract name under the set's
+                                  deployer principal.
+                                maxLength: 40
+                                pattern: ^[a-zA-Z][a-zA-Z0-9_-]{0,39}$
+                                type: string
+                              sourceRef:
+                                description: SourceRef selects exact source bytes
+                                  from a same-namespace ConfigMap.
+                                properties:
+                                  digest:
+                                    description: Digest binds the exact bytes read
+                                      before use.
+                                    maxLength: 71
+                                    pattern: ^sha256:[0-9a-f]{64}$
+                                    type: string
+                                  key:
+                                    description: Key identifies the entry within the
+                                      object.
+                                    maxLength: 253
+                                    minLength: 1
+                                    pattern: ^[a-zA-Z0-9._-]+$
+                                    type: string
+                                  name:
+                                    description: Name identifies the object containing
+                                      the entry.
+                                    maxLength: 63
+                                    pattern: ^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$
+                                    type: string
+                                required:
+                                - digest
+                                - key
+                                - name
+                                type: object
+                            required:
+                            - clarityVersion
+                            - name
+                            - sourceRef
+                            type: object
+                          maxItems: 16
+                          minItems: 1
+                          type: array
+                          x-kubernetes-list-map-keys:
+                          - name
+                          x-kubernetes-list-type: map
+                        name:
+                          description: Name is the capability name within the network.
+                          maxLength: 63
+                          pattern: ^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$
+                          type: string
+                        paused:
+                          description: Paused prevents new authorizations; existing
+                            receipts remain observable.
+                          type: boolean
+                      required:
+                      - account
+                      - contracts
+                      - name
+                      type: object
+                      x-kubernetes-validations:
+                      - message: contract dependencies must name another contract
+                          in the set
+                        rule: self.contracts.all(c, !has(c.dependsOn) || c.dependsOn.all(d,
+                          d != c.name && self.contracts.exists(other, other.name ==
+                          d)))
+                      - message: bridge initialization requires the complete standard
+                          contract set
+                        rule: '!has(self.bridge) || [''sbtc-registry'', ''sbtc-token'',
+                          ''sbtc-bootstrap-signers'', ''sbtc-deposit'', ''sbtc-withdrawal''].all(n,
+                          self.contracts.exists(c, c.name == n))'
+                    maxItems: 8
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
+                  participants:
+                    description: Participants declares maintained stacking independently
+                      of actor existence.
+                    items:
+                      description: StackingPolicy maintains one explicitly declared
+                        direct stacking participant.
+                      properties:
+                        administratorAccount:
+                          description: AdministratorAccount names the manager's exclusive
+                            deployment/registration account.
+                          maxLength: 63
+                          pattern: ^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$
+                          type: string
+                        amountMicroSTX:
+                          description: |-
+                            AmountMicroSTX applies to new enrollments; it does not resize an existing lock.
+                            PoX-4 enrollment also satisfies the observed dynamic threshold.
+                          format: int64
+                          maximum: 9007199254740991
+                          minimum: 50000000000
+                          type: integer
+                        consensusKeySecretRef:
+                          description: ConsensusKeySecretRef supplies offline PoX
+                            authorizations separately from holder spending.
+                          properties:
+                            digest:
+                              description: Digest binds the exact bytes read before
+                                use.
+                              maxLength: 71
+                              pattern: ^sha256:[0-9a-f]{64}$
+                              type: string
+                            key:
+                              description: Key identifies the entry within the object.
+                              maxLength: 253
+                              minLength: 1
+                              pattern: ^[a-zA-Z0-9._-]+$
+                              type: string
+                            name:
+                              description: Name identifies the object containing the
+                                entry.
+                              maxLength: 63
+                              pattern: ^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$
+                              type: string
+                          required:
+                          - digest
+                          - key
+                          - name
+                          type: object
+                        holderAccount:
+                          description: HolderAccount names the managed funded holder.
+                          maxLength: 63
+                          pattern: ^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$
+                          type: string
+                        lockCycles:
+                          description: LockCycles is the enrollment horizon; renewal
+                            maintains this horizon in bounded extensions.
+                          format: int32
+                          maximum: 12
+                          minimum: 2
+                          type: integer
+                        name:
+                          description: Name is the participant name within the network.
+                          maxLength: 63
+                          pattern: ^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$
+                          type: string
+                        paused:
+                          description: Paused stops new enrollment and renewal, without
+                            unlocking an existing stake.
+                          type: boolean
+                        signer:
+                          description: Signer names the consensus signer actor independently
+                            of its holder.
+                          maxLength: 63
+                          pattern: ^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$
+                          type: string
+                      required:
+                      - administratorAccount
+                      - amountMicroSTX
+                      - consensusKeySecretRef
+                      - holderAccount
+                      - lockCycles
+                      - name
+                      - signer
+                      type: object
+                      x-kubernetes-validations:
+                      - message: holder and administrator accounts must be distinct
+                        rule: self.holderAccount != self.administratorAccount
+                    maxItems: 16
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
+                  paused:
+                    description: Paused stops new protocol transactions while preserving
+                      desired policies and receipt observation.
+                    type: boolean
+                required:
+                - accounts
+                type: object
+                x-kubernetes-validations:
+                - message: managed account addresses must be unique
+                  rule: self.accounts.all(a, self.accounts.exists_one(b, b.address
+                    == a.address))
+                - message: contract sets require their exclusive managed deployer
+                    account
+                  rule: '!has(self.contractSets) || self.contractSets.all(c, self.accounts.exists(a,
+                    a.name == c.account && a.consumerKind == ''StacksContractSet''
+                    && a.consumer == c.name))'
+                - message: participants require separate exclusive holder and administrator
+                    accounts
+                  rule: '!has(self.participants) || self.participants.all(p, p.holderAccount
+                    != p.administratorAccount && self.accounts.exists(a, a.name ==
+                    p.holderAccount && a.consumerKind == ''StacksStackingParticipant''
+                    && a.consumer == p.name) && self.accounts.exists(a, a.name ==
+                    p.administratorAccount && a.consumerKind == ''StacksStackingParticipant''
+                    && a.consumer == p.name))'
+              signers:
+                items:
+                  description: StacksSignerTemplate is the aggregate declaration for
+                    one Stacks signer.
+                  properties:
+                    config:
+                      description: ConfigSource selects generated, inline, ConfigMap,
+                        or Secret configuration.
+                      properties:
+                        configMapRef:
+                          description: ConfigObjectRef identifies one complete configuration
+                            file.
+                          properties:
+                            expectedDigest:
+                              description: ExpectedDigest triggers a restart and verifies
+                                mounted bytes before actor startup.
+                              pattern: ^sha256:[0-9a-f]{64}$
+                              type: string
+                            key:
+                              type: string
+                            mountPath:
+                              type: string
+                            name:
+                              minLength: 1
+                              type: string
+                          required:
+                          - name
+                          type: object
+                        generated:
+                          description: GeneratedConfig selects one bounded built-in
+                            configuration profile.
+                          properties:
+                            bootstrapPeers:
+                              items:
+                                type: string
+                              maxItems: 64
+                              type: array
+                              x-kubernetes-list-type: set
+                            eventDispatcher:
+                              enum:
+                              - queued
+                              - blocking
+                              type: string
+                            profile:
+                              enum:
+                              - bitcoin-regtest/v1
+                              - nakamoto-regtest-node/v1
+                              type: string
+                            seed:
+                              description: Seed pins a generated Stacks node identity.
+                                Empty derives from network and actor names.
+                              type: string
+                          required:
+                          - profile
+                          type: object
+                        inline:
+                          description: InlineConfig contains public, non-secret actor
+                            configuration.
+                          properties:
+                            data:
+                              minLength: 1
+                              type: string
+                            key:
+                              type: string
+                            mountPath:
+                              type: string
+                          required:
+                          - data
+                          type: object
+                        secretRef:
+                          description: ConfigObjectRef identifies one complete configuration
+                            file.
+                          properties:
+                            expectedDigest:
+                              description: ExpectedDigest triggers a restart and verifies
+                                mounted bytes before actor startup.
+                              pattern: ^sha256:[0-9a-f]{64}$
+                              type: string
+                            key:
+                              type: string
+                            mountPath:
+                              type: string
+                            name:
+                              minLength: 1
+                              type: string
+                          required:
+                          - name
+                          type: object
+                      type: object
+                      x-kubernetes-validations:
+                      - message: exactly one configuration source is required
+                        rule: '(has(self.generated) ? 1 : 0) + (has(self.inline) ?
+                          1 : 0) + (has(self.configMapRef) ? 1 : 0) + (has(self.secretRef)
+                          ? 1 : 0) == 1'
+                    container:
+                      description: |-
+                        ContainerOverride exposes explicit process controls for version-specific images.
+                        Operator-owned environment names are reserved and cannot be overridden.
+                      properties:
+                        args:
+                          items:
+                            type: string
+                          maxItems: 128
+                          type: array
+                        command:
+                          items:
+                            type: string
+                          maxItems: 32
+                          minItems: 1
+                          type: array
+                        env:
+                          additionalProperties:
+                            type: string
+                          maxProperties: 128
+                          type: object
+                        workingDir:
+                          type: string
+                      type: object
+                      x-kubernetes-validations:
+                      - message: container environment must not override operator-owned
+                          variables
+                        rule: '!has(self.env) || !self.env.exists(key, key in [''POD_IP'',
+                          ''STACKS_ACTOR'', ''STACKS_ACTOR_ROLE'', ''STACKS_CONFIG_RENDERED'',
+                          ''STACKS_CONFIG_TEMPLATE'', ''STACKS_NETWORK'', ''STACKS_SERVICE_MAP''])'
+                    image:
+                      type: string
+                    index:
+                      format: int32
+                      minimum: 0
+                      type: integer
+                    name:
+                      maxLength: 63
+                      pattern: ^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$
+                      type: string
+                    nodeRef:
+                      maxLength: 63
+                      pattern: ^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$
+                      type: string
+                    publicKey:
+                      type: string
+                    serviceRefs:
+                      description: ServiceRefs expose additional declared actor Services
+                        to raw configuration templates.
+                      items:
+                        type: string
+                      maxItems: 8
+                      type: array
+                      x-kubernetes-list-type: set
+                    suspended:
+                      type: boolean
+                    weight:
+                      format: int64
+                      maximum: 9007199254740991
+                      minimum: 1
+                      type: integer
+                    workload:
+                      description: WorkloadSpec contains shared resource, storage,
+                        and scheduling controls.
+                      properties:
+                        nodeSelector:
+                          additionalProperties:
+                            type: string
+                          type: object
+                        resources:
+                          description: ResourceSpec contains CPU and memory requests
+                            and limits for one actor.
+                          properties:
+                            limits:
+                              description: ResourceValues contains Kubernetes quantity
+                                strings for CPU and memory.
+                              properties:
+                                cpu:
+                                  type: string
+                                memory:
+                                  type: string
+                              type: object
+                            requests:
+                              description: ResourceValues contains Kubernetes quantity
+                                strings for CPU and memory.
+                              properties:
+                                cpu:
+                                  type: string
+                                memory:
+                                  type: string
+                              type: object
+                          type: object
+                        storage:
+                          description: StorageSpec configures an actor data volume.
+                          properties:
+                            accessModes:
+                              items:
+                                type: string
+                              type: array
+                              x-kubernetes-list-type: set
+                            enabled:
+                              type: boolean
+                            mountPath:
+                              type: string
+                            retainOnDelete:
+                              type: boolean
+                            size:
+                              pattern: ^[0-9]+(?:Ei|Pi|Ti|Gi|Mi|Ki|E|P|T|G|M|K)?$
+                              type: string
+                            storageClassName:
+                              type: string
+                          type: object
+                        terminationGracePeriodSeconds:
+                          format: int64
+                          minimum: 0
+                          type: integer
+                        tolerations:
+                          items:
+                            description: TolerationSpec is the bounded subset of Pod
+                              toleration fields used by actors.
+                            properties:
+                              effect:
+                                enum:
+                                - NoSchedule
+                                - PreferNoSchedule
+                                - NoExecute
+                                type: string
+                              key:
+                                type: string
+                              operator:
+                                description: A toleration operator is the set of operators
+                                  that can be used in a toleration.
+                                enum:
+                                - Exists
+                                - Equal
+                                type: string
+                              tolerationSeconds:
+                                format: int64
+                                type: integer
+                              value:
+                                type: string
+                            type: object
+                          type: array
+                      type: object
+                  required:
+                  - config
+                  - index
+                  - name
+                  - nodeRef
+                  - weight
+                  type: object
+                  x-kubernetes-validations:
+                  - message: signer configuration must use a Secret reference
+                    rule: has(self.config.secretRef)
+                maxItems: 100
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
+              stacksNodes:
+                items:
+                  description: StacksNodeTemplate is the aggregate declaration for
+                    one Stacks node.
+                  properties:
+                    bitcoinNodeRef:
+                      maxLength: 63
+                      pattern: ^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$
+                      type: string
+                    config:
+                      description: ConfigSource selects generated, inline, ConfigMap,
+                        or Secret configuration.
+                      properties:
+                        configMapRef:
+                          description: ConfigObjectRef identifies one complete configuration
+                            file.
+                          properties:
+                            expectedDigest:
+                              description: ExpectedDigest triggers a restart and verifies
+                                mounted bytes before actor startup.
+                              pattern: ^sha256:[0-9a-f]{64}$
+                              type: string
+                            key:
+                              type: string
+                            mountPath:
+                              type: string
+                            name:
+                              minLength: 1
+                              type: string
+                          required:
+                          - name
+                          type: object
+                        generated:
+                          description: GeneratedConfig selects one bounded built-in
+                            configuration profile.
+                          properties:
+                            bootstrapPeers:
+                              items:
+                                type: string
+                              maxItems: 64
+                              type: array
+                              x-kubernetes-list-type: set
+                            eventDispatcher:
+                              enum:
+                              - queued
+                              - blocking
+                              type: string
+                            profile:
+                              enum:
+                              - bitcoin-regtest/v1
+                              - nakamoto-regtest-node/v1
+                              type: string
+                            seed:
+                              description: Seed pins a generated Stacks node identity.
+                                Empty derives from network and actor names.
+                              type: string
+                          required:
+                          - profile
+                          type: object
+                        inline:
+                          description: InlineConfig contains public, non-secret actor
+                            configuration.
+                          properties:
+                            data:
+                              minLength: 1
+                              type: string
+                            key:
+                              type: string
+                            mountPath:
+                              type: string
+                          required:
+                          - data
+                          type: object
+                        secretRef:
+                          description: ConfigObjectRef identifies one complete configuration
+                            file.
+                          properties:
+                            expectedDigest:
+                              description: ExpectedDigest triggers a restart and verifies
+                                mounted bytes before actor startup.
+                              pattern: ^sha256:[0-9a-f]{64}$
+                              type: string
+                            key:
+                              type: string
+                            mountPath:
+                              type: string
+                            name:
+                              minLength: 1
+                              type: string
+                          required:
+                          - name
+                          type: object
+                      type: object
+                      x-kubernetes-validations:
+                      - message: exactly one configuration source is required
+                        rule: '(has(self.generated) ? 1 : 0) + (has(self.inline) ?
+                          1 : 0) + (has(self.configMapRef) ? 1 : 0) + (has(self.secretRef)
+                          ? 1 : 0) == 1'
+                    container:
+                      description: |-
+                        ContainerOverride exposes explicit process controls for version-specific images.
+                        Operator-owned environment names are reserved and cannot be overridden.
+                      properties:
+                        args:
+                          items:
+                            type: string
+                          maxItems: 128
+                          type: array
+                        command:
+                          items:
+                            type: string
+                          maxItems: 32
+                          minItems: 1
+                          type: array
+                        env:
+                          additionalProperties:
+                            type: string
+                          maxProperties: 128
+                          type: object
+                        workingDir:
+                          type: string
+                      type: object
+                      x-kubernetes-validations:
+                      - message: container environment must not override operator-owned
+                          variables
+                        rule: '!has(self.env) || !self.env.exists(key, key in [''POD_IP'',
+                          ''STACKS_ACTOR'', ''STACKS_ACTOR_ROLE'', ''STACKS_CONFIG_RENDERED'',
+                          ''STACKS_CONFIG_TEMPLATE'', ''STACKS_NETWORK'', ''STACKS_SERVICE_MAP''])'
+                    image:
+                      type: string
+                    name:
+                      maxLength: 63
+                      pattern: ^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$
+                      type: string
+                    role:
+                      description: StacksNodeRole describes a Stacks node process
+                        role.
+                      enum:
+                      - miner
+                      - follower
+                      - signer-node
+                      type: string
+                    serviceRefs:
+                      description: ServiceRefs expose additional declared actor Services
+                        to raw configuration templates.
+                      items:
+                        type: string
+                      maxItems: 8
+                      type: array
+                      x-kubernetes-list-type: set
+                    suspended:
+                      type: boolean
+                    workload:
+                      description: WorkloadSpec contains shared resource, storage,
+                        and scheduling controls.
+                      properties:
+                        nodeSelector:
+                          additionalProperties:
+                            type: string
+                          type: object
+                        resources:
+                          description: ResourceSpec contains CPU and memory requests
+                            and limits for one actor.
+                          properties:
+                            limits:
+                              description: ResourceValues contains Kubernetes quantity
+                                strings for CPU and memory.
+                              properties:
+                                cpu:
+                                  type: string
+                                memory:
+                                  type: string
+                              type: object
+                            requests:
+                              description: ResourceValues contains Kubernetes quantity
+                                strings for CPU and memory.
+                              properties:
+                                cpu:
+                                  type: string
+                                memory:
+                                  type: string
+                              type: object
+                          type: object
+                        storage:
+                          description: StorageSpec configures an actor data volume.
+                          properties:
+                            accessModes:
+                              items:
+                                type: string
+                              type: array
+                              x-kubernetes-list-type: set
+                            enabled:
+                              type: boolean
+                            mountPath:
+                              type: string
+                            retainOnDelete:
+                              type: boolean
+                            size:
+                              pattern: ^[0-9]+(?:Ei|Pi|Ti|Gi|Mi|Ki|E|P|T|G|M|K)?$
+                              type: string
+                            storageClassName:
+                              type: string
+                          type: object
+                        terminationGracePeriodSeconds:
+                          format: int64
+                          minimum: 0
+                          type: integer
+                        tolerations:
+                          items:
+                            description: TolerationSpec is the bounded subset of Pod
+                              toleration fields used by actors.
+                            properties:
+                              effect:
+                                enum:
+                                - NoSchedule
+                                - PreferNoSchedule
+                                - NoExecute
+                                type: string
+                              key:
+                                type: string
+                              operator:
+                                description: A toleration operator is the set of operators
+                                  that can be used in a toleration.
+                                enum:
+                                - Exists
+                                - Equal
+                                type: string
+                              tolerationSeconds:
+                                format: int64
+                                type: integer
+                              value:
+                                type: string
+                            type: object
+                          type: array
+                      type: object
+                  required:
+                  - bitcoinNodeRef
+                  - config
+                  - name
+                  - role
+                  type: object
+                  x-kubernetes-validations:
+                  - message: miner configuration must use a Secret reference
+                    rule: self.role != 'miner' || has(self.config.secretRef)
+                maxItems: 100
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
+              stacksTransactionProduction:
+                description: StacksTransactionProduction optionally maintains fixed-interval
+                  STX transfers.
+                properties:
+                  amountMicroSTX:
+                    description: AmountMicroSTX bounds each ordinary transfer to at
+                      most one STX.
+                    format: int64
+                    maximum: 1000000
+                    minimum: 1
+                    type: integer
+                  credentialsSecret:
+                    description: |-
+                      CredentialsSecret names the same-namespace immutable worker credential document.
+                      Bitcoin uses credentials.json; transfers use account.json.
+                    maxLength: 253
+                    pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                    type: string
+                  feeMicroSTX:
+                    description: FeeMicroSTX is explicit; no automatic fee escalation
+                      occurs.
+                    format: int64
+                    maximum: 1000000
+                    minimum: 1
+                    type: integer
+                  intervalSeconds:
+                    description: IntervalSeconds is offered cadence, not a guaranteed
+                      block interval.
+                    format: int32
+                    maximum: 86400
+                    minimum: 1
+                    type: integer
+                  minimumBurnHeight:
+                    description: MinimumBurnHeight holds new transfers until the ingress
+                      observes this burn height.
+                    format: int64
+                    maximum: 9007199254740991
+                    minimum: 0
+                    type: integer
+                  paused:
+                    description: Paused stops new signing/dispatch while outstanding
+                      evidence remains observable.
+                    type: boolean
+                  recipient:
+                    description: Recipient receives the offered micro-STX amount.
+                    maxLength: 42
+                    pattern: ^ST[0-9A-HJKMNP-TV-Z]{20,40}$
+                    type: string
+                  sender:
+                    description: Sender identifies the administrator-provisioned exclusive
+                      test account.
+                    maxLength: 42
+                    pattern: ^ST[0-9A-HJKMNP-TV-Z]{20,40}$
+                    type: string
+                  target:
+                    description: Target names the declared Stacks ingress actor.
+                    maxLength: 63
+                    pattern: ^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$
+                    type: string
+                required:
+                - amountMicroSTX
+                - feeMicroSTX
+                - intervalSeconds
+                - recipient
+                - sender
+                - target
+                type: object
+              suspended:
+                type: boolean
+            required:
+            - bitcoinNodes
+            - defaults
+            type: object
+            x-kubernetes-validations:
+            - message: transaction production must reference a declared Stacks node
+              rule: '!has(self.stacksTransactionProduction) || (has(self.stacksNodes)
+                && self.stacksNodes.exists(node, node.name == self.stacksTransactionProduction.target))'
+            - message: changing transaction ingress or sender requires a fresh environment
+              rule: '!has(oldSelf.stacksTransactionProduction) || !has(self.stacksTransactionProduction)
+                || (self.stacksTransactionProduction.target == oldSelf.stacksTransactionProduction.target
+                && self.stacksTransactionProduction.sender == oldSelf.stacksTransactionProduction.sender)'
+            - message: production must reference a declared Bitcoin node
+              rule: '!has(self.bitcoinBlockProduction) || self.bitcoinBlockProduction.targets.all(target,
+                self.bitcoinNodes.exists(node, node.name == target.name))'
+            - message: every Stacks node must reference a declared Bitcoin node
+              rule: '!has(self.stacksNodes) || self.stacksNodes.all(node, self.bitcoinNodes.exists(bitcoin,
+                bitcoin.name == node.bitcoinNodeRef))'
+            - message: every signer must reference a declared signer-node
+              rule: '!has(self.signers) || (has(self.stacksNodes) && self.signers.all(signer,
+                self.stacksNodes.exists(node, node.name == signer.nodeRef && node.role
+                == ''signer-node'')))'
+            - message: a signer-node may be referenced by only one signer
+              rule: '!has(self.signers) || self.signers.all(signer, self.signers.exists_one(other,
+                other.nodeRef == signer.nodeRef))'
+            - message: signer indices must be unique
+              rule: '!has(self.signers) || self.signers.all(signer, self.signers.exists_one(other,
+                other.index == signer.index))'
+            - message: Stacks node serviceRefs must name declared actors
+              rule: '!has(self.stacksNodes) || self.stacksNodes.all(node, !has(node.serviceRefs)
+                || node.serviceRefs.all(ref, self.bitcoinNodes.exists(actor, actor.name
+                == ref) || (has(self.stacksNodes) && self.stacksNodes.exists(actor,
+                actor.name == ref)) || (has(self.signers) && self.signers.exists(actor,
+                actor.name == ref))))'
+            - message: signer serviceRefs must name declared actors
+              rule: '!has(self.signers) || self.signers.all(signer, !has(signer.serviceRefs)
+                || signer.serviceRefs.all(ref, self.bitcoinNodes.exists(actor, actor.name
+                == ref) || (has(self.stacksNodes) && self.stacksNodes.exists(actor,
+                actor.name == ref)) || (has(self.signers) && self.signers.exists(actor,
+                actor.name == ref))))'
+            - message: genesis cannot be added or removed; create a fresh network
+              rule: has(self.genesis) == has(oldSelf.genesis)
+            - message: managed accounts require a declared Stacks ingress
+              rule: '!has(self.operation) || (has(self.stacksNodes) && self.operation.accounts.all(a,
+                self.stacksNodes.exists(n, n.name == a.target)))'
+            - message: managed account authority must not overlap the transfer producer
+              rule: '!has(self.operation) || !has(self.stacksTransactionProduction)
+                || self.operation.accounts.all(a, a.address != self.stacksTransactionProduction.sender)'
+            - message: managed participants require a declared consensus signer
+              rule: '!has(self.operation) || !has(self.operation.participants) ||
+                (has(self.signers) && self.operation.participants.all(p, self.signers.exists(s,
+                s.name == p.signer)))'
+            - message: managed bridge deployment must match immutable genesis contract
+                bindings
+              rule: '!has(self.operation) || !has(self.operation.contractSets) ||
+                self.operation.contractSets.all(c, !has(c.bridge) || (has(self.genesis)
+                && has(self.genesis.pox5) && self.operation.accounts.exists(a, a.name
+                == c.account && self.genesis.pox5.sbtcContract == a.address + ''.sbtc-token''
+                && self.genesis.pox5.sbtcRegistryContract == a.address + ''.sbtc-registry'')))'
+          status:
+            description: StacksNetworkStatus aggregates leaf readiness and admitted
+              identity.
+            properties:
+              actors:
+                items:
+                  description: ActorIdentity is the immutable admitted identity of
+                    one running actor.
+                  properties:
+                    configDigest:
+                      type: string
+                    controllerRevision:
+                      type: string
+                    kind:
+                      type: string
+                    name:
+                      type: string
+                    podName:
+                      type: string
+                    podUID:
+                      type: string
+                    requestedImage:
+                      type: string
+                    resourceName:
+                      type: string
+                    role:
+                      description: Role is the Stacks node or signer role; Bitcoin
+                        nodes have none.
+                      type: string
+                    runtimeImageID:
+                      type: string
+                    serviceName:
+                      type: string
+                    specDigest:
+                      type: string
+                    statefulSetName:
+                      type: string
+                    statefulSetUID:
+                      type: string
+                  required:
+                  - configDigest
+                  - controllerRevision
+                  - kind
+                  - name
+                  - podName
+                  - podUID
+                  - requestedImage
+                  - resourceName
+                  - runtimeImageID
+                  - serviceName
+                  - specDigest
+                  - statefulSetName
+                  - statefulSetUID
+                  type: object
+                maxItems: 232
+                type: array
+              bitcoinProductionUID:
+                description: BitcoinProductionUID permanently pins the production
+                  ledger for this network incarnation.
+                type: string
+              capabilities:
+                description: Capabilities retains ledger and consumer identities across
+                  declaration removal.
+                items:
+                  description: CapabilityIdentity pins a managed child incarnation
+                    across removal and re-addition.
+                  properties:
+                    kind:
+                      description: Kind identifies the managed capability API kind.
+                      enum:
+                      - StacksAccount
+                      - StacksContractSet
+                      - StacksStackingParticipant
+                      type: string
+                    name:
+                      description: Name is the compiled same-namespace resource name.
+                      maxLength: 63
+                      minLength: 1
+                      type: string
+                    uid:
+                      description: UID permanently identifies this ledger or consumer
+                        for the network incarnation.
+                      maxLength: 64
+                      minLength: 1
+                      type: string
+                  required:
+                  - kind
+                  - name
+                  - uid
+                  type: object
+                maxItems: 64
+                type: array
+                x-kubernetes-list-map-keys:
+                - kind
+                - name
+                x-kubernetes-list-type: map
+              children:
+                items:
+                  description: ChildStatus summarizes one compiled topology resource.
+                  properties:
+                    actorName:
+                      type: string
+                    kind:
+                      type: string
+                    name:
+                      type: string
+                    phase:
+                      type: string
+                    ready:
+                      type: boolean
+                  required:
+                  - actorName
+                  - kind
+                  - name
+                  - ready
+                  type: object
+                maxItems: 232
+                type: array
+              conditions:
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              desiredActors:
+                format: int32
+                type: integer
+              inventoryDigest:
+                type: string
+              inventoryObservedAt:
+                format: date-time
+                type: string
+              inventoryReady:
+                type: boolean
+              observedGeneration:
+                format: int64
+                type: integer
+              phase:
+                type: string
+              readyActors:
+                format: int32
+                type: integer
+              targetDeclarations:
+                description: TargetDeclarations reports compiled intent without requiring
+                  global readiness.
+                properties:
+                  actors:
+                    description: Actors lists compiled leaf declarations in stable
+                      kind/name order.
+                    items:
+                      description: TargetDeclaration binds a named actor to its complete
+                        compiled leaf specification.
+                      properties:
+                        actorName:
+                          description: ActorName is the logical actor name in the
+                            parent topology.
+                          maxLength: 63
+                          pattern: ^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$
+                          type: string
+                        kind:
+                          description: Kind is the leaf resource kind.
+                          enum:
+                          - BitcoinNode
+                          - StacksNode
+                          - StacksSigner
+                          type: string
+                        name:
+                          description: Name is the compiled same-namespace resource
+                            name.
+                          maxLength: 63
+                          pattern: ^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$
+                          type: string
+                        specDigest:
+                          description: SpecDigest uses the existing canonical leaf-specification
+                            digest contract.
+                          pattern: ^sha256:[0-9a-f]{64}$
+                          type: string
+                        suspended:
+                          description: Suspended is the effective parent-or-actor
+                            suspension state.
+                          type: boolean
+                      required:
+                      - actorName
+                      - kind
+                      - name
+                      - specDigest
+                      - suspended
+                      type: object
+                    maxItems: 232
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - kind
+                    - name
+                    x-kubernetes-list-type: map
+                  networkUID:
+                    description: NetworkUID prevents admission across parent recreation.
+                    minLength: 1
+                    type: string
+                  observedGeneration:
+                    description: ObservedGeneration binds compilation to a particular
+                      admitted parent spec.
+                    format: int64
+                    minimum: 1
+                    type: integer
+                  schemaVersion:
+                    description: SchemaVersion identifies the entry and digest interpretation.
+                    enum:
+                    - network.stacks.org/target-declarations/v1
+                    type: string
+                required:
+                - actors
+                - networkUID
+                - observedGeneration
+                - schemaVersion
+                type: object
+              transactionProductionUID:
+                description: TransactionProductionUID permanently pins the exclusive
+                  account ledger.
+                type: string
+            type: object
+        required:
+        - spec
+        type: object
+        x-kubernetes-validations:
+        - message: metadata.name must be a DNS label no longer than 63 characters
+          rule: self.metadata.name.size() <= 63 && self.metadata.name.matches('^[a-z0-9]([-a-z0-9]*[a-z0-9])?$')
+    served: true
+    storage: true
+    subresources:
+      status: {}

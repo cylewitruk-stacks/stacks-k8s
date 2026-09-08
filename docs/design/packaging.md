@@ -1,0 +1,184 @@
+# Packaging and release design
+
+The implemented [action package](../action-operator/operations.md) owns the
+served action CRDs and lifecycle writers. The network worker retains the sole
+Bitcoin RPC executor. Baseline installs do not require the action chart.
+
+## Independent products
+
+| Package | Responsibility | Dependency direction |
+| --- | --- | --- |
+| `apis/network` | Versioned topology and initial Bitcoin production Kubernetes API types | Kubernetes API machinery only |
+| `stacks-network-operator` | Reusable Stacks regtest topology | Kubernetes only |
+| `stacks-observability-operator` | Passive identity and telemetry collection | Reads network/action/Chaos APIs; does not import their runtime code |
+| `stacks-action-operator` | Bounded protocol actions, overrides, and safety policy | Uses versioned wire APIs |
+| Baseline capability controllers (initial workers in network chart) | Bitcoin production and ongoing transaction demand | Independent of enabled action, Chaos Mesh, or observation controllers |
+| Chaos Mesh | Generic infrastructure faults | External optional dependency |
+| Telemetry backend bundle | Loki/Prometheus/OpenTelemetry/object storage profile | External optional dependencies |
+| Development bundle | Pins compatible chart versions for local use | Depends on products; does not merge their release lifecycles |
+
+The network chart must remain useful alone. Observation and action charts are
+independently installable and versioned. A bundle is convenience packaging,
+not a new monolithic controller. Baseline operation must be available without
+enabling bounded-action controllers. M0.4/M0.6/M0.8 must choose controller,
+chart, ServiceAccount, and CRD ownership for baseline capabilities; do not
+silently require the action operator to run an ordinary productive network.
+
+The [initial Bitcoin baseline](../network-operator/bitcoin-production.md) now
+uses the network API module and chart, with a separate producer Deployment,
+ServiceAccount, leader election, and mounted credential. Transaction-demand
+packaging and broader capability release qualification remain open.
+
+The observability chart treats network APIs as required only when a
+`NetworkTelemetry` targets one, and action/Chaos APIs as optional discovery
+sources. Optional integrations use dynamic discovery/informers so an absent or
+removed CRD degrades that source and records a gap rather than preventing
+manager startup.
+
+## Repository layout
+
+Recommended additions preserve the current pattern:
+
+```text
+charts/
+  stacks-network-operator/
+  stacks-observability-operator/
+  stacks-action-operator/
+  stacks-k8s-dev/                 # optional dependency bundle
+operators/
+  network/
+  observability/
+  action/
+apis/
+  network/
+contracts/
+  action-lifecycle-v1.json
+  actor-ports-v1.json
+  image-id-v1.json
+  inventory-v1.json
+  leaf-spec-v1.json
+  steady-state-operation-v1.json  # direction and open gates, not a served schema
+docs/
+  design/
+  ...
+tools/
+```
+
+Each operator retains its own runtime Go module and release version. Shared
+network API types live in a separately versioned, types-only module. Wire
+fixtures remain under `contracts/`; byte-sensitive consumers continue to
+verify them through their own production implementations. Avoid a shared
+runtime library that forces operators onto one controller-runtime dependency
+graph or release cadence.
+
+## CRD ownership and installation
+
+- Each chart owns only its CRDs and namespaced/cluster-scoped RBAC.
+- Assign each future baseline/action CRD one owning chart. Placement remains
+  open; sharing a binary must not couple baseline availability to enabled
+  bounded actions or merge their API lifecycles.
+- CRDs are cluster-wide even for namespaced objects. Namespace isolation does
+  not permit incompatible versions of one CRD; publish installation ownership
+  and API skew rules for independent releases.
+- CRDs are generated from API types; generated files are committed.
+- Helm's CRD upgrade limitations require documented manual or release-tool
+  steps before a served/storage version changes.
+- Initially serve one alpha version per new API. Do not claim external skew
+  compatibility until a compatibility matrix and conversion plan exist.
+- Native Chaos Mesh CRDs are installed by its upstream chart, never copied.
+
+## Image and Git-source boundary
+
+Operators accept immutable OCI image references. They never clone repositories
+or execute selected build scripts. An external agent or CI system:
+
+1. checks out the chosen repository/revision;
+2. builds and scans the image outside operator trust;
+3. pushes it to an accessible registry, or loads it into the selected local kind cluster;
+4. records its content identity (pinning published images by digest); and
+5. patches the relevant actor image and configuration reference.
+
+See the [local actor image workflow](../network-operator/actor-images.md) for
+revision selection, unique local tags and mixed-version updates.
+
+The observation journal may record declared source metadata and image digest,
+but operators do not attest that metadata matches image contents unless a
+separate verified supply-chain provenance system establishes it.
+
+## Dependencies and compatibility
+
+Publish a tested matrix covering:
+
+- Kubernetes, Helm, controller-runtime, and Go toolchain;
+- Bitcoin Core and Stacks actor images/config profiles;
+- Chaos Mesh, CNI, container runtime, OS/architecture, and kernel;
+- storage driver/filesystem; and
+- telemetry backends and query schemas.
+
+Version pins use supported upstream compatibility families. Renovation is
+tested per module and does not force unrelated operator releases.
+
+## Release artifacts
+
+Every product release provides:
+
+- signed OCI image and Helm chart;
+- SBOM and vulnerability scan result;
+- generated CRDs and API reference;
+- exact RBAC verification;
+- examples validated against schemas;
+- compatibility/qualification statement;
+- upgrade and rollback notes; and
+- checksums/provenance for published artifacts.
+
+Behavioral qualification records what was observed on a concrete platform; it
+does not claim deterministic replay.
+
+## Development and verification
+
+Top-level verification orchestrates independent module checks without a
+committed root `go.work`. Each chart can render/lint alone. Contract tests
+verify import boundaries, CRD ownership, exact RBAC, Markdown links, example
+schemas, generated-file currency, and the absence of scenario resources.
+
+Integration profiles:
+
+| Profile | Contents |
+| --- | --- |
+| Topology | Network operator and real actor images |
+| Productive baseline | Topology, Bitcoin production, and transaction demand; action/observation/Chaos controllers disabled |
+| Observation | Topology plus observation and configured data plane |
+| Native faults | Topology, observation, and Chaos Mesh |
+| Protocol actions | Topology, observation, and action operator |
+| Full development | All compatible pinned charts |
+
+## Alternatives
+
+| Alternative | Disposition |
+| --- | --- |
+| One chart/operator binary | Rejected; combines privileges, failures, and release cadences. |
+| Fork/vendor Chaos Mesh | Rejected initially; use upstream APIs and chart. |
+| Build Git revisions in a controller | Rejected; executes untrusted source inside the control plane. |
+| Shared controller/runtime Go module | Rejected; share only the versioned API types. |
+| Public external-controller compatibility immediately | Deferred until a second consumer and skew policy exist. |
+
+## Definition of done
+
+- Every chart installs, upgrades within its supported alpha contract, and
+  verifies independently.
+- Ordinary baseline operation has no enabled bounded-action, Chaos Mesh, or
+  telemetry dependency; capability packaging and CRD prerequisites are explicit.
+- Qualification includes ordinary regtest use, reliability/liveness and
+  performance investigations, and evidence-based verification workflows.
+- No operator clones or builds Git source.
+- Bundle installation proves compatible pins without coupling releases.
+- Published artifacts are signed, scanned, documented, and reproducible as
+  build artifacts without promising repeatable distributed outcomes.
+
+## Open decisions
+
+1. Registry and chart publication locations.
+2. Initial development-bundle dependencies and whether it belongs in this
+   repository.
+3. Release/version policy before `v1beta1` APIs.
+4. Telemetry backend defaults for local and managed clusters.

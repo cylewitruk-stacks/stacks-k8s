@@ -1,0 +1,13 @@
+{
+  "name": "stacks-k8s-transactions",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test *.test.mjs"
+  },
+  "dependencies": {
+    "@stacks/encryption": "7.6.0",
+    "@stacks/stacking": "7.6.0",
+    "@stacks/transactions": "7.6.0"
+  }
+}

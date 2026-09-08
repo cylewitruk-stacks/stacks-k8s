@@ -1,0 +1,16 @@
+# Qualified local kind/containerd installation; upstream chart version 2.8.4.
+# The dashboard and other optional services are not needed for native CRD use.
+images:
+  registry: ghcr.io
+  tag: v2.8.4
+controllerManager:
+  replicaCount: 1
+  enableFilterNamespace: true
+  allowHostNetworkTesting: false
+chaosDaemon:
+  runtime: containerd
+  socketPath: /run/containerd/containerd.sock
+dashboard:
+  create: false
+dnsServer:
+  create: false

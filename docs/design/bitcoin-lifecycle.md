@@ -1,0 +1,262 @@
+# Bitcoin lifecycle design
+
+## Status and authority
+
+**Direction agreed; replacement implementation contracts open.** This document
+applies the [steady-state operation amendment](steady-state-operation.md).
+A constrained [Bitcoin baseline profile](../network-operator/bitcoin-production.md)
+is implemented in `bitcoin.stacks.org/v1alpha1`; the initial
+[finite generation profile](../network-operator/bitcoin-generation.md) is served
+in `actions.stacks.org/v1alpha1`. A constrained
+[reorganization profile](bitcoin-reorganization.md) adds local replacement and
+acknowledged compensation.
+
+Target API groups remain `bitcoin.stacks.org/v1alpha1` for
+`BitcoinBlockProduction` and `actions.stacks.org/v1alpha1` for
+`BitcoinBlockGeneration` and `BitcoinReorganization`. The linked baseline
+profile owns the served weighted production fields and
+per-target execution ledgers. Broader timing and bounded-action
+admission/recovery contracts remain open.
+
+Only bounded actions follow the [atomic action contract](actions.md).
+Production maintains mutable baseline behavior without a timeout or terminal
+completion claim. It is not a scenario or ordered action plan.
+
+## Network and actor ownership
+
+`StacksNetwork` declares baseline production and compiles an owned
+`BitcoinBlockProduction` alongside neutral `BitcoinNode` resources. Bitcoin
+nodes have no mining role. Their configuration, peers, storage and resources
+are independent of production timing and target selection.
+
+The aggregate writes child specs; a separately permissioned production
+controller issues typed regtest RPC requests. Permanent baseline changes go
+through the aggregate. Baseline operation does not require enabling bounded
+action controllers. Standalone policy ownership and packaging remain open.
+
+### Bitcoin image basis
+
+Use the Debian-based [bitcoin/bitcoin image](https://hub.docker.com/r/bitcoin/bitcoin)
+as the planned standard regtest image, with 31.1 as the current qualification
+baseline. The publisher describes these as unofficial Bitcoin Core testing
+images. Record version, platform, and immutable digest for qualification;
+avoid floating latest tags. Existing 25.2 examples remain pending workload
+qualification and an explicit example update. Custom images remain subject
+to the same capability and identity checks.
+
+## Target admission
+
+Admission establishes current declaration, network membership and ownership,
+UID, generation, runtime/configuration identity, credential profile, and
+reachable regtest capability. It must not require unrelated actors to be
+Ready or accept stale aggregate inventory. R1 in the amendment owns the
+replacement target-validation and endpoint-identity contract.
+
+The [R1/R2 proposal](target-admission-and-rpc-execution.md) recommends a
+health-independent declaration catalog joined to current leaf/runtime identity,
+with endpoint checks under the initial trusted-network profile. Declaration
+publication is implemented and itself enables no RPC mutations.
+Cryptographic process authentication belongs to deferred reset-profile work.
+
+References are typed and same-namespace. Public specs do not choose arbitrary
+RPC endpoints, methods, wallets, or credentials. Destinations remain explicit,
+runtime-validated regtest addresses. Replacement objects never silently inherit
+admission; target-set edits need explicit generation/identity semantics.
+
+## `BitcoinBlockProduction`
+
+The policy separates emission timing, target selection, destination mapping,
+and pause state. It offers fixed or qualified jittered cadence and fixed or
+weighted random selection over a bounded set of Bitcoin node references.
+Weights distribute generation opportunities, not physical hash power or
+guaranteed canonical progress. It does not choose a winning branch.
+
+The served profile has one aggregate-owned policy, 1–8 active logical targets,
+and at most sixteen retained target identities per policy lifetime. Each target
+has a destination and integer weight in 1–1000. Timing is one policy interval
+in 1–86400 seconds, with optional symmetric integer-second uniform jitter
+that keeps every sampled interval within those bounds. Only aggregate-owned
+policies are executable, preventing overlapping policy rates on the same actor.
+
+The scheduler records selections and its next due time durably, with an
+optimistic-lock status write. A selected opportunity expires at the end of its
+interval. A late reconcile publishes at most one fresh opportunity; a policy
+change or resume starts a fresh interval. Delayed queue entries only prompt
+reconciliation. They never authorize replaying stale choices or catch-up work.
+
+Each `BitcoinProductionTarget` consumes its offer in the same status write that
+arms `generatetoaddress`. Unavailable, reserved, outstanding, expired, or
+capacity-limited opportunities are skipped and counted without redistribution.
+Finite actions reserve only their target. Removal stops new baseline admission
+while retaining existing authorization, cleanup obligations, and the ledger UID.
+Re-addition cannot clear an unresolved dispatch or reservation.
+
+Policy status contains bounded target UID pins and offered counts. Execution
+ledgers contain consumed/skipped counts, the latest skip reason, acknowledged
+block counts, and bounded dispatch/action facts. Detailed history belongs to
+observation sinks. Acknowledged generation does not prove canonical adoption.
+Missing or replaced target ledgers remain closed; other targets can continue.
+Exceeding the lifetime identity bound blocks the unsupported policy update.
+
+## Bounded Bitcoin actions
+
+`BitcoinBlockGeneration` requests 1–100 blocks with `Immediate`, `Fixed`,
+`Uniform`, or `Explicit` cadence. Every mode uses serial single-block RPCs;
+the first block is immediately eligible. Later delays follow receipts, with
+fixed/uniform bounds of 1–60 seconds and explicit delays of 0–60 seconds.
+An explicit sequence has exactly count minus one entries. It describes one
+mechanism's timing, not a list of actions. Specs stay immutable, and
+creation-relative timeouts remain at most ten minutes. The
+[generation guide](../network-operator/bitcoin-generation.md#cadence) defines
+durable timing and no-catch-up behavior.
+The `actions.stacks.org/correlation-id` label is a search hint; UID remains
+authoritative.
+
+`BitcoinReorganization` requests one bounded replacement of a local suffix.
+It does not create partitions or judge Stacks recovery. Higher chainwork and
+observed canonical status matter; local completion does not imply global
+convergence.
+
+Prior count, batch, depth, and timeout limits remain conservative design
+inputs. Replacement fixtures must explicitly retain or justify changing them.
+Selective boundary admission still lacks a trusted protocol schedule; the
+all-opt-ins approach remains the conservative review baseline.
+
+Only successful mutation responses support acknowledged progress. Partial
+progress, definite failure, ambiguous effects, and protocol conclusions remain
+separate. Cancellation cannot undo propagated chain history.
+
+## RPC execution and reservation gate
+
+All production and Bitcoin actions require one shared per-target exclusion
+contract across their deployment boundary and independently enabled
+controllers. The prior Lease/token/leader-gated-manager design is a starting
+point, but its recovery guarantees are reopened under R2:
+
+- Client timeout does not terminate Bitcoin Core execution.
+- Lease expiry and uncached reads are not server-side fencing.
+- Absence from observed tips does not prove an outstanding request cannot
+  execute later.
+- A fixed grace interval does not establish server-side quiescence.
+
+The [R1/R2 proposal](target-admission-and-rpc-execution.md) recommends persisting
+dispatch authority and outstanding work in one protected CAS record. Ambiguity
+retains exclusion instead of granting automatic recovery. Reservation ownership
+survives individual receipts and executor replacement until explicit clean
+release. Action deadlines, transport cancellation, and receipt collection have
+separate lifetimes. Initial production retains exclusion after ambiguous
+execution across restarts and replacement; preserve evidence and use a fresh
+independently isolated environment. In-place reset/readmission and an
+execution-aware adapter are deferred until operational need justifies them.
+
+Choose an enforceable execution boundary or an explicitly weaker contract with
+durable unresolved-operation handling before implementation. Do not authorize
+retry, takeover, or resumption solely because `rpc-not-after` elapsed.
+Historical `ProvenAbsent` does not authorize retry without proof that
+outstanding execution ended. `Inconclusive` does not establish that another
+mutation is safe.
+
+Leader election, optimistic updates, local mutexes, bounded clients, and honest
+attribution remain useful; their guarantees must match the server-side
+contract. R2 also determines whether production can omit durable per-request
+execution state. Bounded status does not justify forgetting outstanding work.
+
+## Reorganization cleanup gate
+
+The [initial R4 contract](bitcoin-reorganization.md) now defines this gate for
+one trusted local regtest profile. Broader cleanup/recovery profiles remain open.
+
+Reorganization combines irreversible history with a temporary invalidation
+marker. R4 must define cleanup after success, definite failure, timeout,
+cancellation, ambiguous RPC, reservation loss, and target replacement.
+
+Track whether invalidation occurred, whether compensating `reconsiderblock`
+is safe and acknowledged, and whether cleanup remains unresolved. Removing
+the marker does not undo history. Do not release a target as clean or clear
+its safety finalizer merely because generation stopped. Terminal uncertainty
+may coexist with retained cleanup obligations and explicit administrative
+recovery.
+
+Deleting the entire network/namespace is explicit abandonment, not successful
+cleanup. Apply the [teardown
+exception](target-admission-and-rpc-execution.md#recovery-record-loss-and-replacement)
+so unresolved RPCs alone cannot retain cleanup finalizers indefinitely.
+
+## Credential and renderer gate
+
+Keep high-entropy credentials, immutable administrator-provisioned inputs,
+salted `rpcauth` rendering for profiles that use it,
+digest-verified actor rendering, and no credential output in logs, status,
+arguments, or Helm values. The topology controller does not read Secret bytes.
+Current v1 development profiles are not automatically eligible for managed RPC.
+
+R3 reopens the shared `stacks-bitcoin-rpc` design. Define separate observation
+and mutation authority, Secret access, actor client permissions, and
+server-enforced method restrictions. Freeze names, keys, renderer inputs,
+and profile versions together. Static per-environment credentials are acceptable
+for the initial trusted disposable-network profile; test-service credential
+compromise and credential rotation are outside its scope. Putting both passwords in a Secret
+readable by the observer does not separate authority.
+
+Actor clients receive only their own method-restricted credentials. Never
+mount producer/action mutation passwords into actor workloads; Bitcoin servers
+receive their salted rpcauth verifiers. Use `rpcwhitelist=<user>:<methods>` with
+rpcwhitelistdefault=1 and an explicit method list for each intended principal,
+including any local health/bootstrap client. In
+[Bitcoin Core 31.1](https://github.com/bitcoin/bitcoin/blob/v31.1/src/httprpc.cpp),
+setting rpcwhitelistdefault=0 permits authenticated users with no whitelist
+to call any method; it is not the initial deny-by-default profile. Qualify
+the actual per-role method lists before enabling managed RPC.
+
+For deferred reset recovery, qualify per-process credential epochs alongside actual
+termination evidence. Bitcoin's rotating cookie is a candidate primitive;
+static mutation credentials do not fence a former producer. Armed requests
+pin credentials and never refresh them for a replacement. Provisioning,
+restricted principals, and server identity gate that stronger profile; cookie
+rotation alone does not establish them. See the
+[candidate contract](target-admission-and-rpc-execution.md#candidate-credential-epoch).
+
+Authentication does not encrypt RPC transport. Qualify the private-cluster
+management path and endpoint identity. Updated API, leaf-specification, and
+inventory fixtures precede enabling managed RPC.
+
+## RBAC and finalizers
+
+Controllers need target/resource reads, exact-name credential access, their
+own status writes, Events, and the reviewed reservation permissions. Updating
+metadata finalizers requires patch/update on the primary custom resource;
+status or `/finalizers` permissions alone do not authorize ordinary metadata
+patches. RBAC cannot restrict primary writes to individual fields. Immutable
+action schemas and controller ownership conventions serve separate purposes.
+
+If Leases are retained, state their get/list/watch/create/update/patch scope
+honestly. Labels constrain informer contents, not RBAC. Ownership checks
+protect normal behavior but do not narrow a compromised ServiceAccount's
+authorization. Restricted-ServiceAccount tests must exercise finalizer
+addition/removal as well as the exact rendered-RBAC allowlist.
+
+## Faults, observation, and acceptance
+
+Initial centralized production relies on the
+[qualified management path](steady-state-operation.md#fault-traffic-and-production-control).
+Record control failure separately from peer isolation and process failure.
+Autonomous production under complete external isolation remains deferred.
+
+Observation records baseline generations, selected targets, overrides,
+requested/acknowledged effects, cleanup, identity transitions, and gaps. It
+never authorizes production, holds reservations, or issues mutations.
+
+Before implementation:
+
+- Close applicable R1–R4 gates and freeze replacement schemas, limits,
+  credentials, and execution contracts for each enabled capability.
+- Qualify bootstrap, multi-target selection, partial faults, lost control,
+  policy changes, and outstanding RPCs beyond client deadlines.
+- Test every reorganization cleanup exit and actual finalizer permissions.
+- Validate current contracts with schema, controller and real-runtime tests.
+
+## References
+
+- [Bitcoin RPC security](https://github.com/bitcoin/bitcoin/blob/master/doc/JSON-RPC-interface.md)
+- [Leader-election limitations](https://pkg.go.dev/k8s.io/client-go/tools/leaderelection)
+- [Finalizer implementation](https://book.kubebuilder.io/reference/using-finalizers)

@@ -1,0 +1,90 @@
+{{- if and (gt (int .Values.replicaCount) 1) (not .Values.controller.leaderElection) }}
+{{- fail "controller.leaderElection must be true when replicaCount is greater than one" }}
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "stacks-network-operator.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "stacks-network-operator.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  strategy:
+    type: {{ ternary "RollingUpdate" "Recreate" .Values.controller.leaderElection }}
+  selector:
+    matchLabels:
+      {{- include "stacks-network-operator.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "stacks-network-operator.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "stacks-network-operator.serviceAccountName" . }}
+      automountServiceAccountToken: true
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: manager
+          image: {{ printf "%s:%s" .Values.image.repository .Values.image.tag | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - --watch-namespace={{ .Values.controller.watchNamespace }}
+            - --leader-namespace={{ .Release.Namespace }}
+            - --worker-image={{ printf "%s:%s" .Values.image.repository .Values.image.tag }}
+            - --sdk-worker-image={{ printf "%s:%s" .Values.workers.sdkImage.repository .Values.workers.sdkImage.tag }}
+            - {{ printf "--worker-pull-secrets=%s" (join "," .Values.workers.pullSecrets) | quote }}
+            - --worker-pull-policy={{ .Values.image.pullPolicy }}
+            - --bitcoin-generation-enabled={{ .Values.bitcoinGeneration.enabled }}
+            - --bitcoin-reorganization-enabled={{ .Values.bitcoinReorganization.enabled }}
+            - --bitcoin-production-enabled={{ .Values.bitcoinProduction.enabled }}
+            - --stacks-transactions-enabled={{ .Values.stacksTransactions.enabled }}
+            - --stacks-operation-enabled={{ .Values.stacksOperation.enabled }}
+            - --max-concurrent-reconciles={{ .Values.controller.maxConcurrentReconciles }}
+            - --leader-elect={{ .Values.controller.leaderElection }}
+            - --zap-log-level={{ .Values.controller.logLevel }}
+          ports:
+            - name: metrics
+              containerPort: 8080
+            - name: health
+              containerPort: 8081
+          livenessProbe:
+            httpGet: {path: /healthz, port: health}
+          readinessProbe:
+            httpGet: {path: /readyz, port: health}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- range . }}
+        - name: {{ . | quote }}
+        {{- end }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

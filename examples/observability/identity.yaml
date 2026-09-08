@@ -1,0 +1,8 @@
+apiVersion: observation.stacks.org/v1alpha1
+kind: NetworkObservation
+metadata:
+  name: minimal-identity
+spec:
+  networkRef:
+    name: minimal
+  timeoutSeconds: 10

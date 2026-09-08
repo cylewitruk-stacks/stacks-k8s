@@ -1,0 +1,270 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.22.0
+  name: stacksaccounts.stacks.stacks.org
+spec:
+  group: stacks.stacks.org
+  names:
+    kind: StacksAccount
+    listKind: StacksAccountList
+    plural: stacksaccounts
+    singular: stacksaccount
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: StacksAccount retains the exclusive transaction authority of
+          one managed account.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: Spec binds the account to its environment and consumer.
+            properties:
+              networkName:
+                description: NetworkName identifies the owning network.
+                maxLength: 63
+                minLength: 1
+                type: string
+              networkUID:
+                description: NetworkUID prevents admission against another environment
+                  incarnation.
+                maxLength: 64
+                minLength: 1
+                type: string
+              policy:
+                description: Policy declares the sole account consumer and signing
+                  identity.
+                properties:
+                  address:
+                    description: Address is the funded testnet principal; declaring
+                      funding alone does not manage it.
+                    maxLength: 41
+                    pattern: ^ST[0-9A-HJKMNP-TV-Z]{26,39}$
+                    type: string
+                  configDigest:
+                    description: ConfigDigest approves the ingress configuration independently
+                      of its image.
+                    maxLength: 71
+                    pattern: ^sha256:[0-9a-f]{64}$
+                    type: string
+                  consumer:
+                    description: Consumer names that capability within this network.
+                    maxLength: 63
+                    pattern: ^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$
+                    type: string
+                  consumerKind:
+                    description: ConsumerKind identifies the only capability allowed
+                      to reserve this account.
+                    enum:
+                    - StacksContractSet
+                    - StacksStackingParticipant
+                    type: string
+                  keySecretRef:
+                    description: KeySecretRef contains the offline signing key; it
+                      is never mounted into an actor.
+                    properties:
+                      digest:
+                        description: Digest binds the exact bytes read before use.
+                        maxLength: 71
+                        pattern: ^sha256:[0-9a-f]{64}$
+                        type: string
+                      key:
+                        description: Key identifies the entry within the object.
+                        maxLength: 253
+                        minLength: 1
+                        pattern: ^[a-zA-Z0-9._-]+$
+                        type: string
+                      name:
+                        description: Name identifies the object containing the entry.
+                        maxLength: 63
+                        pattern: ^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$
+                        type: string
+                    required:
+                    - digest
+                    - key
+                    - name
+                    type: object
+                  name:
+                    description: Name is the account's stable name within its network.
+                    maxLength: 63
+                    pattern: ^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$
+                    type: string
+                  target:
+                    description: Target names the declared ingress actor.
+                    maxLength: 63
+                    pattern: ^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$
+                    type: string
+                required:
+                - address
+                - configDigest
+                - consumer
+                - consumerKind
+                - keySecretRef
+                - name
+                - target
+                type: object
+            required:
+            - networkName
+            - networkUID
+            - policy
+            type: object
+            x-kubernetes-validations:
+            - message: account authority is immutable
+              rule: self == oldSelf
+          status:
+            description: Status is a bounded account ledger, not a chain indexer.
+            properties:
+              nextNonce:
+                description: NextNonce advances only when an exact canonical execution
+                  has been accounted.
+                format: int64
+                maximum: 9007199254740991
+                minimum: 0
+                type: integer
+              phase:
+                description: Phase describes account execution without leaking signing
+                  inputs.
+                enum:
+                - Idle
+                - Pending
+                - Ambiguous
+                - Blocked
+                - Executed
+                - Abandoned
+                type: string
+              transaction:
+                description: Transaction retains the current authorization until a
+                  newer acknowledged operation.
+                properties:
+                  accepted:
+                    description: Accepted records an exact submission acknowledgement,
+                      not execution.
+                    type: boolean
+                  acknowledged:
+                    description: Acknowledged permits a newer ordinal after the consumer
+                      retains the receipt.
+                    type: boolean
+                  authorizedAt:
+                    description: AuthorizedAt is the authorization time, including
+                      possibly-unsent requests.
+                    format: date-time
+                    type: string
+                  consumerUID:
+                    description: ConsumerUID binds the request to the observed capability
+                      incarnation.
+                    maxLength: 64
+                    minLength: 1
+                    type: string
+                  containerID:
+                    description: ContainerID identifies the admitted process container.
+                    type: string
+                  nonce:
+                    description: Nonce is the exclusively reserved canonical account
+                      nonce.
+                    format: int64
+                    maximum: 9007199254740990
+                    minimum: 0
+                    type: integer
+                  operationDigest:
+                    description: OperationDigest binds the consumer's explicit public
+                      intent.
+                    maxLength: 71
+                    pattern: ^sha256:[0-9a-f]{64}$
+                    type: string
+                  ordinal:
+                    description: Ordinal is monotonic within this consumer's account;
+                      old operations cannot replay.
+                    format: int64
+                    maximum: 9007199254740991
+                    minimum: 1
+                    type: integer
+                  podUID:
+                    description: PodUID identifies the admitted Pod.
+                    type: string
+                  receipt:
+                    description: Receipt records observed canonical execution, including
+                      unsuccessful execution.
+                    properties:
+                      blockID:
+                        description: BlockID is the observed canonical index block
+                          hash.
+                        pattern: ^[0-9a-f]{64}$
+                        type: string
+                      observedAt:
+                        description: ObservedAt records receipt collection time.
+                        format: date-time
+                        type: string
+                      source:
+                        description: Source identifies the qualified native evidence
+                          path.
+                        enum:
+                        - NativeIndex
+                        - LegacyEvent
+                        type: string
+                      success:
+                        description: Success reports the transaction's response result.
+                        type: boolean
+                    required:
+                    - blockID
+                    - observedAt
+                    - success
+                    type: object
+                  rejectionReason:
+                    description: RejectionReason is a bounded matched native rejection;
+                      it does not free the nonce.
+                    enum:
+                    - FeeTooLow
+                    - BadNonce
+                    - Other
+                    type: string
+                  targetUID:
+                    description: TargetUID identifies the admitted StacksNode.
+                    type: string
+                  txID:
+                    description: TxID hashes the signed bytes before their sole submission
+                      attempt.
+                    pattern: ^[0-9a-f]{64}$
+                    type: string
+                required:
+                - authorizedAt
+                - consumerUID
+                - containerID
+                - nonce
+                - operationDigest
+                - ordinal
+                - podUID
+                - targetUID
+                - txID
+                type: object
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

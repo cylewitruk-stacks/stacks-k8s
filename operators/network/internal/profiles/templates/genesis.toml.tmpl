@@ -1,0 +1,12 @@
+{{define "genesis"}}
+{{range .Epochs}}
+[[burnchain.epochs]]
+epoch_name = {{q .Name}}
+start_height = {{.StartHeight}}
+{{end}}
+{{range .Balances}}
+[[ustx_balance]]
+address = {{q .Address}}
+amount = {{.Amount}}
+{{end}}
+{{end}}

@@ -1,0 +1,144 @@
+{{- if or .Values.networkDelay.enabled .Values.networkPartition.enabled }}
+{{- if ne .Values.chaosMesh.externalVersion "2.8.4" }}
+{{- fail "native network faults require the explicitly installed Chaos Mesh externalVersion 2.8.4" }}
+{{- end }}
+{{- $name := printf "stacks-network-faults-%s" .Release.Namespace }}
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: {{ $name }}
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [chaos-mesh.org]
+        apiVersions: [v1alpha1]
+        operations: [CREATE, UPDATE]
+        resources: [networkchaos]
+        scope: Namespaced
+  validations:
+    - expression: >-
+        oldObject != null || (has(namespaceObject.metadata.labels) &&
+        'network.stacks.org/chaos-profile' in namespaceObject.metadata.labels &&
+        namespaceObject.metadata.labels['network.stacks.org/chaos-profile'] == 'network-faults-v1' &&
+        has(namespaceObject.metadata.annotations) &&
+        'chaos-mesh.org/inject' in namespaceObject.metadata.annotations &&
+        namespaceObject.metadata.annotations['chaos-mesh.org/inject'] == 'enabled')
+      message: namespace must be explicitly enrolled for network-faults-v1
+    - expression: >-
+        oldObject != null || !has(object.metadata.annotations) ||
+        !('experiment.chaos-mesh.org/pause' in object.metadata.annotations)
+      message: create an immediately runnable bounded fault without pause annotations
+    - expression: >-
+        oldObject != null || ((!has(object.status) || (!has(object.status.conditions) &&
+        !has(object.status.instances) && (!has(object.status.experiment) ||
+        (!has(object.status.experiment.desiredPhase) && !has(object.status.experiment.containerRecords))))) &&
+        (!has(object.metadata.finalizers) || size(object.metadata.finalizers) == 0) &&
+        (!has(object.metadata.ownerReferences) || size(object.metadata.ownerReferences) == 0) &&
+        (!has(object.metadata.labels) || !('managed-by' in object.metadata.labels)))
+      message: native controller lifecycle fields must not be supplied at creation
+    - expression: oldObject == null || object.spec == oldObject.spec
+      message: native fault specs are immutable; delete and create a new fault
+    - expression: >-
+        oldObject != null || (object.spec.mode == 'one' &&
+        (({{ .Values.networkDelay.enabled }} && object.spec.action == 'delay' && object.spec.direction == 'to') ||
+        ({{ .Values.networkPartition.enabled }} && object.spec.action == 'partition' && object.spec.direction == 'both')))
+      message: fault mode must be enabled; delay is directed to one actor, partition is bidirectional
+    - expression: >-
+        oldObject != null || (
+        has(object.spec.duration) && object.spec.duration.matches('^[1-9][0-9]{0,2}s$') &&
+        duration(object.spec.duration) <= duration('120s'))
+      message: duration must be an integer number of seconds in 1..120
+    - expression: >-
+        oldObject != null || (object.spec.action == 'partition' ? !has(object.spec.delay) :
+        (has(object.spec.delay) && object.spec.delay.latency.matches('^[1-9][0-9]{0,3}ms$') &&
+        duration(object.spec.delay.latency) <= duration('1s') &&
+        (!has(object.spec.delay.jitter) || object.spec.delay.jitter == '0ms') &&
+        (!has(object.spec.delay.correlation) || object.spec.delay.correlation == '0') &&
+        !has(object.spec.delay.reorder)))
+      message: delay requires 1..1000ms without jitter, correlation or reordering; partition forbids delay parameters
+    - expression: >-
+        oldObject != null || (
+        !has(object.spec.remoteCluster) && !has(object.spec.externalTargets) &&
+        !has(object.spec.device) && !has(object.spec.targetDevice) && !has(object.spec.value) &&
+        !has(object.spec.loss) && !has(object.spec.corrupt) && !has(object.spec.duplicate) &&
+        !has(object.spec.bandwidth) && !has(object.spec.rate))
+      message: external targets, device overrides and other fault mechanisms are unsupported
+    - expression: oldObject != null || (has(object.spec.target) && object.spec.target.mode == 'one' && !has(object.spec.target.value))
+      message: exactly one logical remote actor must be selected
+    {{- range $selector := list "object.spec.selector" "object.spec.target.selector" }}
+    - expression: >-
+        oldObject != null || (
+        has({{ $selector }}.namespaces) && {{ $selector }}.namespaces == [request.namespace] &&
+        has({{ $selector }}.labelSelectors) && size({{ $selector }}.labelSelectors) == 2 &&
+        'network.stacks.org/network' in {{ $selector }}.labelSelectors &&
+        'network.stacks.org/actor' in {{ $selector }}.labelSelectors &&
+        {{ $selector }}.labelSelectors['network.stacks.org/network'].matches('^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$') &&
+        {{ $selector }}.labelSelectors['network.stacks.org/actor'].matches('^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$') &&
+        !has({{ $selector }}.pods) && !has({{ $selector }}.expressionSelectors) &&
+        !has({{ $selector }}.annotationSelectors) && !has({{ $selector }}.fieldSelectors) &&
+        !has({{ $selector }}.nodes) && !has({{ $selector }}.nodeSelectors) && !has({{ $selector }}.podPhaseSelectors))
+      message: source and target require only this namespace and exact network/actor labels
+    {{- end }}
+    - expression: >-
+        oldObject != null || (
+        object.spec.selector.labelSelectors['network.stacks.org/network'] == object.spec.target.selector.labelSelectors['network.stacks.org/network'] &&
+        object.spec.selector.labelSelectors['network.stacks.org/actor'] != object.spec.target.selector.labelSelectors['network.stacks.org/actor'] &&
+        has(object.metadata.labels) && 'network.stacks.org/network' in object.metadata.labels &&
+        object.metadata.labels['network.stacks.org/network'] == object.spec.selector.labelSelectors['network.stacks.org/network'] &&
+        'actions.stacks.org/correlation-id' in object.metadata.labels &&
+        size(object.metadata.labels['actions.stacks.org/correlation-id']) > 0)
+      message: fault metadata and both distinct actors must identify one network and a correlation label
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: {{ $name }}
+spec:
+  policyName: {{ $name }}
+  validationActions: [Deny]
+  matchResources:
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: {{ .Release.Namespace | quote }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Values.agent.serviceAccountName }}
+  namespace: {{ .Release.Namespace }}
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace }}
+rules:
+  - apiGroups: [chaos-mesh.org]
+    resources: [networkchaos]
+    verbs: [get, list, watch, create, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ $name }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Values.agent.serviceAccountName }}
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  hard:
+    count/networkchaos.chaos-mesh.org: "1"
+{{- end }}

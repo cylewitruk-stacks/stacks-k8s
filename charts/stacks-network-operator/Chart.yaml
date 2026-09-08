@@ -1,0 +1,17 @@
+apiVersion: v2
+name: stacks-network-operator
+description: A standalone Kubernetes operator for disposable Stacks regtest networks
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+kubeVersion: ">=1.32.0-0"
+home: https://github.com/cylewitruk-stacks/stacks-k8s
+sources:
+  - https://github.com/cylewitruk-stacks/stacks-k8s
+keywords:
+  - stacks
+  - bitcoin
+  - regtest
+  - operator
+annotations:
+  artifacthub.io/license: MIT

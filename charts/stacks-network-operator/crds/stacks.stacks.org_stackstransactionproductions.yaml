@@ -1,0 +1,283 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.22.0
+  name: stackstransactionproductions.stacks.stacks.org
+spec:
+  group: stacks.stacks.org
+  names:
+    kind: StacksTransactionProduction
+    listKind: StacksTransactionProductionList
+    plural: stackstransactionproductions
+    singular: stackstransactionproduction
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.confirmed
+      name: Confirmed
+      type: integer
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: StacksTransactionProduction maintains aggregate-owned, fixed-interval
+          STX demand.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: Spec is the current aggregate-owned declaration.
+            properties:
+              networkName:
+                description: NetworkName names the owning StacksNetwork.
+                maxLength: 63
+                minLength: 1
+                type: string
+              networkUID:
+                description: NetworkUID prevents admission after parent replacement.
+                maxLength: 64
+                minLength: 1
+                type: string
+              policy:
+                description: Policy is the supported steady transfer profile.
+                properties:
+                  amountMicroSTX:
+                    description: AmountMicroSTX bounds each ordinary transfer to at
+                      most one STX.
+                    format: int64
+                    maximum: 1000000
+                    minimum: 1
+                    type: integer
+                  credentialsSecret:
+                    description: |-
+                      CredentialsSecret names the same-namespace immutable worker credential document.
+                      Bitcoin uses credentials.json; transfers use account.json.
+                    maxLength: 253
+                    pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                    type: string
+                  feeMicroSTX:
+                    description: FeeMicroSTX is explicit; no automatic fee escalation
+                      occurs.
+                    format: int64
+                    maximum: 1000000
+                    minimum: 1
+                    type: integer
+                  intervalSeconds:
+                    description: IntervalSeconds is offered cadence, not a guaranteed
+                      block interval.
+                    format: int32
+                    maximum: 86400
+                    minimum: 1
+                    type: integer
+                  minimumBurnHeight:
+                    description: MinimumBurnHeight holds new transfers until the ingress
+                      observes this burn height.
+                    format: int64
+                    maximum: 9007199254740991
+                    minimum: 0
+                    type: integer
+                  paused:
+                    description: Paused stops new signing/dispatch while outstanding
+                      evidence remains observable.
+                    type: boolean
+                  recipient:
+                    description: Recipient receives the offered micro-STX amount.
+                    maxLength: 42
+                    pattern: ^ST[0-9A-HJKMNP-TV-Z]{20,40}$
+                    type: string
+                  sender:
+                    description: Sender identifies the administrator-provisioned exclusive
+                      test account.
+                    maxLength: 42
+                    pattern: ^ST[0-9A-HJKMNP-TV-Z]{20,40}$
+                    type: string
+                  target:
+                    description: Target names the declared Stacks ingress actor.
+                    maxLength: 63
+                    pattern: ^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$
+                    type: string
+                required:
+                - amountMicroSTX
+                - feeMicroSTX
+                - intervalSeconds
+                - recipient
+                - sender
+                - target
+                type: object
+            required:
+            - networkName
+            - networkUID
+            - policy
+            type: object
+            x-kubernetes-validations:
+            - message: network, ingress and sender are immutable
+              rule: self.networkName == oldSelf.networkName && self.networkUID ==
+                oldSelf.networkUID && self.policy.target == oldSelf.policy.target
+                && self.policy.sender == oldSelf.policy.sender
+          status:
+            description: Status retains bounded submission and inclusion evidence.
+            properties:
+              accepted:
+                description: Accepted reports whether the node acknowledged this TxID;
+                  it is not confirmation.
+                type: boolean
+              conditions:
+                description: Conditions includes WorkerReady, independently of protocol
+                  execution evidence.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                maxItems: 8
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              confirmed:
+                description: Confirmed counts exact successful canonical inclusions
+                  observed and accounted once.
+                format: int64
+                type: integer
+              lastBlockID:
+                description: LastBlockID is the index block hash at the last successful
+                  inclusion observation.
+                type: string
+              lastConfirmedAt:
+                description: LastConfirmedAt is the time of that observation, not
+                  a finality guarantee.
+                format: date-time
+                type: string
+              message:
+                description: Message reports state without exposing credentials or
+                  raw server errors.
+                type: string
+              nextNonce:
+                description: NextNonce equals Nonce while outstanding and becomes
+                  Nonce+1 after exact inclusion.
+                format: int64
+                type: integer
+              nonce:
+                description: Nonce is the last reserved account nonce.
+                format: int64
+                type: integer
+              observedGeneration:
+                description: ObservedGeneration identifies the declaration inspected
+                  by the controller.
+                format: int64
+                type: integer
+              outstanding:
+                description: Outstanding reserves this account until the exact transaction
+                  is accounted.
+                type: boolean
+              phase:
+                description: Phase is Waiting, Paused, Pending, Ambiguous, Running,
+                  Blocked, or Abandoned.
+                enum:
+                - Waiting
+                - Paused
+                - Pending
+                - Ambiguous
+                - Running
+                - Blocked
+                - Abandoned
+                type: string
+              podUID:
+                description: PodUID records the admitted Pod incarnation.
+                type: string
+              rejectionReason:
+                description: RejectionReason retains a matched ingress rejection for
+                  TxID, not a non-execution guarantee.
+                enum:
+                - FeeTooLow
+                - BadNonce
+                - Other
+                type: string
+              submittedAt:
+                description: SubmittedAt records authorization time, including possibly-unsent
+                  requests.
+                format: date-time
+                type: string
+              targetUID:
+                description: TargetUID binds dispatch to an admitted StacksNode incarnation.
+                type: string
+              txID:
+                description: TxID identifies the signed transaction before its only
+                  authorized submission.
+                type: string
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

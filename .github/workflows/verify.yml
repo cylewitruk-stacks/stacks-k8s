@@ -1,0 +1,102 @@
+name: Verify
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  chart-policy:
+    name: Chart policy and native admission
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: tools/chart-policy/go.mod
+          cache-dependency-path: tools/chart-policy/go.sum
+      - uses: azure/setup-helm@v5
+      - run: make verify-chart-policy
+      - run: make -C charts/stacks-chaos-profile verify
+
+  network:
+    name: Network operator
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: operators/network/go.mod
+          cache-dependency-path: |
+            apis/network/go.sum
+            apis/network/tools/go.sum
+            operators/network/go.sum
+            operators/action/go.sum
+      - uses: azure/setup-helm@v5
+      - run: make verify-network
+
+  action:
+    name: Action operator
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: operators/action/go.mod
+          cache-dependency-path: |
+            apis/network/go.sum
+            operators/action/go.sum
+      - uses: azure/setup-helm@v5
+      - run: make verify-action
+
+  observability:
+    name: Observability operator
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: operators/observability/go.mod
+          cache-dependency-path: |
+            operators/observability/go.sum
+            operators/observability/tools/go.sum
+      - uses: azure/setup-helm@v5
+      - run: make verify-observability
+
+  modules:
+    name: Module integrity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: operators/network/go.mod
+          cache-dependency-path: |
+            apis/network/go.sum
+            apis/network/tools/go.sum
+            operators/network/go.sum
+            operators/action/go.sum
+            operators/observability/go.sum
+            operators/observability/tools/go.sum
+            tools/chart-policy/go.sum
+            tools/module-policy/go.sum
+      - run: make modules-verify
+      - run: make module-policy-verify
+      - run: make verify-local-cluster
+
+  containers:
+    name: Container builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: make docker-check
+      - run: make docker-build

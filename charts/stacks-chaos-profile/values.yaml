@@ -1,0 +1,10 @@
+# Install separately from the operators, once per experiment namespace.
+networkDelay:
+  enabled: false
+networkPartition:
+  enabled: false
+# An explicit declaration that the administrator installed the qualified upstream version.
+chaosMesh:
+  externalVersion: ""
+agent:
+  serviceAccountName: stacks-chaos-agent

@@ -1,0 +1,143 @@
+{
+  "contract": "network.stacks.org/leaf-spec/v1",
+  "vectors": [
+    {
+      "id": "bitcoin-minimal",
+      "kind": "BitcoinNode",
+      "digest": "sha256:eeafe4ade386ffeb075b6aec0fc9fd7be9b56f8a873da40b175ec9a71de48df0",
+      "spec": {
+        "networkRef": {"name": "network"},
+        "actorName": "bitcoin",
+        "image": "bitcoin:test",
+        "config": {"generated": {"profile": "bitcoin-regtest/v1"}},
+        "rpcPort": 18443,
+        "p2pPort": 18444,
+        "workload": {}
+      }
+    },
+    {
+      "id": "stacks-node-minimal",
+      "kind": "StacksNode",
+      "digest": "sha256:f6f6aeb154a1c5a719f0de6ecdcac84f0dd580dee6ac4a2baecfe9635fbc183b",
+      "spec": {
+        "networkRef": {"name": "network"},
+        "actorName": "follower",
+        "role": "follower",
+        "image": "stacks:test",
+        "bitcoinNodeRef": {"name": "network-bitcoin"},
+        "config": {"generated": {"profile": "nakamoto-regtest-node/v1"}},
+        "workload": {}
+      }
+    },
+    {
+      "id": "stacks-signer-minimal",
+      "kind": "StacksSigner",
+      "digest": "sha256:42c68b5c28725a8803e461850d8c876b1319607a285fb190d94337ebd18f4a69",
+      "spec": {
+        "networkRef": {"name": "network"},
+        "actorName": "signer",
+        "image": "signer:test",
+        "nodeRef": {"name": "network-signer-node"},
+        "index": 0,
+        "weight": 1,
+        "config": {"secretRef": {"name": "signer-config"}},
+        "workload": {}
+      }
+    },
+    {
+      "id": "bitcoin-empty-resources",
+      "kind": "BitcoinNode",
+      "digest": "sha256:d5cb959e9b92663a945afeba3cbd862511933bc442b612f8cbe23c4103673db9",
+      "spec": {
+        "networkRef": {"name": "network"},
+        "actorName": "bitcoin-empty-resources",
+        "image": "bitcoin:test",
+        "config": {"generated": {"profile": "bitcoin-regtest/v1"}},
+        "rpcPort": 18443,
+        "p2pPort": 18444,
+        "workload": {"resources": {"requests": {}, "limits": {}}}
+      }
+    },
+    {
+      "id": "bitcoin-rich",
+      "kind": "BitcoinNode",
+      "digest": "sha256:2a964f6ddbd7d706c17e7aebd2ad9a08dbb3f2bd5944e7d017003bcd28e9eda9",
+      "spec": {
+        "networkRef": {"name": "rich-network"},
+        "actorName": "bitcoin-b",
+        "image": "registry.example/bitcoin@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "imagePullPolicy": "Always",
+        "imagePullSecrets": [{"name": "registry-credentials"}],
+        "config": {"inline": {"data": "regtest=1\nserver=1\n", "key": "bitcoin.conf", "mountPath": "/etc/bitcoin/bitcoin.conf"}},
+        "peerRefs": ["rich-network-bitcoin-a"],
+        "rpcPort": 19443,
+        "p2pPort": 19444,
+        "dependencyImage": "busybox:1.36.1",
+        "workload": {
+          "storage": {"enabled": true, "size": "2Gi", "mountPath": "/bitcoin", "storageClassName": "fast", "accessModes": ["ReadWriteOnce"], "retainOnDelete": true},
+          "resources": {"requests": {"cpu": "250m", "memory": "512Mi"}, "limits": {"cpu": "2", "memory": "2Gi"}},
+          "nodeSelector": {"kubernetes.io/arch": "arm64"},
+          "tolerations": [{"key": "dedicated", "operator": "Equal", "value": "regtest", "effect": "NoSchedule"}],
+          "terminationGracePeriodSeconds": 45
+        },
+        "container": {"command": ["/usr/local/bin/bitcoind"], "args": ["-conf=/etc/bitcoin/bitcoin.conf"], "env": {"LOG_LEVEL": "debug"}, "workingDir": "/bitcoin"},
+        "suspended": true
+      }
+    },
+    {
+      "id": "stacks-node-rich",
+      "kind": "StacksNode",
+      "digest": "sha256:e89eca3af34f5b2f5819e11114f5ccdbe6adad253c899e296a56778ae12b0eaa",
+      "spec": {
+        "networkRef": {"name": "rich-network"},
+        "actorName": "stacks-follower",
+        "role": "follower",
+        "image": "registry.example/stacks-node@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "imagePullPolicy": "IfNotPresent",
+        "imagePullSecrets": [{"name": "registry-credentials"}],
+        "bitcoinNodeRef": {"name": "rich-network-bitcoin-b"},
+        "config": {"generated": {"profile": "nakamoto-regtest-node/v1", "seed": "rich-seed", "bootstrapPeers": ["02aa@example:20444"], "eventDispatcher": "queued"}},
+        "serviceMap": {"bitcoin-b": "rich-network-bitcoin-b", "stacks-miner": "rich-network-stacks-miner"},
+        "bootstrapPeers": ["02aa@example:20444"],
+        "genesis": {"balances": [{"address": "ST000000000000000000002AMW42H", "amount": 1000000}]},
+        "dependencyImage": "busybox:1.36.1",
+        "workload": {
+          "storage": {"enabled": false},
+          "resources": {"requests": {"cpu": "500m", "memory": "1Gi"}, "limits": {"cpu": "4", "memory": "4Gi"}},
+          "nodeSelector": {"topology.kubernetes.io/zone": "local"},
+          "tolerations": [{"key": "transient", "operator": "Exists", "effect": "NoExecute", "tolerationSeconds": 60}],
+          "terminationGracePeriodSeconds": 30
+        },
+        "container": {"command": ["/bin/stacks-node"], "args": ["start", "--config", "/run/stacks/config.toml"], "env": {"RUST_BACKTRACE": "1"}, "workingDir": "/stacks"}
+      }
+    },
+    {
+      "id": "stacks-signer-rich",
+      "kind": "StacksSigner",
+      "digest": "sha256:442c7526248c9b84aba4990f7fbc5b04a240b894b18462ec6446a38fb117c2e8",
+      "spec": {
+        "networkRef": {"name": "rich-network"},
+        "actorName": "signer-7",
+        "image": "registry.example/stacks-signer@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "imagePullPolicy": "Never",
+        "imagePullSecrets": [{"name": "registry-credentials"}],
+        "nodeRef": {"name": "rich-network-signer-node-7"},
+        "index": 7,
+        "weight": 25,
+        "publicKey": "02aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "config": {"secretRef": {"name": "signer-7-config", "key": "signer.toml", "mountPath": "/etc/stacks-signer/signer.toml", "expectedDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"}},
+        "serviceMap": {"signer-node-7": "rich-network-signer-node-7", "stacks-miner": "rich-network-stacks-miner"},
+        "dependencyImage": "busybox:1.36.1",
+        "workload": {
+          "storage": {"enabled": true, "size": "1Gi", "mountPath": "/signer", "accessModes": ["ReadWriteOnce"]},
+          "resources": {"requests": {"cpu": "100m", "memory": "256Mi"}, "limits": {"cpu": "1", "memory": "1Gi"}},
+          "nodeSelector": {"kubernetes.io/os": "linux"},
+          "tolerations": [{"operator": "Exists", "effect": "PreferNoSchedule"}],
+          "terminationGracePeriodSeconds": 20
+        },
+        "container": {"command": ["/bin/stacks-signer"], "args": ["run", "--config", "/run/stacks/config.toml"], "env": {"SIGNER_LOG": "trace"}, "workingDir": "/signer"},
+        "suspended": true
+      }
+    }
+  ]
+}

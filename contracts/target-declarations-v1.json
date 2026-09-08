@@ -1,0 +1,14 @@
+{
+  "contract": "network.stacks.org/target-declarations/v1",
+  "leafSpecVectors": ["stacks-signer-minimal", "stacks-node-minimal", "bitcoin-minimal"],
+  "catalog": {
+    "schemaVersion": "network.stacks.org/target-declarations/v1",
+    "networkUID": "network-uid",
+    "observedGeneration": 7,
+    "actors": [
+      {"kind": "BitcoinNode", "name": "network-bitcoin", "actorName": "bitcoin", "suspended": false, "specDigest": "sha256:eeafe4ade386ffeb075b6aec0fc9fd7be9b56f8a873da40b175ec9a71de48df0"},
+      {"kind": "StacksNode", "name": "network-follower", "actorName": "follower", "suspended": false, "specDigest": "sha256:f6f6aeb154a1c5a719f0de6ecdcac84f0dd580dee6ac4a2baecfe9635fbc183b"},
+      {"kind": "StacksSigner", "name": "network-signer", "actorName": "signer", "suspended": false, "specDigest": "sha256:42c68b5c28725a8803e461850d8c876b1319607a285fb190d94337ebd18f4a69"}
+    ]
+  }
+}

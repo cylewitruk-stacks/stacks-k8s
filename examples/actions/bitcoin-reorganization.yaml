@@ -1,0 +1,18 @@
+apiVersion: actions.stacks.org/v1alpha1
+kind: BitcoinReorganization
+metadata:
+  name: replace-two-blocks
+  labels:
+    actions.stacks.org/correlation-id: local-fork-check
+spec:
+  networkRef:
+    name: bitcoin
+  bitcoinNodeRef:
+    name: bitcoin-bitcoin
+  depth: 2
+  address: mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn
+  boundaryPolicy:
+    allowEpochBoundaryCrossing: true
+    allowRewardCycleBoundaryCrossing: true
+    allowPreparePhaseBoundaryCrossing: true
+  timeout: 2m

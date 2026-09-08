@@ -1,0 +1,21 @@
+;; Minimal non-custodial manager for one explicitly provisioned direct STX holder.
+(impl-trait 'ST000000000000000000002AMW42H.pox-5.signer-manager-trait)
+(use-trait manager-trait 'ST000000000000000000002AMW42H.pox-5.signer-manager-trait)
+(define-constant owner tx-sender)
+(define-constant holder '{{.}})
+(define-public (validate-stake! (staker principal) (first-index uint)
+    (num-indexes uint) (amount-ustx uint) (amount-sats uint)
+    (is-bond bool) (calldata (optional (buff 500))))
+  (begin
+    (asserts! (is-eq contract-caller 'ST000000000000000000002AMW42H.pox-5) (err u100))
+    (asserts! (and (is-eq staker holder) (not is-bond) (is-eq amount-sats u0)) (err u101))
+    (ok true)))
+(define-public (register-self (manager <manager-trait>) (key (buff 33))
+    (auth-id uint) (signature (buff 65)))
+  (begin
+    (asserts! (and (is-eq tx-sender owner) (is-eq contract-caller owner)) (err u102))
+    (asserts! (is-eq (contract-of manager) current-contract) (err u103))
+    (as-contract? ()
+      (try! (contract-call? 'ST000000000000000000002AMW42H.pox-5
+        grant-signer-key key current-contract auth-id signature))
+      (try! (contract-call? 'ST000000000000000000002AMW42H.pox-5 register-signer manager key)))))

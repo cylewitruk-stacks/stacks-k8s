@@ -1,0 +1,42 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "stacks-observability-operator.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "stacks-observability-operator.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ["observation.stacks.org"]
+    resources: ["networkobservations"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["observation.stacks.org"]
+    resources: ["networkobservations/status"]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: ["network.stacks.org"]
+    resources: ["stacksnetworks", "bitcoinnodes", "stacksnodes", "stackssigners"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods", "services"]
+    verbs: ["list"]
+  - apiGroups: ["apps"]
+    resources: ["statefulsets"]
+    verbs: ["list"]
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "stacks-observability-operator.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "stacks-observability-operator.labels" . | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "stacks-observability-operator.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "stacks-observability-operator.fullname" . }}

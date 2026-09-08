@@ -1,0 +1,29 @@
+{
+  "contract": "network.stacks.org/actor-ports/v1",
+  "vectors": [
+    {
+      "kind": "BitcoinNode",
+      "rpcPort": 18443,
+      "p2pPort": 18444,
+      "ports": [
+        {"name": "rpc", "port": 18443},
+        {"name": "p2p", "port": 18444}
+      ]
+    },
+    {
+      "kind": "StacksNode",
+      "ports": [
+        {"name": "rpc", "port": 20443},
+        {"name": "p2p", "port": 20444},
+        {"name": "metrics", "port": 20446}
+      ]
+    },
+    {
+      "kind": "StacksSigner",
+      "ports": [
+        {"name": "events", "port": 30000},
+        {"name": "metrics", "port": 31000}
+      ]
+    }
+  ]
+}
