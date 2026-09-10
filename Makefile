@@ -109,8 +109,10 @@ docker-build:
 	docker build --file operators/observability/Dockerfile --tag stacks-observability-operator:verify .
 	docker build --file operators/action/Dockerfile --tag stacks-action-operator:verify .
 
-.PHONY: cluster-create cluster-start cluster-stop cluster-destroy cluster-chaos-install verify-local-cluster
-cluster-create cluster-start cluster-stop cluster-destroy cluster-chaos-install:
+CLUSTER_TARGETS := cluster-create cluster-start cluster-stop cluster-destroy cluster-chaos-install \
+	cluster-headlamp-install cluster-headlamp-uninstall cluster-headlamp cluster-headlamp-token cluster-metrics-install
+.PHONY: $(CLUSTER_TARGETS) verify-local-cluster
+$(CLUSTER_TARGETS):
 	$(MAKE) -C tools/local-cluster $(patsubst cluster-%,%,$@)
 
 verify-local-cluster:

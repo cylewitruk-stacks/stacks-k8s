@@ -35,7 +35,8 @@ for cross-node native fault results and the unresolved Stacks recovery limit.
 ## Local kind cluster
 
 The lifecycle helpers use standalone **kind 0.33.0** (or a compatible newer
-version), Docker, and kubectl. Start the Docker engine first. They use your
+version), Docker, kubectl, Helm 3 and `shasum`. Helm and `shasum` are optional
+when both default add-ons are disabled. Start the Docker engine first. They use your
 current Docker connection; set `DOCKER_CONTEXT=desktop-linux` explicitly when
 using Docker Desktop. Docker Desktop's built-in Kubernetes provisioner is not
 used. The checked-in configuration pins Kubernetes **1.37.0** by image digest
@@ -44,7 +45,7 @@ with one control-plane node and two workers.
 From the repository root:
 
 ```bash
-make cluster-create  # Create stacks-k8s; an existing cluster is left intact.
+make cluster-create  # Create stacks-k8s with Headlamp and Metrics Server.
 make cluster-stop   # Stop its node containers, retaining their data.
 make cluster-start  # Resume existing containers and wait for node readiness.
 make cluster-destroy # Delete stacks-k8s and all data stored in its nodes.
@@ -57,6 +58,57 @@ with context `kind-stacks-k8s`. Your global kubeconfig is unchanged. To use it:
 export KUBECONFIG="$PWD/tools/local-cluster/kubeconfig"
 kubectl --context kind-stacks-k8s get nodes
 ```
+
+### Dashboard and resource metrics
+
+Creation installs checksum-verified upstream charts: **Headlamp 0.45.0** and
+**Metrics Server chart 3.14.0 / application 0.9.0**. An existing cluster is left
+intact if creation fails. An add-on failure returns an error and leaves the new
+cluster available for retry with the install commands below.
+
+```bash
+make cluster-create HEADLAMP=false # Metrics Server remains enabled.
+make cluster-create HEADLAMP=false METRICS_SERVER=false # Bare cluster.
+make cluster-headlamp-install # Add/update both on an existing cluster.
+make cluster-metrics-install # Install/check only Metrics Server.
+make cluster-headlamp # Foreground port-forward; Ctrl-C closes it.
+```
+
+Open <http://127.0.0.1:8080> and obtain a login token in another terminal:
+
+```bash
+make cluster-headlamp-token
+```
+
+The token requests a one-hour lifetime and grants **cluster-admin**, deliberately
+matching this local development tool's purpose. It is printed only by the token
+command and is not saved by the helpers. Headlamp runs in namespace `headlamp`
+with token authentication; access uses a loopback-only port-forward, without
+ingress. Set `HEADLAMP_PORT=8081` on `cluster-headlamp` to use another local port.
+
+[Headlamp](https://headlamp.dev/docs/latest/installation/metrics-server/)
+automatically reads the Kubernetes metrics API for CPU/memory usage; no plugin
+is required. Metrics Server runs in `kube-system`, with `--kubelet-insecure-tls`
+for kind's self-signed kubelet serving certificates. These values are local-kind
+configuration, not a production installation profile. An existing externally
+managed metrics API is reused and checked for availability without taking over
+its release. Our own release is upgraded to the repository's pinned values.
+
+`HEADLAMP` and `METRICS_SERVER` accept `true` or `false`. To install only Headlamp,
+use `make cluster-headlamp-install METRICS_SERVER=false`. Explicit install
+commands do not create or start the cluster. All use the repository kubeconfig
+and `kind-stacks-k8s` context. Chart downloads require registry/repository access.
+
+```bash
+make cluster-headlamp-uninstall
+```
+
+Uninstall removes Headlamp's release, retaining its namespace and Metrics Server.
+Stop/start preserves installed add-ons and does not reinstall removed ones;
+destroy removes everything with the cluster. Headlamp is independent of the
+operator charts and complements the observability operator's evidence work.
+
+### Chaos Mesh
 
 Optionally install the pinned **Chaos Mesh 2.8.4** chart with Helm 3 and `shasum`:
 

@@ -1,0 +1,1281 @@
+# PROPOSED API: not accepted by current operators.
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: lab-30
+---
+apiVersion: network.stacks.org/v1alpha2
+kind: StacksEpochSchedule
+metadata:
+  name: epochs
+  namespace: lab-30
+spec:
+  epochs:
+  - name: '1.0'
+    startHeight: 0
+  - name: '2.0'
+    startHeight: 0
+  - name: '2.05'
+    startHeight: 203
+  - name: '2.1'
+    startHeight: 204
+  - name: '2.2'
+    startHeight: 206
+  - name: '2.3'
+    startHeight: 207
+  - name: '2.4'
+    startHeight: 208
+  - name: '2.5'
+    startHeight: 209
+  - name: '3.0'
+    startHeight: 252
+  - name: '3.1'
+    startHeight: 253
+  - name: '3.2'
+    startHeight: 254
+  - name: '3.3'
+    startHeight: 255
+  - name: '3.4'
+    startHeight: 262
+  - name: '4.0'
+    startHeight: 282
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksAccount
+metadata:
+  name: holder-01
+  namespace: lab-30
+spec:
+  key:
+    generate: true
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksAccount
+metadata:
+  name: admin-01
+  namespace: lab-30
+spec:
+  key:
+    generate: true
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksAccount
+metadata:
+  name: consensus-01
+  namespace: lab-30
+spec:
+  key:
+    generate: true
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksAccount
+metadata:
+  name: holder-02
+  namespace: lab-30
+spec:
+  key:
+    generate: true
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksAccount
+metadata:
+  name: admin-02
+  namespace: lab-30
+spec:
+  key:
+    generate: true
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksAccount
+metadata:
+  name: consensus-02
+  namespace: lab-30
+spec:
+  key:
+    generate: true
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksAccount
+metadata:
+  name: holder-03
+  namespace: lab-30
+spec:
+  key:
+    generate: true
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksAccount
+metadata:
+  name: admin-03
+  namespace: lab-30
+spec:
+  key:
+    generate: true
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksAccount
+metadata:
+  name: consensus-03
+  namespace: lab-30
+spec:
+  key:
+    generate: true
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksAccount
+metadata:
+  name: holder-04
+  namespace: lab-30
+spec:
+  key:
+    generate: true
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksAccount
+metadata:
+  name: admin-04
+  namespace: lab-30
+spec:
+  key:
+    generate: true
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksAccount
+metadata:
+  name: consensus-04
+  namespace: lab-30
+spec:
+  key:
+    generate: true
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksAccount
+metadata:
+  name: holder-05
+  namespace: lab-30
+spec:
+  key:
+    generate: true
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksAccount
+metadata:
+  name: admin-05
+  namespace: lab-30
+spec:
+  key:
+    generate: true
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksAccount
+metadata:
+  name: consensus-05
+  namespace: lab-30
+spec:
+  key:
+    generate: true
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksAccount
+metadata:
+  name: holder-06
+  namespace: lab-30
+spec:
+  key:
+    generate: true
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksAccount
+metadata:
+  name: admin-06
+  namespace: lab-30
+spec:
+  key:
+    generate: true
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksAccount
+metadata:
+  name: consensus-06
+  namespace: lab-30
+spec:
+  key:
+    generate: true
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksAccount
+metadata:
+  name: miner-key-01
+  namespace: lab-30
+spec:
+  key:
+    generate: true
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksAccount
+metadata:
+  name: miner-key-02
+  namespace: lab-30
+spec:
+  key:
+    generate: true
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksAccount
+metadata:
+  name: miner-key-03
+  namespace: lab-30
+spec:
+  key:
+    generate: true
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksAccount
+metadata:
+  name: miner-key-04
+  namespace: lab-30
+spec:
+  key:
+    generate: true
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksAccount
+metadata:
+  name: sbtc-deployer
+  namespace: lab-30
+spec:
+  key:
+    generate: true
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksAccount
+metadata:
+  name: traffic-account
+  namespace: lab-30
+spec:
+  key:
+    generate: true
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksAccount
+metadata:
+  name: traffic-recipient
+  namespace: lab-30
+spec:
+  key:
+    generate: true
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksAccount
+metadata:
+  name: bridge-key-01
+  namespace: lab-30
+spec:
+  key:
+    generate: true
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksAccount
+metadata:
+  name: bridge-key-02
+  namespace: lab-30
+spec:
+  key:
+    generate: true
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksAccount
+metadata:
+  name: bridge-aggregate
+  namespace: lab-30
+spec:
+  key:
+    generate: true
+---
+apiVersion: bitcoin.stacks.org/v1alpha2
+kind: BitcoinNode
+metadata:
+  name: btc-01
+  namespace: lab-30
+spec:
+  peers:
+    discovery: Network
+  placement:
+    nodeSelector:
+      kubernetes.io/hostname: stacks-k8s-worker
+  walletRefs:
+  - name: production-wallet
+---
+apiVersion: bitcoin.stacks.org/v1alpha2
+kind: BitcoinNode
+metadata:
+  name: btc-02
+  namespace: lab-30
+spec:
+  peers:
+    discovery: Network
+  placement:
+    nodeSelector:
+      kubernetes.io/hostname: stacks-k8s-worker2
+---
+apiVersion: bitcoin.stacks.org/v1alpha2
+kind: BitcoinNode
+metadata:
+  name: btc-03
+  namespace: lab-30
+spec:
+  peers:
+    discovery: Network
+  placement:
+    nodeSelector:
+      kubernetes.io/hostname: stacks-k8s-worker
+---
+apiVersion: bitcoin.stacks.org/v1alpha2
+kind: BitcoinNode
+metadata:
+  name: btc-04
+  namespace: lab-30
+spec:
+  peers:
+    discovery: Network
+  placement:
+    nodeSelector:
+      kubernetes.io/hostname: stacks-k8s-worker2
+---
+apiVersion: bitcoin.stacks.org/v1alpha2
+kind: BitcoinNode
+metadata:
+  name: btc-05
+  namespace: lab-30
+spec:
+  peers:
+    discovery: Network
+  placement:
+    nodeSelector:
+      kubernetes.io/hostname: stacks-k8s-worker
+---
+apiVersion: bitcoin.stacks.org/v1alpha2
+kind: BitcoinNode
+metadata:
+  name: btc-06
+  namespace: lab-30
+spec:
+  peers:
+    discovery: Network
+  placement:
+    nodeSelector:
+      kubernetes.io/hostname: stacks-k8s-worker2
+---
+apiVersion: bitcoin.stacks.org/v1alpha2
+kind: BitcoinNode
+metadata:
+  name: btc-07
+  namespace: lab-30
+spec:
+  peers:
+    discovery: Network
+  placement:
+    nodeSelector:
+      kubernetes.io/hostname: stacks-k8s-worker
+  walletRefs:
+  - name: miner-wallet-01
+---
+apiVersion: bitcoin.stacks.org/v1alpha2
+kind: BitcoinNode
+metadata:
+  name: btc-08
+  namespace: lab-30
+spec:
+  peers:
+    discovery: Network
+  placement:
+    nodeSelector:
+      kubernetes.io/hostname: stacks-k8s-worker2
+  walletRefs:
+  - name: miner-wallet-02
+---
+apiVersion: bitcoin.stacks.org/v1alpha2
+kind: BitcoinNode
+metadata:
+  name: btc-09
+  namespace: lab-30
+spec:
+  peers:
+    discovery: Network
+  placement:
+    nodeSelector:
+      kubernetes.io/hostname: stacks-k8s-worker
+  walletRefs:
+  - name: miner-wallet-03
+---
+apiVersion: bitcoin.stacks.org/v1alpha2
+kind: BitcoinNode
+metadata:
+  name: btc-10
+  namespace: lab-30
+spec:
+  peers:
+    discovery: Network
+  placement:
+    nodeSelector:
+      kubernetes.io/hostname: stacks-k8s-worker2
+  walletRefs:
+  - name: miner-wallet-04
+---
+apiVersion: bitcoin.stacks.org/v1alpha2
+kind: BitcoinWallet
+metadata:
+  name: miner-wallet-01
+  namespace: lab-30
+spec:
+  walletName: miner-01
+  keySource:
+    stacksMinerAccountRef:
+      name: miner-key-01
+  watchOnly: true
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksNode
+metadata:
+  name: miner-01
+  namespace: lab-30
+spec:
+  bitcoinNodeRef:
+    name: btc-07
+  identityAccountRef:
+    name: miner-key-01
+  mining:
+    enabled: true
+    bitcoinWalletRef:
+      name: miner-wallet-01
+    feeRateSatsPerVByte: 2
+  peers:
+    discovery: Network
+  placement:
+    nodeSelector:
+      kubernetes.io/hostname: stacks-k8s-worker
+---
+apiVersion: bitcoin.stacks.org/v1alpha2
+kind: BitcoinWallet
+metadata:
+  name: miner-wallet-02
+  namespace: lab-30
+spec:
+  walletName: miner-02
+  keySource:
+    stacksMinerAccountRef:
+      name: miner-key-02
+  watchOnly: true
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksNode
+metadata:
+  name: miner-02
+  namespace: lab-30
+spec:
+  bitcoinNodeRef:
+    name: btc-08
+  identityAccountRef:
+    name: miner-key-02
+  mining:
+    enabled: true
+    bitcoinWalletRef:
+      name: miner-wallet-02
+    feeRateSatsPerVByte: 2
+  peers:
+    discovery: Network
+  placement:
+    nodeSelector:
+      kubernetes.io/hostname: stacks-k8s-worker2
+---
+apiVersion: bitcoin.stacks.org/v1alpha2
+kind: BitcoinWallet
+metadata:
+  name: miner-wallet-03
+  namespace: lab-30
+spec:
+  walletName: miner-03
+  keySource:
+    stacksMinerAccountRef:
+      name: miner-key-03
+  watchOnly: true
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksNode
+metadata:
+  name: miner-03
+  namespace: lab-30
+spec:
+  bitcoinNodeRef:
+    name: btc-09
+  identityAccountRef:
+    name: miner-key-03
+  mining:
+    enabled: true
+    bitcoinWalletRef:
+      name: miner-wallet-03
+    feeRateSatsPerVByte: 2
+  peers:
+    discovery: Network
+  placement:
+    nodeSelector:
+      kubernetes.io/hostname: stacks-k8s-worker
+---
+apiVersion: bitcoin.stacks.org/v1alpha2
+kind: BitcoinWallet
+metadata:
+  name: miner-wallet-04
+  namespace: lab-30
+spec:
+  walletName: miner-04
+  keySource:
+    stacksMinerAccountRef:
+      name: miner-key-04
+  watchOnly: true
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksNode
+metadata:
+  name: miner-04
+  namespace: lab-30
+spec:
+  bitcoinNodeRef:
+    name: btc-10
+  identityAccountRef:
+    name: miner-key-04
+  mining:
+    enabled: true
+    bitcoinWalletRef:
+      name: miner-wallet-04
+    feeRateSatsPerVByte: 2
+  peers:
+    discovery: Network
+  placement:
+    nodeSelector:
+      kubernetes.io/hostname: stacks-k8s-worker2
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksNode
+metadata:
+  name: signer-node-01
+  namespace: lab-30
+spec:
+  bitcoinNodeRef:
+    name: btc-01
+  peers:
+    discovery: Network
+  placement:
+    nodeSelector:
+      kubernetes.io/hostname: stacks-k8s-worker
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksSigner
+metadata:
+  name: signer-01
+  namespace: lab-30
+spec:
+  nodeRef:
+    name: signer-node-01
+  accountRef:
+    name: consensus-01
+  placement:
+    nodeSelector:
+      kubernetes.io/hostname: stacks-k8s-worker2
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksStacker
+metadata:
+  name: stacker-01
+  namespace: lab-30
+spec:
+  holderAccountRef:
+    name: holder-01
+  administratorAccountRef:
+    name: admin-01
+  signerRef:
+    name: signer-01
+  targetNodeRef:
+    name: signer-node-01
+  amountMicroSTX: '1000000000000000'
+  lockCycles: 6
+  renewWhenRemainingCycles: 3
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksNode
+metadata:
+  name: signer-node-02
+  namespace: lab-30
+spec:
+  bitcoinNodeRef:
+    name: btc-02
+  peers:
+    discovery: Network
+  placement:
+    nodeSelector:
+      kubernetes.io/hostname: stacks-k8s-worker
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksSigner
+metadata:
+  name: signer-02
+  namespace: lab-30
+spec:
+  nodeRef:
+    name: signer-node-02
+  accountRef:
+    name: consensus-02
+  placement:
+    nodeSelector:
+      kubernetes.io/hostname: stacks-k8s-worker2
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksStacker
+metadata:
+  name: stacker-02
+  namespace: lab-30
+spec:
+  holderAccountRef:
+    name: holder-02
+  administratorAccountRef:
+    name: admin-02
+  signerRef:
+    name: signer-02
+  targetNodeRef:
+    name: signer-node-02
+  amountMicroSTX: '1000000000000000'
+  lockCycles: 6
+  renewWhenRemainingCycles: 3
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksNode
+metadata:
+  name: signer-node-03
+  namespace: lab-30
+spec:
+  bitcoinNodeRef:
+    name: btc-03
+  peers:
+    discovery: Network
+  placement:
+    nodeSelector:
+      kubernetes.io/hostname: stacks-k8s-worker
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksSigner
+metadata:
+  name: signer-03
+  namespace: lab-30
+spec:
+  nodeRef:
+    name: signer-node-03
+  accountRef:
+    name: consensus-03
+  placement:
+    nodeSelector:
+      kubernetes.io/hostname: stacks-k8s-worker2
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksStacker
+metadata:
+  name: stacker-03
+  namespace: lab-30
+spec:
+  holderAccountRef:
+    name: holder-03
+  administratorAccountRef:
+    name: admin-03
+  signerRef:
+    name: signer-03
+  targetNodeRef:
+    name: signer-node-03
+  amountMicroSTX: '1000000000000000'
+  lockCycles: 6
+  renewWhenRemainingCycles: 3
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksNode
+metadata:
+  name: signer-node-04
+  namespace: lab-30
+spec:
+  bitcoinNodeRef:
+    name: btc-04
+  peers:
+    discovery: Network
+  placement:
+    nodeSelector:
+      kubernetes.io/hostname: stacks-k8s-worker
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksSigner
+metadata:
+  name: signer-04
+  namespace: lab-30
+spec:
+  nodeRef:
+    name: signer-node-04
+  accountRef:
+    name: consensus-04
+  placement:
+    nodeSelector:
+      kubernetes.io/hostname: stacks-k8s-worker2
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksStacker
+metadata:
+  name: stacker-04
+  namespace: lab-30
+spec:
+  holderAccountRef:
+    name: holder-04
+  administratorAccountRef:
+    name: admin-04
+  signerRef:
+    name: signer-04
+  targetNodeRef:
+    name: signer-node-04
+  amountMicroSTX: '1000000000000000'
+  lockCycles: 6
+  renewWhenRemainingCycles: 3
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksNode
+metadata:
+  name: signer-node-05
+  namespace: lab-30
+spec:
+  bitcoinNodeRef:
+    name: btc-05
+  peers:
+    discovery: Network
+  placement:
+    nodeSelector:
+      kubernetes.io/hostname: stacks-k8s-worker
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksSigner
+metadata:
+  name: signer-05
+  namespace: lab-30
+spec:
+  nodeRef:
+    name: signer-node-05
+  accountRef:
+    name: consensus-05
+  placement:
+    nodeSelector:
+      kubernetes.io/hostname: stacks-k8s-worker2
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksStacker
+metadata:
+  name: stacker-05
+  namespace: lab-30
+spec:
+  holderAccountRef:
+    name: holder-05
+  administratorAccountRef:
+    name: admin-05
+  signerRef:
+    name: signer-05
+  targetNodeRef:
+    name: signer-node-05
+  amountMicroSTX: '1000000000000000'
+  lockCycles: 6
+  renewWhenRemainingCycles: 3
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksNode
+metadata:
+  name: signer-node-06
+  namespace: lab-30
+spec:
+  bitcoinNodeRef:
+    name: btc-06
+  peers:
+    discovery: Network
+  placement:
+    nodeSelector:
+      kubernetes.io/hostname: stacks-k8s-worker
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksSigner
+metadata:
+  name: signer-06
+  namespace: lab-30
+spec:
+  nodeRef:
+    name: signer-node-06
+  accountRef:
+    name: consensus-06
+  placement:
+    nodeSelector:
+      kubernetes.io/hostname: stacks-k8s-worker2
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksStacker
+metadata:
+  name: stacker-06
+  namespace: lab-30
+spec:
+  holderAccountRef:
+    name: holder-06
+  administratorAccountRef:
+    name: admin-06
+  signerRef:
+    name: signer-06
+  targetNodeRef:
+    name: signer-node-06
+  amountMicroSTX: '1000000000000000'
+  lockCycles: 6
+  renewWhenRemainingCycles: 3
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksNode
+metadata:
+  name: follower-01
+  namespace: lab-30
+spec:
+  bitcoinNodeRef:
+    name: btc-07
+  peers:
+    discovery: Network
+  placement:
+    nodeSelector:
+      kubernetes.io/hostname: stacks-k8s-worker
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksNode
+metadata:
+  name: follower-02
+  namespace: lab-30
+spec:
+  bitcoinNodeRef:
+    name: btc-07
+  peers:
+    discovery: Network
+  placement:
+    nodeSelector:
+      kubernetes.io/hostname: stacks-k8s-worker2
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksNode
+metadata:
+  name: follower-03
+  namespace: lab-30
+spec:
+  bitcoinNodeRef:
+    name: btc-09
+  peers:
+    discovery: Network
+  placement:
+    nodeSelector:
+      kubernetes.io/hostname: stacks-k8s-worker
+---
+apiVersion: bitcoin.stacks.org/v1alpha2
+kind: BitcoinWallet
+metadata:
+  name: production-wallet
+  namespace: lab-30
+spec:
+  walletName: production
+  keySource:
+    generate: true
+  watchOnly: true
+---
+apiVersion: bitcoin.stacks.org/v1alpha2
+kind: BitcoinBlockSchedule
+metadata:
+  name: steady-blocks
+  namespace: lab-30
+spec:
+  cadence:
+    mode: Fixed
+    interval: 5s
+---
+apiVersion: bitcoin.stacks.org/v1alpha2
+kind: BitcoinBlockProduction
+metadata:
+  name: blocks
+  namespace: lab-30
+spec:
+  scheduleRef:
+    name: steady-blocks
+  targets:
+  - nodeRef:
+      name: btc-01
+    weight: 1
+  - nodeRef:
+      name: btc-02
+    weight: 1
+  payoutWalletRef:
+    name: production-wallet
+  initialization:
+    targetNodeRef:
+      name: btc-01
+    minimumHeight: 203
+    minerWalletRefs:
+    - name: miner-wallet-01
+    - name: miner-wallet-02
+    - name: miner-wallet-03
+    - name: miner-wallet-04
+    matureOutputsPerMiner: 2
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksTransactionProduction
+metadata:
+  name: traffic
+  namespace: lab-30
+spec:
+  accountRef:
+    name: traffic-account
+  targetNodeRef:
+    name: signer-node-01
+  recipient:
+    accountRef:
+      name: traffic-recipient
+  amountMicroSTX: '1'
+  feeMicroSTX: '1000'
+  interval: 10s
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksContractSet
+metadata:
+  name: sbtc
+  namespace: lab-30
+spec:
+  deployerAccountRef:
+    name: sbtc-deployer
+  targetNodeRef:
+    name: miner-01
+  bundle: sbtc-regtest-v1
+  initialization:
+    mode: ExplicitTestRegistry
+    signerAccountRefs:
+    - name: bridge-key-01
+    - name: bridge-key-02
+    aggregateKeyAccountRef:
+      name: bridge-aggregate
+    threshold: 2
+---
+apiVersion: network.stacks.org/v1alpha2
+kind: StacksNetwork
+metadata:
+  name: network
+  namespace: lab-30
+spec:
+  profile: regtest-pox4-pox5-v1
+  epochScheduleRef:
+    name: epochs
+  genesis:
+    allocations:
+    - accountRef:
+        name: holder-01
+      amountMicroSTX: '2000000000000000'
+    - accountRef:
+        name: admin-01
+      amountMicroSTX: '1000000000000'
+    - accountRef:
+        name: holder-02
+      amountMicroSTX: '2000000000000000'
+    - accountRef:
+        name: admin-02
+      amountMicroSTX: '1000000000000'
+    - accountRef:
+        name: holder-03
+      amountMicroSTX: '2000000000000000'
+    - accountRef:
+        name: admin-03
+      amountMicroSTX: '1000000000000'
+    - accountRef:
+        name: holder-04
+      amountMicroSTX: '2000000000000000'
+    - accountRef:
+        name: admin-04
+      amountMicroSTX: '1000000000000'
+    - accountRef:
+        name: holder-05
+      amountMicroSTX: '2000000000000000'
+    - accountRef:
+        name: admin-05
+      amountMicroSTX: '1000000000000'
+    - accountRef:
+        name: holder-06
+      amountMicroSTX: '2000000000000000'
+    - accountRef:
+        name: admin-06
+      amountMicroSTX: '1000000000000'
+    - accountRef:
+        name: miner-key-01
+      amountMicroSTX: '1000000000000'
+    - accountRef:
+        name: miner-key-02
+      amountMicroSTX: '1000000000000'
+    - accountRef:
+        name: miner-key-03
+      amountMicroSTX: '1000000000000'
+    - accountRef:
+        name: miner-key-04
+      amountMicroSTX: '1000000000000'
+    - accountRef:
+        name: sbtc-deployer
+      amountMicroSTX: '1000000000000'
+    - accountRef:
+        name: traffic-account
+      amountMicroSTX: '1000000000000'
+    pox:
+      rewardCycleLength: 20
+      prepareLength: 5
+  participants:
+  - name: btc-01
+    kind: BitcoinNode
+    definition:
+      ref:
+        name: btc-01
+  - name: btc-02
+    kind: BitcoinNode
+    definition:
+      ref:
+        name: btc-02
+  - name: btc-03
+    kind: BitcoinNode
+    definition:
+      ref:
+        name: btc-03
+  - name: btc-04
+    kind: BitcoinNode
+    definition:
+      ref:
+        name: btc-04
+  - name: btc-05
+    kind: BitcoinNode
+    definition:
+      ref:
+        name: btc-05
+  - name: btc-06
+    kind: BitcoinNode
+    definition:
+      ref:
+        name: btc-06
+  - name: btc-07
+    kind: BitcoinNode
+    definition:
+      ref:
+        name: btc-07
+  - name: btc-08
+    kind: BitcoinNode
+    definition:
+      ref:
+        name: btc-08
+  - name: btc-09
+    kind: BitcoinNode
+    definition:
+      ref:
+        name: btc-09
+  - name: btc-10
+    kind: BitcoinNode
+    definition:
+      ref:
+        name: btc-10
+  - name: miner-01
+    kind: StacksNode
+    definition:
+      ref:
+        name: miner-01
+  - name: miner-02
+    kind: StacksNode
+    definition:
+      ref:
+        name: miner-02
+  - name: miner-03
+    kind: StacksNode
+    definition:
+      ref:
+        name: miner-03
+  - name: miner-04
+    kind: StacksNode
+    definition:
+      ref:
+        name: miner-04
+  - name: signer-node-01
+    kind: StacksNode
+    definition:
+      ref:
+        name: signer-node-01
+  - name: signer-node-02
+    kind: StacksNode
+    definition:
+      ref:
+        name: signer-node-02
+  - name: signer-node-03
+    kind: StacksNode
+    definition:
+      ref:
+        name: signer-node-03
+  - name: signer-node-04
+    kind: StacksNode
+    definition:
+      ref:
+        name: signer-node-04
+  - name: signer-node-05
+    kind: StacksNode
+    definition:
+      ref:
+        name: signer-node-05
+  - name: signer-node-06
+    kind: StacksNode
+    definition:
+      ref:
+        name: signer-node-06
+  - name: follower-01
+    kind: StacksNode
+    definition:
+      ref:
+        name: follower-01
+  - name: follower-02
+    kind: StacksNode
+    definition:
+      ref:
+        name: follower-02
+    overrides:
+      stacksNode:
+        bitcoinNodeRef:
+          name: btc-08
+  - name: follower-03
+    kind: StacksNode
+    definition:
+      ref:
+        name: follower-03
+  - name: follower-04
+    kind: StacksNode
+    definition:
+      inline:
+        stacksNode:
+          bitcoinNodeRef:
+            name: btc-10
+          peers:
+            discovery: Network
+          placement:
+            nodeSelector:
+              kubernetes.io/hostname: stacks-k8s-worker2
+  - name: signer-01
+    kind: StacksSigner
+    definition:
+      ref:
+        name: signer-01
+  - name: signer-02
+    kind: StacksSigner
+    definition:
+      ref:
+        name: signer-02
+  - name: signer-03
+    kind: StacksSigner
+    definition:
+      ref:
+        name: signer-03
+  - name: signer-04
+    kind: StacksSigner
+    definition:
+      ref:
+        name: signer-04
+  - name: signer-05
+    kind: StacksSigner
+    definition:
+      ref:
+        name: signer-05
+  - name: signer-06
+    kind: StacksSigner
+    definition:
+      ref:
+        name: signer-06
+  - name: stacker-01
+    kind: StacksStacker
+    definition:
+      ref:
+        name: stacker-01
+  - name: stacker-02
+    kind: StacksStacker
+    definition:
+      ref:
+        name: stacker-02
+  - name: stacker-03
+    kind: StacksStacker
+    definition:
+      ref:
+        name: stacker-03
+  - name: stacker-04
+    kind: StacksStacker
+    definition:
+      ref:
+        name: stacker-04
+  - name: stacker-05
+    kind: StacksStacker
+    definition:
+      ref:
+        name: stacker-05
+  - name: stacker-06
+    kind: StacksStacker
+    definition:
+      ref:
+        name: stacker-06
+  - name: blocks
+    kind: BitcoinBlockProduction
+    definition:
+      ref:
+        name: blocks
+  - name: traffic
+    kind: StacksTransactionProduction
+    definition:
+      ref:
+        name: traffic
+  - name: sbtc
+    kind: StacksContractSet
+    definition:
+      ref:
+        name: sbtc
+  - name: faucet
+    kind: StacksFaucet
+    definition:
+      ref:
+        name: faucet
+  defaults:
+    workerPlacement:
+      nodeSelector:
+        kubernetes.io/hostname: stacks-k8s-control-plane
+      tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+    images:
+      bitcoin: bitcoin/bitcoin:31.1
+      stacksNode: stacks-core:4.0.1-pox5
+      stacksSigner: stacks-core:4.0.1-pox5
+    storage:
+      size: 2Gi
+      retainOnDelete: false
+    actorResources:
+      bitcoin:
+        requests:
+          cpu: 50m
+          memory: 128Mi
+      stacksNode:
+        requests:
+          cpu: 300m
+          memory: 768Mi
+      stacksSigner:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+  operation: Paused
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksFaucet
+metadata:
+  name: faucet
+  namespace: lab-30
+spec:
+  genesisBalanceMicroSTX: '5000000000000000'
+  maxRequestMicroSTX: '2000000000000000'
+  targetNodeRef:
+    name: signer-node-01

@@ -71,7 +71,8 @@ capability-owned execution workloads. See the
 The current development and API-server test target is Kubernetes **1.37.0**; see
 [compatibility and qualification limits](docs/development.md#kubernetes-compatibility).
 
-For a local three-node kind cluster, run `make cluster-create`; see the
+For a local three-node kind cluster with Headlamp and resource metrics, run
+`make cluster-create`; see the
 [local lifecycle commands](docs/development.md#local-kind-cluster) for access,
 start, stop, and destruction.
 

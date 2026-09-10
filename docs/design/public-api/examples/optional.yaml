@@ -1,0 +1,86 @@
+# PROPOSED API: not accepted by current operators.
+---
+apiVersion: actions.stacks.org/v1alpha2
+kind: BitcoinBlockGeneration
+metadata:
+  name: three-blocks
+  labels:
+    actions.stacks.org/correlation-id: ordinary-regtest-check
+  namespace: lab-30
+spec:
+  bitcoinNodeRef:
+    name: btc-01
+  count: 3
+  cadence:
+    mode: Fixed
+    intervalSeconds: 2
+  address: mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn
+  timeout: 2m
+  networkUID: "${NETWORK_UID}"
+---
+apiVersion: actions.stacks.org/v1alpha2
+kind: BitcoinReorganization
+metadata:
+  name: replace-two-blocks
+  labels:
+    actions.stacks.org/correlation-id: local-fork-check
+  namespace: lab-30
+spec:
+  bitcoinNodeRef:
+    name: btc-01
+  depth: 2
+  address: mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn
+  boundaryPolicy:
+    allowEpochBoundaryCrossing: true
+    allowRewardCycleBoundaryCrossing: true
+    allowPreparePhaseBoundaryCrossing: true
+  timeout: 2m
+  networkUID: "${NETWORK_UID}"
+---
+apiVersion: bitcoin.stacks.org/v1alpha2
+kind: BitcoinBlockScheduleOverride
+metadata:
+  name: slow-blocks
+  namespace: lab-30
+spec:
+  productionRef:
+    name: blocks
+  schedule:
+    cadence:
+      mode: Fixed
+      interval: 20s
+  duration: 2m
+  networkUID: "${NETWORK_UID}"
+---
+apiVersion: observation.stacks.org/v1alpha2
+kind: NetworkTelemetry
+metadata:
+  name: facts
+  namespace: lab-30
+spec:
+  retention:
+    window: 6h
+    maximumBytes: 1073741824
+  sources:
+    kubernetes: true
+    logs: true
+    metrics: true
+    protocol: true
+  storageSecretRef:
+    name: observation-store
+  networkUID: "${NETWORK_UID}"
+---
+apiVersion: observation.stacks.org/v1alpha2
+kind: EvidenceExport
+metadata:
+  name: window-one
+  namespace: lab-30
+spec:
+  networkUID: "${NETWORK_UID}"
+  telemetryRef:
+    name: facts
+  window:
+    from: '2026-09-08T12:00:00Z'
+    to: '2026-09-08T12:15:00Z'
+  timeout: 5m
+  destinationPrefix: exports/window-one

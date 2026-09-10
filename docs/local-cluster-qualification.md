@@ -1,5 +1,39 @@
 # Local Kubernetes 1.37 qualification
 
+## Dashboard add-ons (2026-09-08)
+
+Qualified on the existing three-node `stacks-k8s` cluster, Kubernetes 1.37.0
+on arm64. Headlamp chart/application 0.45.0 and Metrics Server chart 3.14.0 /
+application 0.9.0 used the checked-in values and verified archive checksums.
+
+| Check | Result |
+| --- | --- |
+| Install and repeated install | Both releases became ready; repeat upgraded the existing releases. |
+| Resource metrics | Metrics API available; `kubectl top nodes` returned all three nodes. |
+| Dashboard access | `cluster-headlamp HEADLAMP_PORT=18080` served HTML over loopback, HTTP 200. |
+| Token and integration | A token from `cluster-headlamp-token`, held only in memory, authenticated Headlamp proxy requests for three nodes, three node metrics and 26 pod metrics. |
+| Uninstall, repeated uninstall, reinstall | Passed; Headlamp release resources removed, Metrics Server remained usable, Headlamp reinstalled successfully. |
+| Final state | Both add-ons and the cluster left running; test port-forward stopped. |
+
+Rendered Headlamp RBAC binds its ServiceAccount to `cluster-admin`; live
+authorization confirms that grant. Token login stays enabled. The metrics API
+is consumed through Headlamp's standard integration without a plugin.
+
+`make verify`, `make vuln`, `make docker-check`, Markdown lint and whitespace
+checks passed. CLI-substitute tests cover default creation, independent opt-outs,
+explicit context selection, external metrics API reuse, download/checksum/readiness
+failures, and leaving a created cluster intact after add-on failure. Cluster
+creation and stop/start were not repeated live in this pass. Authenticated proxy
+responses were checked directly; browser interaction and graph rendering were
+not automated. Dependency checks cover repository dependencies, not an upstream
+container vulnerability scan.
+
+Local logs: `/tmp/stacks-dashboard-{install,upgrade,uninstall,reinstall}.log`
+and `/tmp/stacks-dashboard-{verify,vuln,docker-check}.log`.
+See the [usage guide](development.md#dashboard-and-resource-metrics).
+
+## Network and lifecycle qualification (2026-09-07)
+
 Tested 2026-09-07 with standalone kind 0.33.0, Kubernetes 1.37.0,
 Docker Desktop on arm64, containerd and kindnet. The checked-in three-node
 configuration created `stacks-k8s`; all commands selected its private kubeconfig.

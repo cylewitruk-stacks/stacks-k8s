@@ -1,0 +1,16 @@
+# Local development dashboard: deliberate cluster-admin access, token login.
+fullnameOverride: headlamp
+serviceAccount:
+  create: true
+  name: headlamp
+clusterRoleBinding:
+  create: true
+  clusterRoleName: cluster-admin
+config:
+  inCluster: true
+  inClusterContextName: kind-stacks-k8s
+  unsafeUseServiceAccountToken: false
+service:
+  type: ClusterIP
+ingress:
+  enabled: false

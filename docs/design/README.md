@@ -6,6 +6,11 @@ implementation baseline; they do not imply an installed CRD, served API, or
 implemented controller. Existing behavior remains documented under
 [`docs/`](../README.md).
 
+The [composable public API proposal](public-api/README.md) is an examples-first
+replacement design for reusable namespace declarations and one current network per namespace. It is
+not a served API or an implementation-status update; its scope and departures from
+the current contracts are explicit within that package.
+
 ## Product goals
 
 Intended uses include ordinary regtest development and testing; network
