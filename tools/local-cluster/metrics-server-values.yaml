@@ -1,0 +1,3 @@
+# kind's kubelet serving certificates are self-signed. Local clusters only.
+args:
+  - --kubelet-insecure-tls

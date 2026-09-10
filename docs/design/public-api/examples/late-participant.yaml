@@ -1,0 +1,116 @@
+# PROPOSED API: not accepted by current operators.
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksAccount
+metadata:
+  name: late-holder
+  namespace: lab-30
+spec:
+  key:
+    generate: true
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksAccount
+metadata:
+  name: late-admin
+  namespace: lab-30
+spec:
+  key:
+    generate: true
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksAccount
+metadata:
+  name: late-consensus
+  namespace: lab-30
+spec:
+  key:
+    generate: true
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksFaucetRequest
+metadata:
+  name: fund-late-holder
+  namespace: lab-30
+spec:
+  faucetRef:
+    name: faucet
+  destination:
+    accountRef:
+      name: late-holder
+  amountMicroSTX: '2000000000000000'
+  timeout: 5m
+  networkUID: "${NETWORK_UID}"
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksFaucetRequest
+metadata:
+  name: fund-late-admin
+  namespace: lab-30
+spec:
+  faucetRef:
+    name: faucet
+  destination:
+    accountRef:
+      name: late-admin
+  amountMicroSTX: '1000000000000'
+  timeout: 5m
+  networkUID: "${NETWORK_UID}"
+---
+apiVersion: bitcoin.stacks.org/v1alpha2
+kind: BitcoinNode
+metadata:
+  name: btc-late
+  namespace: lab-30
+spec:
+  placement:
+    nodeSelector:
+      kubernetes.io/hostname: stacks-k8s-worker2
+  peers:
+    discovery: Network
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksNode
+metadata:
+  name: late-signer-node
+  namespace: lab-30
+spec:
+  placement:
+    nodeSelector:
+      kubernetes.io/hostname: stacks-k8s-worker2
+  bitcoinNodeRef:
+    name: btc-late
+  peers:
+    discovery: Network
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksSigner
+metadata:
+  name: late-signer
+  namespace: lab-30
+spec:
+  placement:
+    nodeSelector:
+      kubernetes.io/hostname: stacks-k8s-worker2
+  nodeRef:
+    name: late-signer-node
+  accountRef:
+    name: late-consensus
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksStacker
+metadata:
+  name: late-stacker
+  namespace: lab-30
+spec:
+  holderAccountRef:
+    name: late-holder
+  administratorAccountRef:
+    name: late-admin
+  signerRef:
+    name: late-signer
+  targetNodeRef:
+    name: late-signer-node
+  amountMicroSTX: '1000000000000000'
+  lockCycles: 6
+  renewWhenRemainingCycles: 3
