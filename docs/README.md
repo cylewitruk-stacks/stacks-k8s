@@ -39,3 +39,6 @@
 
 See [network configuration and genesis](network-operator/configuration.md) for immutable shared inputs
 and Go-owned provisioning/bootstrap.
+
+- [Composable public API foundation](network-operator/public-api-foundation.md): preview schemas,
+  resolution and genesis capture; runtime activation is pending.

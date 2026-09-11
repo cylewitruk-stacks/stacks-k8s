@@ -1,4 +1,4 @@
-# PROPOSED API: not accepted by current operators.
+# Design example: these optional runtime APIs are not served by the foundation preview.
 ---
 apiVersion: actions.stacks.org/v1alpha2
 kind: BitcoinBlockGeneration

@@ -15,6 +15,7 @@ import (
 
 func main() {
 	module := flag.String("module", "", "module directory to inspect")
+	portable := flag.Bool("portable", false, "also reject Kubernetes API and operator dependencies")
 	flag.Parse()
 	if *module == "" {
 		fmt.Fprintln(os.Stderr, "--module is required")
@@ -31,10 +32,11 @@ func main() {
 		fmt.Fprintf(os.Stderr, "list module graph: %v: %s\n", err, output)
 		os.Exit(1)
 	}
-	if err := policy.Validate(bytes.NewReader(output), []string{
-		"k8s.io/client-go",
-		"sigs.k8s.io/controller-runtime",
-	}); err != nil {
+	forbidden := []string{"k8s.io/client-go", "sigs.k8s.io/controller-runtime"}
+	if *portable {
+		forbidden = append(forbidden, "k8s.io", "github.com/cylewitruk-stacks/stacks-k8s/apis", "github.com/cylewitruk-stacks/stacks-k8s/operators")
+	}
+	if err := policy.Validate(bytes.NewReader(output), forbidden); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

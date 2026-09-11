@@ -10,7 +10,7 @@ test:
 	$(GO_ISOLATED) test ./...
 
 test-integration:
-	$(GO_ISOLATED) test -p=1 -tags=integration -count=1 ./internal/integration ./internal/workerintegration ./internal/ledgerlifecycle ./internal/workers
+	$(GO_ISOLATED) test -p=1 -tags=integration -count=1 ./internal/integration ./internal/workerintegration ./internal/ledgerlifecycle ./internal/workers ./internal/foundationintegration
 
 test-live:
 	$(GO_ISOLATED) test -tags=live -count=1 -v ./internal/integration
@@ -32,6 +32,6 @@ test-sdk:
 
 .PHONY: test-cli
 test-cli:
-	@set -eu; for command in stacks-environment stacks-bootstrap stacks-maintain-signers; do \
+	@set -eu; for command in foundation stacks-environment stacks-bootstrap stacks-maintain-signers; do \
 		$(GO_ISOLATED) run ./cmd/$$command --help >/dev/null 2>&1; \
 	done
