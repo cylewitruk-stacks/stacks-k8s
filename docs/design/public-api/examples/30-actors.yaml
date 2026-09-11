@@ -1,4 +1,4 @@
-# PROPOSED API: not accepted by current operators.
+# Foundation preview accepts these declarations; actor activation remains pending.
 ---
 apiVersion: v1
 kind: Namespace

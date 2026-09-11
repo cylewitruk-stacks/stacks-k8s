@@ -2,6 +2,7 @@ GO ?= go
 GOVULNCHECK_VERSION ?= v1.7.0
 
 MODULE_DIRS := \
+	libs/stacks \
 	apis/network \
 	apis/network/tools \
 	operators/network \
@@ -16,7 +17,7 @@ MODULE_DIRS := \
 	test-integration test-race verify verify-chart-policy verify-network \
 	verify-observability verify-action vuln
 
-verify: verify-local-cluster modules-verify module-policy-verify verify-chart-policy verify-network verify-observability verify-action
+verify: verify-foundation verify-local-cluster modules-verify module-policy-verify verify-chart-policy verify-network verify-observability verify-action
 	$(MAKE) -C charts/stacks-chaos-profile verify
 
 api-verify:
@@ -26,6 +27,7 @@ module-policy-verify:
 	GOWORK=off $(GO) -C tools/module-policy vet ./...
 	GOWORK=off $(GO) -C tools/module-policy test ./...
 	GOWORK=off $(GO) -C tools/module-policy run ./cmd/module-policy-check --module ../../apis/network
+	GOWORK=off $(GO) -C tools/module-policy run ./cmd/module-policy-check --module ../../libs/stacks --portable
 
 verify-chart-policy:
 	GOWORK=off $(GO) -C tools/chart-policy vet ./...
@@ -90,6 +92,7 @@ modules-verify:
 	done
 
 vuln:
+	GOWORK=off $(GO) -C libs/stacks run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
 	GOWORK=off $(GO) -C tools/chart-policy run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
 	npm --prefix operators/network/transactions audit --omit=dev
 	GOWORK=off $(GO) -C apis/network run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
@@ -98,12 +101,14 @@ vuln:
 	GOWORK=off $(GO) -C operators/action run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
 
 docker-check:
+	docker build --check --file operators/network/Dockerfile.foundation .
 	docker build --check --file operators/network/transactions/Dockerfile .
 	docker build --check --file operators/network/Dockerfile .
 	docker build --check --file operators/observability/Dockerfile .
 	docker build --check --file operators/action/Dockerfile .
 
 docker-build:
+	docker build --file operators/network/Dockerfile.foundation --tag stacks-network-foundation:verify .
 	docker build --file operators/network/transactions/Dockerfile --tag stacks-transaction-worker:verify .
 	docker build --file operators/network/Dockerfile --tag stacks-network-operator:verify .
 	docker build --file operators/observability/Dockerfile --tag stacks-observability-operator:verify .
@@ -118,3 +123,9 @@ $(CLUSTER_TARGETS):
 verify-local-cluster:
 	GOWORK=off $(GO) -C tools/local-cluster vet ./...
 	GOWORK=off $(GO) -C tools/local-cluster test ./...
+
+.PHONY: verify-foundation
+verify-foundation:
+	GOWORK=off $(GO) -C libs/stacks vet ./...
+	GOWORK=off $(GO) -C libs/stacks test -race ./...
+	$(MAKE) -C charts/stacks-network-foundation verify

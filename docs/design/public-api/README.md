@@ -1,5 +1,9 @@
 # Composable network API proposal
 
+The [foundation implementation](../../network-operator/public-api-foundation.md) serves the initial
+API/resolution/genesis slice in a separate preview chart. The complete runtime contract below
+remains a design target.
+
 Status: **Proposed public API, not served by current operators.** Date: 2026-09-10.
 Examples are design artifacts, not manifests for today's CRDs. See the
 [current API](../../network-operator/api.md) for installed software.

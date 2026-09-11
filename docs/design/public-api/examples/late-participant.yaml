@@ -1,4 +1,4 @@
-# PROPOSED API: not accepted by current operators.
+# Design example: foundation serves these declarations; runtime joining remains pending.
 ---
 apiVersion: stacks.stacks.org/v1alpha2
 kind: StacksAccount

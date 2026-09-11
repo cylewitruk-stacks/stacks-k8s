@@ -2,6 +2,9 @@
 # state, worktrees, and unrelated products are never sent to a builder.
 **
 !.dockerignore
+!libs/
+!libs/stacks/
+!libs/stacks/**
 !apis/
 !apis/network/
 !apis/network/**

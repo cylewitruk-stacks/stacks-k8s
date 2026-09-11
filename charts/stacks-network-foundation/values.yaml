@@ -1,0 +1,10 @@
+image:
+  repository: stacks-network-foundation
+  tag: dev
+  pullPolicy: IfNotPresent
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    memory: 512Mi

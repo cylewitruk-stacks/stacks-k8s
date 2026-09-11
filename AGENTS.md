@@ -68,6 +68,10 @@ integrity. See the
   runtime code there. Keep wire-contract fixtures in `contracts/`. Consumers
   that verify byte-level contracts must continue to use their own production
   decoding and digest implementations.
+- Keep portable protocol libraries under `libs/`, without Kubernetes, API-module,
+  or operator dependencies. Consumers use versioned requirements and local
+  `replace` directives, as for `apis/network`; register library verification in
+  the root module gates.
 - Preserve independent API, runtime, and `tools` Go modules. Do not add a
   committed root `go.work` or otherwise unify their dependency graphs.
 - Keep repository-wide verification logic under top-level `tools/` rather than

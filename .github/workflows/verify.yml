@@ -37,12 +37,14 @@ jobs:
         with:
           go-version-file: operators/network/go.mod
           cache-dependency-path: |
+            libs/stacks/go.sum
             apis/network/go.sum
             apis/network/tools/go.sum
             operators/network/go.sum
             operators/action/go.sum
       - uses: azure/setup-helm@v5
       - run: make verify-network
+      - run: make verify-foundation
 
   action:
     name: Action operator
@@ -53,6 +55,7 @@ jobs:
         with:
           go-version-file: operators/action/go.mod
           cache-dependency-path: |
+            libs/stacks/go.sum
             apis/network/go.sum
             operators/action/go.sum
       - uses: azure/setup-helm@v5
@@ -81,6 +84,7 @@ jobs:
         with:
           go-version-file: operators/network/go.mod
           cache-dependency-path: |
+            libs/stacks/go.sum
             apis/network/go.sum
             apis/network/tools/go.sum
             operators/network/go.sum
