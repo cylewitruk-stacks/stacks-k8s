@@ -53,6 +53,9 @@ func TestLiveNativeDelay(t *testing.T) {
 	if ns == "" {
 		ns = "chaos-live"
 	}
+	if _, err := chaosprofile.ResolveActor(ctx, admin, ns, "bitcoin"); err != nil {
+		t.Fatal(err)
+	}
 	native := func(name string) *unstructured.Unstructured {
 		o := &unstructured.Unstructured{}
 		o.SetGroupVersionKind(schema.GroupVersionKind{Group: "chaos-mesh.org", Version: "v1alpha1", Kind: "NetworkChaos"})
@@ -178,6 +181,9 @@ func TestLiveNativeDelay(t *testing.T) {
 		}
 		fault := faults[0]
 		fault.SetNamespace(ns)
+		if err := chaosprofile.BindActors(ctx, admin, fault, "bitcoin", "bitcoin-2"); err != nil {
+			t.Fatal(err)
+		}
 		for _, path := range [][]string{{"spec", "selector", "namespaces"}, {"spec", "target", "selector", "namespaces"}} {
 			_ = unstructured.SetNestedStringSlice(fault.Object, []string{ns}, path...)
 		}
@@ -212,6 +218,9 @@ func TestLiveNativeDelay(t *testing.T) {
 		}
 		extra := fresh[0]
 		extra.SetNamespace(ns)
+		if err := chaosprofile.BindActors(ctx, admin, extra, "bitcoin", "bitcoin-2"); err != nil {
+			t.Fatal(err)
+		}
 		for _, path := range [][]string{{"spec", "selector", "namespaces"}, {"spec", "target", "selector", "namespaces"}} {
 			_ = unstructured.SetNestedStringSlice(extra.Object, []string{ns}, path...)
 		}

@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/naming"
+
 	bitcoin "github.com/cylewitruk-stacks/stacks-k8s/apis/network/bitcoin/v1alpha2"
 	common "github.com/cylewitruk-stacks/stacks-k8s/apis/network/common/v1alpha2"
 	stacks "github.com/cylewitruk-stacks/stacks-k8s/apis/network/stacks/v1alpha2"
@@ -72,14 +74,7 @@ func ParticipantName(networkUID, name string) string {
 
 // RuntimeName isolates runtime roots and reserves suffix space for workload children.
 func RuntimeName(networkUID, participantUID, kind, name, purpose string) string {
-	token := sha256.Sum256([]byte(networkUID))
-	prefix := "n-" + hex.EncodeToString(token[:])[:12] + "-" + strings.ToLower(kind) + "-" + name + "-" + purpose
-	if len(prefix) > 39 {
-		prefix = prefix[:39]
-	}
-	prefix = strings.TrimRight(prefix, "-")
-	suffix := strings.TrimPrefix(Digest([]string{networkUID, participantUID, kind, name, purpose}), "sha256:")
-	return prefix + "-" + suffix[:12]
+	return naming.RuntimeName(networkUID, participantUID, kind, name, purpose)
 }
 
 func objectMap(v any) (map[string]any, error) {

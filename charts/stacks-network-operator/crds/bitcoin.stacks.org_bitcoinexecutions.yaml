@@ -1,0 +1,2105 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.22.0
+  name: bitcoinexecutions.bitcoin.stacks.org
+spec:
+  group: bitcoin.stacks.org
+  names:
+    kind: BitcoinExecution
+    listKind: BitcoinExecutionList
+    plural: bitcoinexecutions
+    singular: bitcoinexecution
+  scope: Namespaced
+  versions:
+  - name: v1alpha2
+    schema:
+      openAPIV3Schema:
+        description: BitcoinExecution retains one node's managed RPC authority across
+          worker restarts.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: Spec binds a participant and one scheduler generation opportunity.
+            properties:
+              networkUID:
+                description: NetworkUID is the owning network incarnation.
+                type: string
+              offer:
+                description: Offer is the scheduler's sole bounded generation opportunity.
+                properties:
+                  address:
+                    description: Address is the exact public coinbase destination.
+                    maxLength: 128
+                    type: string
+                  ceiling:
+                    description: Ceiling is the frozen gate's maximum permitted resulting
+                      height.
+                    format: int64
+                    minimum: 1
+                    type: integer
+                  expectedHeight:
+                    description: ExpectedHeight is the converged pre-dispatch height.
+                    format: int64
+                    minimum: 0
+                    type: integer
+                  expectedTip:
+                    description: ExpectedTip is the converged pre-dispatch block hash.
+                    pattern: ^[0-9a-f]{64}$
+                    type: string
+                  expiresAt:
+                    description: ExpiresAt prevents a stale opportunity from initiating
+                      a new request.
+                    format: date-time
+                    type: string
+                  initialization:
+                    description: Initialization binds the retained network scheduler
+                      record.
+                    properties:
+                      fingerprint:
+                        description: Fingerprint identifies public content when relevant.
+                        type: string
+                      kind:
+                        description: Kind identifies the API kind or participant kind.
+                        type: string
+                      name:
+                        description: Name is the public resource name.
+                        type: string
+                      uid:
+                        description: UID prevents same-name replacement from inheriting
+                          authority.
+                        type: string
+                    required:
+                    - kind
+                    - name
+                    - uid
+                    type: object
+                  mode:
+                    description: |-
+                      Mode distinguishes frozen bootstrap advancement from completed-initialization baseline authority.
+                      Omission preserves existing bootstrap records.
+                    enum:
+                    - Bootstrap
+                    - Baseline
+                    type: string
+                  number:
+                    description: Number is monotonic within the initialization record.
+                    format: int64
+                    minimum: 1
+                    type: integer
+                  override:
+                    description: Override pins the active timing request, when this
+                      opportunity used one.
+                    properties:
+                      fingerprint:
+                        description: Fingerprint identifies public content when relevant.
+                        type: string
+                      kind:
+                        description: Kind identifies the API kind or participant kind.
+                        type: string
+                      name:
+                        description: Name is the public resource name.
+                        type: string
+                      uid:
+                        description: UID prevents same-name replacement from inheriting
+                          authority.
+                        type: string
+                    required:
+                    - kind
+                    - name
+                    - uid
+                    type: object
+                  policyDigest:
+                    description: PolicyDigest identifies the admitted production policy.
+                    type: string
+                  production:
+                    description: Production identifies the admitted production participant.
+                    properties:
+                      fingerprint:
+                        description: Fingerprint identifies public content when relevant.
+                        type: string
+                      kind:
+                        description: Kind identifies the API kind or participant kind.
+                        type: string
+                      name:
+                        description: Name is the public resource name.
+                        type: string
+                      uid:
+                        description: UID prevents same-name replacement from inheriting
+                          authority.
+                        type: string
+                    required:
+                    - kind
+                    - name
+                    - uid
+                    type: object
+                  target:
+                    description: Target binds the sole selected participant for a
+                      baseline opportunity.
+                    properties:
+                      fingerprint:
+                        description: Fingerprint identifies public content when relevant.
+                        type: string
+                      kind:
+                        description: Kind identifies the API kind or participant kind.
+                        type: string
+                      name:
+                        description: Name is the public resource name.
+                        type: string
+                      uid:
+                        description: UID prevents same-name replacement from inheriting
+                          authority.
+                        type: string
+                    required:
+                    - kind
+                    - name
+                    - uid
+                    type: object
+                  wallet:
+                    description: Wallet pins the payout identity used for accounting.
+                    properties:
+                      fingerprint:
+                        description: Fingerprint identifies public content when relevant.
+                        type: string
+                      kind:
+                        description: Kind identifies the API kind or participant kind.
+                        type: string
+                      name:
+                        description: Name is the public resource name.
+                        type: string
+                      uid:
+                        description: UID prevents same-name replacement from inheriting
+                          authority.
+                        type: string
+                    required:
+                    - kind
+                    - name
+                    - uid
+                    type: object
+                required:
+                - address
+                - ceiling
+                - expectedHeight
+                - expectedTip
+                - expiresAt
+                - initialization
+                - number
+                - policyDigest
+                - production
+                - wallet
+                type: object
+              participant:
+                description: Participant is the exact BitcoinNode participant.
+                properties:
+                  fingerprint:
+                    description: Fingerprint identifies public content when relevant.
+                    type: string
+                  kind:
+                    description: Kind identifies the API kind or participant kind.
+                    type: string
+                  name:
+                    description: Name is the public resource name.
+                    type: string
+                  uid:
+                    description: UID prevents same-name replacement from inheriting
+                      authority.
+                    type: string
+                required:
+                - kind
+                - name
+                - uid
+                type: object
+            required:
+            - networkUID
+            - participant
+            type: object
+          status:
+            description: Status is atomically updated by the scoped control worker.
+            properties:
+              action:
+                description: Action retains finite mutation ownership until lifecycle
+                  receipt acknowledgement.
+                properties:
+                  acceptedChain:
+                    description: AcceptedChain is the last fully validated replacement
+                      header.
+                    properties:
+                      chainwork:
+                        description: Chainwork is the fixed-width hexadecimal cumulative
+                          work.
+                        type: string
+                      hash:
+                        description: Hash identifies the block.
+                        type: string
+                      height:
+                        description: Height records its chain position.
+                        format: int64
+                        type: integer
+                      previousBlockHash:
+                        description: PreviousBlockHash identifies its parent; genesis
+                          has none.
+                        type: string
+                    required:
+                    - chainwork
+                    - hash
+                    - height
+                    type: object
+                  admittedAt:
+                    description: AdmittedAt is the original successful reservation
+                      time.
+                    format: date-time
+                    type: string
+                  blocksGenerated:
+                    description: BlocksGenerated counts exactly attributed single-block
+                      responses.
+                    format: int32
+                    maximum: 100
+                    minimum: 0
+                    type: integer
+                  cleanupAcknowledged:
+                    description: CleanupAcknowledged records matching reconsideration,
+                      independently of action outcome.
+                    type: boolean
+                  cleanupUnsafe:
+                    description: CleanupUnsafe prevents compensation on changed identity
+                      or outside its fixed horizon.
+                    type: boolean
+                  correlationID:
+                    description: CorrelationID snapshots the bounded public correlation
+                      label.
+                    maxLength: 63
+                    type: string
+                  effectUncertain:
+                    description: EffectUncertain retains lost transport authority
+                      even if later cleanup facts improve.
+                    type: boolean
+                  expiresAt:
+                    description: ExpiresAt bounds new generation and invalidation
+                      from API creation.
+                    format: date-time
+                    type: string
+                  finalChain:
+                    description: FinalChain records verified higher-work canonical
+                      replacement after cleanup.
+                    properties:
+                      chainwork:
+                        description: Chainwork is the fixed-width hexadecimal cumulative
+                          work.
+                        type: string
+                      hash:
+                        description: Hash identifies the block.
+                        type: string
+                      height:
+                        description: Height records its chain position.
+                        format: int64
+                        type: integer
+                      previousBlockHash:
+                        description: PreviousBlockHash identifies its parent; genesis
+                          has none.
+                        type: string
+                    required:
+                    - chainwork
+                    - hash
+                    - height
+                    type: object
+                  forkParent:
+                    description: ForkParent captures the retained ancestor.
+                    properties:
+                      chainwork:
+                        description: Chainwork is the fixed-width hexadecimal cumulative
+                          work.
+                        type: string
+                      hash:
+                        description: Hash identifies the block.
+                        type: string
+                      height:
+                        description: Height records its chain position.
+                        format: int64
+                        type: integer
+                      previousBlockHash:
+                        description: PreviousBlockHash identifies its parent; genesis
+                          has none.
+                        type: string
+                    required:
+                    - chainwork
+                    - hash
+                    - height
+                    type: object
+                  generation:
+                    description: Generation snapshots one immutable finite generation
+                      request.
+                    properties:
+                      address:
+                        description: Address receives the regtest coinbase outputs.
+                        maxLength: 128
+                        minLength: 14
+                        type: string
+                      bitcoinNodeRef:
+                        description: BitcoinNodeRef names one logical BitcoinNode
+                          participant in the pinned network.
+                        properties:
+                          name:
+                            description: Name is the exact Kubernetes resource name.
+                            maxLength: 63
+                            pattern: ^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      cadence:
+                        description: Cadence controls delays between receipts and
+                          subsequent single-block requests.
+                        properties:
+                          delaysSeconds:
+                            description: DelaysSeconds contains count minus one ordered
+                              delays; zero adds no intentional wait.
+                            items:
+                              format: int32
+                              maximum: 60
+                              minimum: 0
+                              type: integer
+                            maxItems: 99
+                            type: array
+                            x-kubernetes-list-type: atomic
+                          intervalSeconds:
+                            description: IntervalSeconds is the fixed receipt-relative
+                              delay.
+                            format: int32
+                            maximum: 60
+                            minimum: 1
+                            type: integer
+                          maxSeconds:
+                            description: MaxSeconds is the inclusive upper uniform
+                              bound.
+                            format: int32
+                            maximum: 60
+                            minimum: 1
+                            type: integer
+                          minSeconds:
+                            description: MinSeconds is the inclusive lower uniform
+                              bound.
+                            format: int32
+                            maximum: 60
+                            minimum: 1
+                            type: integer
+                          mode:
+                            description: Mode selects immediate, fixed, inclusive
+                              uniform, or explicit inter-block delays.
+                            enum:
+                            - Immediate
+                            - Fixed
+                            - Uniform
+                            - Explicit
+                            maxLength: 9
+                            type: string
+                        required:
+                        - mode
+                        type: object
+                        x-kubernetes-validations:
+                        - message: intervalSeconds is required only for Fixed
+                          rule: has(self.intervalSeconds) == (self.mode == 'Fixed')
+                        - message: minSeconds and maxSeconds are required only for
+                            Uniform
+                          rule: has(self.minSeconds) == (self.mode == 'Uniform') &&
+                            has(self.maxSeconds) == (self.mode == 'Uniform')
+                        - message: uniform bounds must be ordered
+                          rule: self.mode != 'Uniform' || self.minSeconds <= self.maxSeconds
+                        - message: delaysSeconds is allowed only for Explicit
+                          rule: '!has(self.delaysSeconds) || self.mode == ''Explicit'''
+                      count:
+                        description: Count bounds acknowledged single-block RPCs.
+                        format: int32
+                        maximum: 100
+                        minimum: 1
+                        type: integer
+                      networkUID:
+                        description: NetworkUID pins the canonical network incarnation.
+                        maxLength: 128
+                        minLength: 1
+                        type: string
+                      timeout:
+                        description: Timeout includes all pending time from API-server
+                          creation.
+                        maxLength: 32
+                        type: string
+                        x-kubernetes-validations:
+                        - message: timeout must be positive
+                          rule: duration(self) > duration('0s')
+                        - message: timeout cannot exceed 10m
+                          rule: duration(self) <= duration('10m')
+                    required:
+                    - address
+                    - bitcoinNodeRef
+                    - cadence
+                    - count
+                    - networkUID
+                    - timeout
+                    type: object
+                    x-kubernetes-validations:
+                    - message: action spec is immutable
+                      rule: self == oldSelf
+                    - message: explicit cadence requires count minus one delays
+                      rule: 'self.cadence.mode != ''Explicit'' || (has(self.cadence.delaysSeconds)
+                        ? size(self.cadence.delaysSeconds) : 0) == self.count - 1'
+                  invalidatedHash:
+                    description: InvalidatedHash is the original first removed block
+                      and sole allowed marker target.
+                    type: string
+                  invalidationAcknowledged:
+                    description: InvalidationAcknowledged records the matching null
+                      receipt.
+                    type: boolean
+                  lastBlockHash:
+                    description: LastBlockHash identifies the latest acknowledged
+                      block, without asserting canonicality.
+                    type: string
+                  lastCompletedAt:
+                    description: LastCompletedAt retains the latest attributable receipt
+                      time.
+                    format: date-time
+                    type: string
+                  lastDispatchID:
+                    description: LastDispatchID binds the receipt that the lifecycle
+                      controller must acknowledge.
+                    type: string
+                  network:
+                    description: Network captures the admitted environment revision.
+                    properties:
+                      name:
+                        description: Name identifies the admitted parent.
+                        type: string
+                      observedGeneration:
+                        description: ObservedGeneration records the declaration generation
+                          at admission.
+                        format: int64
+                        type: integer
+                      uid:
+                        description: UID fixes its incarnation.
+                        type: string
+                    required:
+                    - name
+                    - observedGeneration
+                    - uid
+                    type: object
+                  nextDispatchAt:
+                    description: NextDispatchAt retains receipt-relative timing without
+                      redraw or catch-up.
+                    format: date-time
+                    type: string
+                  originalChain:
+                    description: OriginalChain captures the immutable original tip
+                      for a reorganization.
+                    properties:
+                      chainwork:
+                        description: Chainwork is the fixed-width hexadecimal cumulative
+                          work.
+                        type: string
+                      hash:
+                        description: Hash identifies the block.
+                        type: string
+                      height:
+                        description: Height records its chain position.
+                        format: int64
+                        type: integer
+                      previousBlockHash:
+                        description: PreviousBlockHash identifies its parent; genesis
+                          has none.
+                        type: string
+                    required:
+                    - chainwork
+                    - hash
+                    - height
+                    type: object
+                  reorganization:
+                    description: Reorganization snapshots one immutable local suffix
+                      replacement request.
+                    properties:
+                      address:
+                        description: Address receives replacement coinbase outputs.
+                        maxLength: 128
+                        minLength: 14
+                        type: string
+                      bitcoinNodeRef:
+                        description: BitcoinNodeRef names the logical BitcoinNode
+                          participant.
+                        properties:
+                          name:
+                            description: Name is the exact Kubernetes resource name.
+                            maxLength: 63
+                            pattern: ^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      boundaryPolicy:
+                        description: BoundaryPolicy explicitly accepts unknown protocol
+                          schedule boundaries.
+                        properties:
+                          allowEpochBoundaryCrossing:
+                            description: AllowEpochBoundaryCrossing permits an epoch
+                              boundary in the affected range.
+                            type: boolean
+                            x-kubernetes-validations:
+                            - message: unknown schedule requires explicit epoch opt-in
+                              rule: self == true
+                          allowPreparePhaseBoundaryCrossing:
+                            description: AllowPreparePhaseBoundaryCrossing permits
+                              a PoX prepare-phase boundary.
+                            type: boolean
+                            x-kubernetes-validations:
+                            - message: unknown schedule requires explicit prepare-phase
+                                opt-in
+                              rule: self == true
+                          allowRewardCycleBoundaryCrossing:
+                            description: AllowRewardCycleBoundaryCrossing permits
+                              a reward-cycle boundary.
+                            type: boolean
+                            x-kubernetes-validations:
+                            - message: unknown schedule requires explicit reward-cycle
+                                opt-in
+                              rule: self == true
+                        required:
+                        - allowEpochBoundaryCrossing
+                        - allowPreparePhaseBoundaryCrossing
+                        - allowRewardCycleBoundaryCrossing
+                        type: object
+                      depth:
+                        description: Depth is the suffix length; exactly depth+1 replacement
+                          blocks are requested.
+                        format: int32
+                        maximum: 6
+                        minimum: 1
+                        type: integer
+                      networkUID:
+                        description: NetworkUID pins the canonical network incarnation.
+                        maxLength: 128
+                        minLength: 1
+                        type: string
+                      timeout:
+                        description: Timeout bounds new invalidation and generation
+                          from object creation.
+                        maxLength: 32
+                        type: string
+                        x-kubernetes-validations:
+                        - message: timeout must be positive
+                          rule: duration(self) > duration('0s')
+                        - message: timeout cannot exceed 10m
+                          rule: duration(self) <= duration('10m')
+                    required:
+                    - address
+                    - bitcoinNodeRef
+                    - boundaryPolicy
+                    - depth
+                    - networkUID
+                    - timeout
+                    type: object
+                    x-kubernetes-validations:
+                    - message: action spec is immutable
+                      rule: self == oldSelf
+                  replacementBlockHashes:
+                    description: ReplacementBlockHashes retains the bounded ordered
+                      generation receipts.
+                    items:
+                      type: string
+                    maxItems: 7
+                    type: array
+                    x-kubernetes-list-type: atomic
+                  request:
+                    description: Request pins the action kind, name and UID.
+                    properties:
+                      fingerprint:
+                        description: Fingerprint identifies public content when relevant.
+                        type: string
+                      kind:
+                        description: Kind identifies the API kind or participant kind.
+                        type: string
+                      name:
+                        description: Name is the public resource name.
+                        type: string
+                      uid:
+                        description: UID prevents same-name replacement from inheriting
+                          authority.
+                        type: string
+                    required:
+                    - kind
+                    - name
+                    - uid
+                    type: object
+                  runtime:
+                    description: Runtime retains exact transport and process identity
+                      for every arm and cleanup.
+                    properties:
+                      configuration:
+                        description: Configuration pins immutable server configuration.
+                        properties:
+                          fingerprint:
+                            description: Fingerprint identifies public content when
+                              relevant.
+                            type: string
+                          kind:
+                            description: Kind identifies the API kind or participant
+                              kind.
+                            type: string
+                          name:
+                            description: Name is the public resource name.
+                            type: string
+                          uid:
+                            description: UID prevents same-name replacement from inheriting
+                              authority.
+                            type: string
+                        required:
+                        - kind
+                        - name
+                        - uid
+                        type: object
+                      containerID:
+                        description: ContainerID identifies the actor process instance.
+                        type: string
+                      credentials:
+                        description: Credentials pins immutable worker RPC credentials
+                          without publishing their bytes.
+                        properties:
+                          fingerprint:
+                            description: Fingerprint identifies public content when
+                              relevant.
+                            type: string
+                          kind:
+                            description: Kind identifies the API kind or participant
+                              kind.
+                            type: string
+                          name:
+                            description: Name is the public resource name.
+                            type: string
+                          uid:
+                            description: UID prevents same-name replacement from inheriting
+                              authority.
+                            type: string
+                        required:
+                        - kind
+                        - name
+                        - uid
+                        type: object
+                      endpoint:
+                        description: Endpoint binds the selected Pod address, never
+                          a replacement Service target.
+                        type: string
+                      participant:
+                        description: Participant binds the node participant.
+                        properties:
+                          fingerprint:
+                            description: Fingerprint identifies public content when
+                              relevant.
+                            type: string
+                          kind:
+                            description: Kind identifies the API kind or participant
+                              kind.
+                            type: string
+                          name:
+                            description: Name is the public resource name.
+                            type: string
+                          uid:
+                            description: UID prevents same-name replacement from inheriting
+                              authority.
+                            type: string
+                        required:
+                        - kind
+                        - name
+                        - uid
+                        type: object
+                      pod:
+                        description: Pod binds the admitted actor Pod.
+                        properties:
+                          fingerprint:
+                            description: Fingerprint identifies public content when
+                              relevant.
+                            type: string
+                          kind:
+                            description: Kind identifies the API kind or participant
+                              kind.
+                            type: string
+                          name:
+                            description: Name is the public resource name.
+                            type: string
+                          uid:
+                            description: UID prevents same-name replacement from inheriting
+                              authority.
+                            type: string
+                        required:
+                        - kind
+                        - name
+                        - uid
+                        type: object
+                      policyDigest:
+                        description: PolicyDigest identifies the accepted actor policy.
+                        type: string
+                    required:
+                    - configuration
+                    - containerID
+                    - credentials
+                    - endpoint
+                    - participant
+                    - pod
+                    - policyDigest
+                    type: object
+                  startedAt:
+                    description: StartedAt records the first potentially executable
+                      action arm.
+                    format: date-time
+                    type: string
+                  stopReason:
+                    description: StopReason withdraws new generation/invalidation
+                      with the same execution CAS.
+                    maxLength: 128
+                    type: string
+                  target:
+                    description: Target exposes exact actor/workload admission identity
+                      to the action lifecycle.
+                    properties:
+                      apiVersion:
+                        description: APIVersion fixes the actor API.
+                        type: string
+                      configDigest:
+                        description: ConfigDigest binds approved configuration bytes.
+                        type: string
+                      configuration:
+                        description: Configuration pins the immutable actor configuration
+                          object.
+                        properties:
+                          fingerprint:
+                            description: Fingerprint identifies public content when
+                              relevant.
+                            type: string
+                          kind:
+                            description: Kind identifies the API kind or participant
+                              kind.
+                            type: string
+                          name:
+                            description: Name is the public resource name.
+                            type: string
+                          uid:
+                            description: UID prevents same-name replacement from inheriting
+                              authority.
+                            type: string
+                        required:
+                        - kind
+                        - name
+                        - uid
+                        type: object
+                      containerID:
+                        description: ContainerID records the admitted process container.
+                        type: string
+                      credentials:
+                        description: Credentials pins immutable control credentials
+                          without exposing their values.
+                        properties:
+                          fingerprint:
+                            description: Fingerprint identifies public content when
+                              relevant.
+                            type: string
+                          kind:
+                            description: Kind identifies the API kind or participant
+                              kind.
+                            type: string
+                          name:
+                            description: Name is the public resource name.
+                            type: string
+                          uid:
+                            description: UID prevents same-name replacement from inheriting
+                              authority.
+                            type: string
+                        required:
+                        - kind
+                        - name
+                        - uid
+                        type: object
+                      kind:
+                        description: Kind fixes the actor type.
+                        type: string
+                      name:
+                        description: Name identifies the compiled leaf.
+                        type: string
+                      podUID:
+                        description: PodUID identifies the admitted Pod.
+                        type: string
+                      revision:
+                        description: Revision identifies the admitted workload rollout.
+                        type: string
+                      runtimeImageID:
+                        description: RuntimeImageID identifies the executed image.
+                        type: string
+                      specDigest:
+                        description: SpecDigest binds actor configuration intent.
+                        type: string
+                      statefulSetUID:
+                        description: StatefulSetUID identifies the owning workload
+                          incarnation.
+                        type: string
+                      uid:
+                        description: UID fixes the leaf incarnation.
+                        type: string
+                    required:
+                    - apiVersion
+                    - configDigest
+                    - configuration
+                    - containerID
+                    - credentials
+                    - kind
+                    - name
+                    - podUID
+                    - revision
+                    - runtimeImageID
+                    - specDigest
+                    - statefulSetUID
+                    - uid
+                    type: object
+                required:
+                - admittedAt
+                - expiresAt
+                - network
+                - request
+                - runtime
+                - target
+                type: object
+                x-kubernetes-validations:
+                - message: exactly one finite action spec is required
+                  rule: has(self.generation) != has(self.reorganization)
+              armed:
+                description: Armed blocks every replacement while delivery or receipt
+                  accounting is outstanding.
+                properties:
+                  action:
+                    description: Action pins the finite action that exclusively owns
+                      this arm.
+                    properties:
+                      fingerprint:
+                        description: Fingerprint identifies public content when relevant.
+                        type: string
+                      kind:
+                        description: Kind identifies the API kind or participant kind.
+                        type: string
+                      name:
+                        description: Name is the public resource name.
+                        type: string
+                      uid:
+                        description: UID prevents same-name replacement from inheriting
+                          authority.
+                        type: string
+                    required:
+                    - kind
+                    - name
+                    - uid
+                    type: object
+                  address:
+                    description: Address supplies the fixed public payout for finite
+                      generation.
+                    type: string
+                  armedAt:
+                    description: ArmedAt records authorization time, not server execution
+                      time.
+                    format: date-time
+                    type: string
+                  blockHash:
+                    description: BlockHash is the captured invalidity marker for finite
+                      reorganization.
+                    type: string
+                  id:
+                    description: ID identifies this unique process-bound request.
+                    type: string
+                  method:
+                    description: Method selects one bounded supported RPC.
+                    enum:
+                    - CreateWallet
+                    - LoadWallet
+                    - ImportDescriptor
+                    - UnloadWallet
+                    - Generate
+                    - InvalidateBlock
+                    - ReconsiderBlock
+                    type: string
+                  offer:
+                    description: Offer preserves an immutable generation opportunity
+                      snapshot.
+                    properties:
+                      address:
+                        description: Address is the exact public coinbase destination.
+                        maxLength: 128
+                        type: string
+                      ceiling:
+                        description: Ceiling is the frozen gate's maximum permitted
+                          resulting height.
+                        format: int64
+                        minimum: 1
+                        type: integer
+                      expectedHeight:
+                        description: ExpectedHeight is the converged pre-dispatch
+                          height.
+                        format: int64
+                        minimum: 0
+                        type: integer
+                      expectedTip:
+                        description: ExpectedTip is the converged pre-dispatch block
+                          hash.
+                        pattern: ^[0-9a-f]{64}$
+                        type: string
+                      expiresAt:
+                        description: ExpiresAt prevents a stale opportunity from initiating
+                          a new request.
+                        format: date-time
+                        type: string
+                      initialization:
+                        description: Initialization binds the retained network scheduler
+                          record.
+                        properties:
+                          fingerprint:
+                            description: Fingerprint identifies public content when
+                              relevant.
+                            type: string
+                          kind:
+                            description: Kind identifies the API kind or participant
+                              kind.
+                            type: string
+                          name:
+                            description: Name is the public resource name.
+                            type: string
+                          uid:
+                            description: UID prevents same-name replacement from inheriting
+                              authority.
+                            type: string
+                        required:
+                        - kind
+                        - name
+                        - uid
+                        type: object
+                      mode:
+                        description: |-
+                          Mode distinguishes frozen bootstrap advancement from completed-initialization baseline authority.
+                          Omission preserves existing bootstrap records.
+                        enum:
+                        - Bootstrap
+                        - Baseline
+                        type: string
+                      number:
+                        description: Number is monotonic within the initialization
+                          record.
+                        format: int64
+                        minimum: 1
+                        type: integer
+                      override:
+                        description: Override pins the active timing request, when
+                          this opportunity used one.
+                        properties:
+                          fingerprint:
+                            description: Fingerprint identifies public content when
+                              relevant.
+                            type: string
+                          kind:
+                            description: Kind identifies the API kind or participant
+                              kind.
+                            type: string
+                          name:
+                            description: Name is the public resource name.
+                            type: string
+                          uid:
+                            description: UID prevents same-name replacement from inheriting
+                              authority.
+                            type: string
+                        required:
+                        - kind
+                        - name
+                        - uid
+                        type: object
+                      policyDigest:
+                        description: PolicyDigest identifies the admitted production
+                          policy.
+                        type: string
+                      production:
+                        description: Production identifies the admitted production
+                          participant.
+                        properties:
+                          fingerprint:
+                            description: Fingerprint identifies public content when
+                              relevant.
+                            type: string
+                          kind:
+                            description: Kind identifies the API kind or participant
+                              kind.
+                            type: string
+                          name:
+                            description: Name is the public resource name.
+                            type: string
+                          uid:
+                            description: UID prevents same-name replacement from inheriting
+                              authority.
+                            type: string
+                        required:
+                        - kind
+                        - name
+                        - uid
+                        type: object
+                      target:
+                        description: Target binds the sole selected participant for
+                          a baseline opportunity.
+                        properties:
+                          fingerprint:
+                            description: Fingerprint identifies public content when
+                              relevant.
+                            type: string
+                          kind:
+                            description: Kind identifies the API kind or participant
+                              kind.
+                            type: string
+                          name:
+                            description: Name is the public resource name.
+                            type: string
+                          uid:
+                            description: UID prevents same-name replacement from inheriting
+                              authority.
+                            type: string
+                        required:
+                        - kind
+                        - name
+                        - uid
+                        type: object
+                      wallet:
+                        description: Wallet pins the payout identity used for accounting.
+                        properties:
+                          fingerprint:
+                            description: Fingerprint identifies public content when
+                              relevant.
+                            type: string
+                          kind:
+                            description: Kind identifies the API kind or participant
+                              kind.
+                            type: string
+                          name:
+                            description: Name is the public resource name.
+                            type: string
+                          uid:
+                            description: UID prevents same-name replacement from inheriting
+                              authority.
+                            type: string
+                        required:
+                        - kind
+                        - name
+                        - uid
+                        type: object
+                    required:
+                    - address
+                    - ceiling
+                    - expectedHeight
+                    - expectedTip
+                    - expiresAt
+                    - initialization
+                    - number
+                    - policyDigest
+                    - production
+                    - wallet
+                    type: object
+                  processNonce:
+                    description: ProcessNonce identifies the acquiring worker process,
+                      not its Pod name.
+                    type: string
+                  reservation:
+                    description: Reservation identifies the current mutation owner;
+                      it survives receipt accounting.
+                    properties:
+                      fingerprint:
+                        description: Fingerprint identifies public content when relevant.
+                        type: string
+                      kind:
+                        description: Kind identifies the API kind or participant kind.
+                        type: string
+                      name:
+                        description: Name is the public resource name.
+                        type: string
+                      uid:
+                        description: UID prevents same-name replacement from inheriting
+                          authority.
+                        type: string
+                    required:
+                    - kind
+                    - name
+                    - uid
+                    type: object
+                  target:
+                    description: Target is the exact actor/transport identity admitted
+                      before arming.
+                    properties:
+                      configuration:
+                        description: Configuration pins immutable server configuration.
+                        properties:
+                          fingerprint:
+                            description: Fingerprint identifies public content when
+                              relevant.
+                            type: string
+                          kind:
+                            description: Kind identifies the API kind or participant
+                              kind.
+                            type: string
+                          name:
+                            description: Name is the public resource name.
+                            type: string
+                          uid:
+                            description: UID prevents same-name replacement from inheriting
+                              authority.
+                            type: string
+                        required:
+                        - kind
+                        - name
+                        - uid
+                        type: object
+                      containerID:
+                        description: ContainerID identifies the actor process instance.
+                        type: string
+                      credentials:
+                        description: Credentials pins immutable worker RPC credentials
+                          without publishing their bytes.
+                        properties:
+                          fingerprint:
+                            description: Fingerprint identifies public content when
+                              relevant.
+                            type: string
+                          kind:
+                            description: Kind identifies the API kind or participant
+                              kind.
+                            type: string
+                          name:
+                            description: Name is the public resource name.
+                            type: string
+                          uid:
+                            description: UID prevents same-name replacement from inheriting
+                              authority.
+                            type: string
+                        required:
+                        - kind
+                        - name
+                        - uid
+                        type: object
+                      endpoint:
+                        description: Endpoint binds the selected Pod address, never
+                          a replacement Service target.
+                        type: string
+                      participant:
+                        description: Participant binds the node participant.
+                        properties:
+                          fingerprint:
+                            description: Fingerprint identifies public content when
+                              relevant.
+                            type: string
+                          kind:
+                            description: Kind identifies the API kind or participant
+                              kind.
+                            type: string
+                          name:
+                            description: Name is the public resource name.
+                            type: string
+                          uid:
+                            description: UID prevents same-name replacement from inheriting
+                              authority.
+                            type: string
+                        required:
+                        - kind
+                        - name
+                        - uid
+                        type: object
+                      pod:
+                        description: Pod binds the admitted actor Pod.
+                        properties:
+                          fingerprint:
+                            description: Fingerprint identifies public content when
+                              relevant.
+                            type: string
+                          kind:
+                            description: Kind identifies the API kind or participant
+                              kind.
+                            type: string
+                          name:
+                            description: Name is the public resource name.
+                            type: string
+                          uid:
+                            description: UID prevents same-name replacement from inheriting
+                              authority.
+                            type: string
+                        required:
+                        - kind
+                        - name
+                        - uid
+                        type: object
+                      policyDigest:
+                        description: PolicyDigest identifies the accepted actor policy.
+                        type: string
+                    required:
+                    - configuration
+                    - containerID
+                    - credentials
+                    - endpoint
+                    - participant
+                    - pod
+                    - policyDigest
+                    type: object
+                  wallet:
+                    description: Wallet supplies required wallet-specific inputs.
+                    properties:
+                      descriptor:
+                        description: Descriptor is a validated checksummed public
+                          descriptor for import.
+                        type: string
+                      name:
+                        description: Name is the local Core wallet name.
+                        type: string
+                      wallet:
+                        description: Wallet pins the reusable wallet incarnation.
+                        properties:
+                          fingerprint:
+                            description: Fingerprint identifies public content when
+                              relevant.
+                            type: string
+                          kind:
+                            description: Kind identifies the API kind or participant
+                              kind.
+                            type: string
+                          name:
+                            description: Name is the public resource name.
+                            type: string
+                          uid:
+                            description: UID prevents same-name replacement from inheriting
+                              authority.
+                            type: string
+                        required:
+                        - kind
+                        - name
+                        - uid
+                        type: object
+                    required:
+                    - name
+                    - wallet
+                    type: object
+                required:
+                - armedAt
+                - id
+                - method
+                - processNonce
+                - reservation
+                - target
+                type: object
+              blocksGenerated:
+                description: BlocksGenerated counts attributable successful generation
+                  receipts.
+                format: int64
+                minimum: 0
+                type: integer
+              completedOffer:
+                description: CompletedOffer prevents repeated execution of an already
+                  accounted offer.
+                format: int64
+                minimum: 0
+                type: integer
+              control:
+                description: Control acknowledges a current root pause only after
+                  local sending has stopped.
+                properties:
+                  heartbeatAt:
+                    description: HeartbeatAt proves this process still observes pause
+                      without an outstanding send.
+                    format: date-time
+                    type: string
+                  networkGeneration:
+                    description: NetworkGeneration identifies the exact evaluated
+                      root operation revision.
+                    format: int64
+                    type: integer
+                  observedAt:
+                    description: ObservedAt is the first successful acknowledgement
+                      time for this process and revision.
+                    format: date-time
+                    type: string
+                  operation:
+                    description: Operation is the acknowledged desired operation.
+                    enum:
+                    - Paused
+                    type: string
+                  processNonce:
+                    description: ProcessNonce identifies the worker that stopped sending.
+                    type: string
+                required:
+                - heartbeatAt
+                - networkGeneration
+                - observedAt
+                - operation
+                - processNonce
+                type: object
+              drain:
+                description: Drain records bounded terminal-control acknowledgement
+                  without claiming server quiescence.
+                properties:
+                  completedAt:
+                    description: CompletedAt records successful acknowledgement after
+                      draining or retaining uncertainty.
+                    format: date-time
+                    type: string
+                  networkGeneration:
+                    description: NetworkGeneration identifies the evaluated root control
+                      revision.
+                    format: int64
+                    type: integer
+                  outcome:
+                    description: Outcome distinguishes settled local execution from
+                      retained Armed uncertainty.
+                    enum:
+                    - Drained
+                    - Uncertain
+                    type: string
+                  processNonce:
+                    description: ProcessNonce identifies the acknowledging worker
+                      process.
+                    type: string
+                  reason:
+                    description: Reason identifies the terminal control being acknowledged.
+                    type: string
+                  requestedAt:
+                    description: RequestedAt preserves the start of the bounded drain.
+                    format: date-time
+                    type: string
+                required:
+                - completedAt
+                - networkGeneration
+                - outcome
+                - processNonce
+                - reason
+                - requestedAt
+                type: object
+              lastReceipt:
+                description: LastReceipt retains the last atomically accounted success.
+                properties:
+                  blockHash:
+                    description: BlockHash identifies the single generated block,
+                      for Generate only.
+                    type: string
+                  receivedAt:
+                    description: ReceivedAt is the original response time, preserved
+                      during accounting retries.
+                    format: date-time
+                    type: string
+                  request:
+                    description: Request preserves the exact accounted execution identity
+                      and inputs.
+                    properties:
+                      action:
+                        description: Action pins the finite action that exclusively
+                          owns this arm.
+                        properties:
+                          fingerprint:
+                            description: Fingerprint identifies public content when
+                              relevant.
+                            type: string
+                          kind:
+                            description: Kind identifies the API kind or participant
+                              kind.
+                            type: string
+                          name:
+                            description: Name is the public resource name.
+                            type: string
+                          uid:
+                            description: UID prevents same-name replacement from inheriting
+                              authority.
+                            type: string
+                        required:
+                        - kind
+                        - name
+                        - uid
+                        type: object
+                      address:
+                        description: Address supplies the fixed public payout for
+                          finite generation.
+                        type: string
+                      armedAt:
+                        description: ArmedAt records authorization time, not server
+                          execution time.
+                        format: date-time
+                        type: string
+                      blockHash:
+                        description: BlockHash is the captured invalidity marker for
+                          finite reorganization.
+                        type: string
+                      id:
+                        description: ID identifies this unique process-bound request.
+                        type: string
+                      method:
+                        description: Method selects one bounded supported RPC.
+                        enum:
+                        - CreateWallet
+                        - LoadWallet
+                        - ImportDescriptor
+                        - UnloadWallet
+                        - Generate
+                        - InvalidateBlock
+                        - ReconsiderBlock
+                        type: string
+                      offer:
+                        description: Offer preserves an immutable generation opportunity
+                          snapshot.
+                        properties:
+                          address:
+                            description: Address is the exact public coinbase destination.
+                            maxLength: 128
+                            type: string
+                          ceiling:
+                            description: Ceiling is the frozen gate's maximum permitted
+                              resulting height.
+                            format: int64
+                            minimum: 1
+                            type: integer
+                          expectedHeight:
+                            description: ExpectedHeight is the converged pre-dispatch
+                              height.
+                            format: int64
+                            minimum: 0
+                            type: integer
+                          expectedTip:
+                            description: ExpectedTip is the converged pre-dispatch
+                              block hash.
+                            pattern: ^[0-9a-f]{64}$
+                            type: string
+                          expiresAt:
+                            description: ExpiresAt prevents a stale opportunity from
+                              initiating a new request.
+                            format: date-time
+                            type: string
+                          initialization:
+                            description: Initialization binds the retained network
+                              scheduler record.
+                            properties:
+                              fingerprint:
+                                description: Fingerprint identifies public content
+                                  when relevant.
+                                type: string
+                              kind:
+                                description: Kind identifies the API kind or participant
+                                  kind.
+                                type: string
+                              name:
+                                description: Name is the public resource name.
+                                type: string
+                              uid:
+                                description: UID prevents same-name replacement from
+                                  inheriting authority.
+                                type: string
+                            required:
+                            - kind
+                            - name
+                            - uid
+                            type: object
+                          mode:
+                            description: |-
+                              Mode distinguishes frozen bootstrap advancement from completed-initialization baseline authority.
+                              Omission preserves existing bootstrap records.
+                            enum:
+                            - Bootstrap
+                            - Baseline
+                            type: string
+                          number:
+                            description: Number is monotonic within the initialization
+                              record.
+                            format: int64
+                            minimum: 1
+                            type: integer
+                          override:
+                            description: Override pins the active timing request,
+                              when this opportunity used one.
+                            properties:
+                              fingerprint:
+                                description: Fingerprint identifies public content
+                                  when relevant.
+                                type: string
+                              kind:
+                                description: Kind identifies the API kind or participant
+                                  kind.
+                                type: string
+                              name:
+                                description: Name is the public resource name.
+                                type: string
+                              uid:
+                                description: UID prevents same-name replacement from
+                                  inheriting authority.
+                                type: string
+                            required:
+                            - kind
+                            - name
+                            - uid
+                            type: object
+                          policyDigest:
+                            description: PolicyDigest identifies the admitted production
+                              policy.
+                            type: string
+                          production:
+                            description: Production identifies the admitted production
+                              participant.
+                            properties:
+                              fingerprint:
+                                description: Fingerprint identifies public content
+                                  when relevant.
+                                type: string
+                              kind:
+                                description: Kind identifies the API kind or participant
+                                  kind.
+                                type: string
+                              name:
+                                description: Name is the public resource name.
+                                type: string
+                              uid:
+                                description: UID prevents same-name replacement from
+                                  inheriting authority.
+                                type: string
+                            required:
+                            - kind
+                            - name
+                            - uid
+                            type: object
+                          target:
+                            description: Target binds the sole selected participant
+                              for a baseline opportunity.
+                            properties:
+                              fingerprint:
+                                description: Fingerprint identifies public content
+                                  when relevant.
+                                type: string
+                              kind:
+                                description: Kind identifies the API kind or participant
+                                  kind.
+                                type: string
+                              name:
+                                description: Name is the public resource name.
+                                type: string
+                              uid:
+                                description: UID prevents same-name replacement from
+                                  inheriting authority.
+                                type: string
+                            required:
+                            - kind
+                            - name
+                            - uid
+                            type: object
+                          wallet:
+                            description: Wallet pins the payout identity used for
+                              accounting.
+                            properties:
+                              fingerprint:
+                                description: Fingerprint identifies public content
+                                  when relevant.
+                                type: string
+                              kind:
+                                description: Kind identifies the API kind or participant
+                                  kind.
+                                type: string
+                              name:
+                                description: Name is the public resource name.
+                                type: string
+                              uid:
+                                description: UID prevents same-name replacement from
+                                  inheriting authority.
+                                type: string
+                            required:
+                            - kind
+                            - name
+                            - uid
+                            type: object
+                        required:
+                        - address
+                        - ceiling
+                        - expectedHeight
+                        - expectedTip
+                        - expiresAt
+                        - initialization
+                        - number
+                        - policyDigest
+                        - production
+                        - wallet
+                        type: object
+                      processNonce:
+                        description: ProcessNonce identifies the acquiring worker
+                          process, not its Pod name.
+                        type: string
+                      reservation:
+                        description: Reservation identifies the current mutation owner;
+                          it survives receipt accounting.
+                        properties:
+                          fingerprint:
+                            description: Fingerprint identifies public content when
+                              relevant.
+                            type: string
+                          kind:
+                            description: Kind identifies the API kind or participant
+                              kind.
+                            type: string
+                          name:
+                            description: Name is the public resource name.
+                            type: string
+                          uid:
+                            description: UID prevents same-name replacement from inheriting
+                              authority.
+                            type: string
+                        required:
+                        - kind
+                        - name
+                        - uid
+                        type: object
+                      target:
+                        description: Target is the exact actor/transport identity
+                          admitted before arming.
+                        properties:
+                          configuration:
+                            description: Configuration pins immutable server configuration.
+                            properties:
+                              fingerprint:
+                                description: Fingerprint identifies public content
+                                  when relevant.
+                                type: string
+                              kind:
+                                description: Kind identifies the API kind or participant
+                                  kind.
+                                type: string
+                              name:
+                                description: Name is the public resource name.
+                                type: string
+                              uid:
+                                description: UID prevents same-name replacement from
+                                  inheriting authority.
+                                type: string
+                            required:
+                            - kind
+                            - name
+                            - uid
+                            type: object
+                          containerID:
+                            description: ContainerID identifies the actor process
+                              instance.
+                            type: string
+                          credentials:
+                            description: Credentials pins immutable worker RPC credentials
+                              without publishing their bytes.
+                            properties:
+                              fingerprint:
+                                description: Fingerprint identifies public content
+                                  when relevant.
+                                type: string
+                              kind:
+                                description: Kind identifies the API kind or participant
+                                  kind.
+                                type: string
+                              name:
+                                description: Name is the public resource name.
+                                type: string
+                              uid:
+                                description: UID prevents same-name replacement from
+                                  inheriting authority.
+                                type: string
+                            required:
+                            - kind
+                            - name
+                            - uid
+                            type: object
+                          endpoint:
+                            description: Endpoint binds the selected Pod address,
+                              never a replacement Service target.
+                            type: string
+                          participant:
+                            description: Participant binds the node participant.
+                            properties:
+                              fingerprint:
+                                description: Fingerprint identifies public content
+                                  when relevant.
+                                type: string
+                              kind:
+                                description: Kind identifies the API kind or participant
+                                  kind.
+                                type: string
+                              name:
+                                description: Name is the public resource name.
+                                type: string
+                              uid:
+                                description: UID prevents same-name replacement from
+                                  inheriting authority.
+                                type: string
+                            required:
+                            - kind
+                            - name
+                            - uid
+                            type: object
+                          pod:
+                            description: Pod binds the admitted actor Pod.
+                            properties:
+                              fingerprint:
+                                description: Fingerprint identifies public content
+                                  when relevant.
+                                type: string
+                              kind:
+                                description: Kind identifies the API kind or participant
+                                  kind.
+                                type: string
+                              name:
+                                description: Name is the public resource name.
+                                type: string
+                              uid:
+                                description: UID prevents same-name replacement from
+                                  inheriting authority.
+                                type: string
+                            required:
+                            - kind
+                            - name
+                            - uid
+                            type: object
+                          policyDigest:
+                            description: PolicyDigest identifies the accepted actor
+                              policy.
+                            type: string
+                        required:
+                        - configuration
+                        - containerID
+                        - credentials
+                        - endpoint
+                        - participant
+                        - pod
+                        - policyDigest
+                        type: object
+                      wallet:
+                        description: Wallet supplies required wallet-specific inputs.
+                        properties:
+                          descriptor:
+                            description: Descriptor is a validated checksummed public
+                              descriptor for import.
+                            type: string
+                          name:
+                            description: Name is the local Core wallet name.
+                            type: string
+                          wallet:
+                            description: Wallet pins the reusable wallet incarnation.
+                            properties:
+                              fingerprint:
+                                description: Fingerprint identifies public content
+                                  when relevant.
+                                type: string
+                              kind:
+                                description: Kind identifies the API kind or participant
+                                  kind.
+                                type: string
+                              name:
+                                description: Name is the public resource name.
+                                type: string
+                              uid:
+                                description: UID prevents same-name replacement from
+                                  inheriting authority.
+                                type: string
+                            required:
+                            - kind
+                            - name
+                            - uid
+                            type: object
+                        required:
+                        - name
+                        - wallet
+                        type: object
+                    required:
+                    - armedAt
+                    - id
+                    - method
+                    - processNonce
+                    - reservation
+                    - target
+                    type: object
+                required:
+                - receivedAt
+                - request
+                type: object
+              observation:
+                description: Observation retains successful native state reads.
+                properties:
+                  height:
+                    description: Height is the processed regtest height.
+                    format: int64
+                    minimum: 0
+                    type: integer
+                  observedAt:
+                    description: ObservedAt records successful reads, never a status
+                      heartbeat alone.
+                    format: date-time
+                    type: string
+                  target:
+                    description: Target binds the observed actor process and transport.
+                    properties:
+                      configuration:
+                        description: Configuration pins immutable server configuration.
+                        properties:
+                          fingerprint:
+                            description: Fingerprint identifies public content when
+                              relevant.
+                            type: string
+                          kind:
+                            description: Kind identifies the API kind or participant
+                              kind.
+                            type: string
+                          name:
+                            description: Name is the public resource name.
+                            type: string
+                          uid:
+                            description: UID prevents same-name replacement from inheriting
+                              authority.
+                            type: string
+                        required:
+                        - kind
+                        - name
+                        - uid
+                        type: object
+                      containerID:
+                        description: ContainerID identifies the actor process instance.
+                        type: string
+                      credentials:
+                        description: Credentials pins immutable worker RPC credentials
+                          without publishing their bytes.
+                        properties:
+                          fingerprint:
+                            description: Fingerprint identifies public content when
+                              relevant.
+                            type: string
+                          kind:
+                            description: Kind identifies the API kind or participant
+                              kind.
+                            type: string
+                          name:
+                            description: Name is the public resource name.
+                            type: string
+                          uid:
+                            description: UID prevents same-name replacement from inheriting
+                              authority.
+                            type: string
+                        required:
+                        - kind
+                        - name
+                        - uid
+                        type: object
+                      endpoint:
+                        description: Endpoint binds the selected Pod address, never
+                          a replacement Service target.
+                        type: string
+                      participant:
+                        description: Participant binds the node participant.
+                        properties:
+                          fingerprint:
+                            description: Fingerprint identifies public content when
+                              relevant.
+                            type: string
+                          kind:
+                            description: Kind identifies the API kind or participant
+                              kind.
+                            type: string
+                          name:
+                            description: Name is the public resource name.
+                            type: string
+                          uid:
+                            description: UID prevents same-name replacement from inheriting
+                              authority.
+                            type: string
+                        required:
+                        - kind
+                        - name
+                        - uid
+                        type: object
+                      pod:
+                        description: Pod binds the admitted actor Pod.
+                        properties:
+                          fingerprint:
+                            description: Fingerprint identifies public content when
+                              relevant.
+                            type: string
+                          kind:
+                            description: Kind identifies the API kind or participant
+                              kind.
+                            type: string
+                          name:
+                            description: Name is the public resource name.
+                            type: string
+                          uid:
+                            description: UID prevents same-name replacement from inheriting
+                              authority.
+                            type: string
+                        required:
+                        - kind
+                        - name
+                        - uid
+                        type: object
+                      policyDigest:
+                        description: PolicyDigest identifies the accepted actor policy.
+                        type: string
+                    required:
+                    - configuration
+                    - containerID
+                    - credentials
+                    - endpoint
+                    - participant
+                    - pod
+                    - policyDigest
+                    type: object
+                  tip:
+                    description: Tip is the processed regtest tip hash.
+                    pattern: ^[0-9a-f]{64}$
+                    type: string
+                  wallets:
+                    description: Wallets records the currently attached public wallets
+                      on this node.
+                    items:
+                      description: BitcoinWalletObservation reports per-node wallet
+                        facts, never global balance.
+                      properties:
+                        address:
+                          description: Address is the resolved public payout address.
+                          type: string
+                        matureOutputs:
+                          description: MatureOutputs counts observed outputs with
+                            at least 101 confirmations.
+                          format: int32
+                          minimum: 0
+                          type: integer
+                        name:
+                          description: Name is the local Core wallet name.
+                          type: string
+                        ready:
+                          description: Ready confirms a loaded watch-only descriptor
+                            wallet with the intended descriptor.
+                          type: boolean
+                        wallet:
+                          description: Wallet pins the reusable identity.
+                          properties:
+                            fingerprint:
+                              description: Fingerprint identifies public content when
+                                relevant.
+                              type: string
+                            kind:
+                              description: Kind identifies the API kind or participant
+                                kind.
+                              type: string
+                            name:
+                              description: Name is the public resource name.
+                              type: string
+                            uid:
+                              description: UID prevents same-name replacement from
+                                inheriting authority.
+                              type: string
+                          required:
+                          - kind
+                          - name
+                          - uid
+                          type: object
+                      required:
+                      - address
+                      - matureOutputs
+                      - name
+                      - ready
+                      - wallet
+                      type: object
+                    maxItems: 100
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
+                required:
+                - height
+                - observedAt
+                - target
+                - tip
+                type: object
+              pendingWalletRemoval:
+                description: PendingWalletRemoval preserves a detached wallet until
+                  acknowledgement or observed absence.
+                properties:
+                  descriptor:
+                    description: Descriptor is a validated checksummed public descriptor
+                      for import.
+                    type: string
+                  name:
+                    description: Name is the local Core wallet name.
+                    type: string
+                  wallet:
+                    description: Wallet pins the reusable wallet incarnation.
+                    properties:
+                      fingerprint:
+                        description: Fingerprint identifies public content when relevant.
+                        type: string
+                      kind:
+                        description: Kind identifies the API kind or participant kind.
+                        type: string
+                      name:
+                        description: Name is the public resource name.
+                        type: string
+                      uid:
+                        description: UID prevents same-name replacement from inheriting
+                          authority.
+                        type: string
+                    required:
+                    - kind
+                    - name
+                    - uid
+                    type: object
+                required:
+                - name
+                - wallet
+                type: object
+              phase:
+                description: Phase distinguishes idle/active/uncertain execution without
+                  claiming quiescence.
+                enum:
+                - Idle
+                - Armed
+                - Blocked
+                - Abandoned
+                type: string
+              reservation:
+                description: Reservation retains the current mutation owner's exclusion
+                  after accounting.
+                properties:
+                  fingerprint:
+                    description: Fingerprint identifies public content when relevant.
+                    type: string
+                  kind:
+                    description: Kind identifies the API kind or participant kind.
+                    type: string
+                  name:
+                    description: Name is the public resource name.
+                    type: string
+                  uid:
+                    description: UID prevents same-name replacement from inheriting
+                      authority.
+                    type: string
+                required:
+                - kind
+                - name
+                - uid
+                type: object
+            type: object
+        required:
+        - spec
+        type: object
+        x-kubernetes-validations:
+        - message: execution identity is immutable
+          rule: self.spec.networkUID == oldSelf.spec.networkUID && self.spec.participant
+            == oldSelf.spec.participant
+    served: true
+    storage: true
+    subresources:
+      status: {}

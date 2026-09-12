@@ -14,18 +14,11 @@ spec:
     singular: stackstransactionproduction
   scope: Namespaced
   versions:
-  - additionalPrinterColumns:
-    - jsonPath: .status.phase
-      name: Phase
-      type: string
-    - jsonPath: .status.confirmed
-      name: Confirmed
-      type: integer
-    name: v1alpha1
+  - name: v1alpha2
     schema:
       openAPIV3Schema:
-        description: StacksTransactionProduction maintains aggregate-owned, fixed-interval
-          STX demand.
+        description: StacksTransactionProduction is an independently owned reusable
+          declaration.
         properties:
           apiVersion:
             description: |-
@@ -45,104 +38,143 @@ spec:
           metadata:
             type: object
           spec:
-            description: Spec is the current aggregate-owned declaration.
+            description: Spec contains reusable inputs.
             properties:
-              networkName:
-                description: NetworkName names the owning StacksNetwork.
-                maxLength: 63
-                minLength: 1
-                type: string
-              networkUID:
-                description: NetworkUID prevents admission after parent replacement.
-                maxLength: 64
-                minLength: 1
-                type: string
-              policy:
-                description: Policy is the supported steady transfer profile.
+              accountRef:
+                description: AccountRef selects signing identity.
                 properties:
-                  amountMicroSTX:
-                    description: AmountMicroSTX bounds each ordinary transfer to at
-                      most one STX.
-                    format: int64
-                    maximum: 1000000
-                    minimum: 1
-                    type: integer
-                  credentialsSecret:
-                    description: |-
-                      CredentialsSecret names the same-namespace immutable worker credential document.
-                      Bitcoin uses credentials.json; transfers use account.json.
+                  name:
+                    description: Name is the referenced name; the containing field
+                      determines its kind.
                     maxLength: 253
-                    pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
-                    type: string
-                  feeMicroSTX:
-                    description: FeeMicroSTX is explicit; no automatic fee escalation
-                      occurs.
-                    format: int64
-                    maximum: 1000000
-                    minimum: 1
-                    type: integer
-                  intervalSeconds:
-                    description: IntervalSeconds is offered cadence, not a guaranteed
-                      block interval.
-                    format: int32
-                    maximum: 86400
-                    minimum: 1
-                    type: integer
-                  minimumBurnHeight:
-                    description: MinimumBurnHeight holds new transfers until the ingress
-                      observes this burn height.
-                    format: int64
-                    maximum: 9007199254740991
-                    minimum: 0
-                    type: integer
-                  paused:
-                    description: Paused stops new signing/dispatch while outstanding
-                      evidence remains observable.
-                    type: boolean
-                  recipient:
-                    description: Recipient receives the offered micro-STX amount.
-                    maxLength: 42
-                    pattern: ^ST[0-9A-HJKMNP-TV-Z]{20,40}$
-                    type: string
-                  sender:
-                    description: Sender identifies the administrator-provisioned exclusive
-                      test account.
-                    maxLength: 42
-                    pattern: ^ST[0-9A-HJKMNP-TV-Z]{20,40}$
-                    type: string
-                  target:
-                    description: Target names the declared Stacks ingress actor.
-                    maxLength: 63
-                    pattern: ^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$
+                    minLength: 1
+                    pattern: ^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$
                     type: string
                 required:
-                - amountMicroSTX
-                - feeMicroSTX
-                - intervalSeconds
-                - recipient
-                - sender
-                - target
+                - name
                 type: object
-            required:
-            - networkName
-            - networkUID
-            - policy
+              amountMicroSTX:
+                description: AmountMicroSTX is transfer amount.
+                maxLength: 20
+                pattern: ^(0|[1-9][0-9]{0,19})$
+                type: string
+                x-kubernetes-validations:
+                - message: amount must fit uint64
+                  rule: uint(self) <= 18446744073709551615u
+              feeMicroSTX:
+                description: FeeMicroSTX is transfer fee.
+                maxLength: 20
+                pattern: ^(0|[1-9][0-9]{0,19})$
+                type: string
+                x-kubernetes-validations:
+                - message: amount must fit uint64
+                  rule: uint(self) <= 18446744073709551615u
+              interval:
+                description: Interval is the offered cadence.
+                maxLength: 32
+                minLength: 2
+                type: string
+              recipient:
+                description: Recipient receives baseline transfers.
+                properties:
+                  accountRef:
+                    description: AccountRef selects a resolved public identity.
+                    properties:
+                      name:
+                        description: Name is the referenced name; the containing field
+                          determines its kind.
+                        maxLength: 253
+                        minLength: 1
+                        pattern: ^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  address:
+                    description: Address is an explicit destination.
+                    maxLength: 64
+                    pattern: ^ST[0-9A-HJKMNP-TV-Z]{26,39}$
+                    type: string
+                type: object
+                x-kubernetes-validations:
+                - message: select an account or address
+                  rule: has(self.accountRef) != has(self.address)
+              targetNodeRef:
+                description: TargetNodeRef selects native ingress.
+                properties:
+                  name:
+                    description: Name is the referenced name; the containing field
+                      determines its kind.
+                    maxLength: 253
+                    minLength: 1
+                    pattern: ^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$
+                    type: string
+                required:
+                - name
+                type: object
+              workerPlacement:
+                description: WorkerPlacement applies to scoped support Pods.
+                properties:
+                  nodeSelector:
+                    additionalProperties:
+                      type: string
+                    description: NodeSelector constrains eligible nodes.
+                    maxProperties: 32
+                    type: object
+                  spreadAcrossNodes:
+                    description: SpreadAcrossNodes requests preferred same-kind anti-affinity.
+                    type: boolean
+                  tolerations:
+                    description: Tolerations allow explicit support-node placement.
+                    items:
+                      description: |-
+                        The pod this Toleration is attached to tolerates any taint that matches
+                        the triple <key,value,effect> using the matching operator <operator>.
+                      properties:
+                        effect:
+                          description: |-
+                            Effect indicates the taint effect to match. Empty means match all taint effects.
+                            When specified, allowed values are NoSchedule, PreferNoSchedule and NoExecute.
+                          type: string
+                        key:
+                          description: |-
+                            Key is the taint key that the toleration applies to. Empty means match all taint keys.
+                            If the key is empty, operator must be Exists; this combination means to match all values and all keys.
+                          type: string
+                        operator:
+                          description: |-
+                            Operator represents a key's relationship to the value.
+                            Valid operators are Exists, Equal, Lt, and Gt. Defaults to Equal.
+                            Exists is equivalent to wildcard for value, so that a pod can
+                            tolerate all taints of a particular category.
+                            Lt and Gt perform numeric comparisons (requires feature gate TaintTolerationComparisonOperators).
+                          type: string
+                        tolerationSeconds:
+                          description: |-
+                            TolerationSeconds represents the period of time the toleration (which must be
+                            of effect NoExecute, otherwise this field is ignored) tolerates the taint. By default,
+                            it is not set, which means tolerate the taint forever (do not evict). Zero and
+                            negative values will be treated as 0 (evict immediately) by the system.
+                          format: int64
+                          type: integer
+                        value:
+                          description: |-
+                            Value is the taint value the toleration matches to.
+                            If the operator is Exists, the value should be empty, otherwise just a regular string.
+                          type: string
+                      type: object
+                    maxItems: 32
+                    type: array
+                type: object
             type: object
-            x-kubernetes-validations:
-            - message: network, ingress and sender are immutable
-              rule: self.networkName == oldSelf.networkName && self.networkUID ==
-                oldSelf.networkUID && self.policy.target == oldSelf.policy.target
-                && self.policy.sender == oldSelf.policy.sender
           status:
-            description: Status retains bounded submission and inclusion evidence.
+            description: Status reports direct-input resolution only.
             properties:
-              accepted:
-                description: Accepted reports whether the node acknowledged this TxID;
-                  it is not confirmation.
-                type: boolean
+              bitcoinAddress:
+                description: BitcoinAddress is the resolved public wallet payout address.
+                type: string
               conditions:
-                description: Conditions includes WorkerReady, independently of protocol
-                  execution evidence.
+                description: Conditions report resolution without runtime claims.
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -197,82 +229,83 @@ spec:
                   - status
                   - type
                   type: object
-                maxItems: 8
                 type: array
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
-              confirmed:
-                description: Confirmed counts exact successful canonical inclusions
-                  observed and accounted once.
-                format: int64
-                type: integer
-              lastBlockID:
-                description: LastBlockID is the index block hash at the last successful
-                  inclusion observation.
+              credentialsRef:
+                description: CredentialsRef identifies generated or imported private
+                  material.
+                properties:
+                  key:
+                    description: Key selects one entry.
+                    maxLength: 253
+                    minLength: 1
+                    type: string
+                  name:
+                    description: Name selects a same-namespace Secret.
+                    maxLength: 253
+                    minLength: 1
+                    type: string
+                required:
+                - key
+                - name
+                type: object
+              credentialsUID:
+                description: CredentialsUID pins imported or generated key material
+                  after resolution.
                 type: string
-              lastConfirmedAt:
-                description: LastConfirmedAt is the time of that observation, not
-                  a finality guarantee.
-                format: date-time
+              dependencies:
+                description: Dependencies pins public source identities.
+                items:
+                  description: Binding identifies an exact resolved public dependency.
+                  properties:
+                    fingerprint:
+                      description: Fingerprint identifies public content when relevant.
+                      type: string
+                    kind:
+                      description: Kind identifies the API kind or participant kind.
+                      type: string
+                    name:
+                      description: Name is the public resource name.
+                      type: string
+                    uid:
+                      description: UID prevents same-name replacement from inheriting
+                        authority.
+                      type: string
+                  required:
+                  - kind
+                  - name
+                  - uid
+                  type: object
+                maxItems: 8
+                type: array
+              descriptor:
+                description: Descriptor is the supported public wallet descriptor.
                 type: string
-              message:
-                description: Message reports state without exposing credentials or
-                  raw server errors.
+              digest:
+                description: Digest identifies resolved public inputs.
                 type: string
-              nextNonce:
-                description: NextNonce equals Nonce while outstanding and becomes
-                  Nonce+1 after exact inclusion.
-                format: int64
-                type: integer
-              nonce:
-                description: Nonce is the last reserved account nonce.
-                format: int64
-                type: integer
+              identity:
+                description: Identity contains public account information.
+                properties:
+                  address:
+                    description: Address is a testnet Stacks address.
+                    maxLength: 64
+                    pattern: ^ST[0-9A-HJKMNP-TV-Z]{26,39}$
+                    type: string
+                  publicKey:
+                    description: PublicKey is a compressed secp256k1 public key.
+                    pattern: ^(02|03)[0-9a-fA-F]{64}$
+                    type: string
+                required:
+                - address
+                - publicKey
+                type: object
               observedGeneration:
-                description: ObservedGeneration identifies the declaration inspected
-                  by the controller.
+                description: ObservedGeneration identifies the evaluated spec.
                 format: int64
                 type: integer
-              outstanding:
-                description: Outstanding reserves this account until the exact transaction
-                  is accounted.
-                type: boolean
-              phase:
-                description: Phase is Waiting, Paused, Pending, Ambiguous, Running,
-                  Blocked, or Abandoned.
-                enum:
-                - Waiting
-                - Paused
-                - Pending
-                - Ambiguous
-                - Running
-                - Blocked
-                - Abandoned
-                type: string
-              podUID:
-                description: PodUID records the admitted Pod incarnation.
-                type: string
-              rejectionReason:
-                description: RejectionReason retains a matched ingress rejection for
-                  TxID, not a non-execution guarantee.
-                enum:
-                - FeeTooLow
-                - BadNonce
-                - Other
-                type: string
-              submittedAt:
-                description: SubmittedAt records authorization time, including possibly-unsent
-                  requests.
-                format: date-time
-                type: string
-              targetUID:
-                description: TargetUID binds dispatch to an admitted StacksNode incarnation.
-                type: string
-              txID:
-                description: TxID identifies the signed transaction before its only
-                  authorized submission.
-                type: string
             type: object
         required:
         - spec

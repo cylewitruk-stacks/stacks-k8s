@@ -12,7 +12,7 @@ not completion of M1 or a cross-platform support matrix.
 | Test-only delayed-receipt image ID | `sha256:30fd9d1a52f5695c585548fb4c1c0e61957582188c27044f0b87d88094379010` |
 | Test-only dropped-receipt image ID | `sha256:28360c7cf30ac2b2ffcf27f80940ec2cb68ffbf672e1c5f3c2b7cadd4f03be7d` |
 
-The [live suites](../../operators/network/internal/integration/bitcoin_live_test.go)
+The live suites (retired test)
 ran against dedicated namespaces in context `kind-stacks-baseline-20260905`,
 using `/tmp/stacks-baseline-20260905.kubeconfig`:
 

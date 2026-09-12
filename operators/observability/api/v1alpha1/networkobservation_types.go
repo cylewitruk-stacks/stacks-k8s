@@ -31,10 +31,14 @@ type LocalObjectReference struct {
 type NetworkObservationSpec struct {
 	// NetworkRef selects a StacksNetwork in this namespace.
 	NetworkRef LocalObjectReference `json:"networkRef"`
-	// ExpectedInventoryDigest fails closed when the admitted inventory differs.
+	// ExpectedInventoryDigest binds only a legacy v1alpha1 network inventory.
 	// +optional
 	// +kubebuilder:validation:Pattern=`^sha256:[0-9a-f]{64}$`
 	ExpectedInventoryDigest string `json:"expectedInventoryDigest,omitempty"`
+	// ExpectedSnapshotDigest binds the independently observed v1alpha2 actor snapshot.
+	// +optional
+	// +kubebuilder:validation:Pattern=`^sha256:[0-9a-f]{64}$`
+	ExpectedSnapshotDigest string `json:"expectedSnapshotDigest,omitempty"`
 	// TimeoutSeconds bounds the complete direct-read observation.
 	// +optional
 	// +kubebuilder:default=10
@@ -55,11 +59,32 @@ type NetworkBinding struct {
 	Name string `json:"name"`
 	// UID prevents same-name topology replacement from being hidden.
 	UID types.UID `json:"uid"`
-	// ObservedGeneration is the reconciled topology generation.
+	// ObservedGeneration is the topology generation read for this snapshot.
 	ObservedGeneration int64 `json:"observedGeneration"`
-	// InventoryDigest binds the admitted actor set.
+	// NetworkAPIVersion identifies the selected network API, without version fallback.
+	// +optional
+	// +kubebuilder:validation:Enum=network.stacks.org/v1alpha1;network.stacks.org/v1alpha2
+	NetworkAPIVersion string `json:"networkAPIVersion,omitempty"`
+	// SnapshotDigest identifies the observation-owned v1alpha2 actor snapshot.
+	// +optional
 	// +kubebuilder:validation:Pattern=`^sha256:[0-9a-f]{64}$`
-	InventoryDigest string `json:"inventoryDigest"`
+	SnapshotDigest string `json:"snapshotDigest,omitempty"`
+	// InventoryDigest binds only the legacy admitted actor set.
+	// +optional
+	// +kubebuilder:validation:Pattern=`^sha256:[0-9a-f]{64}$`
+	InventoryDigest string `json:"inventoryDigest,omitempty"`
+}
+
+// ObservedServiceIdentity records a directly verified participant endpoint.
+type ObservedServiceIdentity struct {
+	// Name is the same-namespace Service name.
+	Name string `json:"name"`
+	// UID pins the Service object.
+	UID types.UID `json:"uid"`
+	// Protocol identifies the native endpoint.
+	Protocol string `json:"protocol"`
+	// Port is the verified TCP port.
+	Port int32 `json:"port"`
 }
 
 // ObservedActorIdentity contains orchestrator-observed runtime facts.
@@ -72,8 +97,36 @@ type ObservedActorIdentity struct {
 	Role string `json:"role,omitempty"`
 	// ResourceName is the admitted leaf resource name.
 	ResourceName string `json:"resourceName"`
+	// ResourceUID pins the generated v1alpha2 participant.
+	// +optional
+	ResourceUID types.UID `json:"resourceUID,omitempty"`
+	// ContainerID pins the directly observed v1alpha2 actor process.
+	// +optional
+	ContainerID string `json:"containerID,omitempty"`
+	// ConfigurationName is the mounted Secret name published by the participant.
+	// +optional
+	ConfigurationName string `json:"configurationName,omitempty"`
+	// ConfigurationUID is the controller-reported Secret UID; Secret metadata is not read.
+	// +optional
+	ConfigurationUID types.UID `json:"configurationUID,omitempty"`
+	// ConfigurationFingerprint is the controller-reported private configuration content digest.
+	// +optional
+	ConfigurationFingerprint string `json:"configurationFingerprint,omitempty"`
+	// ConfigurationEvidence attributes Secret identity and content to public controller reports.
+	// +optional
+	// +kubebuilder:validation:Enum=controller-reported
+	ConfigurationEvidence string `json:"configurationEvidence,omitempty"`
+	// ConfigurationReportUID pins the corroborating public resolver ConfigMap.
+	// +optional
+	ConfigurationReportUID types.UID `json:"configurationReportUID,omitempty"`
 	// ServiceName is the actor's stable Service identity.
 	ServiceName string `json:"serviceName"`
+	// Services contains all directly checked v1alpha2 endpoint identities.
+	// +optional
+	// +listType=map
+	// +listMapKey=name
+	// +kubebuilder:validation:MaxItems=8
+	Services []ObservedServiceIdentity `json:"services,omitempty"`
 	// StatefulSetName is the actor workload name.
 	StatefulSetName string `json:"statefulSetName"`
 	// StatefulSetUID prevents same-name workload replacement from being hidden.
@@ -90,7 +143,7 @@ type ObservedActorIdentity struct {
 	RuntimeImageID string `json:"runtimeImageID"`
 	// ConfigDigest binds the admitted configuration declaration or bytes.
 	ConfigDigest string `json:"configDigest"`
-	// SpecDigest binds the complete admitted leaf specification.
+	// SpecDigest binds the legacy leaf spec or complete v1alpha2 admitted configuration.
 	SpecDigest string `json:"specDigest"`
 	// EvidenceClass distinguishes Kubernetes-observed facts from actor reports.
 	// +kubebuilder:validation:Enum=orchestrator-observed
@@ -110,7 +163,7 @@ type NetworkObservationStatus struct {
 	// +listType=map
 	// +listMapKey=kind
 	// +listMapKey=name
-	// +kubebuilder:validation:MaxItems=232
+	// +kubebuilder:validation:MaxItems=1000
 	Actors []ObservedActorIdentity `json:"actors,omitempty"`
 	// StartedAt records when this generation first attempted observation.
 	StartedAt *metav1.Time `json:"startedAt,omitempty"`

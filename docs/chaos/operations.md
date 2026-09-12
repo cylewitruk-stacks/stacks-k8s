@@ -81,16 +81,26 @@ an experiment agent.
 
 Submit either the [delay](../../examples/chaos/network-delay.yaml) or
 [partition](../../examples/chaos/network-partition.yaml) example through the
-agent's Kubernetes identity. Both selectors use logical actor labels; the
-qualified example has source `bitcoin` and destination `bitcoin-2`.
+agent's Kubernetes identity. Both selectors require the current network and
+participant UIDs plus `role=actor`; actor names are `bitcoin` and `bitcoin-2` in
+the example. Resolve these UIDs from current `v1alpha2` objects using a public
+read identity before submitting through the restricted fault identity. The old
+legacy qualification fixture below cannot supply these replacement identities.
 
 ```bash
 kubectl --kubeconfig "$task_kubeconfig" --context "$task_context" \
-  create -f examples/chaos/network-delay.yaml
+  get stacksnetwork network -n chaos-live -o jsonpath='{.metadata.uid}'
+# Set NETWORK_UID, SOURCE_PARTICIPANT_UID and TARGET_PARTICIPANT_UID from the
+# current network and its selected StacksNetworkParticipant objects.
+# Inspect both current actor Pods and verify these labels before submitting.
+envsubst '${NETWORK_UID} ${SOURCE_PARTICIPANT_UID} ${TARGET_PARTICIPANT_UID}' \
+  < examples/chaos/network-delay.yaml > /tmp/current-network-delay.yaml
+kubectl --kubeconfig "$task_kubeconfig" --context "$task_context" \
+  create -f /tmp/current-network-delay.yaml
 kubectl --kubeconfig "$task_kubeconfig" --context "$task_context" \
   -n chaos-live get networkchaos actor-delay -o yaml
 kubectl --kubeconfig "$task_kubeconfig" --context "$task_context" \
-  -n chaos-live get bitcoinproductiontargets
+  -n chaos-live get bitcoinexecutions
 ```
 
 These commands use the explicit qualification kubeconfig; production agent

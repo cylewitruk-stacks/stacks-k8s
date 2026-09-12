@@ -16,3 +16,10 @@ make -C operators/action verify
 Public controller packages permit paired executor/lifecycle regression tests
 in the network module. Production binaries only share the versioned API module;
 this runtime does not import another operator's implementation.
+
+The composable API runtime uses `--api-version=v1alpha2` and the independent
+[foundation chart](../../charts/stacks-action-operator/README.md). It reads the
+existing per-node BitcoinExecution records and owns only action lifecycle status and
+retention. Enable each finite mechanism separately on the network operator; the
+lifecycle controller never creates another RPC worker. The legacy default remains
+`v1alpha1` until its separate retirement.

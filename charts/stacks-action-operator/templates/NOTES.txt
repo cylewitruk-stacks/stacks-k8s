@@ -1,3 +1,0 @@
-Action lifecycle controllers watch namespace {{ .Release.Namespace }}.
-The network chart's corresponding Bitcoin executor flags must also be enabled.
-Inspect: kubectl -n {{ .Release.Namespace }} get bitcoinblockgenerations,bitcoinreorganizations,bitcoinproductiontargets

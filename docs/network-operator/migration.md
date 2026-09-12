@@ -1,33 +1,34 @@
-# Migration from Hacknet topology
+# Installation compatibility
 
-The standalone operator is a new API, not an in-place conversion of
-`testing.stacks.org/StacksNetwork`.
+The network and action operators serve the composable `v1alpha2` APIs. They do
+not convert stored `v1alpha1` networks, ledgers or action requests. Namespaces cannot
+isolate incompatible CRDs with the same cluster-wide name.
 
-| Hacknet concern | Standalone topology |
-| ---- | ---- |
-| Aggregate actor declaration | `network.stacks.org/StacksNetwork` |
-| Bitcoin actor | `BitcoinNode` leaf |
-| Stacks node actor | `StacksNode` leaf |
-| Stacks signer actor | `StacksSigner` leaf |
-| Burnchain clock and mining | External client or testing control plane |
-| Signer enrollment | External bootstrap client |
-| Faults, upgrades, fuzzing, assertions | Attacknet control plane |
-| Trusted runtime identity | Initial `stacks-observability-operator` `NetworkObservation` API |
-| Protocol telemetry and evidence | Future observation and evidence layers |
+Before replacing an older installation, inventory custom resources, retained PVCs,
+workloads and Helm releases. Collect required evidence, destroy disposable networks
+through their owning controllers, then uninstall the old operators. Remove obsolete
+CRDs only after confirming they have no state that must survive. Install the current
+charts and create fresh network identities from current declarations.
 
-Do not deploy old and new aggregates with the same network and actor names in
-one namespace: their API groups differ, but their Services and StatefulSets do
-not. Create a fresh namespace, translate the desired topology, verify the new
-admitted inventory, and then retire the old network.
+## Preview chart rename
 
-Attacknet continues to use its reviewed Hacknet topology until an explicit
-adapter migration is qualified. The standalone chart does not claim behavioral
-compatibility for Attacknet faults or runs merely because it can realize the
-same actor graph.
+The development preview used `stacks-network-foundation` and
+`stacks-action-foundation`. The final products are `stacks-network-operator` and
+`stacks-action-operator`. Complete and delete preview experiments before changing
+packaging: workload manager labels change with the product name. Do not run both
+controller installations concurrently.
 
-Generated profiles intentionally cover only disposable Bitcoin regtest and
-non-mining Stacks nodes. The Bitcoin profile's fixed development RPC
-credentials are public configuration, not secrets. Move miner and signer full
-configurations into Secrets and reference them with expected digests. Signer
-enrollment is a bootstrap operation rather than a long-running actor and
-remains outside this initial topology API.
+Helm installs files under `crds/` only when absent; it does not upgrade their schema
+or remove them on uninstall. For existing compatible `v1alpha2` CRDs, explicitly
+apply the new chart's generated CRDs before installing/upgrading the renamed chart:
+
+```bash
+kubectl apply --server-side -f charts/stacks-network-operator/crds/
+kubectl apply --server-side -f charts/stacks-action-operator/crds/
+```
+
+Review schema conflicts instead of forcing ownership blindly. If CRDs carry Helm
+ownership annotations, preserve or deliberately transfer them to the chosen release;
+they must not point to two owners. Chart lookup guards reject incompatible served
+versions but do not migrate data. Use fresh namespace/root identities for the
+post-transition qualification.

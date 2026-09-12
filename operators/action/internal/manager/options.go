@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	actionv1 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/actions/v1alpha1"
+	actionv2 "github.com/cylewitruk-stacks/stacks-k8s/apis/network/actions/v1alpha2"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -22,6 +22,8 @@ import (
 
 // Options contains manager runtime settings.
 type Options struct {
+	// APIVersion selects the independent served lifecycle contract.
+	APIVersion string
 	// GenerationEnabled enables finite generation lifecycle projection.
 	GenerationEnabled bool
 	// ReorganizationEnabled enables the existing reorganization lifecycle.
@@ -40,6 +42,7 @@ type Options struct {
 
 // Bind registers manager flags.
 func (o *Options) Bind(flags *flag.FlagSet) {
+	flags.StringVar(&o.APIVersion, "api-version", "v1alpha2", "Served action API version.")
 	flags.BoolVar(&o.GenerationEnabled, "bitcoin-generation-enabled", true, "Enable finite generation lifecycle.")
 	flags.BoolVar(&o.ReorganizationEnabled, "bitcoin-reorganization-enabled", false, "Enable reorganization lifecycle.")
 	flags.StringVar(&o.MetricsAddress, "metrics-bind-address", ":8080", "Prometheus metrics address.")
@@ -51,6 +54,9 @@ func (o *Options) Bind(flags *flag.FlagSet) {
 
 // New constructs a namespaced controller manager.
 func (o Options) New(configuration *rest.Config, scheme *runtime.Scheme) (ctrl.Manager, error) {
+	if o.APIVersion != "" && o.APIVersion != "v1alpha2" {
+		return nil, fmt.Errorf("unsupported action API version")
+	}
 	if !o.GenerationEnabled && !o.ReorganizationEnabled {
 		return nil, fmt.Errorf("at least one action controller must be enabled")
 	}
@@ -83,9 +89,9 @@ func (o Options) New(configuration *rest.Config, scheme *runtime.Scheme) (ctrl.M
 		ctx, cancel := context.WithTimeout(request.Context(), 2*time.Second)
 		defer cancel()
 		if o.GenerationEnabled {
-			return manager.GetAPIReader().List(ctx, &actionv1.BitcoinBlockGenerationList{}, client.InNamespace(namespace), client.Limit(1))
+			return manager.GetAPIReader().List(ctx, &actionv2.BitcoinBlockGenerationList{}, client.InNamespace(namespace), client.Limit(1))
 		}
-		return manager.GetAPIReader().List(ctx, &actionv1.BitcoinReorganizationList{}, client.InNamespace(namespace), client.Limit(1))
+		return manager.GetAPIReader().List(ctx, &actionv2.BitcoinReorganizationList{}, client.InNamespace(namespace), client.Limit(1))
 	}); err != nil {
 		return nil, err
 	}

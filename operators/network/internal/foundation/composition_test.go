@@ -95,8 +95,8 @@ func TestProtectedBindingsExcludeMutableSelection(t *testing.T) {
 	old := api.Configuration{StacksTransactionProduction: &stacks.StacksTransactionProductionSpec{AccountRef: &common.NameRef{Name: "sender"}, TargetNodeRef: &common.NameRef{Name: "node"}}}
 	next := *old.DeepCopy()
 	next.StacksTransactionProduction.Recipient = &stacks.Recipient{AccountRef: &common.NameRef{Name: "recipient"}}
-	if !sameProtectedConfiguration("StacksTransactionProduction", old, next) {
-		t.Fatal("recipient treated as immutable")
+	if sameProtectedConfiguration("StacksTransactionProduction", old, next) {
+		t.Fatal("recipient silently rebound")
 	}
 	next.StacksTransactionProduction.TargetNodeRef = &common.NameRef{Name: "other-node"}
 	if sameProtectedConfiguration("StacksTransactionProduction", old, next) {

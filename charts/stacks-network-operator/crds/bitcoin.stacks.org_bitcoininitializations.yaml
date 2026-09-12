@@ -1,0 +1,1097 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.22.0
+  name: bitcoininitializations.bitcoin.stacks.org
+spec:
+  group: bitcoin.stacks.org
+  names:
+    kind: BitcoinInitialization
+    listKind: BitcoinInitializationList
+    plural: bitcoininitializations
+    singular: bitcoininitialization
+  scope: Namespaced
+  versions:
+  - name: v1alpha2
+    schema:
+      openAPIV3Schema:
+        description: BitcoinInitialization retains bootstrap requirements and sole
+          scheduler state.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: Spec freezes the first Bitcoin gate and initial cohort.
+            properties:
+              genesis:
+                description: Genesis binds the frozen requirements artifact.
+                properties:
+                  fingerprint:
+                    description: Fingerprint identifies public content when relevant.
+                    type: string
+                  kind:
+                    description: Kind identifies the API kind or participant kind.
+                    type: string
+                  name:
+                    description: Name is the public resource name.
+                    type: string
+                  uid:
+                    description: UID prevents same-name replacement from inheriting
+                      authority.
+                    type: string
+                required:
+                - kind
+                - name
+                - uid
+                type: object
+              matureOutputsPerMiner:
+                description: MatureOutputsPerMiner is the frozen per-miner funding
+                  requirement.
+                format: int32
+                minimum: 1
+                type: integer
+              minerWallets:
+                description: MinerWallets is the exact immutable initial funding cohort.
+                items:
+                  description: FrozenBitcoinWallet preserves initial public funding
+                    identity.
+                  properties:
+                    address:
+                      description: Address is the fixed coinbase destination.
+                      type: string
+                    descriptor:
+                      description: Descriptor is the fixed public watch-only descriptor.
+                      type: string
+                    name:
+                      description: Name is the local Core wallet name.
+                      type: string
+                    wallet:
+                      description: Wallet binds the reusable wallet incarnation and
+                        public digest.
+                      properties:
+                        fingerprint:
+                          description: Fingerprint identifies public content when
+                            relevant.
+                          type: string
+                        kind:
+                          description: Kind identifies the API kind or participant
+                            kind.
+                          type: string
+                        name:
+                          description: Name is the public resource name.
+                          type: string
+                        uid:
+                          description: UID prevents same-name replacement from inheriting
+                            authority.
+                          type: string
+                      required:
+                      - kind
+                      - name
+                      - uid
+                      type: object
+                  required:
+                  - address
+                  - descriptor
+                  - name
+                  - wallet
+                  type: object
+                maxItems: 100
+                type: array
+              minimumHeight:
+                description: MinimumHeight is the first frozen ceiling and target
+                  height.
+                format: int64
+                minimum: 1
+                type: integer
+              networkUID:
+                description: NetworkUID identifies the owning independent environment.
+                type: string
+              nodes:
+                description: Nodes pins every Bitcoin participant required to converge
+                  for the first gate.
+                items:
+                  description: Binding identifies an exact resolved public dependency.
+                  properties:
+                    fingerprint:
+                      description: Fingerprint identifies public content when relevant.
+                      type: string
+                    kind:
+                      description: Kind identifies the API kind or participant kind.
+                      type: string
+                    name:
+                      description: Name is the public resource name.
+                      type: string
+                    uid:
+                      description: UID prevents same-name replacement from inheriting
+                        authority.
+                      type: string
+                  required:
+                  - kind
+                  - name
+                  - uid
+                  type: object
+                maxItems: 1000
+                type: array
+              payoutWallet:
+                description: PayoutWallet is the pinned destination for maturity/height
+                  advancement blocks.
+                properties:
+                  address:
+                    description: Address is the fixed coinbase destination.
+                    type: string
+                  descriptor:
+                    description: Descriptor is the fixed public watch-only descriptor.
+                    type: string
+                  name:
+                    description: Name is the local Core wallet name.
+                    type: string
+                  wallet:
+                    description: Wallet binds the reusable wallet incarnation and
+                      public digest.
+                    properties:
+                      fingerprint:
+                        description: Fingerprint identifies public content when relevant.
+                        type: string
+                      kind:
+                        description: Kind identifies the API kind or participant kind.
+                        type: string
+                      name:
+                        description: Name is the public resource name.
+                        type: string
+                      uid:
+                        description: UID prevents same-name replacement from inheriting
+                          authority.
+                        type: string
+                    required:
+                    - kind
+                    - name
+                    - uid
+                    type: object
+                required:
+                - address
+                - descriptor
+                - name
+                - wallet
+                type: object
+              production:
+                description: Production binds the captured initial production participant.
+                properties:
+                  fingerprint:
+                    description: Fingerprint identifies public content when relevant.
+                    type: string
+                  kind:
+                    description: Kind identifies the API kind or participant kind.
+                    type: string
+                  name:
+                    description: Name is the public resource name.
+                    type: string
+                  uid:
+                    description: UID prevents same-name replacement from inheriting
+                      authority.
+                    type: string
+                required:
+                - kind
+                - name
+                - uid
+                type: object
+              target:
+                description: Target binds the single initialization generation participant.
+                properties:
+                  fingerprint:
+                    description: Fingerprint identifies public content when relevant.
+                    type: string
+                  kind:
+                    description: Kind identifies the API kind or participant kind.
+                    type: string
+                  name:
+                    description: Name is the public resource name.
+                    type: string
+                  uid:
+                    description: UID prevents same-name replacement from inheriting
+                      authority.
+                    type: string
+                required:
+                - kind
+                - name
+                - uid
+                type: object
+            required:
+            - genesis
+            - matureOutputsPerMiner
+            - minerWallets
+            - minimumHeight
+            - networkUID
+            - nodes
+            - payoutWallet
+            - production
+            - target
+            type: object
+          status:
+            description: Status is written only by the scheduler.
+            properties:
+              baseline:
+                description: Baseline retains ongoing cadence and selection after
+                  every frozen gate completes.
+                properties:
+                  receipts:
+                    description: Receipts retains accounting cursors for network-owned
+                      execution records after target removal.
+                    items:
+                      description: BitcoinReceiptCursor prevents duplicate counting
+                        when different nodes complete out of order.
+                      properties:
+                        executionUID:
+                          description: ExecutionUID pins the network-retained execution
+                            record.
+                          maxLength: 128
+                          type: string
+                        offer:
+                          description: Offer is the latest accounted offer on this
+                            one execution record.
+                          format: int64
+                          minimum: 1
+                          type: integer
+                      required:
+                      - executionUID
+                      - offer
+                      type: object
+                    maxItems: 1000
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - executionUID
+                    x-kubernetes-list-type: map
+                  scheduling:
+                    description: Scheduling contains bounded effective policy and
+                      cumulative network baseline facts.
+                    properties:
+                      acknowledged:
+                        description: Acknowledged counts exact baseline generation
+                          receipts, independently of assignment ordering.
+                        format: int64
+                        minimum: 0
+                        type: integer
+                      admissionDigest:
+                        description: AdmissionDigest binds the complete admitted configuration
+                          and dependency snapshots.
+                        maxLength: 71
+                        type: string
+                      assigned:
+                        description: Assigned counts selected offers published to
+                          their sole execution record.
+                        format: int64
+                        minimum: 0
+                        type: integer
+                      eligibleTargets:
+                        description: EligibleTargets counts currently ready admitted
+                          targets independently of the committed draw.
+                        format: int32
+                        maximum: 100
+                        minimum: 0
+                        type: integer
+                      initialization:
+                        description: Initialization identifies the retained network
+                          scheduler authority.
+                        properties:
+                          fingerprint:
+                            description: Fingerprint identifies public content when
+                              relevant.
+                            type: string
+                          kind:
+                            description: Kind identifies the API kind or participant
+                              kind.
+                            type: string
+                          name:
+                            description: Name is the public resource name.
+                            type: string
+                          uid:
+                            description: UID prevents same-name replacement from inheriting
+                              authority.
+                            type: string
+                        required:
+                        - kind
+                        - name
+                        - uid
+                        type: object
+                      lastAcknowledgedAt:
+                        description: LastAcknowledgedAt preserves the latest original
+                          attributable baseline receipt time.
+                        format: date-time
+                        type: string
+                      nextOpportunityAt:
+                        description: NextOpportunityAt is the next durable opportunity
+                          deadline, without catch-up work.
+                        format: date-time
+                        type: string
+                      observedAt:
+                        description: ObservedAt records when current baseline target
+                          availability was checked.
+                        format: date-time
+                        type: string
+                      opportunities:
+                        description: Opportunities counts due baseline selections
+                          across producer replacements.
+                        format: int64
+                        minimum: 0
+                        type: integer
+                      override:
+                        description: Override identifies active temporary timing while
+                          admission retains the latest baseline.
+                        properties:
+                          expiresAt:
+                            description: ExpiresAt bounds future overridden opportunities.
+                            format: date-time
+                            type: string
+                          override:
+                            description: Override pins the user-owned request.
+                            properties:
+                              fingerprint:
+                                description: Fingerprint identifies public content
+                                  when relevant.
+                                type: string
+                              kind:
+                                description: Kind identifies the API kind or participant
+                                  kind.
+                                type: string
+                              name:
+                                description: Name is the public resource name.
+                                type: string
+                              uid:
+                                description: UID prevents same-name replacement from
+                                  inheriting authority.
+                                type: string
+                            required:
+                            - kind
+                            - name
+                            - uid
+                            type: object
+                          production:
+                            description: Production pins the admitted producer incarnation.
+                            properties:
+                              fingerprint:
+                                description: Fingerprint identifies public content
+                                  when relevant.
+                                type: string
+                              kind:
+                                description: Kind identifies the API kind or participant
+                                  kind.
+                                type: string
+                              name:
+                                description: Name is the public resource name.
+                                type: string
+                              uid:
+                                description: UID prevents same-name replacement from
+                                  inheriting authority.
+                                type: string
+                            required:
+                            - kind
+                            - name
+                            - uid
+                            type: object
+                          schedule:
+                            description: Schedule snapshots the effective cadence.
+                            properties:
+                              cadence:
+                                description: Cadence controls block opportunities.
+                                properties:
+                                  interval:
+                                    description: Interval is the fixed duration.
+                                    maxLength: 32
+                                    minLength: 2
+                                    type: string
+                                  maximumInterval:
+                                    description: MaximumInterval bounds uniform timing.
+                                    maxLength: 32
+                                    minLength: 2
+                                    type: string
+                                  minimumInterval:
+                                    description: MinimumInterval bounds uniform timing.
+                                    maxLength: 32
+                                    minLength: 2
+                                    type: string
+                                  mode:
+                                    description: Mode selects fixed or uniform timing.
+                                    enum:
+                                    - Fixed
+                                    - Uniform
+                                    type: string
+                                required:
+                                - mode
+                                type: object
+                                x-kubernetes-validations:
+                                - message: interval must be between 1s and 1h
+                                  rule: '!has(self.interval) || (duration(self.interval)
+                                    >= duration(''1s'') && duration(self.interval)
+                                    <= duration(''1h''))'
+                                - message: minimumInterval must be between 1s and
+                                    1h
+                                  rule: '!has(self.minimumInterval) || (duration(self.minimumInterval)
+                                    >= duration(''1s'') && duration(self.minimumInterval)
+                                    <= duration(''1h''))'
+                                - message: maximumInterval must be between 1s and
+                                    1h
+                                  rule: '!has(self.maximumInterval) || (duration(self.maximumInterval)
+                                    >= duration(''1s'') && duration(self.maximumInterval)
+                                    <= duration(''1h''))'
+                                - message: maximumInterval must not be below minimumInterval
+                                  rule: '!has(self.minimumInterval) || !has(self.maximumInterval)
+                                    || duration(self.maximumInterval) >= duration(self.minimumInterval)'
+                                - message: cadence fields must match mode
+                                  rule: 'self.mode == ''Fixed'' ? (has(self.interval)
+                                    && !has(self.minimumInterval) && !has(self.maximumInterval))
+                                    : (!has(self.interval) && has(self.minimumInterval)
+                                    && has(self.maximumInterval))'
+                            required:
+                            - cadence
+                            type: object
+                          scheduleRef:
+                            description: ScheduleRef pins a selected immutable reusable
+                              schedule.
+                            properties:
+                              fingerprint:
+                                description: Fingerprint identifies public content
+                                  when relevant.
+                                type: string
+                              kind:
+                                description: Kind identifies the API kind or participant
+                                  kind.
+                                type: string
+                              name:
+                                description: Name is the public resource name.
+                                type: string
+                              uid:
+                                description: UID prevents same-name replacement from
+                                  inheriting authority.
+                                type: string
+                            required:
+                            - kind
+                            - name
+                            - uid
+                            type: object
+                          startedAt:
+                            description: StartedAt is the original successful activation
+                              time.
+                            format: date-time
+                            type: string
+                        required:
+                        - expiresAt
+                        - override
+                        - production
+                        - schedule
+                        - startedAt
+                        type: object
+                      policyDigest:
+                        description: PolicyDigest identifies the admitted production
+                          configuration.
+                        maxLength: 71
+                        type: string
+                      progressWindowSeconds:
+                        description: ProgressWindowSeconds bounds expected receipt
+                          progress using the effective cadence upper bound.
+                        format: int64
+                        maximum: 10810
+                        minimum: 130
+                        type: integer
+                      reason:
+                        description: Reason classifies the current baseline scheduling
+                          state.
+                        maxLength: 128
+                        type: string
+                      schedule:
+                        description: Schedule is the exact effective timing value.
+                        properties:
+                          cadence:
+                            description: Cadence controls block opportunities.
+                            properties:
+                              interval:
+                                description: Interval is the fixed duration.
+                                maxLength: 32
+                                minLength: 2
+                                type: string
+                              maximumInterval:
+                                description: MaximumInterval bounds uniform timing.
+                                maxLength: 32
+                                minLength: 2
+                                type: string
+                              minimumInterval:
+                                description: MinimumInterval bounds uniform timing.
+                                maxLength: 32
+                                minLength: 2
+                                type: string
+                              mode:
+                                description: Mode selects fixed or uniform timing.
+                                enum:
+                                - Fixed
+                                - Uniform
+                                type: string
+                            required:
+                            - mode
+                            type: object
+                            x-kubernetes-validations:
+                            - message: interval must be between 1s and 1h
+                              rule: '!has(self.interval) || (duration(self.interval)
+                                >= duration(''1s'') && duration(self.interval) <=
+                                duration(''1h''))'
+                            - message: minimumInterval must be between 1s and 1h
+                              rule: '!has(self.minimumInterval) || (duration(self.minimumInterval)
+                                >= duration(''1s'') && duration(self.minimumInterval)
+                                <= duration(''1h''))'
+                            - message: maximumInterval must be between 1s and 1h
+                              rule: '!has(self.maximumInterval) || (duration(self.maximumInterval)
+                                >= duration(''1s'') && duration(self.maximumInterval)
+                                <= duration(''1h''))'
+                            - message: maximumInterval must not be below minimumInterval
+                              rule: '!has(self.minimumInterval) || !has(self.maximumInterval)
+                                || duration(self.maximumInterval) >= duration(self.minimumInterval)'
+                            - message: cadence fields must match mode
+                              rule: 'self.mode == ''Fixed'' ? (has(self.interval)
+                                && !has(self.minimumInterval) && !has(self.maximumInterval))
+                                : (!has(self.interval) && has(self.minimumInterval)
+                                && has(self.maximumInterval))'
+                        required:
+                        - cadence
+                        type: object
+                      scheduleGeneration:
+                        description: ScheduleGeneration records the observed immutable
+                          schedule revision; zero means inline.
+                        format: int64
+                        minimum: 0
+                        type: integer
+                      scheduleRef:
+                        description: ScheduleRef pins an admitted reusable schedule
+                          when one was selected.
+                        properties:
+                          fingerprint:
+                            description: Fingerprint identifies public content when
+                              relevant.
+                            type: string
+                          kind:
+                            description: Kind identifies the API kind or participant
+                              kind.
+                            type: string
+                          name:
+                            description: Name is the public resource name.
+                            type: string
+                          uid:
+                            description: UID prevents same-name replacement from inheriting
+                              authority.
+                            type: string
+                        required:
+                        - kind
+                        - name
+                        - uid
+                        type: object
+                      skipped:
+                        description: Skipped counts selections lost to unavailable
+                          or busy targets without redraw.
+                        format: int64
+                        minimum: 0
+                        type: integer
+                      targets:
+                        description: Targets preserves target order and exact participant
+                          UIDs independently of health.
+                        items:
+                          description: BitcoinScheduledTarget preserves one admitted
+                            weighted participant identity.
+                          properties:
+                            participant:
+                              description: Participant binds the exact selected BitcoinNode
+                                incarnation.
+                              properties:
+                                fingerprint:
+                                  description: Fingerprint identifies public content
+                                    when relevant.
+                                  type: string
+                                kind:
+                                  description: Kind identifies the API kind or participant
+                                    kind.
+                                  type: string
+                                name:
+                                  description: Name is the public resource name.
+                                  type: string
+                                uid:
+                                  description: UID prevents same-name replacement
+                                    from inheriting authority.
+                                  type: string
+                              required:
+                              - kind
+                              - name
+                              - uid
+                              type: object
+                            weight:
+                              description: Weight is sampled independently of target
+                                availability.
+                              format: int32
+                              minimum: 1
+                              type: integer
+                          required:
+                          - participant
+                          - weight
+                          type: object
+                        maxItems: 100
+                        type: array
+                        x-kubernetes-list-type: atomic
+                      unassigned:
+                        description: Unassigned counts selected opportunities that
+                          expired or were withdrawn before assignment.
+                        format: int64
+                        minimum: 0
+                        type: integer
+                    required:
+                    - acknowledged
+                    - admissionDigest
+                    - assigned
+                    - eligibleTargets
+                    - initialization
+                    - opportunities
+                    - policyDigest
+                    - reason
+                    - skipped
+                    - unassigned
+                    type: object
+                  selectedTarget:
+                    description: SelectedTarget is the one committed draw for the
+                      current opportunity.
+                    properties:
+                      fingerprint:
+                        description: Fingerprint identifies public content when relevant.
+                        type: string
+                      kind:
+                        description: Kind identifies the API kind or participant kind.
+                        type: string
+                      name:
+                        description: Name is the public resource name.
+                        type: string
+                      uid:
+                        description: UID prevents same-name replacement from inheriting
+                          authority.
+                        type: string
+                    required:
+                    - kind
+                    - name
+                    - uid
+                    type: object
+                  sequence:
+                    description: Sequence is monotonic across bootstrap and every
+                      baseline producer incarnation.
+                    format: int64
+                    minimum: 0
+                    type: integer
+                  stage:
+                    description: Stage records durable selection, publication or final
+                      non-execution disposition.
+                    enum:
+                    - Selected
+                    - Offered
+                    - Assigned
+                    - Skipped
+                    - Unassigned
+                    type: string
+                required:
+                - scheduling
+                - sequence
+                type: object
+              firstCeilingObservedAt:
+                description: FirstCeilingObservedAt preserves the ceiling observation
+                  deadline across pause/restart.
+                format: date-time
+                type: string
+              funded:
+                description: Funded counts exact successful funding receipts.
+                items:
+                  description: BitcoinFundingCount records attributable coinbase-generation
+                    receipts per wallet.
+                  properties:
+                    outputs:
+                      description: Outputs counts successful initialization generation
+                        receipts.
+                      format: int32
+                      minimum: 0
+                      type: integer
+                    walletUID:
+                      description: WalletUID pins the recipient's reusable identity.
+                      type: string
+                  required:
+                  - outputs
+                  - walletUID
+                  type: object
+                maxItems: 100
+                type: array
+                x-kubernetes-list-map-keys:
+                - walletUID
+                x-kubernetes-list-type: map
+              lastAccountedOffer:
+                description: LastAccountedOffer prevents duplicate funding accounting
+                  after retries.
+                format: int64
+                minimum: 0
+                type: integer
+              nextOpportunityAt:
+                description: NextOpportunityAt is the durable cadence anchor; pauses
+                  do not create catch-up bursts.
+                format: date-time
+                type: string
+              offer:
+                description: Offer is the sole selected, durable generation opportunity.
+                properties:
+                  address:
+                    description: Address is the exact public coinbase destination.
+                    maxLength: 128
+                    type: string
+                  ceiling:
+                    description: Ceiling is the frozen gate's maximum permitted resulting
+                      height.
+                    format: int64
+                    minimum: 1
+                    type: integer
+                  expectedHeight:
+                    description: ExpectedHeight is the converged pre-dispatch height.
+                    format: int64
+                    minimum: 0
+                    type: integer
+                  expectedTip:
+                    description: ExpectedTip is the converged pre-dispatch block hash.
+                    pattern: ^[0-9a-f]{64}$
+                    type: string
+                  expiresAt:
+                    description: ExpiresAt prevents a stale opportunity from initiating
+                      a new request.
+                    format: date-time
+                    type: string
+                  initialization:
+                    description: Initialization binds the retained network scheduler
+                      record.
+                    properties:
+                      fingerprint:
+                        description: Fingerprint identifies public content when relevant.
+                        type: string
+                      kind:
+                        description: Kind identifies the API kind or participant kind.
+                        type: string
+                      name:
+                        description: Name is the public resource name.
+                        type: string
+                      uid:
+                        description: UID prevents same-name replacement from inheriting
+                          authority.
+                        type: string
+                    required:
+                    - kind
+                    - name
+                    - uid
+                    type: object
+                  mode:
+                    description: |-
+                      Mode distinguishes frozen bootstrap advancement from completed-initialization baseline authority.
+                      Omission preserves existing bootstrap records.
+                    enum:
+                    - Bootstrap
+                    - Baseline
+                    type: string
+                  number:
+                    description: Number is monotonic within the initialization record.
+                    format: int64
+                    minimum: 1
+                    type: integer
+                  override:
+                    description: Override pins the active timing request, when this
+                      opportunity used one.
+                    properties:
+                      fingerprint:
+                        description: Fingerprint identifies public content when relevant.
+                        type: string
+                      kind:
+                        description: Kind identifies the API kind or participant kind.
+                        type: string
+                      name:
+                        description: Name is the public resource name.
+                        type: string
+                      uid:
+                        description: UID prevents same-name replacement from inheriting
+                          authority.
+                        type: string
+                    required:
+                    - kind
+                    - name
+                    - uid
+                    type: object
+                  policyDigest:
+                    description: PolicyDigest identifies the admitted production policy.
+                    type: string
+                  production:
+                    description: Production identifies the admitted production participant.
+                    properties:
+                      fingerprint:
+                        description: Fingerprint identifies public content when relevant.
+                        type: string
+                      kind:
+                        description: Kind identifies the API kind or participant kind.
+                        type: string
+                      name:
+                        description: Name is the public resource name.
+                        type: string
+                      uid:
+                        description: UID prevents same-name replacement from inheriting
+                          authority.
+                        type: string
+                    required:
+                    - kind
+                    - name
+                    - uid
+                    type: object
+                  target:
+                    description: Target binds the sole selected participant for a
+                      baseline opportunity.
+                    properties:
+                      fingerprint:
+                        description: Fingerprint identifies public content when relevant.
+                        type: string
+                      kind:
+                        description: Kind identifies the API kind or participant kind.
+                        type: string
+                      name:
+                        description: Name is the public resource name.
+                        type: string
+                      uid:
+                        description: UID prevents same-name replacement from inheriting
+                          authority.
+                        type: string
+                    required:
+                    - kind
+                    - name
+                    - uid
+                    type: object
+                  wallet:
+                    description: Wallet pins the payout identity used for accounting.
+                    properties:
+                      fingerprint:
+                        description: Fingerprint identifies public content when relevant.
+                        type: string
+                      kind:
+                        description: Kind identifies the API kind or participant kind.
+                        type: string
+                      name:
+                        description: Name is the public resource name.
+                        type: string
+                      uid:
+                        description: UID prevents same-name replacement from inheriting
+                          authority.
+                        type: string
+                    required:
+                    - kind
+                    - name
+                    - uid
+                    type: object
+                required:
+                - address
+                - ceiling
+                - expectedHeight
+                - expectedTip
+                - expiresAt
+                - initialization
+                - number
+                - policyDigest
+                - production
+                - wallet
+                type: object
+              override:
+                description: Override retains the sole active timing override independently
+                  of bootstrap progress.
+                properties:
+                  expiresAt:
+                    description: ExpiresAt bounds future overridden opportunities.
+                    format: date-time
+                    type: string
+                  override:
+                    description: Override pins the user-owned request.
+                    properties:
+                      fingerprint:
+                        description: Fingerprint identifies public content when relevant.
+                        type: string
+                      kind:
+                        description: Kind identifies the API kind or participant kind.
+                        type: string
+                      name:
+                        description: Name is the public resource name.
+                        type: string
+                      uid:
+                        description: UID prevents same-name replacement from inheriting
+                          authority.
+                        type: string
+                    required:
+                    - kind
+                    - name
+                    - uid
+                    type: object
+                  production:
+                    description: Production pins the admitted producer incarnation.
+                    properties:
+                      fingerprint:
+                        description: Fingerprint identifies public content when relevant.
+                        type: string
+                      kind:
+                        description: Kind identifies the API kind or participant kind.
+                        type: string
+                      name:
+                        description: Name is the public resource name.
+                        type: string
+                      uid:
+                        description: UID prevents same-name replacement from inheriting
+                          authority.
+                        type: string
+                    required:
+                    - kind
+                    - name
+                    - uid
+                    type: object
+                  schedule:
+                    description: Schedule snapshots the effective cadence.
+                    properties:
+                      cadence:
+                        description: Cadence controls block opportunities.
+                        properties:
+                          interval:
+                            description: Interval is the fixed duration.
+                            maxLength: 32
+                            minLength: 2
+                            type: string
+                          maximumInterval:
+                            description: MaximumInterval bounds uniform timing.
+                            maxLength: 32
+                            minLength: 2
+                            type: string
+                          minimumInterval:
+                            description: MinimumInterval bounds uniform timing.
+                            maxLength: 32
+                            minLength: 2
+                            type: string
+                          mode:
+                            description: Mode selects fixed or uniform timing.
+                            enum:
+                            - Fixed
+                            - Uniform
+                            type: string
+                        required:
+                        - mode
+                        type: object
+                        x-kubernetes-validations:
+                        - message: interval must be between 1s and 1h
+                          rule: '!has(self.interval) || (duration(self.interval) >=
+                            duration(''1s'') && duration(self.interval) <= duration(''1h''))'
+                        - message: minimumInterval must be between 1s and 1h
+                          rule: '!has(self.minimumInterval) || (duration(self.minimumInterval)
+                            >= duration(''1s'') && duration(self.minimumInterval)
+                            <= duration(''1h''))'
+                        - message: maximumInterval must be between 1s and 1h
+                          rule: '!has(self.maximumInterval) || (duration(self.maximumInterval)
+                            >= duration(''1s'') && duration(self.maximumInterval)
+                            <= duration(''1h''))'
+                        - message: maximumInterval must not be below minimumInterval
+                          rule: '!has(self.minimumInterval) || !has(self.maximumInterval)
+                            || duration(self.maximumInterval) >= duration(self.minimumInterval)'
+                        - message: cadence fields must match mode
+                          rule: 'self.mode == ''Fixed'' ? (has(self.interval) && !has(self.minimumInterval)
+                            && !has(self.maximumInterval)) : (!has(self.interval)
+                            && has(self.minimumInterval) && has(self.maximumInterval))'
+                    required:
+                    - cadence
+                    type: object
+                  scheduleRef:
+                    description: ScheduleRef pins a selected immutable reusable schedule.
+                    properties:
+                      fingerprint:
+                        description: Fingerprint identifies public content when relevant.
+                        type: string
+                      kind:
+                        description: Kind identifies the API kind or participant kind.
+                        type: string
+                      name:
+                        description: Name is the public resource name.
+                        type: string
+                      uid:
+                        description: UID prevents same-name replacement from inheriting
+                          authority.
+                        type: string
+                    required:
+                    - kind
+                    - name
+                    - uid
+                    type: object
+                  startedAt:
+                    description: StartedAt is the original successful activation time.
+                    format: date-time
+                    type: string
+                required:
+                - expiresAt
+                - override
+                - production
+                - schedule
+                - startedAt
+                type: object
+              phase:
+                description: Phase is a truthful first-gate hold/progress observation.
+                enum:
+                - Waiting
+                - Preparing
+                - Paused
+                - Held
+                - Blocked
+                - Abandoned
+                type: string
+              preparedAt:
+                description: PreparedAt records the first complete wallet/maturity/convergence
+                  observation.
+                format: date-time
+                type: string
+              production:
+                description: Production identifies the current compatible producer
+                  independently of frozen provenance.
+                properties:
+                  fingerprint:
+                    description: Fingerprint identifies public content when relevant.
+                    type: string
+                  kind:
+                    description: Kind identifies the API kind or participant kind.
+                    type: string
+                  name:
+                    description: Name is the public resource name.
+                    type: string
+                  uid:
+                    description: UID prevents same-name replacement from inheriting
+                      authority.
+                    type: string
+                required:
+                - kind
+                - name
+                - uid
+                type: object
+              reason:
+                description: Reason is a bounded machine-readable hold classification.
+                type: string
+            type: object
+        required:
+        - spec
+        type: object
+        x-kubernetes-validations:
+        - message: Bitcoin initialization is immutable
+          rule: self.spec == oldSelf.spec
+    served: true
+    storage: true
+    subresources:
+      status: {}

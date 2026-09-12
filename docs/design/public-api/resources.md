@@ -238,9 +238,12 @@ ledger prevents accidental instance/worker reuse after removal, as defined in
 ## StacksNetworkParticipant
 
 Generated `network.stacks.org/v1alpha2` resource, one per named network entry. It is not a
-reusable definition and users do not apply it. The aggregate controller owns its spec; domain
-controllers own resolution/admission/workload status; a scoped Stacks worker owns only
-status.execution. A kind discriminator selects the same configuration branches as
+reusable definition and users do not apply it. The aggregate controller owns its spec,
+complete status.admission and resolution/policy projections. Domain controllers own
+configuration validation reports and workload/runtime facts; a scoped worker owns only
+its assigned execution status. The [status ownership contract](operations.md#admission-execution-status-and-faucet-dispatch)
+also defines the temporary WorkloadReady fallback for unsupported kinds. A kind
+discriminator selects the same configuration branches as
 [composition](composition.md).
 
 ```yaml
@@ -268,11 +271,12 @@ spec:
   control: {suspended: false}
   # genesisRef and admitted dependencies are published only after validation.
 status:
-  admission:
+  admission: # Complete subtree owned by the network aggregate.
+    source: {name: "<definition>", uid: "<definition UID>", generation: 1, digest: sha256:...}
     genesisRef: {name: "<generated genesis>", uid: "<genesis UID>"}
     dependencies: [] # Participant/account/wallet/Secret names and exact UIDs.
     policyDigest: sha256:...
-  runtime: {workloadRefs: []}
+  runtime: {workloadRefs: []} # Domain-controller facts.
   execution: {} # Only present for a Stacks protocol worker.
   conditions: []
 ```
@@ -280,8 +284,11 @@ status:
 networkUID, participantName and kind are immutable. source identifies a pinned referenced
 definition; inline sources instead record the root generation and inline digest, with no
 synthetic reusable CR. configuration is the complete compiled policy, not an override patch.
-Domain admission keeps the previous valid complete policy when a candidate requires
-replacement; workers never execute spec directly. Control is independently projected from the
+Aggregate admission keeps the previous valid complete policy when a candidate requires
+replacement; admission.source records that policy's provenance independently of the
+candidate spec.source. AdmissionReady reports current retained-source and dependency
+eligibility separately from candidate resolution; workers never execute spec directly.
+Control is independently projected from the
 network entry. Users edit that entry; generated spec drift is reconciled back. Domain
 controllers watch instances of their kind and their indexed dependencies, and own
 workload/config roots through the participant ownerRef. Ordinary StatefulSet/Deployment/Job
@@ -314,7 +321,7 @@ artifact UID/digest. It creates no workloads itself.
 | spec.chain.allocations | Concrete public principal/amountMicroSTX entries, normalized and deduplicated. |
 | spec.chain.contracts | Public sBTC/PoX contract bindings and source manifest hashes required for node configuration. |
 | spec.source | Network UID, captured inputDigest, resolved genesis-source UID/generations and initial participant names/UIDs and compiled policy digests. No entire descriptor specs, private keys or rendered configuration. |
-| spec.bootstrap | Ordered profile gates with their ceilings/cycles and bounded public requirements: participant/dependency UIDs, holder/miner/signer identities, stake amounts and required cycle coverage, wallet funding/maturity requirements, and contract/registry expectations. Values needed after controller restart, not only policy digests. |
+| spec.bootstrap | Ordered profile gates with their ceilings/cycles and bounded public requirements: participant/dependency UIDs, holder/miner/signer identities, initial mining-enabled roles, stake amounts and required cycle coverage, wallet funding/maturity requirements, and contract/registry expectations. Values needed after controller restart, not only policy digests. |
 | status | Canonical genesisDigest over spec.chain and publication time. Source/cohort provenance is excluded from the chain digest. |
 
 Creation captures validated chain data, initial cohort and bootstrap requirements together.
@@ -361,6 +368,13 @@ keySource is stacksMinerAccountRef, secretRef to a supported descriptor, or gene
 miner wallets use public descriptors matching the miner key encoding; sharing that key with
 other actors is permitted. The Stacks miner holds its signing key; Core need not. Omitted
 walletName uses the CR name.
+
+The current implementation supports watch-only Core wallets only: `watchOnly: false`
+is rejected at API admission. Generated or imported wallet keys remain outside Core;
+this profile does not implement private-key import or Bitcoin spending from Core.
+Previously stored unsupported declarations report `Resolved=False` with reason
+`UnsupportedWalletProfile` before dependent admission. An already-resolved wallet is
+immutable; select a new supported wallet declaration instead of editing its identity.
 
 Wallet resolution depends only on its key source and directly referenced identity, not on
 network or node readiness. Controller owns optional reusable key Secret/resolver report and
@@ -414,6 +428,49 @@ Readiness means Core RPC is responsive and reports the correct regtest identity;
 synchronization is a separate condition. Status includes bound wallet refs and observed
 tip/height. Core itself can restart; Bitcoin control worker restart/ambiguity uses the
 retained Bitcoin execution rules.
+
+### Bitcoin configuration
+
+`config.overrides` uses native Bitcoin option names. Root scalar values become
+`key=value` entries; booleans become `1` or `0`. Scalar lists replace all repeated
+entries for that option, retaining list order. One nested object selects a native
+section (`regtest`, `main`, `test`, `testnet4` or `signet`); deeper objects are invalid.
+For example:
+
+```yaml
+config:
+  overrides:
+    dbcache: 256
+    debug: [net, rpc]
+    regtest:
+      maxconnections: 32
+```
+
+`config.secretRef: {name: core-config-v2, key: bitcoin.conf}` instead selects a
+complete immutable native document. The scoped resolver reads its exact admitted
+Secret UID; replacing a Secret under the same name cannot replace that binding.
+Use a new Secret name for a new configuration version. Declared `${SERVICE:alias}`
+substitutions follow the DNS-only rules below. No credential interpolation occurs.
+Native documents support comments and repeated `key=value` entries. Option names
+must be lowercase, without dotted aliases; overrides reject newlines and comment
+characters in scalar values.
+
+Managed chain selection, RPC credentials/whitelists, listeners, peer seeds, required
+indexes and wallet availability are protected in every section, including negated
+option aliases. Complete Managed documents must preserve their generated values,
+section scope and repetition order. File inclusion/redirection, wallet paths,
+notification commands and daemon/process options are outside this single-document
+interface, including in Unverified mode. `Unverified` permits other managed-setting
+divergence, reports `ConfigVerified=False`, and excludes that actor from protocol
+prerequisites and managed mutation targets.
+
+Before genesis freeze, customized Bitcoin actors require the scoped resolver's
+syntax and managed-setting agreement report, bound to the exact configuration
+inputs and output Secret. Preparation creates support resources only. Bitcoin's
+`ConfigVerified=True` does **not** establish that the selected Core image accepts
+unknown options, numeric values or option interactions; semantic compatibility is
+checked by Core startup and actor readiness. No help-command or separate Core
+startup probe is used as a configuration validator.
 
 ## StacksNode
 
@@ -477,6 +534,17 @@ subscriptions are protected paths. Attempts to override them are rejected with t
 path. Unknown unprotected settings reach the selected actor image, whose validation error is
 surfaced as InvalidConfiguration.
 
+Before initial genesis freeze, customized Stacks actors use the exact public candidate
+chain in a scoped resolver and a configuration check in the selected actor image.
+Preparation may allocate Services and private support artifacts, but cannot create
+actor StatefulSets. Freeze rechecks the candidate report and configuration Secret
+UID; pending, rejected or stale validation leaves genesis unpublished. Candidate
+rendering has a separate entrypoint and cannot substitute for a published genesis
+binding during actor activation.
+Stacks node resolvers wait for their Bitcoin dependency's completed public configuration
+report and exact credential binding. Allocated empty Secrets do not start dependent jobs;
+Bitcoin actor startup is not required for candidate rendering.
+
 Alternatively `config.secretRef: {name: complete-node-config, key: config.toml}` selects a
 complete immutable user-owned config, mutually exclusive with overrides. Change it by
 referencing a new Secret name: a validated configuration-version change supports an
@@ -515,9 +583,13 @@ Account must be signing-capable; multiple signers may deliberately share its key
 ownership is not transferred. Actor image/resources/storage/config escape hatch follow the
 node rules, with signer-specific protected fields. The signer controller manages a
 participant-owned StatefulSet, event Service on 30000, configuration Secret and optional PVC.
-The node controller manages its event subscription and authentication Secret, owned by the
-node participant; public status identifies the binding while only the relevant Pods mount the
-token.
+The node controller manages its event subscription and provisions a scoped Go resolver
+Job that mints the event token into an immutable Secret owned by the node participant.
+Only the relevant node and signer workloads mount it; the operator consumes public
+binding reports and Secret metadata. Ordinary Pod rolls preserve the token; a new
+participant receives a new token. Once bound, missing or replaced credentials block
+operation without silent regeneration or rebinding. Public status identifies the
+exact Secret binding.
 
 `Resolved` requires the node/key binding and configuration; it does not wait for PoX
 registration. The signer starts early and waits for its protocol role. Ready means signer
@@ -679,6 +751,12 @@ The worker checks available funds through a chain read; a successful read showin
 funds yields execution Rejected before send. A failed balance read is an unavailable
 observation, not proof of insufficient funds.
 
+A native HTTP 400 rejection with the exact submitted TxID and reason FeeTooLow,
+BadNonce, ConflictingNonceInMempool or NotEnoughFunds also yields Rejected. It
+retains the TxID with noSend=false and frees pending nonce coordination without
+advancing the local nonce. The request is terminal and never resubmitted; unknown
+reasons or malformed responses remain uncertain.
+
 Request phases: Pending, Submitted, Completed, Rejected, Inconclusive, Expired. Completed
 means this exact transfer is observed included successfully through the native transaction
 index; increased destination balance alone is insufficient. Post-Nakamoto funding requests
@@ -768,8 +846,9 @@ positive interval or Uniform with positive `minimumInterval` and `maximumInterva
 minimumInterval`; bounds 1s–1h. Production accepts exactly one scheduleRef or inline
 `schedule` with the same shape; omitting both uses Fixed/5s. Changing a ref switches to
 another immutable schedule. The controller snapshots its value/generation into status;
-unavailable new input pauses new opportunities rather than silently continuing an obsolete
-schedule. Generation jitter is separate from weighted target selection.
+a rejected candidate retains the last complete admission while its exact captured schedule
+and payout identities remain available. Missing, replaced or deleting admitted inputs close
+new opportunities. Generation jitter is separate from weighted target selection.
 
 Production target list/weights/schedule/pause can update the live network. Payout identity and
 initialization changes require a fresh network, even for a new participant. Targets have
@@ -801,9 +880,13 @@ BitcoinBlockProduction participant may execute in this profile; independent over
 production roots are excluded. Definitions alone create no records or workers. The network
 owns shared initialization and target execution records so participant removal cannot erase
 uncertain RPCs or cause funding to repeat. The production domain controller publishes
-schedule, target participant UIDs and acknowledged/unassigned/skipped opportunities on the
-instance. Bitcoin node control workers perform mutations; no additional production Pod is
-required.
+the exact admitted schedule, target participant UIDs and cumulative assigned, acknowledged,
+unassigned and skipped opportunities in `status.scheduling`, using the fixed
+`stacks-network-domain-bitcoinblockproduction-scheduling` SSA manager. The retained
+initialization record commits each weighted selection before checking target availability and
+keeps one receipt cursor per execution record. Original receipt time and current availability
+time remain separate; neither a retry nor producer replacement repeats initial funding.
+Bitcoin node control workers perform mutations; no additional production Pod is required.
 
 Removing the production entry withdraws baseline scheduling under the Bitcoin cleanup
 contract. A new named production instance must use the same captured payout and initialization
@@ -833,11 +916,13 @@ creation. Use exactly one inline schedule or scheduleRef. Override changes timin
 targets, credentials or pause state. Only one can be Active: contention waits in deterministic
 creationTimestamp/UID order until pending expiry. A later pending override never preempts an
 active one. Deletion requests cancellation; expiry/cancellation ends future override
-scheduling, not already submitted generation. Latest resolved baseline then applies with a
+scheduling, not already submitted generation. Latest admitted baseline then applies with a
 fresh timer anchor, no stale spec restoration or catch-up. Pause still wins, and elapsed
 wall-clock expiry continues while paused. Controller restart reads retained
 activation/expiresAt timestamps. Status: Pending/Active/Completed/Expired/Cancelled and
-admittedProductionUID/effectiveSchedule/startedAt/expiresAt/reason. Block-count expiration is
+status.admission captures the exact override/production bindings, effective schedule,
+optional scheduleRef binding, startedAt and expiresAt; status.reason reports lifecycle state.
+Block-count expiration is
 deferred because stalled or reorganized chains need a separate clock contract; duration
 support is complete without it.
 

@@ -145,10 +145,10 @@ type ServiceRef struct {
 	Endpoint string `json:"endpoint"`
 }
 
-// Config selects typed TOML overrides or a complete immutable config Secret.
+// Config selects actor-native overrides or a complete immutable configuration Secret.
 // +kubebuilder:validation:XValidation:rule="!(has(self.overrides) && has(self.secretRef))",message="config overrides and secretRef are exclusive"
 type Config struct {
-	// Overrides contains TOML-compatible values validated by the resolver.
+	// Overrides contains Stacks TOML values or Bitcoin scalar/repeated-option/section values.
 	// +kubebuilder:pruning:PreserveUnknownFields
 	Overrides *runtime.RawExtension `json:"overrides,omitempty"`
 	// SecretRef selects a complete configuration version.

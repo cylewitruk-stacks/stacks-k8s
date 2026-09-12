@@ -27,7 +27,7 @@ integrity. See the
   experiment plan. Follow the [steady-state design](docs/design/steady-state-operation.md).
 - Install the network operator independently of individual networks. The aggregate
   compiles capability resources; capability workload controllers provision scoped
-  execution Deployments in each network namespace. Keep signing keys out of the
+  execution workloads in each network namespace. Keep signing keys out of the
   operator process and consensus signer administration outside signer Pods.
 - `BitcoinNode` describes a Bitcoin Core instance without a mining role.
   `BitcoinBlockProduction` and bounded actions own block generation;
@@ -85,14 +85,11 @@ integrity. See the
 - Go is the implementation language for operators and repository tooling.
   Keep Kubernetes APIs, reconciliation, admission, production nonce ownership,
   submission/recovery, and evidence accounting in Go.
-- JavaScript is a narrow Stacks SDK integration exception, confined to
-  `operators/network/transactions`: offline key encoding and transfer/PoX/contract
-  transaction signing, with focused tests.
-  It must not render actor configuration, build Kubernetes resources, query
-  clusters, submit transactions, or sequence bootstrap/renewal. Go capability
-  controllers own declared initialization and ongoing protocol maintenance.
-  Provisioning commands render declarations; they are not required to sequence
-  a running network. Funded genesis accounts do not imply managed participation.
+- JavaScript is test-only, confined to `operators/network/transactions` as a pinned
+  offline Stacks.js oracle for portable Go protocol implementation. Runtime images
+  and workers must not invoke it. It must not query clusters, render configuration,
+  submit transactions or sequence network operation. Funded genesis accounts do
+  not imply managed participation.
 - Keep repository wire-contract fixtures in `contracts/` and their production
   decoding/digest implementations in the respective Go consumers. Do not move
   or duplicate these contracts into JavaScript fixtures or modules.

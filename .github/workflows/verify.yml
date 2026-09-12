@@ -44,7 +44,7 @@ jobs:
             operators/action/go.sum
       - uses: azure/setup-helm@v5
       - run: make verify-network
-      - run: make verify-foundation
+      - run: make api-verify verify-library
 
   action:
     name: Action operator

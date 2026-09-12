@@ -1,6 +1,7 @@
 package foundation
 
 import (
+	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -10,15 +11,19 @@ import (
 
 const (
 	managedByLabel    = "app.kubernetes.io/managed-by"
-	foundationManager = "stacks-network-foundation"
+	foundationManager = "stacks-network-operator"
 )
 
-// CacheOptions excludes unrelated Jobs and ConfigMaps without filtering user declarations.
+// CacheOptions excludes unrelated runtime objects without filtering user declarations.
 // Secret watches remain metadata-only; labels select notifications, never authorize ownership.
 func CacheOptions() cache.Options {
 	selector := labels.SelectorFromSet(labels.Set{managedByLabel: foundationManager})
 	return cache.Options{ByObject: map[client.Object]cache.ByObject{
-		&batchv1.Job{}:      {Label: selector},
-		&corev1.ConfigMap{}: {Label: selector},
+		&corev1.Pod{}:         {Label: selector},
+		&corev1.Service{}:     {Label: selector},
+		&appsv1.StatefulSet{}: {Label: selector},
+		&appsv1.Deployment{}:  {Label: selector},
+		&batchv1.Job{}:        {Label: selector},
+		&corev1.ConfigMap{}:   {Label: selector},
 	}}
 }

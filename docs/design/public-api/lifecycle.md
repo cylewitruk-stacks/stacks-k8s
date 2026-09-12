@@ -20,7 +20,8 @@ advances the local nonce; uncertainty holds the pending stream without a replay.
 
 1. Apply definitions and a network in any order. Allocate generated participants for
    its explicitly named entries; resolve their complete effective configurations.
-   Identity/config resolver Jobs may run, but no actor or mutation worker activates.
+   Domain controllers may provision scoped non-mutating config resolver Jobs and
+   report validation; identity resolvers may also run. No actor or mutation worker activates.
    Definitions validate direct inputs independently; instance wiring checks use the
    selected participant graph. An unrelated parked definition does not block it.
 2. Profile, schedule, genesis allocations/settings and root defaults are immutable
@@ -30,7 +31,8 @@ advances the local nonce; uncertainty holds the pending stream without a replay.
 3. With operation Running and a complete valid graph, recheck root UID/generation,
    deletion/control, participant UIDs and source/dependency identities. Optional
    expectedInputDigest must match this candidate. Each initial participant's complete
-   public policy must already be durably recorded in status.admission; incomplete
+   public policy must already be durably recorded by the network controller in
+   status.admission, using current domain/identity reports; incomplete
    runtime bindings do not permit activation. Create deterministic network-owned
    StacksGenesis, capturing chain inputs, initial participant UIDs/config digests and
    the public values required by each bootstrap gate together. This single creation
@@ -67,9 +69,23 @@ or corrupt published genesis fails the network, never regenerates from current i
 
 Each instance admission pins its participant UID, definition UID when referenced,
 transitive participant/account/wallet/Secret UIDs and public fingerprints. Record
-complete policy inputs and digest; never private keys. Domain controllers validate
-complete candidate policies before admitting them. Workers execute admitted state,
+complete policy inputs and digest; never private keys. Domain controllers report
+configuration validation and runtime facts. The network controller validates the
+complete candidate, membership, dependencies and cross-participant constraints, and
+alone writes complete admission and resolution/policy conditions. Workers execute admitted state,
 not an arbitrary combination of root/definition informer snapshots.
+
+Admission.source retains the policy's source name, UID, generation and public digest.
+AdmissionReady independently reports whether that retained source and its captured
+dependencies remain eligible for the current participant generation. A rejected newer
+candidate does not make the retained policy ineligible merely because its source
+generation differs. Missing, replaced or deleting sources set AdmissionReady=False;
+an unavailable current API observation sets it to Unknown. Mutation workers also read
+their exact named public source before authorizing sends; Bitcoin generation additionally
+checks the production source. Native reads, receipt accounting and previously admitted
+finite compensation keep their separate identity checks. Observed source loss holds
+the surviving process's baseline through later API outages; an unobserved first source
+cannot establish outage authority.
 
 A changed protected binding reports RequiresReplacement; preserve the previous whole
 policy only while its captured dependencies still exist and remain eligible. Root
@@ -103,7 +119,7 @@ durable root status; a controller restart reconstructs the remaining work from t
 two resources. No definition history or process-local policy snapshot is required.
 
 Until a gate completes, a candidate policy that conflicts with any of its captured
-requirements sets the participant condition PolicyDeferred=True with reason
+requirements makes the network controller set PolicyDeferred=True with reason
 BootstrapPending. Keep the previous complete admitted policy; apply none of the
 candidate's substantive fields. The worker continues
 to pursue the captured requirements. Re-evaluate the latest candidate after the last
@@ -222,6 +238,15 @@ latched experiment condition: no edit can authorize a new worker after failure.
 | Paused | Resolve/validate for inspection; do not freeze/start. If genesis already won a race, retain it without activation. | Cooperatively hold new baseline/faucet submissions; observe pending work and retain processes. Already-admitted bounded actions and consensus may continue. |
 | Stopped | Create no further runtime; keep existing resolved artifacts for inspection. | Stop new activity, settle/disposition pending work, terminate worker/actor processes and confirm termination. Retain instance declarations/config and PVCs until removal/deletion. No resume. |
 
+For root stop or deletion, keep StacksNode RPC and StacksSigner consensus actors
+running until every retained Stacks management session has a recorded Settled or
+Unsettled disposition. The aggregate's existing 30-second settlement bound may record
+Unsettled; actor shutdown does not wait for successful inclusion or worker recovery.
+Actor finalizers preserve this order when participant deletion happens concurrently.
+Never-bound workers add no delay. Individual actor suspension/removal remains destructive.
+Missing root/session identity or hard disappearance of a bound worker Pod without
+retained disposition stays TerminationUnknown; timeout alone does not prove termination.
+
 Stopped does not preserve container logs, memory or ephemeral files. Actor stop scales
 its StatefulSet to zero; support Deployments drain then scale to zero; standalone
 workers acknowledge shutdown then exit. Confirm exact process identities. Failed
@@ -322,18 +347,19 @@ acknowledgement and works without observability CRDs or collectors.
 | Configuration | Public effective configuration/digests may be collected; runtime ConfigMaps/Secrets are deleted with their owner. Export required private files explicitly with appropriate access; passive observability never reads signing Secrets. |
 | Ephemeral files / process memory | No retention promise after stop, Pod replacement or deletion; explicit capture must precede the destructive operation. |
 
-For ordered disposal, use background cascading deletion (`--cascade=background`).
-While the root finalizer remains, its children can serve cleanup. Root deletion
-withdraws new activity, then finalizes dependent workers, Bitcoin
-cleanup and actors before deleting shared genesis/config and releasing its finalizer.
-Existing Bitcoin cleanup uses bounded disposition rules. An unreachable node cannot
-prove old processes stopped; report Destroying/TerminationUnknown and keep the root
-finalizer. Pod force deletion or administrative namespace removal is outside this
-ordered contract. Foreground cascading can delete descendants before the root
-finalizer completes; orphan propagation can leave unmanaged runtime. Both are outside
-the ordered-disposal guarantee. Report interrupted/uncertain cleanup honestly and
-verify surviving process identities before claiming termination; never infer settled
-work from GC. Do not retain artifacts automatically to make these modes archival.
+Background and foreground cascading deletion support ordered disposal. The root
+finalizer withdraws new activity, settles dependent workers and Bitcoin cleanup,
+confirms process termination, then removes actors and shared artifacts. Participant,
+genesis and workload owner references do not block owner deletion; their finalizers
+and explicit controller ordering preserve cleanup inputs. BitcoinExecution and
+BitcoinInitialization can receive an early deletionTimestamp under foreground GC;
+their artifact finalizer retains them until participant disposal finishes, and
+cleanup/accounting paths tolerate that timestamp without authorizing new work.
+
+An unreachable node cannot prove old processes stopped: report
+Destroying/TerminationUnknown and retain the root finalizer. Orphan propagation,
+forced Pod/finalizer removal and administrative namespace removal are outside the
+ordered contract. Never infer settlement from GC or treat deletion as archival.
 A failed network remains inspectable until explicit disposal. See
 [Kubernetes cascading deletion](https://kubernetes.io/docs/concepts/architecture/garbage-collection/#foreground-cascading-deletion).
 

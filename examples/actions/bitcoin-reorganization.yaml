@@ -1,14 +1,14 @@
-apiVersion: actions.stacks.org/v1alpha1
+# Set networkUID and payout address from the selected running network before applying.
+apiVersion: actions.stacks.org/v1alpha2
 kind: BitcoinReorganization
 metadata:
   name: replace-two-blocks
   labels:
     actions.stacks.org/correlation-id: local-fork-check
 spec:
-  networkRef:
-    name: bitcoin
+  networkUID: REPLACE-WITH-CURRENT-NETWORK-UID
   bitcoinNodeRef:
-    name: bitcoin-bitcoin
+    name: btc-01
   depth: 2
   address: mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn
   boundaryPolicy:

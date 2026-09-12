@@ -49,8 +49,13 @@ spec:
             description: NetworkObservationSpec requests one identity-bound observation.
             properties:
               expectedInventoryDigest:
-                description: ExpectedInventoryDigest fails closed when the admitted
-                  inventory differs.
+                description: ExpectedInventoryDigest binds only a legacy v1alpha1
+                  network inventory.
+                pattern: ^sha256:[0-9a-f]{64}$
+                type: string
+              expectedSnapshotDigest:
+                description: ExpectedSnapshotDigest binds the independently observed
+                  v1alpha2 actor snapshot.
                 pattern: ^sha256:[0-9a-f]{64}$
                 type: string
               networkRef:
@@ -97,6 +102,32 @@ spec:
                       description: ConfigDigest binds the admitted configuration declaration
                         or bytes.
                       type: string
+                    configurationEvidence:
+                      description: ConfigurationEvidence attributes Secret identity
+                        and content to public controller reports.
+                      enum:
+                      - controller-reported
+                      type: string
+                    configurationFingerprint:
+                      description: ConfigurationFingerprint is the controller-reported
+                        private configuration content digest.
+                      type: string
+                    configurationName:
+                      description: ConfigurationName is the mounted Secret name published
+                        by the participant.
+                      type: string
+                    configurationReportUID:
+                      description: ConfigurationReportUID pins the corroborating public
+                        resolver ConfigMap.
+                      type: string
+                    configurationUID:
+                      description: ConfigurationUID is the controller-reported Secret
+                        UID; Secret metadata is not read.
+                      type: string
+                    containerID:
+                      description: ContainerID pins the directly observed v1alpha2
+                        actor process.
+                      type: string
                     controllerRevision:
                       description: ControllerRevision is the converged StatefulSet
                         revision.
@@ -126,6 +157,9 @@ spec:
                     resourceName:
                       description: ResourceName is the admitted leaf resource name.
                       type: string
+                    resourceUID:
+                      description: ResourceUID pins the generated v1alpha2 participant.
+                      type: string
                     role:
                       description: Role is the Stacks node or signer role; Bitcoin
                         nodes have none.
@@ -137,8 +171,40 @@ spec:
                     serviceName:
                       description: ServiceName is the actor's stable Service identity.
                       type: string
+                    services:
+                      description: Services contains all directly checked v1alpha2
+                        endpoint identities.
+                      items:
+                        description: ObservedServiceIdentity records a directly verified
+                          participant endpoint.
+                        properties:
+                          name:
+                            description: Name is the same-namespace Service name.
+                            type: string
+                          port:
+                            description: Port is the verified TCP port.
+                            format: int32
+                            type: integer
+                          protocol:
+                            description: Protocol identifies the native endpoint.
+                            type: string
+                          uid:
+                            description: UID pins the Service object.
+                            type: string
+                        required:
+                        - name
+                        - port
+                        - protocol
+                        - uid
+                        type: object
+                      maxItems: 8
+                      type: array
+                      x-kubernetes-list-map-keys:
+                      - name
+                      x-kubernetes-list-type: map
                     specDigest:
-                      description: SpecDigest binds the complete admitted leaf specification.
+                      description: SpecDigest binds the legacy leaf spec or complete
+                        v1alpha2 admitted configuration.
                       type: string
                     statefulSetName:
                       description: StatefulSetName is the actor workload name.
@@ -163,7 +229,7 @@ spec:
                   - statefulSetName
                   - statefulSetUID
                   type: object
-                maxItems: 232
+                maxItems: 1000
                 type: array
                 x-kubernetes-list-map-keys:
                 - kind
@@ -173,22 +239,35 @@ spec:
                 description: Binding identifies the stable topology when Ready.
                 properties:
                   inventoryDigest:
-                    description: InventoryDigest binds the admitted actor set.
+                    description: InventoryDigest binds only the legacy admitted actor
+                      set.
                     pattern: ^sha256:[0-9a-f]{64}$
                     type: string
                   name:
                     description: Name is the topology resource name.
                     type: string
+                  networkAPIVersion:
+                    description: NetworkAPIVersion identifies the selected network
+                      API, without version fallback.
+                    enum:
+                    - network.stacks.org/v1alpha1
+                    - network.stacks.org/v1alpha2
+                    type: string
                   observedGeneration:
-                    description: ObservedGeneration is the reconciled topology generation.
+                    description: ObservedGeneration is the topology generation read
+                      for this snapshot.
                     format: int64
                     type: integer
+                  snapshotDigest:
+                    description: SnapshotDigest identifies the observation-owned v1alpha2
+                      actor snapshot.
+                    pattern: ^sha256:[0-9a-f]{64}$
+                    type: string
                   uid:
                     description: UID prevents same-name topology replacement from
                       being hidden.
                     type: string
                 required:
-                - inventoryDigest
                 - name
                 - observedGeneration
                 - uid

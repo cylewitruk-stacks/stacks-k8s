@@ -1,0 +1,516 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.22.0
+  name: stacksfaucetrequests.stacks.stacks.org
+spec:
+  group: stacks.stacks.org
+  names:
+    kind: StacksFaucetRequest
+    listKind: StacksFaucetRequestList
+    plural: stacksfaucetrequests
+    singular: stacksfaucetrequest
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    name: v1alpha2
+    schema:
+      openAPIV3Schema:
+        description: StacksFaucetRequest is one user-owned transfer request bound
+          to one network attempt.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: Spec fixes the requested transfer and its original lifetime.
+            properties:
+              amountMicroSTX:
+                description: AmountMicroSTX is a positive uint64 transfer amount.
+                maxLength: 20
+                pattern: ^(0|[1-9][0-9]{0,19})$
+                type: string
+                x-kubernetes-validations:
+                - message: amount must be positive
+                  rule: self != '0'
+                - message: amount must fit uint64
+                  rule: uint(self) <= 18446744073709551615u
+              destination:
+                description: Destination is resolved once to a concrete public address.
+                properties:
+                  accountRef:
+                    description: AccountRef selects a resolved public identity.
+                    properties:
+                      name:
+                        description: Name is the referenced name; the containing field
+                          determines its kind.
+                        maxLength: 253
+                        minLength: 1
+                        pattern: ^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  address:
+                    description: Address is an explicit destination.
+                    maxLength: 64
+                    pattern: ^ST[0-9A-HJKMNP-TV-Z]{26,39}$
+                    type: string
+                type: object
+                x-kubernetes-validations:
+                - message: select an account or address
+                  rule: has(self.accountRef) != has(self.address)
+              faucetRef:
+                description: FaucetRef selects one logical faucet participant in this
+                  namespace.
+                properties:
+                  name:
+                    description: Name is the referenced name; the containing field
+                      determines its kind.
+                    maxLength: 253
+                    minLength: 1
+                    pattern: ^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$
+                    type: string
+                required:
+                - name
+                type: object
+              networkUID:
+                description: NetworkUID prevents a request from following a replacement
+                  environment.
+                maxLength: 128
+                minLength: 1
+                type: string
+              timeout:
+                description: Timeout starts at creationTimestamp; the controller never
+                  extends it.
+                maxLength: 32
+                minLength: 2
+                type: string
+                x-kubernetes-validations:
+                - message: timeout must be positive and at most one hour
+                  rule: duration(self) > duration('0s') && duration(self) <= duration('1h')
+            required:
+            - amountMicroSTX
+            - destination
+            - faucetRef
+            - networkUID
+            - timeout
+            type: object
+            x-kubernetes-validations:
+            - message: request spec is immutable
+              rule: self == oldSelf
+          status:
+            description: Status separates admission/projection from worker-owned execution
+              evidence.
+            properties:
+              admission:
+                description: Admission is written by the request controller.
+                properties:
+                  amountMicroSTX:
+                    description: AmountMicroSTX is the immutable admitted transfer
+                      amount.
+                    maxLength: 20
+                    pattern: ^(0|[1-9][0-9]{0,19})$
+                    type: string
+                    x-kubernetes-validations:
+                    - message: amount must fit uint64
+                      rule: uint(self) <= 18446744073709551615u
+                  decision:
+                    description: Decision separates waiting from granted or permanently
+                      refused execution authority.
+                    enum:
+                    - Pending
+                    - Admitted
+                    - Rejected
+                    - Expired
+                    type: string
+                  destination:
+                    description: Destination is the resolved immutable testnet principal.
+                    maxLength: 64
+                    pattern: ^ST[0-9A-HJKMNP-TV-Z]{26,39}$
+                    type: string
+                  destinationAccount:
+                    description: DestinationAccount records the optional account resolved
+                      to Destination.
+                    properties:
+                      fingerprint:
+                        description: Fingerprint pins resolved public content where
+                          applicable.
+                        maxLength: 71
+                        type: string
+                      kind:
+                        description: Kind identifies the bound public resource.
+                        maxLength: 64
+                        type: string
+                      name:
+                        description: Name identifies the same-namespace object.
+                        maxLength: 253
+                        minLength: 1
+                        type: string
+                      uid:
+                        description: UID prevents identity replacement.
+                        maxLength: 128
+                        minLength: 1
+                        type: string
+                    required:
+                    - kind
+                    - name
+                    - uid
+                    type: object
+                  expiresAt:
+                    description: ExpiresAt is creationTimestamp + timeout, with subsecond
+                      precision preserved.
+                    format: date-time
+                    maxLength: 64
+                    type: string
+                    x-kubernetes-validations:
+                    - message: absolute request deadline is immutable
+                      rule: self == oldSelf
+                  faucet:
+                    description: Faucet is the exact generated participant, not the
+                      reusable definition.
+                    properties:
+                      fingerprint:
+                        description: Fingerprint pins resolved public content where
+                          applicable.
+                        maxLength: 71
+                        type: string
+                      kind:
+                        description: Kind identifies the bound public resource.
+                        maxLength: 64
+                        type: string
+                      name:
+                        description: Name identifies the same-namespace object.
+                        maxLength: 253
+                        minLength: 1
+                        type: string
+                      uid:
+                        description: UID prevents identity replacement.
+                        maxLength: 128
+                        minLength: 1
+                        type: string
+                    required:
+                    - kind
+                    - name
+                    - uid
+                    type: object
+                  feeMicroSTX:
+                    description: FeeMicroSTX is the explicit release-selected transaction
+                      fee.
+                    maxLength: 20
+                    pattern: ^(0|[1-9][0-9]{0,19})$
+                    type: string
+                    x-kubernetes-validations:
+                    - message: amount must fit uint64
+                      rule: uint(self) <= 18446744073709551615u
+                  networkUID:
+                    description: NetworkUID is the exact environment admitted for
+                      execution.
+                    maxLength: 128
+                    minLength: 1
+                    type: string
+                  profileDigest:
+                    description: ProfileDigest pins the worker's mounted identities
+                      and immutable ingress profile.
+                    maxLength: 71
+                    pattern: ^sha256:[0-9a-f]{64}$
+                    type: string
+                  reason:
+                    description: Reason is a bounded controller classification.
+                    maxLength: 64
+                    type: string
+                  sourceAccount:
+                    description: SourceAccount is the immutable funding account identity.
+                    properties:
+                      fingerprint:
+                        description: Fingerprint pins resolved public content where
+                          applicable.
+                        maxLength: 71
+                        type: string
+                      kind:
+                        description: Kind identifies the bound public resource.
+                        maxLength: 64
+                        type: string
+                      name:
+                        description: Name identifies the same-namespace object.
+                        maxLength: 253
+                        minLength: 1
+                        type: string
+                      uid:
+                        description: UID prevents identity replacement.
+                        maxLength: 128
+                        minLength: 1
+                        type: string
+                    required:
+                    - kind
+                    - name
+                    - uid
+                    type: object
+                  target:
+                    description: Target is the exact admitted Stacks mutation ingress
+                      participant.
+                    properties:
+                      fingerprint:
+                        description: Fingerprint pins resolved public content where
+                          applicable.
+                        maxLength: 71
+                        type: string
+                      kind:
+                        description: Kind identifies the bound public resource.
+                        maxLength: 64
+                        type: string
+                      name:
+                        description: Name identifies the same-namespace object.
+                        maxLength: 253
+                        minLength: 1
+                        type: string
+                      uid:
+                        description: UID prevents identity replacement.
+                        maxLength: 128
+                        minLength: 1
+                        type: string
+                    required:
+                    - kind
+                    - name
+                    - uid
+                    type: object
+                  worker:
+                    description: Worker is the exact non-restarting Pod bound in the
+                      root ledger.
+                    properties:
+                      fingerprint:
+                        description: Fingerprint pins resolved public content where
+                          applicable.
+                        maxLength: 71
+                        type: string
+                      kind:
+                        description: Kind identifies the bound public resource.
+                        maxLength: 64
+                        type: string
+                      name:
+                        description: Name identifies the same-namespace object.
+                        maxLength: 253
+                        minLength: 1
+                        type: string
+                      uid:
+                        description: UID prevents identity replacement.
+                        maxLength: 128
+                        minLength: 1
+                        type: string
+                    required:
+                    - kind
+                    - name
+                    - uid
+                    type: object
+                required:
+                - decision
+                - expiresAt
+                - networkUID
+                - reason
+                type: object
+                x-kubernetes-validations:
+                - message: execution admission is immutable once granted
+                  rule: oldSelf.decision != 'Admitted' || self == oldSelf
+                - message: negative terminal admission is immutable
+                  rule: oldSelf.decision != 'Rejected' && oldSelf.decision != 'Expired'
+                    || self == oldSelf
+                - message: admission requires complete execution bindings
+                  rule: self.decision != 'Admitted' || has(self.faucet) && has(self.worker)
+                    && has(self.sourceAccount) && has(self.target) && has(self.destination)
+                    && has(self.amountMicroSTX) && has(self.feeMicroSTX) && has(self.profileDigest)
+              conditions:
+                description: Conditions belong solely to the request controller.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              execution:
+                description: Execution belongs solely to the admitted worker.
+                properties:
+                  amountMicroSTX:
+                    description: AmountMicroSTX is the exact micro-STX amount.
+                    maxLength: 20
+                    pattern: ^(0|[1-9][0-9]{0,19})$
+                    type: string
+                    x-kubernetes-validations:
+                    - message: amount must fit uint64
+                      rule: uint(self) <= 18446744073709551615u
+                  destination:
+                    description: Destination and AmountMicroSTX retain the actual
+                      immutable transfer inputs.
+                    maxLength: 64
+                    type: string
+                  faucetUID:
+                    description: FaucetUID pins the admitted participant instance.
+                    maxLength: 128
+                    minLength: 1
+                    type: string
+                  inclusionBlockID:
+                    description: InclusionBlockID identifies the native canonical
+                      inclusion, when observed.
+                    pattern: ^[0-9a-f]{64}$
+                    type: string
+                  networkUID:
+                    description: NetworkUID identifies the environment actually observed
+                      by this worker.
+                    maxLength: 128
+                    minLength: 1
+                    type: string
+                  noSend:
+                    description: NoSend is affirmative worker evidence that dispatch
+                      never began.
+                    type: boolean
+                  observedAt:
+                    description: ObservedAt is the original successful observation
+                      time retained through API retries.
+                    format: date-time
+                    type: string
+                  phase:
+                    description: Phase reports dispatch and exact native outcomes
+                      independently of projection.
+                    enum:
+                    - Submitted
+                    - Completed
+                    - Rejected
+                    - Expired
+                    - Inconclusive
+                    type: string
+                  processNonce:
+                    description: ProcessNonce identifies the surviving process that
+                      owns pending coordination.
+                    maxLength: 128
+                    minLength: 1
+                    type: string
+                  reason:
+                    description: Reason classifies the observed outcome without raw
+                      RPC bodies.
+                    maxLength: 64
+                    type: string
+                  txID:
+                    description: TxID is the exact signed transaction identity when
+                      dispatch began.
+                    pattern: ^[0-9a-f]{64}$
+                    type: string
+                  workerUID:
+                    description: WorkerUID pins the admitted Pod.
+                    maxLength: 128
+                    minLength: 1
+                    type: string
+                required:
+                - amountMicroSTX
+                - destination
+                - faucetUID
+                - networkUID
+                - noSend
+                - observedAt
+                - phase
+                - processNonce
+                - reason
+                - workerUID
+                type: object
+                x-kubernetes-validations:
+                - message: no-send evidence cannot identify a submitted transaction
+                  rule: '!self.noSend || !has(self.txID) && (self.phase == ''Rejected''
+                    || self.phase == ''Expired'')'
+                - message: expiry requires affirmative no-send evidence
+                  rule: self.phase != 'Expired' || self.noSend
+                - message: completion requires exact native inclusion
+                  rule: self.phase != 'Completed' || !self.noSend && has(self.txID)
+                    && has(self.inclusionBlockID)
+                - message: rejection requires no-send evidence, a classified native
+                    refusal with txID, or exact failed inclusion
+                  rule: self.phase != 'Rejected' || self.noSend || has(self.inclusionBlockID)
+                    || has(self.txID) && self.reason in ['RejectedFeeTooLow', 'RejectedBadNonce',
+                    'RejectedConflictingNonceInMempool', 'RejectedNotEnoughFunds']
+              phase:
+                description: Phase is a projection, never independent transaction
+                  evidence.
+                enum:
+                - Pending
+                - Submitted
+                - Completed
+                - Rejected
+                - Inconclusive
+                - Expired
+                type: string
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

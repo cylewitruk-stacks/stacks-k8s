@@ -12,7 +12,7 @@ var GroupVersion = schema.GroupVersion{Group: "stacks.stacks.org", Version: "v1a
 
 // AddToScheme registers definitions and list kinds.
 func AddToScheme(s *runtime.Scheme) error {
-	s.AddKnownTypes(GroupVersion, &StacksAccount{}, &StacksAccountList{}, &StacksNode{}, &StacksNodeList{}, &StacksSigner{}, &StacksSignerList{}, &StacksStacker{}, &StacksStackerList{}, &StacksContractSet{}, &StacksContractSetList{}, &StacksFaucet{}, &StacksFaucetList{}, &StacksTransactionProduction{}, &StacksTransactionProductionList{})
+	s.AddKnownTypes(GroupVersion, &StacksAccount{}, &StacksAccountList{}, &StacksNode{}, &StacksNodeList{}, &StacksSigner{}, &StacksSignerList{}, &StacksStacker{}, &StacksStackerList{}, &StacksContractSet{}, &StacksContractSetList{}, &StacksFaucet{}, &StacksFaucetList{}, &StacksTransactionProduction{}, &StacksTransactionProductionList{}, &StacksFaucetRequest{}, &StacksFaucetRequestList{})
 	metav1.AddToGroupVersion(s, GroupVersion)
 	return nil
 }

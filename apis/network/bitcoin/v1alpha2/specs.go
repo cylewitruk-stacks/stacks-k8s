@@ -31,17 +31,22 @@ type WalletKeySource struct {
 }
 
 // BitcoinWalletSpec defines a reusable wallet, without a global balance.
+// +kubebuilder:validation:XValidation:rule="!has(self.watchOnly) || self.watchOnly",message="only watch-only Core wallets are supported; omit watchOnly or set it to true"
 type BitcoinWalletSpec struct {
 	// WalletName is the local Core wallet name; omission uses the CR name.
 	// +kubebuilder:validation:MaxLength=253
 	WalletName *string `json:"walletName,omitempty"`
 	// KeySource defines wallet identity; omission requests generation.
 	KeySource *WalletKeySource `json:"keySource,omitempty"`
-	// WatchOnly omits private material from Core.
+	// WatchOnly omits private material from Core; only true or omission is supported.
 	WatchOnly *bool `json:"watchOnly,omitempty"`
 }
 
 // Cadence separates timing from target selection.
+// +kubebuilder:validation:XValidation:rule="!has(self.interval) || (duration(self.interval) >= duration('1s') && duration(self.interval) <= duration('1h'))",message="interval must be between 1s and 1h"
+// +kubebuilder:validation:XValidation:rule="!has(self.minimumInterval) || (duration(self.minimumInterval) >= duration('1s') && duration(self.minimumInterval) <= duration('1h'))",message="minimumInterval must be between 1s and 1h"
+// +kubebuilder:validation:XValidation:rule="!has(self.maximumInterval) || (duration(self.maximumInterval) >= duration('1s') && duration(self.maximumInterval) <= duration('1h'))",message="maximumInterval must be between 1s and 1h"
+// +kubebuilder:validation:XValidation:rule="!has(self.minimumInterval) || !has(self.maximumInterval) || duration(self.maximumInterval) >= duration(self.minimumInterval)",message="maximumInterval must not be below minimumInterval"
 // +kubebuilder:validation:XValidation:rule="self.mode == 'Fixed' ? (has(self.interval) && !has(self.minimumInterval) && !has(self.maximumInterval)) : (!has(self.interval) && has(self.minimumInterval) && has(self.maximumInterval))",message="cadence fields must match mode"
 type Cadence struct {
 	// Mode selects fixed or uniform timing.

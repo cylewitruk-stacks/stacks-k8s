@@ -14,7 +14,6 @@ import (
 	common "github.com/cylewitruk-stacks/stacks-k8s/apis/network/common/v1alpha2"
 	stacks "github.com/cylewitruk-stacks/stacks-k8s/apis/network/stacks/v1alpha2"
 	"github.com/cylewitruk-stacks/stacks-k8s/libs/stacks/identity"
-	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -25,8 +24,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 type resolvable interface {
@@ -81,6 +78,9 @@ func (r *IdentityReconciler) Reconcile(ctx context.Context, request ctrl.Request
 		if errors.Is(resolveErr, errResolverFailed) {
 			reason = "ResolverFailed"
 		}
+		if errors.Is(resolveErr, ErrUnsupportedWalletProfile) {
+			reason = "UnsupportedWalletProfile"
+		}
 		condition = metav1.ConditionFalse
 		message = resolveErr.Error()
 	} else {
@@ -93,7 +93,7 @@ func (r *IdentityReconciler) Reconcile(ctx context.Context, request ctrl.Request
 			return ctrl.Result{}, err
 		}
 	}
-	if resolveErr != nil && !errors.Is(resolveErr, errResolverFailed) {
+	if resolveErr != nil && !errors.Is(resolveErr, errResolverFailed) && !errors.Is(resolveErr, ErrUnsupportedWalletProfile) {
 		return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
 	}
 	return ctrl.Result{}, nil
@@ -119,6 +119,9 @@ func (r *IdentityReconciler) resolve(ctx context.Context, obj resolvable, inputD
 			}
 		}
 	case *bitcoin.BitcoinWallet:
+		if err := ValidateWalletProfile(v.Spec); err != nil {
+			return status, err
+		}
 		if key := v.Spec.KeySource; key != nil {
 			if key.StacksMinerAccountRef != nil {
 				var account stacks.StacksAccount
@@ -229,43 +232,9 @@ func resolved(obj resolvable) bool {
 	return obj.GetDeletionTimestamp() == nil && s.ObservedGeneration == obj.GetGeneration() && s.Identity != nil && meta.IsStatusConditionTrue(s.Conditions, "Resolved")
 }
 
-// SetupWithManager registers owned-report and metadata-only credential notifications.
+// SetupWithManager registers targeted public-report and metadata-only credential notifications.
 func (r *IdentityReconciler) SetupWithManager(m ctrl.Manager) error {
-	source := r.object()
-	name := "foundation-account"
-	if r.Wallet {
-		name = "foundation-wallet"
-	}
-	enqueueNamespace := handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
-		var objects []client.Object
-		if r.Wallet {
-			var list bitcoin.BitcoinWalletList
-			if r.Client.List(ctx, &list, client.InNamespace(obj.GetNamespace())) != nil {
-				return nil
-			}
-			for i := range list.Items {
-				objects = append(objects, &list.Items[i])
-			}
-		} else {
-			var list stacks.StacksAccountList
-			if r.Client.List(ctx, &list, client.InNamespace(obj.GetNamespace())) != nil {
-				return nil
-			}
-			for i := range list.Items {
-				objects = append(objects, &list.Items[i])
-			}
-		}
-		result := []reconcile.Request{}
-		for _, o := range objects {
-			result = append(result, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(o)})
-		}
-		return result
-	})
-	builder := ctrl.NewControllerManagedBy(m).Named(name).For(source).Owns(&corev1.ConfigMap{}).Owns(&batchv1.Job{}).WatchesMetadata(&corev1.Secret{}, enqueueNamespace)
-	if r.Wallet {
-		builder = builder.Watches(&stacks.StacksAccount{}, enqueueNamespace)
-	}
-	return builder.Complete(r)
+	return r.setupIdentityWatches(m)
 }
 
 // DefaultAccountName names reusable identities independently of network instances.

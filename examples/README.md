@@ -1,25 +1,13 @@
 # Examples
 
-- [`network/`](network/) contains `StacksNetwork` topology examples.
-- [`observability/`](observability/) contains one-shot trusted-observation
-  examples.
+Install the owning charts before applying resources. Examples are source-checkout
+inputs; actor images must be built/loaded or available from a registry.
 
-Install the owning chart before applying an example.
+- [Network composition](network/README.md) uses the maintained public API example.
+- [Actions](actions/) contain bounded Bitcoin requests; fill exact network identity
+  and target/payout fields from your running network.
+- [Native faults](chaos/) require exact network and participant labels.
+- [Observation](observability/) describes read-only identity observation.
 
-For a Bitcoin 31.1 network that generates blocks automatically, follow the
-[baseline guide](../docs/network-operator/bitcoin-production.md). Its generator
-creates the network plus fresh credentials and configuration; credentials are
-not committed as static example manifests.
-
-The examples are source-checkout templates, not image-distribution manifests.
-`network/minimal.yaml` expects `stacks-core-network:local`; build that actor
-image and load it into the target cluster, or replace it with an accessible
-image reference. Apply the examples only after every referenced image is
-available to the cluster.
-
-## Stacks transfer profile
-
-The [Stacks bootstrap and transfer guide](../docs/network-operator/stacks-production.md)
-uses an external generator instead of committing private fixture keys. It
-creates a Bitcoin node, Stacks miner, signer-node/signer and paused transfer policy,
-with fresh isolated accounts and version-specific raw configuration.
+Use a fresh namespace for each independent experiment. Examples contain no private
+fixture keys; account resolvers generate or import scoped credentials.

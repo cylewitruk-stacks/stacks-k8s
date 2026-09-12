@@ -1,227 +1,83 @@
-# Steady-state operation amendment
+# Steady-state network operation
 
 ## Status and authority
 
-**Direction agreed; implementation contracts open.** The
-[M0 remediation plan](m0-remediation-plan.md) adopts this amendment as the
-current product and ownership direction. It supersedes the topology-only
-boundary and production model of M0.3/M0.4. Its broader contracts
-remain open; the constrained [implemented Bitcoin
-baseline](../network-operator/bitcoin-production.md)
-is an initial delivery slice, not completion of this amendment.
-
-[`steady-state-operation-v1.json`](../../contracts/steady-state-operation-v1.json)
-records these decisions and implementation gates.
+The [composable public API](public-api/README.md) defines the implemented network
+contract. This document summarizes its product boundaries; generated CRDs and the
+resource/lifecycle specification determine individual fields and transitions.
 
 ## Desired operating state
 
-`StacksNetwork` declares baseline topology and supported ongoing behavior for
-a useful regtest network. Independently reconciled capabilities maintain that
-state. A functioning network is the desired outcome, not a prerequisite for
-starting every capability needed to reach it. Explicitly paused, partially
-configured, and externally driven networks remain valid uses.
-
-| Resource | Responsibility |
-| --- | --- |
-| `StacksNetwork` | Declare actors, relationships, baseline production, and transaction demand. |
-| `BitcoinNode` | Run Bitcoin Core and expose qualified interfaces; no mining role or cadence policy. |
-| `StacksNode` | Run a Stacks node, including its miner role and supported miner configuration. |
-| `StacksSigner` | Run a signer with its configured identity and behavior. |
-| `BitcoinBlockProduction` | Apply emission timing and target-selection policy across referenced Bitcoin nodes. |
-| `StacksTransactionProduction` | Ongoing Stacks demand; one-account fixed-interval transfers through one ingress are implemented. |
-| `StacksAccount` | Retain exclusive transaction authority and exact execution evidence for one managed account. |
-| `StacksContractSet` | Establish exact contract artifacts and declared initial bridge state. |
-| `StacksStackingParticipant` | Maintain declared direct stacking and signer-manager registration independently of the signer Pod. |
-| Bounded action/override | Apply one temporary, independently observable intervention. |
-
-The aggregate controller compiles owned resources; it does not issue mining
-RPCs, generate transaction traffic, or execute a bootstrap plan. Permanent
-changes go through `StacksNetwork`. Each child has one spec writer and one
-controller responsible for its status and effects.
-
-Baseline operation must be available without enabling chaos, bounded-action,
-or observability controllers. Deployment, chart, API-module, and ServiceAccount
-ownership remain packaging decisions. Standalone capability resources need
-explicit ownership/overlap rules before becoming a supported advanced API.
+`StacksNetwork` describes a functioning regtest network, including topology and
+ongoing behavior. Reusable definitions are inert until selected as participants.
+The aggregate resolves and admits; scoped workers converge initialization and
+maintain declared operation. An external bootstrap command is not required.
 
 ## Network genesis and configuration
 
-Each provisioned network carries an immutable public genesis snapshot: accounts,
-balances, test-genesis selection, epoch schedule, PoX parameters and optional
-PoX-5 contract/admin principals. External Go
-provisioning may copy a reusable immutable `StacksGenesisProfile`; controllers
-use the copied snapshot rather than looking up a mutable recipe. One Go TOML
-renderer supplies node and
-signer configurations. SDK adapters only encode keys and sign transactions.
-See [configuration ownership](../network-operator/configuration.md).
+Account resolution is independent of networks. Genesis explicitly allocates funds
+and freezes epoch/PoX inputs, public identities, contract sources and initial
+requirements before runtime starts. Extra funded accounts may remain unmanaged.
+Generated nodes and workers consume the same artifact. Config rendering is Go-owned
+and Secrets remain outside the operator process.
 
 ## Bitcoin production
 
-Emission timing and target selection are separate dimensions. Intended
-capabilities include fixed cadence, cadence with jitter, and weighted random
-selection across referenced `BitcoinNode`s. Each emission requests a block on
-the selected node's local chain. The controller does not choose a winning
-branch or rebalance activity after observing a partition.
-
-Cadence describes offered generation opportunities for the policy. Weights
-distribute those opportunities; they are not measured hash power or a promise
-about canonical chain growth. Repeatable inputs do not imply repeatable
-execution.
-
-The [implemented baseline profile](../network-operator/bitcoin-production.md)
-has one aggregate-owned policy, 1–8 weighted targets with explicit destinations,
-and fixed or bounded uniform-jitter timing. Parent intent controls mutable
-policy; UID-pinned ledgers retain execution identity. Standalone policies and
-per-target credential profiles remain deferred.
-Overlapping policies must not silently multiply baseline rates; a per-target
-Lease alone cannot enforce this property.
-
-Unavailable or reserved targets must not cause silent redistribution of their
-weight. The initial profile skips and counts unavailable opportunities, with
-no redistribution. Restart must not cause
-catch-up bursts. Production remains mutable desired operation with bounded
-status, not a terminal action. The [Bitcoin design](bitcoin-lifecycle.md)
-owns its execution and recovery gates.
+Bitcoin nodes have no mining role. Production selects targets and timing through
+separate policy. Shared per-target reservations serialize baseline and bounded
+actions. Durable Armed uncertainty cannot be cleared by a client timeout or by
+assuming a restarted process reconstructed an unavailable receipt.
 
 ## Stacks mining and transaction demand
 
-Keep mining as a `StacksNode` role/property. Proposal timing is supported actor
-configuration, qualified against its image; accepted block cadence also
-depends on tenure, signers, processing, and protocol rules. Changes may roll
-the actor unless the image offers a qualified live-update capability.
-
-`StacksTransactionProduction` supplies steady demand independently of the
-current miner. Submission targets may include follower RPC endpoints. Exact
-empty-mempool behavior is image-specific; offered demand does not guarantee a
-proposal or block in every interval.
-
-The [initial transfer profile](../network-operator/stacks-production.md) implements
-a separately deployed worker, one exclusive account/ingress, fixed offered
-intervals, and exact inclusion accounting. External helpers own funding and
-direct PoX-4/PoX-5 enrollment and renewal with separate holder, manager
-administrator and consensus-signer identities. See the
-[PoX-5 profile](../network-operator/pox5.md). Its static account isolation is qualified; rotation
-means withdrawal followed by a fresh account/environment, with no hot rotation
-or protocol revocation claim. Broader contracts below remain open.
-
-The recommended execution model uses dedicated workers reconciled by a small
-controller. M0.6 must define transaction profiles, ingress references, offered
-rate, timing, pause/update behavior, funding prerequisites, signing authority,
-and one nonce owner per account across producers. Outstanding work,
-backpressure, retries, ambiguous submissions, status, and restart behavior
-must be bounded and explicit.
-
-M0.6 Requirement 14 must resolve signing-authority isolation:
-administrator-selected account/credential profiles, designated worker access, rotation and
-revocation, and exclusion of observers, actors, and unrelated producers from
-signing credentials. M2 validates that contract before enabling transaction
-production; signing material never enters public specs, status, or evidence.
-
-Distinguish submitted, accepted, rejected, pending, and confirmed transactions.
-Do not increase offered traffic automatically to conceal a throughput drop.
-Contract initialization and signer registration/renewal use separate desired-state
-capabilities compiled from `StacksNetwork.spec.operation`; transaction production
-remains independent. See [managed network operation](managed-network-operation.md).
+Stacks nodes retain mining configuration. Independent transfer workers supply
+transaction demand, and stackers enroll/renew holder participation. Consensus
+signers run separately. A configured transfer interval influences demand; it does
+not promise exact block cadence or deterministic consensus outcomes.
 
 ## Temporary interventions
 
-A temporary cadence or pause override is narrowly typed, target-bound,
-time-bounded, and explicit about conflicts. It does not patch and later restore
-a saved baseline spec. One controller applies the effective behavior from the
-current baseline and admitted override; expiry or cancellation resumes the
-latest baseline, including edits made during the intervention.
-
-Status binds baseline generation and override identity. Override kinds,
-precedence, expiry enforcement, and the boundary with finite generation remain
-deferred M0.4/M0.6 decisions; no temporary override kind is served. Finite
-generation instead reserves one target and releases to the latest baseline.
-No generic action list or mechanism registry is introduced.
+Bounded actions and native faults are separate from baseline policy. Temporary
+timing overrides resume the latest baseline after expiry/cancellation. Reorganization
+cleanup removes its local invalidity marker, not the resulting best chain. There
+is no ordered experiment/playbook resource or restoration of an old network spec.
 
 ## Identity, readiness, and progress
 
-Preserve the implemented complete inventory as an aggregate snapshot contract.
-Do not relabel stale or partial inventory as complete. Design a separate
-current target-validation contract for declaration, ownership, UID, generation,
-runtime/configuration identity, and required endpoint capability. Wire changes
-require fixtures and consumer compatibility work.
+Admission requires each capability's current dependencies and exact runtime bindings.
+Kubernetes readiness, completed initialization, recent protocol progress and action
+completion are distinct facts. Optional actors, faucets and telemetry do not become
+implicit prerequisites for unrelated capability admission.
 
-Bitcoin production must start while Stacks awaits Bitcoin progress. An
-unrelated actor failure must not automatically suspend a valid target.
-Observation must continue recording unhealthy actors and identity transitions.
-Readiness neither certifies protocol correctness nor permits replacement
-targets to inherit admission. Endpoint identity at mutation time and
-cross-system races are not solved solely by uncached Kubernetes reads.
+Stacks management workers retain process-local nonce/submission state. A lost bound
+worker fails the experiment; no replacement reconstructs or replays uncertain work.
+Shared accounts are legal experiment inputs, without coordinated nonce ownership
+between independent workers.
 
 ## Fault traffic and production control
 
-The initial direction is centralized Bitcoin production with a qualified
-management path. Supported protocol-network faults preserve that path unless
-control failure is explicitly the subject of the test.
-
-| Traffic | Default fault treatment |
-| --- | --- |
-| Bitcoin peer traffic | Eligible for selected disruption. |
-| Stacks node to Bitcoin RPC | Eligible for selected disruption. |
-| Production controller to Bitcoin RPC | Preserved by the qualified protocol-fault profile. |
-
-The RPC paths can share a port. A second Service or an allow NetworkPolicy does
-not bypass a packet-level Chaos Mesh fault. Qualify actual source, target, and
-direction behavior, including replacement Pods.
-
-Peer isolation, loss of generation control, and process unavailability are
-different observations. Isolation need not stop local mining; actual behavior
-also depends on templates, software connectivity checks, and pool dependencies.
-Do not infer mining cessation from an unreachable control endpoint.
-
-Central production cannot promise continuity through arbitrary Pod-wide
-isolation or node failure. Autonomous local production is deferred. A local
-proxy alone cannot solve lost control connectivity: a local worker needs
-already-admitted authority and reviewed ownership, expiry, and reservation
-semantics. Never silently switch from central selection to local policies.
+Native protocol-fault selectors include exact network and participant UIDs plus
+actor role on both ends. Control access is qualified separately. Losing RPC access
+does not prove an actor stopped producing blocks. Fault cleanup likewise does not
+prove the Stacks network resumed useful consensus.
 
 ## Review ledger and implementation gates
 
-These are design findings, not claims of implemented vulnerabilities. Recording
-a correction does not close its implementation gate.
-
-The [R1/R2 proposal](target-admission-and-rpc-execution.md) supplies concrete
-admission and execution recommendations with local evidence. Its conservative
-profile blocks conflicting mutations while a request remains unresolved;
-the [initial delivery scope](m0-remediation-plan.md#initial-delivery-scope)
-puts R1 publication next and uses fresh isolated environments after ambiguity.
-Credential rotation and explicit reset/readmission are deferred. R3 still
-defines basic RPC authority separation; R4 gates reorganization cleanup.
-
-| ID | Required resolution | Owner | State |
-| --- | --- | --- | --- |
-| R1 | Target admission independent of whole-network health, including endpoint identity and bootstrap/fault cases. | M0.3/M0.4 amendment; M0.6 | Open |
-| R2 | Server-side quiescence or an explicitly weaker RPC contract; client deadlines and Lease expiry do not fence execution. | M0.3/M0.4 amendment | Open |
-| R3 | Separate observation/mutation authority, Secret access, and server-enforced RPC permissions; freeze concrete profiles. | M0.3 amendment; M0.7 | Open |
-| R4 | Invalidation cleanup for every reorganization exit, including cancellation, timeout, ownership loss, and unresolved cleanup. | M0.3 amendment | Open |
-| R5 | Primary-resource metadata patch permissions for finalizers, verified with restricted ServiceAccounts. | M0.2 clarification; implementation | Direction recorded; validation open |
-| R6 | Delegated workload/Secret access through topology editing and credential isolation. | M0.7/M0.8 | Direction recorded; qualification open |
-| R7 | Query backend reachability and actor trust; proxy RBAC does not authenticate direct backend connections. | M0.7 | Open |
-| R8 | Ordinary regtest, resilience/liveness, performance/resource, and reported-behavior acceptance exercises. | M0.8 design; M8 cross-product qualification | Planned |
+Qualification names the topology, images, schedule, identities and observed results.
+Unit/envtest assertions establish controller/API behavior; live checks establish the
+selected profile's kubelet, storage, GC and protocol behavior. Broader fault, image,
+observability and release matrices remain explicit roadmap work.
 
 ## Acceptance
 
-- Produce Bitcoin blocks while Stacks is unready and while an unrelated actor
-  fails, without weakening target identity.
-- Qualify timing and weighted selection without silent redistribution,
-  catch-up bursts, or overlapping baseline writers.
-- Distinguish protocol isolation from lost control and process failure on the
-  supported local platform.
-- Exercise transaction demand with account ownership, backpressure, and honest
-  outcome attribution.
-- Change a baseline during an override; removal resumes the latest baseline.
-- Close applicable gates and freeze replacement schemas/fixtures before
-  enabling controllers. Runtime acceptance requires implementation evidence.
+A baseline must initialize from public declarations, keep producing useful protocol
+progress, expose distinct failure/health facts and support documented cleanup.
+Optional actions/observability must remain independently installable. Operators
+provide capabilities and evidence; users/agents investigate and draw conclusions.
 
 ## References
 
-- [Bitcoin regtest](https://developer.bitcoin.org/examples/testing.html#regtest-mode)
-- [Bitcoin mining](https://developer.bitcoin.org/devguide/mining.html)
-- [Stacks miner/signer configuration](https://github.com/stacks-network/stacks-core/blob/main/docs/signing.md)
-- [Chaos Mesh network faults](https://chaos-mesh.org/docs/simulate-network-chaos-on-kubernetes/)
-- [Kubernetes finalizers](https://book.kubebuilder.io/reference/using-finalizers)
-- [Delegated workload access](https://kubernetes.io/docs/concepts/security/rbac-good-practices/#workload-creation)
+- [Runtime guide](../network-operator/public-api-foundation.md)
+- [Protocol timing](public-api/protocol-timing.md)
+- [Lifecycle](public-api/lifecycle.md)
+- [Current state](current-state.md)

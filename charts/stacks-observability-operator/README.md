@@ -1,10 +1,11 @@
 # Stacks observability operator
 
 This independent chart begins the trusted-observation layer for topologies
-managed by `stacks-network-operator`. The initial API verifies the admitted
+managed by the network operator. New installations select the `v1alpha2`
+foundation API. The initial API verifies the admitted
 Kubernetes identity of every actor through uncached API-server reads.
 
-The first slice intentionally does not collect protocol values, logs, metrics,
+The identity reader does not collect protocol values, logs, metrics,
 or evidence bundles. It writes no topology or workload resource and has no
 Secret access.
 
@@ -31,7 +32,7 @@ helm upgrade --install stacks-observability-operator \
   --set image.pullPolicy=Never
 ```
 
-Install this chart in the same namespace as the topology operator, then create
+Install this chart in the namespace of the network to observe, then create
 a `NetworkObservation`:
 
 ```bash
@@ -47,21 +48,37 @@ kubectl --namespace stacks-regtest get networkobservation minimal-identity \
   --output yaml
 ```
 
-`Ready` means the topology was ready and every admitted leaf, Service,
-StatefulSet, and Pod identity matched direct API reads. This includes ownership,
-generation and revision convergence, canonical leaf-spec and inventory
-digests, configuration digest, requested image, readiness, and immutable
-runtime image identity. The topology UID/generation/inventory binding must also
-remain stable across the complete observation. `Inconclusive` means the
-operator declined to make that claim. `Pending` waits for a complete admitted
-inventory.
+For `network.stacks.org/v1alpha2`, `Ready` means every
+selected Bitcoin node, Stacks node and signer has a directly verified current
+participant/workload/Pod/container identity. The reader checks allocation UIDs,
+controller ownership, complete admitted policy digest, requested and resolved
+images, readiness, rollout revision, Service routing, mounted configuration name
+and public configuration annotations. It re-reads the collected objects before
+publishing. Unrelated management workers and the root's `Operational` condition
+do not gate this physical actor observation.
 
-The observer discovers resources through controller-owner UID chains. It then
-checks operator labels as identity assertions, so label drift cannot hide a
-retired or unexpected network-owned resource.
+`status.binding.snapshotDigest` belongs to the observation snapshot, not the
+network. `spec.expectedSnapshotDigest` optionally pins a previously observed
+snapshot. Service UID and container changes produce a different digest. An
+observation is a bounded series of reads, not an atomic Kubernetes snapshot;
+read-time drift returns `Inconclusive`. Missing or unfinished actors remain
+`Pending` until the configured deadline.
 
-For a pre-bound workflow, set `spec.expectedInventoryDigest` to the digest the
-caller admitted. The observation fails closed when it differs.
+Private configuration content and Secret UID are **controller-reported** evidence,
+corroborated against the public resolver ConfigMap. They are marked separately
+from the directly observed Pod mount and annotation identity. Secret objects are
+never read, and this chart grants no Secret permission. The snapshot is evidence,
+not authority to dispatch actions or proof of protocol health.
+
+The final consistency pass compares identity-bearing inputs, including declarations,
+allocation, admission, runtime bindings, workload state and configuration reports.
+Root progress conditions and participant protocol/execution heartbeats do not change
+actor identity. Replacement, deletion or a changed consumed input makes the snapshot
+inconclusive.
+
+The reader supports only the participant API. Legacy `expectedInventoryDigest`
+requests become `Inconclusive` without observation; use `expectedSnapshotDigest`.
+Previously completed observations remain unchanged.
 
 An observation is one-shot per resource generation. Create another resource
 for another point in time. An external agent may create observations whenever

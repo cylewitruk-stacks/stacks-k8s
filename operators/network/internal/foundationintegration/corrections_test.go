@@ -18,6 +18,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -89,7 +90,7 @@ func verifyRetainedDependencyFailure(t *testing.T, ctx context.Context, c client
 		t.Fatal(err)
 	}
 	spec := *definition.Spec.DeepCopy()
-	definition.Spec.Recipient = &stacks.Recipient{AccountRef: &common.NameRef{Name: "admin-01"}}
+	definition.Spec.Interval = ptr.To(common.Duration("20s"))
 	updateObject(t, ctx, c, &definition)
 	reader := r.Reader
 	r.Reader = &missingAccountReader{Reader: reader, key: client.ObjectKey{Namespace: root.Namespace, Name: spec.Recipient.AccountRef.Name}}
@@ -104,9 +105,9 @@ func verifyRetainedDependencyFailure(t *testing.T, ctx context.Context, c client
 	r.Reader = reader
 	driveRoot(t, ctx, c, r, request, root)
 	p = participant(t, ctx, c, root, "traffic")
-	requireReason(t, p, "BootstrapPending")
-	if !reflect.DeepEqual(p.Status.Admission, old.Status.Admission) {
-		t.Fatal("recovery changed captured policy")
+	requireReason(t, p, "Admitted")
+	if *p.Status.Admission.Configuration.StacksTransactionProduction.Interval != "20s" {
+		t.Fatal("recovery did not admit compatible cadence")
 	}
 	if err := c.Get(ctx, client.ObjectKeyFromObject(&definition), &definition); err != nil {
 		t.Fatal(err)

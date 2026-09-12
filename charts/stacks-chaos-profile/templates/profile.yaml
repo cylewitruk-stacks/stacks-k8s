@@ -70,22 +70,35 @@ spec:
     - expression: >-
         oldObject != null || (
         has({{ $selector }}.namespaces) && {{ $selector }}.namespaces == [request.namespace] &&
-        has({{ $selector }}.labelSelectors) && size({{ $selector }}.labelSelectors) == 2 &&
+        has({{ $selector }}.labelSelectors) && size({{ $selector }}.labelSelectors) <= 6 &&
+        {{ $selector }}.labelSelectors.all(k, k in ['network.stacks.org/network', 'network.stacks.org/actor', 'network.stacks.org/network-uid', 'network.stacks.org/participant-uid', 'network.stacks.org/role', 'network.stacks.org/participant-kind']) &&
+        (!('network.stacks.org/participant-kind' in {{ $selector }}.labelSelectors) ||
+        {{ $selector }}.labelSelectors['network.stacks.org/participant-kind'] in ['BitcoinNode', 'StacksNode', 'StacksSigner']) &&
         'network.stacks.org/network' in {{ $selector }}.labelSelectors &&
         'network.stacks.org/actor' in {{ $selector }}.labelSelectors &&
+        'network.stacks.org/network-uid' in {{ $selector }}.labelSelectors &&
+        'network.stacks.org/participant-uid' in {{ $selector }}.labelSelectors &&
+        'network.stacks.org/role' in {{ $selector }}.labelSelectors &&
+        {{ $selector }}.labelSelectors['network.stacks.org/role'] == 'actor' &&
+        {{ $selector }}.labelSelectors['network.stacks.org/network-uid'].matches('^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$') &&
+        {{ $selector }}.labelSelectors['network.stacks.org/participant-uid'].matches('^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$') &&
         {{ $selector }}.labelSelectors['network.stacks.org/network'].matches('^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$') &&
         {{ $selector }}.labelSelectors['network.stacks.org/actor'].matches('^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$') &&
         !has({{ $selector }}.pods) && !has({{ $selector }}.expressionSelectors) &&
         !has({{ $selector }}.annotationSelectors) && !has({{ $selector }}.fieldSelectors) &&
         !has({{ $selector }}.nodes) && !has({{ $selector }}.nodeSelectors) && !has({{ $selector }}.podPhaseSelectors))
-      message: source and target require only this namespace and exact network/actor labels
+      message: source and target require this namespace, exact network and participant UIDs, actor name and role=actor
     {{- end }}
     - expression: >-
         oldObject != null || (
         object.spec.selector.labelSelectors['network.stacks.org/network'] == object.spec.target.selector.labelSelectors['network.stacks.org/network'] &&
+        object.spec.selector.labelSelectors['network.stacks.org/network-uid'] == object.spec.target.selector.labelSelectors['network.stacks.org/network-uid'] &&
+        object.spec.selector.labelSelectors['network.stacks.org/participant-uid'] != object.spec.target.selector.labelSelectors['network.stacks.org/participant-uid'] &&
         object.spec.selector.labelSelectors['network.stacks.org/actor'] != object.spec.target.selector.labelSelectors['network.stacks.org/actor'] &&
         has(object.metadata.labels) && 'network.stacks.org/network' in object.metadata.labels &&
         object.metadata.labels['network.stacks.org/network'] == object.spec.selector.labelSelectors['network.stacks.org/network'] &&
+        'network.stacks.org/network-uid' in object.metadata.labels &&
+        object.metadata.labels['network.stacks.org/network-uid'] == object.spec.selector.labelSelectors['network.stacks.org/network-uid'] &&
         'actions.stacks.org/correlation-id' in object.metadata.labels &&
         size(object.metadata.labels['actions.stacks.org/correlation-id']) > 0)
       message: fault metadata and both distinct actors must identify one network and a correlation label

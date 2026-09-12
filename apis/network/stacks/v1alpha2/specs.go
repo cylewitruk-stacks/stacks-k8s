@@ -70,12 +70,13 @@ type StacksStackerSpec struct {
 
 // RegistryInitialization configures explicit test bridge state.
 // +kubebuilder:validation:XValidation:rule="self.threshold <= size(self.signerAccountRefs)",message="threshold must not exceed signer count"
+// +kubebuilder:validation:XValidation:rule="self.threshold > size(self.signerAccountRefs) / 2",message="threshold must be a strict signer majority"
 type RegistryInitialization struct {
 	// Mode is the supported initialization authority.
 	// +kubebuilder:validation:Enum=ExplicitTestRegistry
 	Mode string `json:"mode"`
 	// SignerAccountRefs supplies public bridge identities.
-	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MinItems=2
 	// +kubebuilder:validation:MaxItems=100
 	// +listType=map
 	// +listMapKey=name

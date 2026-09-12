@@ -131,9 +131,9 @@ Server-side apply is not an automatic safeguard: omitted entries owned by the sa
 field manager can be removed. Separate managers may own disjoint map-list entries,
 but that requires an explicit ownership workflow; do not switch apply modes as a
 repair for a stale manifest. See [SSA ownership](https://kubernetes.io/docs/reference/using-api/server-side-apply/).
-For Argo CD, configure PrunePropagationPolicy=background to match ordered root disposal;
-its default foreground prune does not provide that guarantee. This does not prevent
-destructive membership edits. See [Argo CD pruning](https://argo-cd.readthedocs.io/en/stable/user-guide/sync-options/#resources-prune-deletion-propagation-policy).
+Both foreground and background pruning support ordered root disposal through the
+controller finalizers. Neither prevents destructive membership edits. See
+[Argo CD pruning](https://argo-cd.readthedocs.io/en/stable/user-guide/sync-options/#resources-prune-deletion-propagation-policy).
 Pausing is not an atomic protocol snapshot. Stopping can lose logs/ephemeral data;
 PVC retention and optional external telemetry provide only their configured coverage.
 

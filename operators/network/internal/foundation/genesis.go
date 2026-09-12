@@ -137,8 +137,14 @@ func compileGenesis(ctx context.Context, r client.Reader, root *api.StacksNetwor
 	for _, name := range names {
 		c := all[name]
 		v := c.configuration
+		if unverified(v) {
+			continue
+		}
 		counts[c.instance.Spec.Kind]++
-		req := api.BootstrapRequirement{Participant: binding("StacksNetworkParticipant", c.instance, ""), PolicyDigest: Digest(v), Dependencies: c.dependencies}
+		req := api.BootstrapRequirement{Kind: c.instance.Spec.Kind, Participant: binding("StacksNetworkParticipant", c.instance, ""), PolicyDigest: Digest(v), Dependencies: c.dependencies}
+		if v.StacksNode != nil {
+			req.MiningEnabled = ptr.To(v.StacksNode.Mining != nil && ptr.Deref(v.StacksNode.Mining.Enabled, false))
+		}
 		accountNames := make([]string, 0, len(c.accounts))
 		for name := range c.accounts {
 			accountNames = append(accountNames, name)
@@ -197,6 +203,9 @@ func compileGenesis(ctx context.Context, r client.Reader, root *api.StacksNetwor
 		}
 		if v.StacksContractSet != nil {
 			s := v.StacksContractSet
+			if err := validateRegistryInitialization(s.Initialization); err != nil {
+				return spec, err
+			}
 			if err := requireFunding(c, s.DeployerAccountRef); err != nil {
 				return spec, err
 			}
@@ -234,7 +243,7 @@ func compileGenesis(ctx context.Context, r client.Reader, root *api.StacksNetwor
 		return spec, fmt.Errorf("initial network requires a Stacks miner")
 	}
 	for name, c := range all {
-		if c.configuration.StacksSigner != nil && !stackedSigners[name] {
+		if c.configuration.StacksSigner != nil && !unverified(c.configuration) && !stackedSigners[name] {
 			return spec, fmt.Errorf("signer %s has no initial stacker", name)
 		}
 	}

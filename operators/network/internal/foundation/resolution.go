@@ -55,6 +55,9 @@ func (c *candidate) wallet(ctx context.Context, r client.Reader, ref *common.Nam
 	if err := r.Get(ctx, types.NamespacedName{Namespace: c.instance.Namespace, Name: ref.Name}, &w); err != nil {
 		return fmt.Errorf("wallet %s unavailable", ref.Name)
 	}
+	if err := ValidateWalletProfile(w.Spec); err != nil {
+		return fmt.Errorf("wallet %s: %w", ref.Name, err)
+	}
 	if !resolved(&w) {
 		return fmt.Errorf("wallet %s unresolved", ref.Name)
 	}
@@ -69,6 +72,9 @@ func (c *candidate) participant(all map[string]*candidate, ref *common.NameRef, 
 	other := all[ref.Name]
 	if other == nil || string(other.instance.Spec.Kind) != kind {
 		return fmt.Errorf("participant %s must select an admitted %s", ref.Name, kind)
+	}
+	if unverified(other.configuration) && !unverified(c.configuration) {
+		return fmt.Errorf("managed participant cannot target Unverified actor %s", ref.Name)
 	}
 	c.dependencies = append(c.dependencies, binding("StacksNetworkParticipant", other.instance, ""))
 	return nil
@@ -161,9 +167,7 @@ func (c *candidate) validate(ctx context.Context, r client.Reader, all map[strin
 				account(&v.Initialization.SignerAccountRefs[i], false)
 			}
 			account(&v.Initialization.AggregateKeyAccountRef, false)
-			if int(v.Initialization.Threshold) > len(v.Initialization.SignerAccountRefs) {
-				errs = append(errs, fmt.Errorf("registry threshold exceeds signers"))
-			}
+			errs = append(errs, validateRegistryInitialization(v.Initialization))
 		}
 	case c.configuration.BitcoinBlockProduction != nil:
 		v := c.configuration.BitcoinBlockProduction
@@ -228,8 +232,16 @@ func (c *candidate) validate(ctx context.Context, r client.Reader, all map[strin
 		if fields.Image == nil || *fields.Image == "" {
 			errs = append(errs, fmt.Errorf("actor image is required"))
 		}
-		if cfg := fields.Config; cfg != nil && (cfg.Overrides != nil || ptr.Deref(cfg.Compatibility, "Managed") == "Unverified" || len(cfg.ServiceRefs) > 0) {
-			errs = append(errs, fmt.Errorf("configuration escape-hatch validation requires the actor activation slice"))
+		errs = append(errs, validateCustomization(c.instance.Spec.Kind, fields.Config))
+		if cfg := fields.Config; cfg != nil {
+			for _, ref := range cfg.ServiceRefs {
+				target := all[ref.Name]
+				if target == nil || string(target.instance.Spec.Kind) != ref.Kind {
+					errs = append(errs, fmt.Errorf("Service alias %s selects an unavailable participant", ref.Alias))
+					continue
+				}
+				c.dependencies = append(c.dependencies, binding("StacksNetworkParticipant", target.instance, ""))
+			}
 		}
 		if cfg := fields.Config; cfg != nil && cfg.SecretRef != nil {
 			metadata := &metav1.PartialObjectMetadata{TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "Secret"}}
@@ -238,8 +250,6 @@ func (c *candidate) validate(ctx context.Context, r client.Reader, all map[strin
 			} else {
 				c.dependencies = append(c.dependencies, binding("Secret", metadata, ""))
 			}
-			// Full configuration compatibility is not yet implemented. Never approve bootstrap from uninspected configuration.
-			errs = append(errs, fmt.Errorf("complete configuration Secret compatibility requires the actor activation slice"))
 		}
 	}
 	for _, err := range errs {

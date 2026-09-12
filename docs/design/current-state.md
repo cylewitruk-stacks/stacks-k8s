@@ -1,180 +1,71 @@
-# Current state and gap inventory
+# Current capabilities and gaps
 
-This inventory separates implemented functionality from historical Attacknet
-features. Historical code is feature research only; its orchestration model is
-not a migration target.
+The [composable public API](public-api/README.md) governs network and action
+`v1alpha2` behavior. [Runtime operation](../network-operator/public-api-foundation.md)
+is distinct from profile-specific live qualification.
 
-## Action deployment
+## Network
 
-The independent `stacks-action-operator` owns `BitcoinBlockGeneration` and
-optional `BitcoinReorganization` status/finalizers. The network Bitcoin worker
-reads actions and owns the reservation ledger and all mutation RPCs. See the
-[action guide](../action-operator/operations.md).
-
-## Implemented topology
-
-The `network.stacks.org/v1alpha1` API provides:
-
-| Resource | Implemented behavior | Important limit |
+| Capability | Implemented behavior | Boundary |
 | --- | --- | --- |
-| `StacksNetwork` | Compiles topology and optional Bitcoin/STX/protocol capabilities; publishes declarations and admitted actor identity. | Does not bootstrap protocol state or issue mining RPCs itself. |
-| `BitcoinNode` | Runs one Bitcoin Core instance with explicit peers. | Block generation requires production or action resources. |
-| `StacksNode` | Runs one miner, follower, or signer-node bound to one Bitcoin node. | Protocol readiness is not independently established. |
-| `StacksSigner` | Runs one signer bound to one signer-node with index and weight. | Registration and renewal belong to a separate stacking capability. |
+| Composition | Explicit heterogeneous participants, reusable definitions or inline entries, typed overrides | Participant names are single-use within a root |
+| Accounts/wallets | Scoped generation/import and public identity resolution | No operator access to private key data; shared accounts are legal experiments |
+| Genesis | Immutable balances, epoch/PoX inputs, contract sources and bootstrap cohort | New genesis requires a new network |
+| Actors | Bitcoin nodes, Stacks miners/followers, consensus signers; configured StatefulSets and Services | Ready Pods do not establish protocol health |
+| Bitcoin production | Fixed/uniform timing, weighted targets, initialization ceilings and per-target execution records | Ambiguous dispatch closes that target |
+| Stacks operation | Transaction demand, direct PoX-4/PoX-5 enrollment/renewal, pinned sBTC deployment and registry initialization | Exact-Pod workers do not recover after process loss |
+| Faucet | Bounded request CRs, native submission/inclusion, per-worker deduplication | No generic command server or cross-worker nonce coordination |
+| Lifecycle | Cooperative pause, terminal stop, actor rolls, destructive participant/root removal and configured PVC retention | No historical network-instance registry or mandatory evidence export |
 
-The separate `bitcoin.stacks.org/v1alpha1` `BitcoinBlockProduction` API now
-supports an aggregate-owned, weighted multi-target baseline at fixed or bounded
-jittered cadence. Its
-[implemented profile](../network-operator/bitcoin-production.md) defines static
-credential separation, admission, durable dispatch accounting, and the
-fail-closed availability limit after a lost receipt. Per-target ledgers retain ambiguous work independently.
+`StacksNetwork` resolves and admits; domain controllers provision runtime; scoped
+workers perform protocol work. Shared status uses disjoint server-side-apply writers.
+The portable Go library handles RPC, Clarity and transaction signing; Stacks.js is
+an offline test oracle only.
 
-The separate `stacks.stacks.org/v1alpha1` `StacksTransactionProduction` API
-supports one exclusive account, fixed-interval tiny STX transfers, bounded
-pending work, and exact native inclusion accounting. The
-[initial Stacks profile](../network-operator/stacks-production.md) provides
-controller-managed wallet initialization and PoX-4 enrollment/renewal. The
-[PoX-5 profile](../network-operator/pox5.md) adds real sBTC deployment, explicit
-registry initialization, minimal managers and direct staking. `StacksAccount`,
-`StacksContractSet` and `StacksStackingParticipant` are independently reconciled
-capabilities compiled from `spec.operation`. Genesis funding alone does not
-enroll an account. A local normal
-Stacks image is qualified; this is not a general image compatibility claim.
+The initial timing profile initializes Bitcoin, enrolls PoX-4, establishes a native
+Nakamoto tip, deploys/initializes sBTC, enrolls PoX-5 managers and observes the final
+release boundary. `Initialized` records those historical gates. `Operational`
+requires fresh native evidence and recent ongoing progress. These are independent
+of optional observability tooling.
 
-The aggregate accepts 1–32 Bitcoin nodes and up to 100 Stacks nodes and 100
-signers. Multiple Bitcoin nodes and Stacks miners are structurally possible.
-Current live qualification does not establish every multi-miner or
-mixed-version combination.
+## Actions and faults
 
-Actor templates support per-actor images, raw or generated configuration,
-container command overrides, storage, CPU and memory, placement, and
-suspension. Aggregate-owned leaf resources must be changed through the parent.
-Standalone leaf resources remain an advanced API.
+The independent action operator projects bounded generation and reorganization
+lifecycle facts. The existing Bitcoin control worker remains the sole sender and
+reservation owner. Generation supports immediate, fixed, uniform and explicit
+receipt-relative delay. Reorganization cleanup removes its invalidity marker;
+it does not restore the previous best chain.
 
-The [steady-state operation design](steady-state-operation.md) separates actor
-topology from baseline capabilities. Bitcoin nodes describe Core instances;
-production resources select where and when blocks are generated.
+Temporary schedule overrides resume the latest baseline on expiry/cancellation.
+The native Chaos Mesh profile requires exact network/participant identities and
+actor role on both ends of supported faults. Protocol faults and RPC control loss
+are qualified separately; fault cleanup does not prove protocol recovery.
 
-The operator supports persistent volumes and retention, but refuses unsafe
-in-place changes to immutable StatefulSet service identity, selectors, and
-volume-claim templates. A replacement logical actor is required for those
-changes.
+## Observation
 
-The optional [`BitcoinBlockGeneration`](../network-operator/bitcoin-generation.md)
-API shares the baseline executor with durable reservation, bounded immutable
-requests, cancellation, and receipt attribution. The optional
-[`BitcoinReorganization`](../network-operator/bitcoin-reorganization.md) profile
-adds bounded suffix replacement and explicit compensation obligations.
+The independently versioned `NetworkObservation` API remains `v1alpha1`.
+Its default network reader verifies `v1alpha2` participants, workload/process
+identity and public configuration reports. It never reads Secret values or
+controls the environment. Snapshot identity excludes unrelated protocol heartbeats.
+The explicitly selected old inventory reader remains available for external
+legacy installations; there is no fallback between network API versions.
 
-## Native infrastructure faults
+Logs, metrics, tracing, durable journals, broader capture/export and richer
+correlation remain roadmap work. Native RPC and worker observations used for
+baseline convergence are not a general observability implementation.
 
-The optional [native fault profile](../chaos/operations.md) supplies static CEL,
-namespace enrollment, narrow agent RBAC, one-object quota, and direct
-`NetworkChaos` examples. Chaos Mesh 2.8.4 remains an external installation.
-The [delay matrix](../chaos/qualification.md) and
-[partition matrix](../chaos/partition-qualification.md) cover Bitcoin peers and
-miner-to-Bitcoin traffic with producer access preserved, cancellation/expiry,
-reconnection and observed productive recovery. A repeat Stacks run stalled at a
-reward-cycle transition after native cleanup; reliable Stacks recovery remains
-an open qualification item. Separate administrator-only control-path
-loss retains unresolved dispatches across producer replacement. Other fault
-modes and passive native-fault history remain unimplemented.
+## Qualification and remaining scope
 
-## Implemented observation
+Qualification must name images, schedules, cluster/version, topology and verified
+outcomes. A live result does not establish arbitrary custom-image compatibility,
+all cadence/resource combinations or recovery from every fault. Unit/envtest
+results do not prove kubelet, storage, GC or protocol behavior.
+The [local qualification record](../network-operator/public-api-qualification.md)
+includes successful full-cohort initialization, renewal, native faults and fresh-network
+reuse. Late historical catch-up remains unreliable on the tested native Core profile;
+its missing-anchor failures are recorded without a root-cause or recovery claim.
 
-`observation.stacks.org/v1alpha1` provides `NetworkObservation`, a one-shot,
-read-only verification of:
-
-- topology UID, observed generation, and admitted inventory digest;
-- leaf ownership and specification identity;
-- Service and StatefulSet identity;
-- Pod UID, readiness, controller revision, and immutable runtime image ID; and
-- configuration declaration or content identity published by the network
-  operator.
-
-It does not collect protocol state, logs, metrics, audit events, resource
-usage, or rolling history. It does not export evidence.
-
-## Existing live-update behavior
-
-Patching `StacksNetwork` can add or remove actors; alter images, configuration,
-peers, resources, placement, or process overrides; and suspend individual
-actors or the complete network. The admitted inventory is withdrawn while the
-new generation converges.
-
-Changing a generated or inline configuration rolls the affected actor. A
-referenced ConfigMap or Secret changes only when its reference or optional
-expected digest changes; the controller does not read Secret bytes.
-
-Changing an actor image consumes an existing OCI artifact. No operator clones
-Git, runs repository build logic, or constructs an image.
-
-## Functional gaps
-
-| Area | Missing capability |
-| --- | --- |
-| Bitcoin lifecycle | Broader branch observation and recovery. Weighted baseline with jitter, all four finite generation cadence modes, and constrained local reorganization are implemented. |
-| Steady transaction demand | Multi-account/ingress profiles, overrides and wider signing lifecycle support. One-account fixed-interval demand is implemented. |
-| Protocol bootstrap | General image/epoch compatibility and reusable bounded APIs. Managed direct PoX-4/PoX-5 initialization and renewal are implemented; delegated pools and live sBTC bridge daemons remain outside the profile. |
-| Generic faults | Wider native kinds, traffic/platform combinations, and passive correlation. Bounded NetworkChaos delay and bidirectional actor partitions are implemented. |
-| Protocol actions | Signer/miner behavior controls, application clock offset, bounded input behaviors, and portable storage pressure. |
-| Continuous observation | Mutation history, protocol telemetry, logs, metrics, resource telemetry, rolling retention, and capture-gap reporting. |
-| Agent access | Machine-readable capability discovery, efficient query API, and consistent cross-resource status vocabulary. |
-| Evidence | Passive time-range export with completeness and source metadata. |
-| Safety | Per-resource administrative bounds, direct-leaf edit RBAC, action identity pinning, and explicit cross-kind aggregate limitations. |
-| Packaging | Optional Chaos Mesh and telemetry dependencies, published images/charts, SBOMs, signing, and a support matrix. |
-| Actor coverage | sBTC signers and other materially distinct executables. |
-
-## Historical features worth preserving semantically
-
-The historical Attacknet demonstrated useful behavior that should be recast as
-small resources or passive observations:
-
-- Pod/container failure, network, DNS, I/O, time, and stress faults;
-- application-level clock offset and portable disk pressure;
-- Bitcoin mining pause, flash blocks, reorganizations, multiple Bitcoin views,
-  and follower binding;
-- bounded signer behaviors such as withholding, delay, and peer-response
-  suppression;
-- mixed actor images and configuration escape hatches;
-- actor and topology identity checks before mutation;
-- explicit effect, recovery, and capture-gap facts; and
-- centralized log and telemetry export.
-
-The following historical structures must not return:
-
-- `AttacknetRun`-style scenario schedules;
-- multi-stage `FaultCampaign` execution plans;
-- in-cluster replay, fuzz planning, minimization, or diagnosis;
-- outcome claims based only on a mutation object's successful lifecycle; or
-- deterministic distributed-execution claims.
-
-## Requirements newly identified
-
-- Authoritative mutation history requires Kubernetes audit input when the
-  cluster exposes it. Informer watches alone cannot guarantee every
-  intermediate write.
-- High-volume telemetry and evidence must not be stored in Kubernetes CRDs.
-- A forced reorganization is an action even though natural reorganizations are
-  normal Bitcoin behavior.
-- Bitcoin topology and block production are separate concerns: neutral nodes
-  host chain state; `BitcoinBlockProduction` declares timing and selection
-  among referenced nodes. Stacks nodes retain miner configuration.
-- Baseline production needs current target admission independent of unrelated
-  actor health; whole-network readiness can itself depend on chain progress.
-- Supported protocol faults must distinguish actor traffic from centralized
-  production control access; arbitrary isolation has no continuity guarantee.
-- Safe independent upgrades require persistent-data compatibility guidance and
-  explicit identity transitions, not an in-cluster rollout plan.
-
-## Open inventory questions
-
-1. Which Stacks images and additional Bitcoin/platform combinations extend the
-   initial Bitcoin Core 31.1 Linux/arm64 baseline qualification?
-2. Which additional participation and delegated-pool profiles should extend the
-   managed direct-stacking capabilities?
-3. Is sBTC in the first actor-expansion release or a later extension?
-4. Which managed Kubernetes providers expose usable audit streams?
-5. Which additional transaction profiles merit support? Initial Bitcoin and STX
-   production use capability-owned Deployments and ServiceAccounts; the chart
-   installs their provisioning controllers independently of individual networks.
+The roadmap retains broader instrumented/adversarial actors, protocol actions,
+observation and release qualification. There is no scenario engine, reducer,
+replay coordinator, account lease service or management-worker crash recovery.
+See the [roadmap](roadmap.md) and [M0 remediation](m0-remediation-plan.md).

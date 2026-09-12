@@ -189,19 +189,17 @@ Keep controller packages aligned with the Kubernetes resource they reconcile.
 Small cohesive packages are valid boundaries; merge them only when measured
 coupling or duplication demonstrates a clearer design.
 
-## Stacks transfer profile
+## Portable protocol library and SDK oracle
 
-Network verification also runs the locked SDK tests with Node.js 24 or newer
-and npm. Verification runs `npm ci --ignore-scripts`, so an existing
-`node_modules` directory does not substitute for registry access. Offline CI
-must prepopulate the npm cache with the exact locked packages and set
-`npm_config_offline=true`; Go modules/toolchains and envtest assets must also
-already be available. `make vuln` requires access to the npm advisory registry
-and Go vulnerability database for a current audit. The separate worker Dockerfile
-is `operators/network/transactions/Dockerfile`; it packages offline SDK adapters
-and the Go manager for separate transfer and managed-operation Deployments.
-Controllers own managed initialization and renewal. See the
-[qualification record](network-operator/managed-operation-qualification.md).
+`libs/stacks` implements runtime RPC, Clarity values, address encoding and transaction
+signing in Go. Network verification also runs the pinned offline Stacks.js oracle
+under `operators/network/transactions` using Node.js 24+ and npm. Runtime images
+contain no Node.js or signing subprocesses.
+
+Verification uses `npm ci --ignore-scripts`. Offline CI must prepopulate the exact
+locked npm packages and set `npm_config_offline=true`; Go modules, toolchains and
+envtest assets must also be cached. Current vulnerability auditing requires the
+npm advisory registry and Go vulnerability database.
 
 ## Native-fault contract verification
 

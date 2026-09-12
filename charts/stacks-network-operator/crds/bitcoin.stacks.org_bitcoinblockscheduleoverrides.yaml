@@ -1,0 +1,309 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.22.0
+  name: bitcoinblockscheduleoverrides.bitcoin.stacks.org
+spec:
+  group: bitcoin.stacks.org
+  names:
+    kind: BitcoinBlockScheduleOverride
+    listKind: BitcoinBlockScheduleOverrideList
+    plural: bitcoinblockscheduleoverrides
+    singular: bitcoinblockscheduleoverride
+  scope: Namespaced
+  versions:
+  - name: v1alpha2
+    schema:
+      openAPIV3Schema:
+        description: BitcoinBlockScheduleOverride changes timing for one bounded production
+          interval.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: Spec fixes one environment, producer and bounded schedule.
+            properties:
+              duration:
+                description: Duration starts at activation, including time spent paused.
+                maxLength: 32
+                minLength: 2
+                type: string
+                x-kubernetes-validations:
+                - message: duration must be positive and at most 1h
+                  rule: duration(self) > duration('0s') && duration(self) <= duration('1h')
+              networkUID:
+                description: NetworkUID pins the canonical network incarnation.
+                maxLength: 128
+                minLength: 1
+                type: string
+              productionRef:
+                description: ProductionRef selects the logical BitcoinBlockProduction
+                  participant.
+                properties:
+                  name:
+                    description: Name is the referenced name; the containing field
+                      determines its kind.
+                    maxLength: 253
+                    minLength: 1
+                    pattern: ^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$
+                    type: string
+                required:
+                - name
+                type: object
+              schedule:
+                description: Schedule contains immutable inline timing.
+                properties:
+                  cadence:
+                    description: Cadence controls block opportunities.
+                    properties:
+                      interval:
+                        description: Interval is the fixed duration.
+                        maxLength: 32
+                        minLength: 2
+                        type: string
+                      maximumInterval:
+                        description: MaximumInterval bounds uniform timing.
+                        maxLength: 32
+                        minLength: 2
+                        type: string
+                      minimumInterval:
+                        description: MinimumInterval bounds uniform timing.
+                        maxLength: 32
+                        minLength: 2
+                        type: string
+                      mode:
+                        description: Mode selects fixed or uniform timing.
+                        enum:
+                        - Fixed
+                        - Uniform
+                        type: string
+                    required:
+                    - mode
+                    type: object
+                    x-kubernetes-validations:
+                    - message: interval must be between 1s and 1h
+                      rule: '!has(self.interval) || (duration(self.interval) >= duration(''1s'')
+                        && duration(self.interval) <= duration(''1h''))'
+                    - message: minimumInterval must be between 1s and 1h
+                      rule: '!has(self.minimumInterval) || (duration(self.minimumInterval)
+                        >= duration(''1s'') && duration(self.minimumInterval) <= duration(''1h''))'
+                    - message: maximumInterval must be between 1s and 1h
+                      rule: '!has(self.maximumInterval) || (duration(self.maximumInterval)
+                        >= duration(''1s'') && duration(self.maximumInterval) <= duration(''1h''))'
+                    - message: maximumInterval must not be below minimumInterval
+                      rule: '!has(self.minimumInterval) || !has(self.maximumInterval)
+                        || duration(self.maximumInterval) >= duration(self.minimumInterval)'
+                    - message: cadence fields must match mode
+                      rule: 'self.mode == ''Fixed'' ? (has(self.interval) && !has(self.minimumInterval)
+                        && !has(self.maximumInterval)) : (!has(self.interval) && has(self.minimumInterval)
+                        && has(self.maximumInterval))'
+                required:
+                - cadence
+                type: object
+              scheduleRef:
+                description: ScheduleRef selects one immutable same-namespace schedule.
+                properties:
+                  name:
+                    description: Name is the referenced name; the containing field
+                      determines its kind.
+                    maxLength: 253
+                    minLength: 1
+                    pattern: ^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$
+                    type: string
+                required:
+                - name
+                type: object
+            required:
+            - duration
+            - networkUID
+            - productionRef
+            type: object
+            x-kubernetes-validations:
+            - message: select exactly one schedule source
+              rule: has(self.schedule) != has(self.scheduleRef)
+          status:
+            description: Status projects the retained scheduler activation.
+            properties:
+              admission:
+                description: Admission preserves the actual retained scheduler activation.
+                properties:
+                  expiresAt:
+                    description: ExpiresAt bounds future overridden opportunities.
+                    format: date-time
+                    type: string
+                  override:
+                    description: Override pins the user-owned request.
+                    properties:
+                      fingerprint:
+                        description: Fingerprint identifies public content when relevant.
+                        type: string
+                      kind:
+                        description: Kind identifies the API kind or participant kind.
+                        type: string
+                      name:
+                        description: Name is the public resource name.
+                        type: string
+                      uid:
+                        description: UID prevents same-name replacement from inheriting
+                          authority.
+                        type: string
+                    required:
+                    - kind
+                    - name
+                    - uid
+                    type: object
+                  production:
+                    description: Production pins the admitted producer incarnation.
+                    properties:
+                      fingerprint:
+                        description: Fingerprint identifies public content when relevant.
+                        type: string
+                      kind:
+                        description: Kind identifies the API kind or participant kind.
+                        type: string
+                      name:
+                        description: Name is the public resource name.
+                        type: string
+                      uid:
+                        description: UID prevents same-name replacement from inheriting
+                          authority.
+                        type: string
+                    required:
+                    - kind
+                    - name
+                    - uid
+                    type: object
+                  schedule:
+                    description: Schedule snapshots the effective cadence.
+                    properties:
+                      cadence:
+                        description: Cadence controls block opportunities.
+                        properties:
+                          interval:
+                            description: Interval is the fixed duration.
+                            maxLength: 32
+                            minLength: 2
+                            type: string
+                          maximumInterval:
+                            description: MaximumInterval bounds uniform timing.
+                            maxLength: 32
+                            minLength: 2
+                            type: string
+                          minimumInterval:
+                            description: MinimumInterval bounds uniform timing.
+                            maxLength: 32
+                            minLength: 2
+                            type: string
+                          mode:
+                            description: Mode selects fixed or uniform timing.
+                            enum:
+                            - Fixed
+                            - Uniform
+                            type: string
+                        required:
+                        - mode
+                        type: object
+                        x-kubernetes-validations:
+                        - message: interval must be between 1s and 1h
+                          rule: '!has(self.interval) || (duration(self.interval) >=
+                            duration(''1s'') && duration(self.interval) <= duration(''1h''))'
+                        - message: minimumInterval must be between 1s and 1h
+                          rule: '!has(self.minimumInterval) || (duration(self.minimumInterval)
+                            >= duration(''1s'') && duration(self.minimumInterval)
+                            <= duration(''1h''))'
+                        - message: maximumInterval must be between 1s and 1h
+                          rule: '!has(self.maximumInterval) || (duration(self.maximumInterval)
+                            >= duration(''1s'') && duration(self.maximumInterval)
+                            <= duration(''1h''))'
+                        - message: maximumInterval must not be below minimumInterval
+                          rule: '!has(self.minimumInterval) || !has(self.maximumInterval)
+                            || duration(self.maximumInterval) >= duration(self.minimumInterval)'
+                        - message: cadence fields must match mode
+                          rule: 'self.mode == ''Fixed'' ? (has(self.interval) && !has(self.minimumInterval)
+                            && !has(self.maximumInterval)) : (!has(self.interval)
+                            && has(self.minimumInterval) && has(self.maximumInterval))'
+                    required:
+                    - cadence
+                    type: object
+                  scheduleRef:
+                    description: ScheduleRef pins a selected immutable reusable schedule.
+                    properties:
+                      fingerprint:
+                        description: Fingerprint identifies public content when relevant.
+                        type: string
+                      kind:
+                        description: Kind identifies the API kind or participant kind.
+                        type: string
+                      name:
+                        description: Name is the public resource name.
+                        type: string
+                      uid:
+                        description: UID prevents same-name replacement from inheriting
+                          authority.
+                        type: string
+                    required:
+                    - kind
+                    - name
+                    - uid
+                    type: object
+                  startedAt:
+                    description: StartedAt is the original successful activation time.
+                    format: date-time
+                    type: string
+                required:
+                - expiresAt
+                - override
+                - production
+                - schedule
+                - startedAt
+                type: object
+              observedGeneration:
+                description: ObservedGeneration identifies the immutable request evaluated.
+                format: int64
+                type: integer
+              pendingExpiresAt:
+                description: PendingExpiresAt is creation time plus the fixed five-minute
+                  admission window.
+                format: date-time
+                type: string
+              phase:
+                description: Phase reports deterministic contention and bounded activation.
+                enum:
+                - Pending
+                - Active
+                - Completed
+                - Expired
+                - Cancelled
+                type: string
+              reason:
+                description: Reason describes current eligibility or terminal disposition.
+                maxLength: 128
+                type: string
+            type: object
+        required:
+        - spec
+        type: object
+        x-kubernetes-validations:
+        - message: schedule overrides are immutable
+          rule: self.spec == oldSelf.spec
+    served: true
+    storage: true
+    subresources:
+      status: {}

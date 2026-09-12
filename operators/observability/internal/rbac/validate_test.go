@@ -25,3 +25,22 @@ func TestValidateAcceptsExactContractAndRejectsTopologyWrite(t *testing.T) {
 		t.Fatal("topology write privilege was accepted")
 	}
 }
+
+func TestObservationPermissionsNeverIncludePrivateObjectsOrNetworkWrites(t *testing.T) {
+	for _, rule := range expectedRules() {
+		for _, resource := range rule.Resources {
+			if resource == "secrets" || resource == "*" {
+				t.Fatalf("private resource permission: %+v", rule)
+			}
+		}
+		for _, group := range rule.APIGroups {
+			if group == "network.stacks.org" || group == "apps" || group == "" {
+				for _, verb := range rule.Verbs {
+					if verb != "get" && verb != "list" && verb != "watch" {
+						t.Fatalf("network mutation permission: %+v", rule)
+					}
+				}
+			}
+		}
+	}
+}

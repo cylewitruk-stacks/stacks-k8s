@@ -2,7 +2,9 @@
 FROM golang:1.27.1 AS builder
 WORKDIR /src
 COPY operators/observability/go.mod operators/observability/go.sum ./operators/observability/
+COPY apis/network/go.mod apis/network/go.sum ./apis/network/
 RUN --mount=type=cache,target=/go/pkg/mod cd operators/observability && go mod download
+COPY apis/network ./apis/network
 COPY operators/observability ./operators/observability
 WORKDIR /src/operators/observability
 ARG TARGETOS=linux

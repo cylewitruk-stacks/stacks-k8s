@@ -49,7 +49,7 @@ The window does not guarantee their inclusion rate.
 | PrepareBitcoin: imported wallets, mature miner outputs, synchronized initial Core views | Reach 203, then start Stacks actors and workers. |
 | EnrollPoX4: native PoX-4 active after 209; successful canonical enrollments with exact holder/key/amount covering cycle 12 | Ceiling 234 is a conservative one-block margin before the latest eligible anchor at 235; confirm these facts before release. |
 | PrepareNakamoto: canonical prepared cycle-12 signer set matches the required cohort | Permit Core prepare 236..240; ceiling 251 guards crossing epoch 3.0 at 252. Never require this finalized set while still held at 234. |
-| PreparePoX5: pinned real sBTC contracts and exact initialized registry | Deploy at supported Clarity 3 / epoch 3.0; ceiling 281 protects crossing epoch 4.0 at 282. No direct-manager or PoX-5 enrollment requirement yet. |
+| PreparePoX5: pinned real sBTC contracts and exact initialized registry | Deploy after canonical Nakamoto header observation confirms Clarity-3 support, not Bitcoin height alone; ceiling 281 protects crossing epoch 4.0 at 282. No direct-manager or PoX-5 enrollment requirement yet. |
 | EnrollPoX5: actual epoch 4.0 boot state and PoX-5 tip RPC after 282; managers and exact cycle-15 enrollment | Hold at 284, within the reward phase, while Stacks blocks include management transactions. The contract's next-cycle edit cutoff is 295 exclusive; do not substitute the later Core prepare boundary. |
 | PrepareWaterfall: canonical prepared cycle-15 signer set | Permit Core prepare 296..299; hold at 299 until the prepared set is observed, then allow signing/waterfall boundary 300. |
 | Running: fresh canonical transaction inclusion and intended cohort production after 300 | Release bootstrap ceilings; continue maintenance. Merely seeing pox-5 in RPC is insufficient. |
@@ -68,6 +68,10 @@ Before Nakamoto, a Stacks transaction needs Bitcoin advancement for inclusion. T
 producer admits one confirmation block at a time within the remaining enrollment
 window, with current actor readiness and outstanding authorized enrollment observed.
 It does not stop all Bitcoin movement while waiting for a receipt that needs it.
+Before the first Stacks anchor, fresh native empty-chain observations also authorize
+single-block advancement within the same ceiling: the miner's commitment must be
+confirmed before PoX becomes readable. Missing or failed observations do not grant
+this allowance, and an established chain cannot regain it by losing its data.
 At the legacy enrollment ceiling, persist reachedAt and allow 120s for already
 possible inclusion/catch-up, including across controller restarts. In the proposed v1
 policy this is wall-clock time: the deadline remains reachedAt + 120s during an
