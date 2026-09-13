@@ -21,15 +21,51 @@ func TestBitcoinPauseRequiresFreshHeartbeatIndependentOfOriginalAcknowledgement(
 		heartbeat          time.Duration
 		absentNonce, armed bool
 		want               bool
-	}{{name: "fresh", want: true}, {name: "stale", heartbeat: -foundation.ObservationFreshness() - time.Second}, {name: "future", heartbeat: time.Minute}, {name: "missing process", absentNonce: true}, {name: "outstanding arm", armed: true}} {
+	}{
+		{name: "fresh", want: true},
+		{name: "stale", heartbeat: -foundation.ObservationFreshness() - time.Second},
+		{name: "future", heartbeat: time.Minute},
+		{name: "missing process", absentNonce: true},
+		{name: "outstanding arm", armed: true},
+	} {
 		t.Run(tc.name, func(t *testing.T) {
 			now := time.Now()
 			root := rootFixture()
 			root.Spec.Operation = "Paused"
 			root.Spec.Participants = []api.Participant{{Name: "btc", Kind: "BitcoinNode"}}
 			root.Status.Identities = []api.InstanceIdentity{{Name: "btc", UID: "participant"}}
-			root.Status.Bitcoin = &api.BitcoinRuntimeStatus{ExecutionRefs: []common.Binding{{Kind: "BitcoinExecution", Name: "execution", UID: "execution-uid"}}}
-			record := &bitcoin.BitcoinExecution{ObjectMeta: metav1.ObjectMeta{Name: "execution", Namespace: root.Namespace, UID: "execution-uid", OwnerReferences: []metav1.OwnerReference{{APIVersion: api.GroupVersion.String(), Kind: "StacksNetwork", Name: root.Name, UID: root.UID, Controller: ptr.To(true)}}}, Spec: bitcoin.BitcoinExecutionSpec{NetworkUID: root.UID, Participant: common.Binding{Kind: "StacksNetworkParticipant", Name: "node", UID: "participant"}}, Status: bitcoin.BitcoinExecutionStatus{Control: &bitcoin.BitcoinControlAcknowledgement{NetworkGeneration: root.Generation, ProcessNonce: "current-process", Operation: "Paused", ObservedAt: metav1.NewTime(now.Add(-time.Hour)), HeartbeatAt: metav1.NewTime(now.Add(tc.heartbeat))}}}
+			root.Status.Bitcoin = &api.BitcoinRuntimeStatus{
+				ExecutionRefs: []common.Binding{{Kind: "BitcoinExecution", Name: "execution", UID: "execution-uid"}},
+			}
+			record := &bitcoin.BitcoinExecution{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "execution",
+					Namespace: root.Namespace,
+					UID:       "execution-uid",
+					OwnerReferences: []metav1.OwnerReference{
+						{
+							APIVersion: api.GroupVersion.String(),
+							Kind:       "StacksNetwork",
+							Name:       root.Name,
+							UID:        root.UID,
+							Controller: ptr.To(true),
+						},
+					},
+				},
+				Spec: bitcoin.BitcoinExecutionSpec{
+					NetworkUID:  root.UID,
+					Participant: common.Binding{Kind: "StacksNetworkParticipant", Name: "node", UID: "participant"},
+				},
+				Status: bitcoin.BitcoinExecutionStatus{
+					Control: &bitcoin.BitcoinControlAcknowledgement{
+						NetworkGeneration: root.Generation,
+						ProcessNonce:      "current-process",
+						Operation:         "Paused",
+						ObservedAt:        metav1.NewTime(now.Add(-time.Hour)),
+						HeartbeatAt:       metav1.NewTime(now.Add(tc.heartbeat)),
+					},
+				},
+			}
 			if tc.absentNonce {
 				record.Status.Control.ProcessNonce = ""
 			}

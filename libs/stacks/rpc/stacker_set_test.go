@@ -28,15 +28,45 @@ func TestCanonicalViewAndPreparedSetPinEpochTwoTip(t *testing.T) {
 		}
 		switch r.URL.Path {
 		case "/v2/info":
-			fmt.Fprintf(w, `{"network_id":2147483648,"burn_block_height":240,"stacks_tip_height":20,"stacks_tip":"%s","stacks_tip_consensus_hash":"%s","pox_consensus":"%s","is_fully_synced":true}`, tip, consensus, burn)
+			if _, err := fmt.Fprintf(
+				w,
+				`{"network_id":2147483648,"burn_block_height":240,"stacks_tip_height":20,`+
+					`"stacks_tip":"%s","stacks_tip_consensus_hash":"%s","pox_consensus":"%s",`+
+					`"is_fully_synced":true}`,
+				tip,
+				consensus,
+				burn,
+			); err != nil {
+				t.Error(err)
+			}
 		case "/v3/stacker_set/12":
-			fmt.Fprintf(w, `{"stacker_set":{"reward_set_version":0,"signers":[{"signing_key":"%s","weight":7,"stacked_amt":340282366920938463463374607431768211455}],"pox_ustx_threshold":9007199254740993}}`, preparedKey)
+			if _, err := fmt.Fprintf(
+				w,
+				`{"stacker_set":{"reward_set_version":0,"signers":[{"signing_key":"%s",`+
+					`"weight":7,"stacked_amt":340282366920938463463374607431768211455}],`+
+					`"pox_ustx_threshold":9007199254740993}}`,
+				preparedKey,
+			); err != nil {
+				t.Error(err)
+			}
 		case "/v2/pox":
-			fmt.Fprintf(w, `{"contract_id":"%s.pox-4","current_burnchain_block_height":240,"reward_cycle_id":12,"reward_cycle_length":20,"next_cycle":{"min_threshold_ustx":1,"blocks_until_prepare_phase":15}}`, testAddress)
+			if _, err := fmt.Fprintf(
+				w,
+				`{"contract_id":"%s.pox-4","current_burnchain_block_height":240,`+
+					`"reward_cycle_id":12,"reward_cycle_length":20,`+
+					`"next_cycle":{"min_threshold_ustx":1,"blocks_until_prepare_phase":15}}`,
+				testAddress,
+			); err != nil {
+				t.Error(err)
+			}
 		case "/v2/accounts/" + testAddress:
-			io.WriteString(w, `{"nonce":1,"balance":"0x1","locked":"0x0","unlock_height":0}`)
+			if _, err := io.WriteString(w, `{"nonce":1,"balance":"0x1","locked":"0x0","unlock_height":0}`); err != nil {
+				t.Error(err)
+			}
 		case "/v2/contracts/call-read/" + testAddress + "/pox-4/example":
-			io.WriteString(w, `{"okay":true,"result":"0x03"}`)
+			if _, err := io.WriteString(w, `{"okay":true,"result":"0x03"}`); err != nil {
+				t.Error(err)
+			}
 		default:
 			t.Errorf("unexpected request %s", r.URL.Path)
 		}
@@ -47,7 +77,9 @@ func TestCanonicalViewAndPreparedSetPinEpochTwoTip(t *testing.T) {
 		t.Fatalf("canonical view: %+v %v", view, err)
 	}
 	set, err := c.StackerSet(ctx, 12, view.IndexBlockID)
-	if err != nil || !set.Available || set.Signers[0].Weight != 7 || set.Signers[0].StackedAmount.Integer.String() != "340282366920938463463374607431768211455" || set.Threshold.Integer.String() != "9007199254740993" {
+	if err != nil || !set.Available || set.Signers[0].Weight != 7 ||
+		set.Signers[0].StackedAmount.Integer.String() != "340282366920938463463374607431768211455" ||
+		set.Threshold.Integer.String() != "9007199254740993" {
 		t.Fatalf("native epoch-2 set: %+v %v", set, err)
 	}
 	if _, err := c.PoXAt(ctx, index); err != nil {
@@ -72,12 +104,44 @@ func TestPreparedSetDistinguishesWaitingFromMalformedOrFailedReads(t *testing.T)
 		{"other error", 400, `{"err_type":"other"}`, true},
 		{"missing endpoint", 404, `{}`, true},
 		{"absent signer field", 200, `{"stacker_set":{"pox_ustx_threshold":1}}`, true},
-		{"duplicate signer", 200, fmt.Sprintf(`{"stacker_set":{"signers":[{"signing_key":"%s","weight":1,"stacked_amt":1},{"signing_key":"%s","weight":1,"stacked_amt":1}],"pox_ustx_threshold":1}}`, preparedKey, preparedKey), true},
-		{"overflow stake", 200, fmt.Sprintf(`{"stacker_set":{"signers":[{"signing_key":"%s","weight":1,"stacked_amt":340282366920938463463374607431768211456}],"pox_ustx_threshold":1}}`, preparedKey), true},
-		{"future version", 200, `{"stacker_set":{"reward_set_version":2,"signers":[],"pox_ustx_threshold":1}}`, true},
+		{
+			"duplicate signer",
+			200,
+			fmt.Sprintf(
+				`{"stacker_set":{"signers":[{"signing_key":"%s","weight":1,"stacked_amt":1},`+
+					`{"signing_key":"%s","weight":1,"stacked_amt":1}],"pox_ustx_threshold":1}}`,
+				preparedKey,
+				preparedKey,
+			),
+			true,
+		},
+		{
+			"overflow stake",
+			200,
+			fmt.Sprintf(
+				`{"stacker_set":{"signers":[{"signing_key":"%s","weight":1,`+
+					`"stacked_amt":340282366920938463463374607431768211456}],"pox_ustx_threshold":1}}`,
+				preparedKey,
+			),
+			true,
+		},
+		{
+			"future version",
+			200,
+			`{"stacker_set":{"reward_set_version":2,"signers":[],"pox_ustx_threshold":1}}`,
+			true,
+		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			c := clientFor(t, func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(test.code); io.WriteString(w, test.body) })
+			c := clientFor(
+				t,
+				func(w http.ResponseWriter, _ *http.Request) {
+					w.WriteHeader(test.code)
+					if _, err := io.WriteString(w, test.body); err != nil {
+						t.Error(err)
+					}
+				},
+			)
 			set, err := c.StackerSet(context.Background(), 12, strings.Repeat("1", 64))
 			if (err != nil) != test.wantErr || set.Available {
 				t.Fatalf("availability fabricated: %+v %v", set, err)

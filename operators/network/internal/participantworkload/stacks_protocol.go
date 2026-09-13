@@ -35,14 +35,21 @@ type StacksProtocolRPC interface {
 }
 
 // collectStacksProtocol requires a coherent canonical bracket and preserves height progress time.
-func collectStacksProtocol(ctx context.Context, node StacksProtocolRPC, previous *api.StacksProtocolObservation, cycle *uint64, now time.Time) (*api.StacksProtocolObservation, error) {
+func collectStacksProtocol(
+	ctx context.Context,
+	node StacksProtocolRPC,
+	previous *api.StacksProtocolObservation,
+	cycle *uint64,
+	now time.Time,
+) (*api.StacksProtocolObservation, error) {
 	before, err := node.ChainView(ctx)
 	if err != nil {
 		return nil, err
 	}
 	// Boot contracts are not readable until a first anchored block is confirmed.
 	// Preserve this positive startup observation separately from failed RPC reads.
-	if before.StacksHeight == 0 && before.Tip == strings.Repeat("0", 64) && before.ConsensusHash == strings.Repeat("0", 40) {
+	if before.StacksHeight == 0 && before.Tip == strings.Repeat("0", 64) &&
+		before.ConsensusHash == strings.Repeat("0", 40) {
 		if before.NetworkID != 0x80000000 || previous != nil && previous.HighestStacksHeight > 0 {
 			return nil, fmt.Errorf("initial canonical view differs from startup identity")
 		}
@@ -55,7 +62,17 @@ func collectStacksProtocol(ctx context.Context, node StacksProtocolRPC, previous
 		if previous != nil {
 			advancedAt = previous.LastHeightAdvancedAt
 		}
-		return &api.StacksProtocolObservation{Reason: "AwaitingFirstAnchor", ObservedAt: at, LastHeightAdvancedAt: advancedAt, NetworkID: uint64(before.NetworkID), BurnHeight: before.BurnHeight, StacksTip: before.Tip, IndexBlockID: before.IndexBlockID, BurnConsensusHash: before.BurnConsensusHash, FullySynced: before.FullySynced}, nil
+		return &api.StacksProtocolObservation{
+			Reason:               api.ReasonAwaitingFirstAnchor,
+			ObservedAt:           at,
+			LastHeightAdvancedAt: advancedAt,
+			NetworkID:            uint64(before.NetworkID),
+			BurnHeight:           before.BurnHeight,
+			StacksTip:            before.Tip,
+			IndexBlockID:         before.IndexBlockID,
+			BurnConsensusHash:    before.BurnConsensusHash,
+			FullySynced:          before.FullySynced,
+		}, nil
 	}
 	pox, err := node.PoXAt(ctx, before.IndexBlockID)
 	if err != nil {
@@ -65,7 +82,24 @@ func collectStacksProtocol(ctx context.Context, node StacksProtocolRPC, previous
 		return nil, fmt.Errorf("native chain views disagree")
 	}
 	at := metav1.NewTime(now.UTC().Truncate(time.Second))
-	observation := &api.StacksProtocolObservation{Available: true, Reason: "Observed", ObservedAt: at, HighestStacksHeight: before.StacksHeight, LastHeightAdvancedAt: at, NetworkID: uint64(before.NetworkID), BurnHeight: before.BurnHeight, StacksHeight: before.StacksHeight, StacksTip: before.Tip, IndexBlockID: before.IndexBlockID, BurnConsensusHash: before.BurnConsensusHash, FullySynced: before.FullySynced, PoXContract: pox.Contract, PoXBurnHeight: pox.BurnHeight, RewardCycle: pox.RewardCycle, CycleLength: pox.CycleLength}
+	observation := &api.StacksProtocolObservation{
+		Available:            true,
+		Reason:               reasonObserved,
+		ObservedAt:           at,
+		HighestStacksHeight:  before.StacksHeight,
+		LastHeightAdvancedAt: at,
+		NetworkID:            uint64(before.NetworkID),
+		BurnHeight:           before.BurnHeight,
+		StacksHeight:         before.StacksHeight,
+		StacksTip:            before.Tip,
+		IndexBlockID:         before.IndexBlockID,
+		BurnConsensusHash:    before.BurnConsensusHash,
+		FullySynced:          before.FullySynced,
+		PoXContract:          pox.Contract,
+		PoXBurnHeight:        pox.BurnHeight,
+		RewardCycle:          pox.RewardCycle,
+		CycleLength:          pox.CycleLength,
+	}
 	if previous != nil && before.StacksHeight <= previous.HighestStacksHeight {
 		observation.HighestStacksHeight = previous.HighestStacksHeight
 		observation.LastHeightAdvancedAt = previous.LastHeightAdvancedAt
@@ -75,11 +109,23 @@ func collectStacksProtocol(ctx context.Context, node StacksProtocolRPC, previous
 		if err != nil {
 			return nil, err
 		}
-		observation.PreparedSet = &api.PreparedSignerSetObservation{Cycle: *cycle, Available: set.Available, Version: set.Version, ObservedAt: at}
+		observation.PreparedSet = &api.PreparedSignerSetObservation{
+			Cycle:      *cycle,
+			Available:  set.Available,
+			Version:    set.Version,
+			ObservedAt: at,
+		}
 		if set.Available {
 			observation.PreparedSet.Threshold = set.Threshold.Integer.String()
 			for _, signer := range set.Signers {
-				observation.PreparedSet.Signers = append(observation.PreparedSet.Signers, api.PreparedSignerObservation{PublicKey: signer.PublicKey, Weight: uint64(signer.Weight), StackedAmount: signer.StackedAmount.Integer.String()})
+				observation.PreparedSet.Signers = append(
+					observation.PreparedSet.Signers,
+					api.PreparedSignerObservation{
+						PublicKey:     signer.PublicKey,
+						Weight:        uint64(signer.Weight),
+						StackedAmount: signer.StackedAmount.Integer.String(),
+					},
+				)
 			}
 		}
 	}
@@ -94,34 +140,53 @@ func collectStacksProtocol(ctx context.Context, node StacksProtocolRPC, previous
 }
 
 // observeStacksProtocol reads the exact Pod IP, then confirms the same process still owns it.
-func (r *Reconciler) observeStacksProtocol(ctx context.Context, root *api.StacksNetwork, p *api.StacksNetworkParticipant, pod *corev1.Pod, state *api.ParticipantRuntimeStatus) (observeErr error) {
+func (r *Reconciler) observeStacksProtocol(
+	ctx context.Context,
+	root *api.StacksNetwork,
+	p *api.StacksNetworkParticipant,
+	pod *corev1.Pod,
+	state *api.ParticipantRuntimeStatus,
+) (observeErr error) {
 	defer func() {
 		if observeErr != nil && state.Protocol != nil {
 			state.Protocol.Available = false
-			state.Protocol.Reason = "ObservationUnavailable"
+			state.Protocol.Reason = api.ReasonObservationUnavailable
 		}
 	}()
-	if root.Status.GenesisRef == nil || root.Status.GenesisRef.Kind != "StacksGenesis" || state.PodRef == nil || state.ContainerID == "" || net.ParseIP(pod.Status.PodIP) == nil {
+	if root.Status.GenesisRef == nil || root.Status.GenesisRef.Kind != api.KindStacksGenesis || state.PodRef == nil ||
+		state.ContainerID == "" ||
+		net.ParseIP(pod.Status.PodIP) == nil {
 		return fmt.Errorf("protocol target identity unavailable")
 	}
 	if p.Status.Runtime != nil && p.Status.Runtime.Protocol != nil {
 		previous := p.Status.Runtime.Protocol
-		if previous.Available && previous.PodUID == pod.UID && previous.ContainerID == state.ContainerID && previous.ConfigurationDigest == state.ConfigurationDigest && previous.GenesisUID == root.Status.GenesisRef.UID && time.Since(previous.ObservedAt.Time) >= 0 && time.Since(previous.ObservedAt.Time) < protocolPollInterval {
+		if previous.Available && previous.PodUID == pod.UID && previous.ContainerID == state.ContainerID &&
+			previous.ConfigurationDigest == state.ConfigurationDigest &&
+			previous.GenesisUID == root.Status.GenesisRef.UID &&
+			time.Since(previous.ObservedAt.Time) >= 0 &&
+			time.Since(previous.ObservedAt.Time) < protocolPollInterval {
 			state.Protocol = previous.DeepCopy()
 			return nil
 		}
 	}
 	var genesis api.StacksGenesis
-	if err := r.Reader.Get(ctx, client.ObjectKey{Namespace: p.Namespace, Name: root.Status.GenesisRef.Name}, &genesis); err != nil {
+	if err := r.Reader.Get(
+		ctx,
+		client.ObjectKey{Namespace: p.Namespace, Name: root.Status.GenesisRef.Name},
+		&genesis,
+	); err != nil {
 		return err
 	}
-	if genesis.UID != root.Status.GenesisRef.UID || genesis.Spec.Source.NetworkUID != root.UID || genesis.DeletionTimestamp != nil || !metav1.IsControlledBy(&genesis, root) || foundation.Digest(genesis.Spec.Chain) != root.Status.GenesisDigest {
+	if genesis.UID != root.Status.GenesisRef.UID || genesis.Spec.Source.NetworkUID != root.UID ||
+		genesis.DeletionTimestamp != nil ||
+		!metav1.IsControlledBy(&genesis, root) ||
+		foundation.Digest(genesis.Spec.Chain) != root.Status.GenesisDigest {
 		return fmt.Errorf("protocol genesis identity changed")
 	}
 	var cycle *uint64
 	// Observe the next unfinished prepared-set gate; the cycle always comes from frozen genesis.
 	for _, gate := range genesis.Spec.Bootstrap.Gates {
-		if gate.Name != "PrepareNakamoto" && gate.Name != "PrepareWaterfall" {
+		if gate.Name != api.GatePrepareNakamoto && gate.Name != api.GatePrepareWaterfall {
 			continue
 		}
 		completed := false
@@ -165,7 +230,10 @@ func (r *Reconciler) observeStacksProtocol(ctx context.Context, root *api.Stacks
 	}
 	currentState := api.ParticipantRuntimeStatus{}
 	observePod(&currentState, &current)
-	if current.UID != pod.UID || current.Status.PodIP != pod.Status.PodIP || current.DeletionTimestamp != nil || !podReady(&current) || currentState.ContainerID != state.ContainerID || current.Annotations["network.stacks.org/configuration-digest"] != state.ConfigurationDigest {
+	if current.UID != pod.UID || current.Status.PodIP != pod.Status.PodIP || current.DeletionTimestamp != nil ||
+		!podReady(&current) ||
+		currentState.ContainerID != state.ContainerID ||
+		current.Annotations[api.AnnotationConfigurationDigest] != state.ConfigurationDigest {
 		return fmt.Errorf("protocol target process changed")
 	}
 	observed.PodUID = pod.UID
@@ -174,7 +242,8 @@ func (r *Reconciler) observeStacksProtocol(ctx context.Context, root *api.Stacks
 	observed.GenesisUID = genesis.UID
 	if p.Status.Runtime != nil && p.Status.Runtime.Protocol != nil {
 		previous := p.Status.Runtime.Protocol
-		if observed.ObservedAt.Sub(previous.ObservedAt.Time) < protocolHeartbeatInterval && protocolObservationUnchanged(previous, observed) {
+		if observed.ObservedAt.Sub(previous.ObservedAt.Time) < protocolHeartbeatInterval &&
+			protocolObservationUnchanged(previous, observed) {
 			state.Protocol = previous.DeepCopy()
 			return nil
 		}

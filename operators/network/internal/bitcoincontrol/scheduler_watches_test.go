@@ -1,16 +1,19 @@
 package bitcoincontrol
 
 import (
+	"testing"
+	"time"
+
 	bitcoin "github.com/cylewitruk-stacks/stacks-k8s/apis/network/bitcoin/v1alpha2"
 	api "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/event"
-	"testing"
-	"time"
 )
 
 func TestSchedulerFiltersHeartbeatsButRetainsAuthorityAndReceipts(t *testing.T) {
-	old := &bitcoin.BitcoinExecution{Status: bitcoin.BitcoinExecutionStatus{Observation: &bitcoin.BitcoinObservation{ObservedAt: metav1.Now()}}}
+	old := &bitcoin.BitcoinExecution{
+		Status: bitcoin.BitcoinExecutionStatus{Observation: &bitcoin.BitcoinObservation{ObservedAt: metav1.Now()}},
+	}
 	current := old.DeepCopy()
 	current.Status.Observation.ObservedAt = metav1.NewTime(time.Now().Add(time.Second))
 	pred := schedulerEvents()

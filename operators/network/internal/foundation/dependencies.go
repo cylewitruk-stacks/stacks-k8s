@@ -8,6 +8,8 @@ import (
 	common "github.com/cylewitruk-stacks/stacks-k8s/apis/network/common/v1alpha2"
 	stacks "github.com/cylewitruk-stacks/stacks-k8s/apis/network/stacks/v1alpha2"
 	api "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha2"
+	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/objectref"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -25,7 +27,13 @@ type dependencyCheck struct {
 }
 
 func newDependencyCheck(reader client.Reader, root *api.StacksNetwork) *dependencyCheck {
-	return &dependencyCheck{reader: reader, root: root, results: map[common.Binding]error{}, sources: map[common.Binding]error{}, visiting: map[common.Binding]bool{}}
+	return &dependencyCheck{
+		reader:   reader,
+		root:     root,
+		results:  map[common.Binding]error{},
+		sources:  map[common.Binding]error{},
+		visiting: map[common.Binding]bool{},
+	}
 }
 
 // validate keeps historical bindings separate from evidence of current availability.
@@ -53,7 +61,7 @@ func (v *dependencyCheck) binding(ctx context.Context, b common.Binding) error {
 }
 
 func (v *dependencyCheck) read(ctx context.Context, b common.Binding) error {
-	if b.Kind == "Secret" && v.publicOnly {
+	if b.Kind == common.KindSecret && v.publicOnly {
 		if b.Name == "" || b.UID == "" {
 			return fmt.Errorf("credential identity unavailable")
 		}
@@ -61,18 +69,20 @@ func (v *dependencyCheck) read(ctx context.Context, b common.Binding) error {
 	}
 	var obj client.Object
 	switch b.Kind {
-	case "StacksAccount":
+	case stacks.KindStacksAccount:
 		obj = &stacks.StacksAccount{}
-	case "BitcoinWallet":
+	case bitcoin.KindBitcoinWallet:
 		obj = &bitcoin.BitcoinWallet{}
-	case "StacksNetworkParticipant":
+	case api.KindStacksNetworkParticipant:
 		obj = &api.StacksNetworkParticipant{}
-	case "BitcoinBlockSchedule":
+	case bitcoin.KindBitcoinBlockSchedule:
 		obj = &bitcoin.BitcoinBlockSchedule{}
-	case "StacksEpochSchedule":
+	case api.KindStacksEpochSchedule:
 		obj = &api.StacksEpochSchedule{}
-	case "Secret":
-		obj = &metav1.PartialObjectMetadata{TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "Secret"}}
+	case common.KindSecret:
+		obj = &metav1.PartialObjectMetadata{
+			TypeMeta: metav1.TypeMeta{APIVersion: corev1.SchemeGroupVersion.String(), Kind: common.KindSecret},
+		}
 	default:
 		return fmt.Errorf("unsupported dependency kind %s", b.Kind)
 	}
@@ -88,19 +98,25 @@ func (v *dependencyCheck) read(ctx context.Context, b common.Binding) error {
 			return err
 		}
 	}
-	if identity, ok := obj.(resolvable); ok && (b.Kind == "StacksAccount" || b.Kind == "BitcoinWallet") {
+	if identity, ok := obj.(resolvable); ok &&
+		(b.Kind == stacks.KindStacksAccount || b.Kind == bitcoin.KindBitcoinWallet) {
 		status := identity.GetResolutionStatus()
 		if !resolved(identity) || status.Digest != b.Fingerprint {
 			return fmt.Errorf("%s %s public identity unavailable", b.Kind, b.Name)
 		}
 		if ref := status.CredentialsRef; ref != nil {
-			if err := v.binding(ctx, common.Binding{Kind: "Secret", Name: ref.Name, UID: status.CredentialsUID}); err != nil {
+			if err := v.binding(
+				ctx,
+				common.Binding{Kind: common.KindSecret, Name: ref.Name, UID: status.CredentialsUID},
+			); err != nil {
 				return err
 			}
 		}
-		if wallet, ok := obj.(*bitcoin.BitcoinWallet); ok && wallet.Spec.KeySource != nil && wallet.Spec.KeySource.StacksMinerAccountRef != nil {
+		if wallet, ok := obj.(*bitcoin.BitcoinWallet); ok && wallet.Spec.KeySource != nil &&
+			wallet.Spec.KeySource.StacksMinerAccountRef != nil {
 			ref := wallet.Spec.KeySource.StacksMinerAccountRef
-			if len(status.Dependencies) != 1 || status.Dependencies[0].Kind != "StacksAccount" || status.Dependencies[0].Name != ref.Name {
+			if len(status.Dependencies) != 1 || status.Dependencies[0].Kind != stacks.KindStacksAccount ||
+				status.Dependencies[0].Name != ref.Name {
 				return fmt.Errorf("wallet %s derived account binding unavailable", b.Name)
 			}
 			return v.validate(ctx, status.Dependencies)
@@ -112,7 +128,8 @@ func (v *dependencyCheck) read(ctx context.Context, b common.Binding) error {
 		for _, entry := range v.root.Spec.Participants {
 			selected = selected || entry.Name == p.Spec.ParticipantName && entry.Kind == p.Spec.Kind
 		}
-		if !selected || id == nil || id.Removing || id.UID != p.UID || p.Spec.NetworkUID != v.root.UID || !ownedUID(p, v.root.UID) {
+		if !selected || id == nil || id.Removing || id.UID != p.UID || p.Spec.NetworkUID != v.root.UID ||
+			!ownedUID(p, v.root.UID) {
 			return fmt.Errorf("participant %s is no longer selected with its admitted identity", p.Spec.ParticipantName)
 		}
 		if p.Status.Admission == nil {
@@ -129,33 +146,55 @@ func (v *dependencyCheck) read(ctx context.Context, b common.Binding) error {
 // ValidateParticipantAdmission checks a current complete policy and all captured dependencies.
 // The caller must read the root and participant through the uncached reader and separately
 // enforce operation, runtime identity and capability-specific gates before mutation.
-func ValidateParticipantAdmission(ctx context.Context, reader client.Reader, root *api.StacksNetwork, participant *api.StacksNetworkParticipant) error {
-	if participant.Namespace != root.Namespace || participant.Status.Admission == nil || Digest(participant.Status.Admission.Configuration) != participant.Status.Admission.PolicyDigest {
+func ValidateParticipantAdmission(
+	ctx context.Context,
+	reader client.Reader,
+	root *api.StacksNetwork,
+	participant *api.StacksNetworkParticipant,
+) error {
+	if participant.Namespace != root.Namespace || participant.Status.Admission == nil ||
+		Digest(participant.Status.Admission.Configuration) != participant.Status.Admission.PolicyDigest {
 		return fmt.Errorf("participant has no complete admitted policy")
 	}
-	return newDependencyCheck(reader, root).validate(ctx, []common.Binding{{Kind: "StacksNetworkParticipant", Name: participant.Name, UID: participant.UID}})
+	return newDependencyCheck(reader, root).validate(ctx, []common.Binding{objectref.Participant(participant)})
 }
 
 // ValidateDependencyBindings checks an explicitly selected set of admitted mandatory inputs.
 // Capability controllers select these inputs; target liveness remains a separate decision.
-func ValidateDependencyBindings(ctx context.Context, reader client.Reader, root *api.StacksNetwork, bindings []common.Binding) error {
+func ValidateDependencyBindings(
+	ctx context.Context,
+	reader client.Reader,
+	root *api.StacksNetwork,
+	bindings []common.Binding,
+) error {
 	return newDependencyCheck(reader, root).validate(ctx, bindings)
 }
 
 // ValidatePublicDependencyBindings validates public identities without granting signing Secret access.
 // Bitcoin dispatch uses this after the scheduler validated credential metadata for its short-lived offer.
-func ValidatePublicDependencyBindings(ctx context.Context, reader client.Reader, root *api.StacksNetwork, bindings []common.Binding) error {
+func ValidatePublicDependencyBindings(
+	ctx context.Context,
+	reader client.Reader,
+	root *api.StacksNetwork,
+	bindings []common.Binding,
+) error {
 	check := newDependencyCheck(reader, root)
 	check.publicOnly = true
 	return check.validate(ctx, bindings)
 }
 
 // ValidatePublicParticipantAdmission validates an admitted actor using public dependencies only.
-func ValidatePublicParticipantAdmission(ctx context.Context, reader client.Reader, root *api.StacksNetwork, participant *api.StacksNetworkParticipant) error {
-	if participant.Namespace != root.Namespace || participant.Status.Admission == nil || Digest(participant.Status.Admission.Configuration) != participant.Status.Admission.PolicyDigest {
+func ValidatePublicParticipantAdmission(
+	ctx context.Context,
+	reader client.Reader,
+	root *api.StacksNetwork,
+	participant *api.StacksNetworkParticipant,
+) error {
+	if participant.Namespace != root.Namespace || participant.Status.Admission == nil ||
+		Digest(participant.Status.Admission.Configuration) != participant.Status.Admission.PolicyDigest {
 		return fmt.Errorf("participant has no complete admitted policy")
 	}
-	return ValidatePublicDependencyBindings(ctx, reader, root, []common.Binding{{Kind: "StacksNetworkParticipant", Name: participant.Name, UID: participant.UID}})
+	return ValidatePublicDependencyBindings(ctx, reader, root, []common.Binding{objectref.Participant(participant)})
 }
 
 // source memoizes immutable source identity checks only within this validation pass.

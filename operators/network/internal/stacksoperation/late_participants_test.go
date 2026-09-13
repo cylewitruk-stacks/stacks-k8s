@@ -53,13 +53,16 @@ func TestLatePoX5UsesExistingManagerAndCurrentCycleAfterOutage(t *testing.T) {
 			s.Paused, s.CachedApplied = false, true
 			n.cycle, n.burn, n.first = 22, 444, 23
 			result, err := r.Step(context.Background(), s)
-			if err != nil || result.Failed || result.Pending != 1 || len(n.sent) != 1 || r.goal == nil || r.goal.kind != "PoX5Enrollment" || r.goal.target != 23 {
+			if err != nil || result.Failed || result.Pending != 1 || len(n.sent) != 1 || r.goal == nil ||
+				r.goal.kind != "PoX5Enrollment" ||
+				r.goal.target != 23 {
 				t.Fatalf("late worker replayed manager/bootstrap or used cached cycle: %+v %v", result, err)
 			}
 			n.present = true
 			n.nonce++
 			result, err = r.Step(context.Background(), s)
-			if err != nil || result.Pending != 0 || result.PoX5 == nil || result.PoX5.TargetCycle != 23 || result.Failed {
+			if err != nil || result.Pending != 0 || result.PoX5 == nil || result.PoX5.TargetCycle != 23 ||
+				result.Failed {
 				t.Fatalf("late enrollment did not settle: %+v %v", result, err)
 			}
 			_, _ = r.Step(context.Background(), s)

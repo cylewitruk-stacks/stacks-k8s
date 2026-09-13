@@ -23,6 +23,7 @@ func (f *testFixture) readInitial(t *testing.T) *bitcoin.BitcoinInitialization {
 	}
 	return record
 }
+
 func TestSchedulerFreezesFirstGateAndFundsBeforeMaturity(t *testing.T) {
 	f := newFixture(t)
 	f.worker.Now = func() time.Time { return f.now }
@@ -36,7 +37,8 @@ func TestSchedulerFreezesFirstGateAndFundsBeforeMaturity(t *testing.T) {
 		f.reconcile(t, s)
 		f.reconcile(t, s)
 		record := f.readRecord(t)
-		if record.Spec.Offer == nil || record.Spec.Offer.ExpectedHeight != expected-1 || record.Spec.Offer.Ceiling != 203 {
+		if record.Spec.Offer == nil || record.Spec.Offer.ExpectedHeight != expected-1 ||
+			record.Spec.Offer.Ceiling != 203 {
 			t.Fatalf("height %d offer %+v", expected, record.Spec.Offer)
 		}
 		if e := f.worker.Step(context.Background()); e != nil {
@@ -49,7 +51,11 @@ func TestSchedulerFreezesFirstGateAndFundsBeforeMaturity(t *testing.T) {
 		f.reconcile(t, s)
 	}
 	initial := f.readInitial(t)
-	if initial.Status.PreparedAt == nil || initial.Status.Phase != "Held" || initial.Status.Reason != "NextGateNotImplemented" || initial.Status.LastAccountedOffer != 203 || len(initial.Status.Funded) != 1 || initial.Status.Funded[0].Outputs != 203 {
+	if initial.Status.PreparedAt == nil || initial.Status.Phase != "Held" ||
+		initial.Status.Reason != "NextGateNotImplemented" ||
+		initial.Status.LastAccountedOffer != 203 ||
+		len(initial.Status.Funded) != 1 ||
+		initial.Status.Funded[0].Outputs != 203 {
 		t.Fatalf("unexpected first-gate result %+v", initial.Status)
 	}
 	before := f.rpc.count()
@@ -123,7 +129,10 @@ func TestCadenceAndCeilingDeadlineSurvivePause(t *testing.T) {
 	_ = f.c.Update(context.Background(), root)
 	f.now = f.now.Add(121 * time.Second)
 	f.reconcile(t, s)
-	if state := f.readInitial(t).Status; state.Phase != "Blocked" || state.Reason != "PrepareBitcoinObservationDeadline" {
+	if state := f.readInitial(
+		t,
+	).Status; state.Phase != "Blocked" ||
+		state.Reason != "PrepareBitcoinObservationDeadline" {
 		t.Fatal("pause hid an expired initialization deadline", state)
 	}
 	root.Spec.Operation = "Running"
@@ -134,7 +143,8 @@ func TestCadenceAndCeilingDeadlineSurvivePause(t *testing.T) {
 	_ = f.c.Status().Update(context.Background(), record)
 	f.reconcile(t, s)
 	after := f.readInitial(t)
-	if after.Status.Reason != "PrepareBitcoinObservationDeadline" || after.Status.PreparedAt != nil || !after.Status.FirstCeilingObservedAt.Equal(started) {
+	if after.Status.Reason != "PrepareBitcoinObservationDeadline" || after.Status.PreparedAt != nil ||
+		!after.Status.FirstCeilingObservedAt.Equal(started) {
 		t.Fatal("pause reset frozen ceiling deadline")
 	}
 }
@@ -143,7 +153,13 @@ func TestUniformCadenceDrawOnlyWhenChoosingNewAnchor(t *testing.T) {
 	f := newFixture(t)
 	production := &api.StacksNetworkParticipant{}
 	_ = f.c.Get(context.Background(), client.ObjectKeyFromObject(f.production), production)
-	production.Status.Admission.Configuration.BitcoinBlockProduction.Schedule = &bitcoin.BitcoinBlockScheduleSpec{Cadence: bitcoin.Cadence{Mode: "Uniform", MinimumInterval: ptr.To(common.Duration("1s")), MaximumInterval: ptr.To(common.Duration("3s"))}}
+	production.Status.Admission.Configuration.BitcoinBlockProduction.Schedule = &bitcoin.BitcoinBlockScheduleSpec{
+		Cadence: bitcoin.Cadence{
+			Mode:            "Uniform",
+			MinimumInterval: ptr.To(common.Duration("1s")),
+			MaximumInterval: ptr.To(common.Duration("3s")),
+		},
+	}
 	production.Status.Admission.PolicyDigest = foundation.Digest(production.Status.Admission.Configuration)
 	_ = f.c.Status().Update(context.Background(), production)
 	if e := f.worker.Step(context.Background()); e != nil {
@@ -165,15 +181,27 @@ type countingReader struct {
 	walletReads int
 }
 
-func (r *countingReader) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+func (r *countingReader) Get(
+	ctx context.Context,
+	key client.ObjectKey,
+	obj client.Object,
+	opts ...client.GetOption,
+) error {
 	if _, ok := obj.(*bitcoin.BitcoinWallet); ok {
 		r.walletReads++
 	}
 	return r.Reader.Get(ctx, key, obj, opts...)
 }
+
 func TestAllocatorRetainsLossAndSkipsExistingIdentityGraph(t *testing.T) {
 	f := newFixture(t)
-	actualName := naming.RuntimeName(string(f.root.UID), string(f.node.UID), "BitcoinNode", f.node.Spec.ParticipantName, "execution")
+	actualName := naming.RuntimeName(
+		string(f.root.UID),
+		string(f.node.UID),
+		"BitcoinNode",
+		f.node.Spec.ParticipantName,
+		"execution",
+	)
 	record := f.readRecord(t)
 	if e := f.c.Delete(context.Background(), record); e != nil {
 		t.Fatal(e)
@@ -226,7 +254,15 @@ func TestTerminalDrainRetainsUnknownOutcome(t *testing.T) {
 
 func TestCadenceRejectsInvalidBounds(t *testing.T) {
 	s := &Scheduler{Draw: func(int64) int64 { return 0 }}
-	for _, schedule := range []*bitcoin.BitcoinBlockScheduleSpec{nil, {Cadence: bitcoin.Cadence{Mode: "Fixed", Interval: ptr.To(common.Duration("0s"))}}, {Cadence: bitcoin.Cadence{Mode: "Uniform", MinimumInterval: ptr.To(common.Duration("2s")), MaximumInterval: ptr.To(common.Duration("1s"))}}} {
+	for _, schedule := range []*bitcoin.BitcoinBlockScheduleSpec{
+		nil,
+		{Cadence: bitcoin.Cadence{Mode: "Fixed", Interval: ptr.To(common.Duration("0s"))}},
+		{Cadence: bitcoin.Cadence{
+			Mode:            "Uniform",
+			MinimumInterval: ptr.To(common.Duration("2s")),
+			MaximumInterval: ptr.To(common.Duration("1s")),
+		}},
+	} {
 		if _, e := s.interval(schedule); e == nil {
 			t.Fatal("invalid cadence accepted")
 		}
@@ -256,12 +292,16 @@ func TestStopBeforeWorkerActivationDoesNotRequireRuntimePointerAbsence(t *testin
 				}
 				p := f.node.DeepCopy()
 				p.Status.Runtime = &api.ParticipantRuntimeStatus{ObservedGeneration: p.Generation}
-				p.Status.Conditions = []metav1.Condition{{Type: "WorkloadReady", Status: metav1.ConditionFalse, Reason: state}}
+				p.Status.Conditions = []metav1.Condition{
+					{Type: "WorkloadReady", Status: metav1.ConditionFalse, Reason: state},
+				}
 				ready, e := CheckDrained(context.Background(), f.c, p)
 				if e != nil || !ready {
 					t.Fatalf("never-activated worker blocked disposal: %v", e)
 				}
-				p.Status.BitcoinControl = &api.BitcoinControlRuntimeStatus{DeploymentRef: &common.Binding{Kind: "Deployment", Name: "prior-worker", UID: "prior-worker-uid"}}
+				p.Status.BitcoinControl = &api.BitcoinControlRuntimeStatus{
+					DeploymentRef: &common.Binding{Kind: "Deployment", Name: "prior-worker", UID: "prior-worker-uid"},
+				}
 				if ready, e = CheckDrained(context.Background(), f.c, p); e != nil || ready {
 					t.Fatal("historical control identity was treated as never activated")
 				}
@@ -270,7 +310,9 @@ func TestStopBeforeWorkerActivationDoesNotRequireRuntimePointerAbsence(t *testin
 				if ready, e = CheckDrained(context.Background(), f.c, p); e != nil || !ready {
 					t.Fatal("an actor Pod was mistaken for control-worker activation")
 				}
-				p.Status.BitcoinControl = &api.BitcoinControlRuntimeStatus{Pods: []api.BitcoinControlPodStatus{{UID: "prior-control-pod"}}}
+				p.Status.BitcoinControl = &api.BitcoinControlRuntimeStatus{
+					Pods: []api.BitcoinControlPodStatus{{UID: "prior-control-pod"}},
+				}
 				if ready, e = CheckDrained(context.Background(), f.c, p); e != nil || ready {
 					t.Fatal("known control process without its record authorized disposal")
 				}
@@ -307,7 +349,9 @@ func TestBootstrapCadenceChangePreservesOpportunitySequence(t *testing.T) {
 	if err := f.c.Get(ctx, client.ObjectKeyFromObject(f.production), &production); err != nil {
 		t.Fatal(err)
 	}
-	production.Status.Admission.Configuration.BitcoinBlockProduction.Schedule.Cadence.Interval = ptr.To(common.Duration("2s"))
+	production.Status.Admission.Configuration.BitcoinBlockProduction.Schedule.Cadence.Interval = ptr.To(
+		common.Duration("2s"),
+	)
 	production.Status.Admission.PolicyDigest = foundation.Digest(production.Status.Admission.Configuration)
 	if err := f.c.Status().Update(ctx, &production); err != nil {
 		t.Fatal(err)
@@ -321,7 +365,8 @@ func TestBootstrapCadenceChangePreservesOpportunitySequence(t *testing.T) {
 	f.reconcile(t, s)
 	f.reconcile(t, s)
 	offer := f.readRecord(t).Spec.Offer
-	if offer == nil || offer.Number != 2 || offer.ExpectedHeight != 1 || offer.PolicyDigest != production.Status.Admission.PolicyDigest {
+	if offer == nil || offer.Number != 2 || offer.ExpectedHeight != 1 ||
+		offer.PolicyDigest != production.Status.Admission.PolicyDigest {
 		t.Fatalf("replacement cadence reused an old opportunity: %+v", offer)
 	}
 	if err := f.worker.Step(ctx); err != nil {

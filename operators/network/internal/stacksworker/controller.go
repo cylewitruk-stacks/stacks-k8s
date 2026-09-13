@@ -12,6 +12,7 @@ import (
 	common "github.com/cylewitruk-stacks/stacks-k8s/apis/network/common/v1alpha2"
 	api "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha2"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/foundation"
+	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/objectref"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/participantstatus"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -64,50 +65,85 @@ func (r *Reconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 	finish := func(status metav1.ConditionStatus, reason string) (ctrl.Result, error) {
 		conditions := []metav1.Condition{}
 		for _, c := range p.Status.Conditions {
-			if c.Type == "WorkloadReady" || c.Type == "PlacementReady" {
+			if c.Type == api.ConditionWorkloadReady || c.Type == api.ConditionPlacementReady {
 				conditions = append(conditions, c)
 			}
 		}
 		if placement != nil {
 			meta.SetStatusCondition(&conditions, *placement)
 		}
-		meta.SetStatusCondition(&conditions, metav1.Condition{Type: "WorkloadReady", Status: status, Reason: reason, Message: reason, ObservedGeneration: p.Generation})
+		meta.SetStatusCondition(
+			&conditions,
+			metav1.Condition{
+				Type:               api.ConditionWorkloadReady,
+				Status:             status,
+				Reason:             reason,
+				Message:            reason,
+				ObservedGeneration: p.Generation,
+			},
+		)
 		owned := api.ParticipantStatus{Runtime: &state, Conditions: conditions}
 		result := ctrl.Result{}
-		if status == metav1.ConditionUnknown || reason == "WorkerDraining" || reason == "WorkerDisposing" {
+		if status == metav1.ConditionUnknown || reason == reasonWorkerDraining || reason == reasonWorkerDisposing {
 			result.RequeueAfter = 5 * time.Second
 		}
-		if reflect.DeepEqual(p.Status.Runtime, owned.Runtime) && reflect.DeepEqual(conditions, workerConditions(p.Status.Conditions)) {
+		if reflect.DeepEqual(p.Status.Runtime, owned.Runtime) &&
+			reflect.DeepEqual(conditions, workerConditions(p.Status.Conditions)) {
 			return result, nil
 		}
-		return result, participantstatus.Apply(ctx, r.Client, &p, owned, "stacks-network-domain-"+strings.ToLower(string(r.Kind)))
+		return result, participantstatus.Apply(
+			ctx,
+			r.Client,
+			&p,
+			owned,
+			"stacks-network-domain-"+strings.ToLower(string(r.Kind)),
+		)
 	}
 	var root api.StacksNetwork
 	if err := r.Reader.Get(ctx, client.ObjectKey{Namespace: p.Namespace, Name: "network"}, &root); err != nil {
-		return finish(metav1.ConditionUnknown, "RootIdentityUnavailable")
+		return finish(metav1.ConditionUnknown, reasonRootIdentityUnavailable)
 	}
 	id, err := Session(&root, &p)
 	if errors.Is(err, errParticipantAllocating) {
-		return finish(metav1.ConditionUnknown, "AllocationPending")
+		return finish(metav1.ConditionUnknown, reasonAllocationPending)
 	}
 	if err != nil {
-		return finish(metav1.ConditionFalse, "WorkerIdentityLost")
+		return finish(metav1.ConditionFalse, api.ReasonWorkerIdentityLost)
 	}
 	var pod corev1.Pod
 	podErr := r.Reader.Get(ctx, client.ObjectKey{Namespace: p.Namespace, Name: Name(&p)}, &pod)
 	if podErr != nil && !apierrors.IsNotFound(podErr) {
-		return finish(metav1.ConditionUnknown, "WorkerObservationUnavailable")
+		return finish(metav1.ConditionUnknown, reasonWorkerObservationUnavailable)
 	}
 	if podErr == nil {
-		placement = &metav1.Condition{Type: "PlacementReady", Status: metav1.ConditionUnknown, Reason: "Pending", Message: "Waiting for scheduler observation", ObservedGeneration: p.Generation}
-		if previous := meta.FindStatusCondition(p.Status.Conditions, "PlacementReady"); previous != nil && previous.Status == metav1.ConditionFalse && previous.Reason == "PlacementError" {
+		placement = &metav1.Condition{
+			Type:               api.ConditionPlacementReady,
+			Status:             metav1.ConditionUnknown,
+			Reason:             api.ReasonPending,
+			Message:            "Waiting for scheduler observation",
+			ObservedGeneration: p.Generation,
+		}
+		if previous := meta.FindStatusCondition(
+			p.Status.Conditions,
+			api.ConditionPlacementReady,
+		); previous != nil && previous.Status == metav1.ConditionFalse &&
+			previous.Reason == api.ReasonPlacementError {
 			placement = previous.DeepCopy()
 		} else if pod.Spec.NodeName != "" {
-			placement.Status, placement.Reason, placement.Message = metav1.ConditionTrue, "Scheduled", "Worker is scheduled"
+			placement.Status,
+				placement.Reason,
+				placement.Message = metav1.ConditionTrue,
+				api.ReasonScheduled,
+				"Worker is scheduled"
 		} else {
 			for _, condition := range pod.Status.Conditions {
-				if condition.Type == corev1.PodScheduled && condition.Status == corev1.ConditionFalse && condition.Reason == corev1.PodReasonUnschedulable {
-					placement.Status, placement.Reason, placement.Message = metav1.ConditionFalse, "PlacementError", "Worker placement requirements cannot be satisfied"
+				if condition.Type == corev1.PodScheduled && condition.Status == corev1.ConditionFalse &&
+					condition.Reason == corev1.PodReasonUnschedulable {
+					placement.Status,
+						placement.Reason,
+						placement.Message = metav1.ConditionFalse,
+						api.ReasonPlacementError,
+						"Worker placement requirements cannot be satisfied"
 				}
 			}
 		}
@@ -117,27 +153,33 @@ func (r *Reconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 		state.WorkerCandidate = &api.WorkerCandidate{Pod: session.Pod, ProfileDigest: session.ProfileDigest}
 		if apierrors.IsNotFound(podErr) {
 			if session.Disposal == nil || !session.Disposal.Terminated {
-				return finish(metav1.ConditionFalse, "BoundWorkerLost")
+				return finish(metav1.ConditionFalse, reasonBoundWorkerLost)
 			}
 			state.Terminated = true
-			if stoppedReason(&root, &p, id) == "ParticipantRemoved" || p.DeletionTimestamp != nil || root.DeletionTimestamp != nil {
+			if stoppedReason(&root, &p, id) == api.WorkerShutdownParticipantRemoved || p.DeletionTimestamp != nil ||
+				root.DeletionTimestamp != nil {
 				if err := r.releaseParticipant(ctx, &p); err != nil {
 					return ctrl.Result{}, err
 				}
 			}
-			return finish(metav1.ConditionFalse, "WorkerDisposed")
+			return finish(metav1.ConditionFalse, reasonWorkerDisposed)
 		}
 		if pod.UID != session.Pod.UID || !ownedPod(&pod, &p) || pod.Annotations[profileLabel] != session.ProfileDigest {
-			return finish(metav1.ConditionFalse, "BoundWorkerReplaced")
+			return finish(metav1.ConditionFalse, reasonBoundWorkerReplaced)
 		}
 		profile, err := profileFromPod(&pod)
 		if err != nil && session.Disposal == nil && session.Shutdown == nil {
-			return finish(metav1.ConditionFalse, "WorkerProfileChanged")
+			return finish(metav1.ConditionFalse, reasonWorkerProfileChanged)
 		}
-		if err := r.profileAvailable(ctx, p.Namespace, profile); err != nil && session.Shutdown == nil && session.Disposal == nil && stoppedReason(&root, &p, id) == "" {
-			return finish(metav1.ConditionUnknown, "WorkerInputsUnavailable")
+		if err := r.profileAvailable(
+			ctx,
+			p.Namespace,
+			profile,
+		); err != nil && session.Shutdown == nil && session.Disposal == nil &&
+			stoppedReason(&root, &p, id) == "" {
+			return finish(metav1.ConditionUnknown, reasonWorkerInputsUnavailable)
 		}
-		state.PodRef = objectBinding("Pod", &pod)
+		state.PodRef = ptr.To(objectref.Pod(&pod))
 		state.WorkloadRefs = []common.Binding{*state.PodRef}
 		if err == nil {
 			state.ConfigRef = &profile.Configuration
@@ -145,71 +187,91 @@ func (r *Reconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 		if session.Disposal != nil {
 			if pod.DeletionTimestamp == nil {
 				uid := pod.UID
-				if err := r.Client.Delete(ctx, &pod, &client.DeleteOptions{Preconditions: &metav1.Preconditions{UID: &uid}}); err != nil && !apierrors.IsNotFound(err) {
+				if err := r.Client.Delete(
+					ctx,
+					&pod,
+					&client.DeleteOptions{Preconditions: &metav1.Preconditions{UID: &uid}},
+				); err != nil &&
+					!apierrors.IsNotFound(err) {
 					return ctrl.Result{}, err
 				}
-				return finish(metav1.ConditionFalse, "WorkerDisposing")
+				return finish(metav1.ConditionFalse, reasonWorkerDisposing)
 			}
 			state.Terminated = Terminated(&pod)
 			if state.Terminated && session.Disposal.Terminated {
 				if controllerutil.ContainsFinalizer(&pod, PodFinalizer) {
 					base := pod.DeepCopy()
 					controllerutil.RemoveFinalizer(&pod, PodFinalizer)
-					if err := r.Client.Patch(ctx, &pod, client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{})); err != nil {
+					if err := r.Client.Patch(
+						ctx,
+						&pod,
+						client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{}),
+					); err != nil {
 						return ctrl.Result{}, err
 					}
 				}
 			}
-			return finish(metav1.ConditionFalse, "WorkerDisposing")
+			return finish(metav1.ConditionFalse, reasonWorkerDisposing)
 		}
 		if terminal(&pod) || pod.DeletionTimestamp != nil {
-			return finish(metav1.ConditionFalse, "BoundWorkerExited")
+			return finish(metav1.ConditionFalse, reasonBoundWorkerExited)
 		}
 		if session.Shutdown != nil {
-			return finish(metav1.ConditionFalse, "WorkerDraining")
+			return finish(metav1.ConditionFalse, reasonWorkerDraining)
 		}
 		if err := r.extraCandidates(ctx, &p); err != nil {
-			return finish(metav1.ConditionFalse, "CandidateConflict")
+			return finish(metav1.ConditionFalse, reasonCandidateConflict)
 		}
 		if r.ResolveReads != nil {
 			reads, err := r.ResolveReads(ctx, &root, &p)
 			if err != nil {
-				return finish(metav1.ConditionUnknown, "WorkerDependenciesUnavailable")
+				return finish(metav1.ConditionUnknown, reasonWorkerDependenciesUnavailable)
 			}
 			profile.Reads = reads
 			if err := r.ensureSupport(ctx, &p, profile); err != nil {
-				return finish(metav1.ConditionUnknown, "WorkerSupportUnavailable")
+				return finish(metav1.ConditionUnknown, reasonWorkerSupportUnavailable)
 			}
 		}
-		if execution := p.Status.Execution; execution != nil && execution.PodUID == pod.UID && execution.ProfileDigest == session.ProfileDigest && execution.ProcessNonce != "" && (execution.Phase == "Active" || execution.Phase == "Paused") {
-			return finish(metav1.ConditionTrue, "WorkerBound")
+		if execution := p.Status.Execution; execution != nil && execution.PodUID == pod.UID &&
+			execution.ProfileDigest == session.ProfileDigest &&
+			execution.ProcessNonce != "" &&
+			(execution.Phase == api.WorkerPhaseActive || execution.Phase == api.WorkerPhasePaused) {
+			return finish(metav1.ConditionTrue, api.ReasonWorkerBound)
 		}
-		return finish(metav1.ConditionFalse, "WorkerInactive")
+		return finish(metav1.ConditionFalse, reasonWorkerInactive)
 	}
-	if p.Status.Execution != nil && p.Status.Execution.Phase != "Inactive" {
-		return finish(metav1.ConditionFalse, "WorkerBindingLost")
+	if p.Status.Execution != nil && p.Status.Execution.Phase != api.WorkerPhaseInactive {
+		return finish(metav1.ConditionFalse, reasonWorkerBindingLost)
 	}
 	if stoppedReason(&root, &p, id) != "" {
 		if podErr == nil {
 			if !ownedPod(&pod, &p) {
-				return finish(metav1.ConditionFalse, "CandidateConflict")
+				return finish(metav1.ConditionFalse, reasonCandidateConflict)
 			}
 			if _, err := profileFromPod(&pod); err != nil {
-				return finish(metav1.ConditionFalse, "CandidateConflict")
+				return finish(metav1.ConditionFalse, reasonCandidateConflict)
 			}
 			// An exact framework candidate cannot activate without a durable root binding.
 			if pod.DeletionTimestamp == nil {
 				uid := pod.UID
-				if err := r.Client.Delete(ctx, &pod, &client.DeleteOptions{Preconditions: &metav1.Preconditions{UID: &uid}}); err != nil {
+				if err := r.Client.Delete(
+					ctx,
+					&pod,
+					&client.DeleteOptions{Preconditions: &metav1.Preconditions{UID: &uid}},
+				); err != nil {
 					return ctrl.Result{}, err
 				}
 			}
 			if !Terminated(&pod) {
-				return finish(metav1.ConditionUnknown, "InactiveCandidateTerminating")
+				return finish(metav1.ConditionUnknown, reasonInactiveCandidateTerminating)
 			}
 			base := pod.DeepCopy()
 			controllerutil.RemoveFinalizer(&pod, PodFinalizer)
-			if err := r.Client.Patch(ctx, &pod, client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{})); err != nil {
+			if err := r.Client.Patch(
+				ctx,
+				&pod,
+				client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{}),
+			); err != nil {
 				return ctrl.Result{}, err
 			}
 		} else {
@@ -218,44 +280,48 @@ func (r *Reconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 				return ctrl.Result{}, err
 			}
 		}
-		return finish(metav1.ConditionFalse, "InactiveCandidateDisposed")
+		return finish(metav1.ConditionFalse, reasonInactiveCandidateDisposed)
 	}
-	if root.Spec.Operation != "Running" || failed(&root) || root.Status.GenesisRef == nil {
-		return finish(metav1.ConditionFalse, "WorkerActivationHeld")
+	if root.Spec.Operation != api.NetworkOperationRunning || failed(&root) || root.Status.GenesisRef == nil {
+		return finish(metav1.ConditionFalse, reasonWorkerActivationHeld)
 	}
 	if err := foundation.ValidateParticipantAdmission(ctx, r.Reader, &root, &p); err != nil {
-		return finish(metav1.ConditionFalse, "AdmissionUnavailable")
+		return finish(metav1.ConditionFalse, api.ReasonAdmissionUnavailable)
 	}
 	if !controllerutil.ContainsFinalizer(&p, Finalizer) {
 		base := p.DeepCopy()
 		controllerutil.AddFinalizer(&p, Finalizer)
-		if err := r.Client.Patch(ctx, &p, client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{})); err != nil {
+		if err := r.Client.Patch(
+			ctx,
+			&p,
+			client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{}),
+		); err != nil {
 			return ctrl.Result{}, err
 		}
 	}
 	if r.ResolveProfile == nil {
-		return finish(metav1.ConditionFalse, "WorkerProfileUnavailable")
+		return finish(metav1.ConditionFalse, reasonWorkerProfileUnavailable)
 	}
 	profile, err := r.ResolveProfile(ctx, &root, &p)
 	if err != nil {
-		return finish(metav1.ConditionFalse, "WorkerProfileUnavailable")
+		return finish(metav1.ConditionFalse, reasonWorkerProfileUnavailable)
 	}
 	profile, err = profile.Normalize()
 	if err != nil {
-		return finish(metav1.ConditionFalse, "InvalidWorkerProfile")
+		return finish(metav1.ConditionFalse, reasonInvalidWorkerProfile)
 	}
 	if err := r.profileAvailable(ctx, p.Namespace, profile); err != nil {
-		return finish(metav1.ConditionUnknown, "WorkerInputsUnavailable")
+		return finish(metav1.ConditionUnknown, reasonWorkerInputsUnavailable)
 	}
 	if err := r.extraCandidates(ctx, &p); err != nil {
-		return finish(metav1.ConditionFalse, "CandidateConflict")
+		return finish(metav1.ConditionFalse, reasonCandidateConflict)
 	}
 	if err := r.ensureSupport(ctx, &p, profile); err != nil {
-		return finish(metav1.ConditionFalse, "WorkerSupportUnavailable")
+		return finish(metav1.ConditionFalse, reasonWorkerSupportUnavailable)
 	}
 	desired, err := Pod(&p, profile)
 	if err != nil {
-		return finish(metav1.ConditionFalse, "InvalidWorkerProfile")
+		return finish(metav1.ConditionFalse, reasonInvalidWorkerProfile)
 	}
 	if apierrors.IsNotFound(podErr) {
 		if err := r.Client.Create(ctx, desired); err != nil && !apierrors.IsAlreadyExists(err) {
@@ -266,42 +332,50 @@ func (r *Reconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 		}
 	}
 	if !ownedPod(&pod, &p) || pod.Annotations[profileLabel] != profile.Digest() {
-		return finish(metav1.ConditionFalse, "CandidateConflict")
+		return finish(metav1.ConditionFalse, reasonCandidateConflict)
 	}
 	if _, err := profileFromPod(&pod); err != nil {
-		return finish(metav1.ConditionFalse, "CandidateConflict")
+		return finish(metav1.ConditionFalse, reasonCandidateConflict)
 	}
 	if terminal(&pod) || pod.DeletionTimestamp != nil {
 		if pod.DeletionTimestamp == nil {
 			uid := pod.UID
-			if err := r.Client.Delete(ctx, &pod, &client.DeleteOptions{Preconditions: &metav1.Preconditions{UID: &uid}}); err != nil {
+			if err := r.Client.Delete(
+				ctx,
+				&pod,
+				&client.DeleteOptions{Preconditions: &metav1.Preconditions{UID: &uid}},
+			); err != nil {
 				return ctrl.Result{}, err
 			}
-			return finish(metav1.ConditionUnknown, "InactiveCandidateTerminating")
+			return finish(metav1.ConditionUnknown, reasonInactiveCandidateTerminating)
 		}
 		if !Terminated(&pod) {
-			return finish(metav1.ConditionUnknown, "InactiveCandidateTerminating")
+			return finish(metav1.ConditionUnknown, reasonInactiveCandidateTerminating)
 		}
 		base := pod.DeepCopy()
 		controllerutil.RemoveFinalizer(&pod, PodFinalizer)
-		if err := r.Client.Patch(ctx, &pod, client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{})); err != nil {
+		if err := r.Client.Patch(
+			ctx,
+			&pod,
+			client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{}),
+		); err != nil {
 			return ctrl.Result{}, err
 		}
 		state.WorkerCandidate, state.PodRef = nil, nil
-		return finish(metav1.ConditionUnknown, "CandidateRetryPending")
+		return finish(metav1.ConditionUnknown, reasonCandidateRetryPending)
 	}
 	state.WorkerCandidate = &api.WorkerCandidate{Pod: podBinding(&pod), ProfileDigest: profile.Digest()}
-	state.PodRef = objectBinding("Pod", &pod)
+	state.PodRef = ptr.To(objectref.Pod(&pod))
 	state.WorkloadRefs = []common.Binding{*state.PodRef}
 	state.ConfigRef = &profile.Configuration
 	state.Terminated = false
-	return finish(metav1.ConditionFalse, "CandidateInactive")
+	return finish(metav1.ConditionFalse, reasonCandidateInactive)
 }
 
 // profileFromPod validates the retained immutable bootstrap manifest against mutable image fields.
 func profileFromPod(pod *corev1.Pod) (Profile, error) {
 	var profile Profile
-	raw := pod.Annotations["network.stacks.org/worker-profile-json"]
+	raw := pod.Annotations[profileJSONAnnotation]
 	if len(raw) > 48*1024 || json.Unmarshal([]byte(raw), &profile) != nil {
 		return profile, fmt.Errorf("worker profile missing")
 	}
@@ -309,20 +383,38 @@ func profileFromPod(pod *corev1.Pod) (Profile, error) {
 	if err != nil {
 		return profile, err
 	}
-	if profile.Digest() != pod.Annotations[profileLabel] || pod.Spec.RestartPolicy != corev1.RestartPolicyNever || len(pod.Spec.Containers) != 1 || pod.Spec.Containers[0].Name != "worker" || pod.Spec.Containers[0].Image != profile.Image || len(pod.Spec.InitContainers) != 0 || len(pod.Spec.EphemeralContainers) != 0 {
+	if profile.Digest() != pod.Annotations[profileLabel] || pod.Spec.RestartPolicy != corev1.RestartPolicyNever ||
+		len(pod.Spec.Containers) != 1 ||
+		pod.Spec.Containers[0].Name != "worker" ||
+		pod.Spec.Containers[0].Image != profile.Image ||
+		len(pod.Spec.InitContainers) != 0 ||
+		len(pod.Spec.EphemeralContainers) != 0 {
 		return profile, fmt.Errorf("worker profile changed")
 	}
 	owner := metav1.GetControllerOf(pod)
 	if owner == nil {
 		return profile, fmt.Errorf("worker owner unavailable")
 	}
-	p := &api.StacksNetworkParticipant{ObjectMeta: metav1.ObjectMeta{Name: owner.Name, Namespace: pod.Namespace, UID: owner.UID}, Spec: api.StacksNetworkParticipantSpec{NetworkUID: types.UID(pod.Labels["network.stacks.org/network-uid"]), ParticipantName: pod.Labels["network.stacks.org/participant"], Kind: api.ParticipantKind(pod.Labels["network.stacks.org/participant-kind"])}}
+	p := &api.StacksNetworkParticipant{
+		ObjectMeta: metav1.ObjectMeta{Name: owner.Name, Namespace: pod.Namespace, UID: owner.UID},
+		Spec: api.StacksNetworkParticipantSpec{
+			NetworkUID:      types.UID(pod.Labels[api.LabelNetworkUID]),
+			ParticipantName: pod.Labels[api.LabelParticipant],
+			Kind:            api.ParticipantKind(pod.Labels[api.LabelParticipantKind]),
+		},
+	}
 	wanted, err := Pod(p, profile)
 	if err != nil {
 		return profile, err
 	}
 	actual, expected := pod.Spec.Containers[0], wanted.Spec.Containers[0]
-	if pod.Name != wanted.Name || pod.Spec.ServiceAccountName != wanted.Spec.ServiceAccountName || !reflect.DeepEqual(actual.Command, expected.Command) || !reflect.DeepEqual(actual.Args, expected.Args) || !reflect.DeepEqual(actual.Env, expected.Env) || len(actual.EnvFrom) != 0 || !reflect.DeepEqual(actual.SecurityContext, expected.SecurityContext) || !reflect.DeepEqual(actual.Resources, expected.Resources) {
+	if pod.Name != wanted.Name || pod.Spec.ServiceAccountName != wanted.Spec.ServiceAccountName ||
+		!reflect.DeepEqual(actual.Command, expected.Command) ||
+		!reflect.DeepEqual(actual.Args, expected.Args) ||
+		!reflect.DeepEqual(actual.Env, expected.Env) ||
+		len(actual.EnvFrom) != 0 ||
+		!reflect.DeepEqual(actual.SecurityContext, expected.SecurityContext) ||
+		!reflect.DeepEqual(actual.Resources, expected.Resources) {
 		return profile, fmt.Errorf("worker process configuration changed")
 	}
 	// Kubernetes injects the service-account volume; compare every explicitly declared mount.
@@ -346,7 +438,13 @@ func profileFromPod(pod *corev1.Pod) (Profile, error) {
 				break
 			}
 		}
-		if !found && !(strings.HasPrefix(mount.Name, "kube-api-access-") && mount.MountPath == "/var/run/secrets/kubernetes.io/serviceaccount" && mount.ReadOnly) {
+		if !found &&
+			(!strings.HasPrefix(
+				mount.Name,
+				"kube-api-access-",
+			) ||
+				mount.MountPath != "/var/run/secrets/kubernetes.io/serviceaccount" ||
+				!mount.ReadOnly) {
 			return profile, fmt.Errorf("unexpected worker key/config mount")
 		}
 	}
@@ -381,7 +479,8 @@ func profileFromPod(pod *corev1.Pod) (Profile, error) {
 			}
 		}
 	}
-	if pod.Spec.HostNetwork || pod.Spec.HostPID || pod.Spec.HostIPC || !reflect.DeepEqual(pod.Spec.SecurityContext, wanted.Spec.SecurityContext) {
+	if pod.Spec.HostNetwork || pod.Spec.HostPID || pod.Spec.HostIPC ||
+		!reflect.DeepEqual(pod.Spec.SecurityContext, wanted.Spec.SecurityContext) {
 		return profile, fmt.Errorf("worker isolation changed")
 	}
 	return profile, nil
@@ -390,15 +489,26 @@ func profileFromPod(pod *corev1.Pod) (Profile, error) {
 // profileAvailable reads public config and key metadata only in the shared controller.
 func (r *Reconciler) profileAvailable(ctx context.Context, namespace string, profile Profile) error {
 	var configuration corev1.ConfigMap
-	if err := r.Reader.Get(ctx, client.ObjectKey{Namespace: namespace, Name: profile.Configuration.Name}, &configuration); err != nil {
+	if err := r.Reader.Get(
+		ctx,
+		client.ObjectKey{Namespace: namespace, Name: profile.Configuration.Name},
+		&configuration,
+	); err != nil {
 		return err
 	}
-	if configuration.UID != profile.Configuration.UID || configuration.DeletionTimestamp != nil || !ptr.Deref(configuration.Immutable, false) {
+	if configuration.UID != profile.Configuration.UID || configuration.DeletionTimestamp != nil ||
+		!ptr.Deref(configuration.Immutable, false) {
 		return fmt.Errorf("immutable worker config unavailable")
 	}
 	for _, key := range profile.Keys {
-		metadata := &metav1.PartialObjectMetadata{TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "Secret"}}
-		if err := r.Reader.Get(ctx, client.ObjectKey{Namespace: namespace, Name: key.Secret.Name}, metadata); err != nil {
+		metadata := &metav1.PartialObjectMetadata{
+			TypeMeta: metav1.TypeMeta{APIVersion: corev1.SchemeGroupVersion.String(), Kind: common.KindSecret},
+		}
+		if err := r.Reader.Get(
+			ctx,
+			client.ObjectKey{Namespace: namespace, Name: key.Secret.Name},
+			metadata,
+		); err != nil {
 			return err
 		}
 		if metadata.UID != key.Secret.UID || metadata.DeletionTimestamp != nil {
@@ -415,7 +525,15 @@ func (r *Reconciler) ensureSupport(ctx context.Context, p *api.StacksNetworkPart
 		return err
 	}
 	meta := metadata(p)
-	objects := []client.Object{&corev1.ServiceAccount{ObjectMeta: meta}, &rbacv1.Role{ObjectMeta: meta, Rules: Rules(p, profile)}, &rbacv1.RoleBinding{ObjectMeta: meta, RoleRef: rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: "Role", Name: meta.Name}, Subjects: []rbacv1.Subject{{Kind: "ServiceAccount", Name: meta.Name, Namespace: p.Namespace}}}}
+	objects := []client.Object{
+		&corev1.ServiceAccount{ObjectMeta: meta},
+		&rbacv1.Role{ObjectMeta: meta, Rules: Rules(p, profile)},
+		&rbacv1.RoleBinding{
+			ObjectMeta: meta,
+			RoleRef:    rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: common.KindRole, Name: meta.Name},
+			Subjects:   []rbacv1.Subject{{Kind: common.KindServiceAccount, Name: meta.Name, Namespace: p.Namespace}},
+		},
+	}
 	for _, object := range objects {
 		if err := r.Client.Create(ctx, object); err != nil {
 			if !apierrors.IsAlreadyExists(err) {
@@ -431,7 +549,10 @@ func (r *Reconciler) ensureSupport(ctx context.Context, p *api.StacksNetworkPart
 			}
 			if role, ok := current.(*rbacv1.Role); ok {
 				rules := Rules(p, profile)
-				if p.Status.Execution != nil && (p.Status.Execution.Pending > 0 || p.Status.Admission == nil || p.Status.Execution.AppliedPolicyDigest != p.Status.Admission.PolicyDigest) {
+				if p.Status.Execution != nil &&
+					(p.Status.Execution.Pending > 0 ||
+						p.Status.Admission == nil ||
+						p.Status.Execution.AppliedPolicyDigest != p.Status.Admission.PolicyDigest) {
 					for _, old := range role.Rules {
 						if !safeRule(p, old) {
 							return fmt.Errorf("worker prior permissions exceed scope")
@@ -454,7 +575,11 @@ func (r *Reconciler) ensureSupport(ctx context.Context, p *api.StacksNetworkPart
 				if !reflect.DeepEqual(role.Rules, rules) {
 					base := role.DeepCopy()
 					role.Rules = rules
-					if err := r.Client.Patch(ctx, role, client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{})); err != nil {
+					if err := r.Client.Patch(
+						ctx,
+						role,
+						client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{}),
+					); err != nil {
 						return err
 					}
 				}
@@ -473,7 +598,13 @@ func (r *Reconciler) ensureSupport(ctx context.Context, p *api.StacksNetworkPart
 // extraCandidates removes only never-scheduled extras; every uncertain process is a conflict.
 func (r *Reconciler) extraCandidates(ctx context.Context, p *api.StacksNetworkParticipant) error {
 	var pods corev1.PodList
-	if err := r.Reader.List(ctx, &pods, client.InNamespace(p.Namespace), client.MatchingLabels{"network.stacks.org/participant-uid": string(p.UID), "network.stacks.org/workload": "stacks-worker"}, client.Limit(3)); err != nil {
+	if err := r.Reader.List(
+		ctx,
+		&pods,
+		client.InNamespace(p.Namespace),
+		client.MatchingLabels{api.LabelParticipantUID: string(p.UID), workloadLabel: workloadStacksWorker},
+		client.Limit(3),
+	); err != nil {
 		return err
 	}
 	if pods.Continue != "" || len(pods.Items) > 2 {
@@ -484,11 +615,17 @@ func (r *Reconciler) extraCandidates(ctx context.Context, p *api.StacksNetworkPa
 		if pod.Name == Name(p) {
 			continue
 		}
-		if !ownedPod(pod, p) || pod.Spec.NodeName != "" || len(pod.Status.ContainerStatuses) > 0 || len(pod.Status.InitContainerStatuses) > 0 {
+		if !ownedPod(pod, p) || pod.Spec.NodeName != "" || len(pod.Status.ContainerStatuses) > 0 ||
+			len(pod.Status.InitContainerStatuses) > 0 {
 			return fmt.Errorf("extra worker process cannot be proven inactive")
 		}
 		uid := pod.UID
-		if err := r.Client.Delete(ctx, pod, &client.DeleteOptions{Preconditions: &metav1.Preconditions{UID: &uid}}); err != nil && !apierrors.IsNotFound(err) {
+		if err := r.Client.Delete(
+			ctx,
+			pod,
+			&client.DeleteOptions{Preconditions: &metav1.Preconditions{UID: &uid}},
+		); err != nil &&
+			!apierrors.IsNotFound(err) {
 			return err
 		}
 		var current corev1.Pod
@@ -504,7 +641,11 @@ func (r *Reconciler) extraCandidates(ctx context.Context, p *api.StacksNetworkPa
 		if controllerutil.ContainsFinalizer(&current, PodFinalizer) {
 			base := current.DeepCopy()
 			controllerutil.RemoveFinalizer(&current, PodFinalizer)
-			if err := r.Client.Patch(ctx, &current, client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{})); err != nil {
+			if err := r.Client.Patch(
+				ctx,
+				&current,
+				client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{}),
+			); err != nil {
 				return err
 			}
 		}
@@ -522,16 +663,11 @@ func (r *Reconciler) releaseParticipant(ctx context.Context, p *api.StacksNetwor
 	return r.Client.Patch(ctx, p, client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{}))
 }
 
-// objectBinding identifies an observed resource without its private contents.
-func objectBinding(kind string, object metav1.Object) *common.Binding {
-	return &common.Binding{Kind: kind, Name: object.GetName(), UID: object.GetUID()}
-}
-
 // workerConditions selects only the domain's condition ownership.
 func workerConditions(conditions []metav1.Condition) []metav1.Condition {
 	result := []metav1.Condition{}
 	for _, condition := range conditions {
-		if condition.Type == "WorkloadReady" || condition.Type == "PlacementReady" {
+		if condition.Type == api.ConditionWorkloadReady || condition.Type == api.ConditionPlacementReady {
 			result = append(result, condition)
 		}
 	}
@@ -553,9 +689,22 @@ func (r *Reconciler) SetupWithManager(manager ctrl.Manager) error {
 		}
 		var out []reconcile.Request
 		for _, id := range root.Status.Identities {
-			out = append(out, reconcile.Request{NamespacedName: client.ObjectKey{Namespace: root.Namespace, Name: foundation.ParticipantName(string(root.UID), id.Name)}})
+			out = append(
+				out,
+				reconcile.Request{
+					NamespacedName: client.ObjectKey{
+						Namespace: root.Namespace,
+						Name:      foundation.ParticipantName(string(root.UID), id.Name),
+					},
+				},
+			)
 		}
 		return out
 	})
-	return ctrl.NewControllerManagedBy(manager).Named("stacks-worker-"+strings.ToLower(string(r.Kind))).For(&api.StacksNetworkParticipant{}).Owns(&corev1.Pod{}).Watches(&api.StacksNetwork{}, rootMap).Complete(r)
+	return ctrl.NewControllerManagedBy(manager).
+		Named("stacks-worker-"+strings.ToLower(string(r.Kind))).
+		For(&api.StacksNetworkParticipant{}).
+		Owns(&corev1.Pod{}).
+		Watches(&api.StacksNetwork{}, rootMap).
+		Complete(r)
 }

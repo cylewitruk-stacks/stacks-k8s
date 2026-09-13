@@ -36,7 +36,7 @@ type InitializationStatus struct {
 type GateObservation struct {
 	// Name identifies one gate in the immutable genesis bootstrap requirements.
 	// +kubebuilder:validation:MaxLength=64
-	Name string `json:"name"`
+	Name GateName `json:"name"`
 	// FirstCeilingObservedAt starts the bounded observation window once, without pause extension.
 	FirstCeilingObservedAt *metav1.Time `json:"firstCeilingObservedAt,omitempty"`
 	// CompletedAt is the original successful gate observation time.

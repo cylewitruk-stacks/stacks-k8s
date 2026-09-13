@@ -9,7 +9,11 @@ import (
 
 // topologyConflicts applies permanent attachment constraints independently of genesis.
 // Existing admissions keep their attachment; new contenders are considered by name.
-func topologyConflicts(all map[string]*candidate, instances map[string]*api.StacksNetworkParticipant, invalid map[string]bool) map[string]string {
+func topologyConflicts(
+	all map[string]*candidate,
+	instances map[string]*api.StacksNetworkParticipant,
+	invalid map[string]bool,
+) map[string]string {
 	claims := map[string]string{}
 	for name, p := range instances {
 		if prior := p.Status.Admission; prior != nil && prior.Configuration.StacksSigner != nil {

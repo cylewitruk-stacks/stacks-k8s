@@ -4,6 +4,7 @@ package publicintegration
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -42,7 +43,7 @@ func loadFixture(options fixtureOptions) (declarations, error) {
 	var objects []*unstructured.Unstructured
 	for {
 		object := &unstructured.Unstructured{}
-		if err := decoder.Decode(object); err == io.EOF {
+		if err := decoder.Decode(object); errors.Is(err, io.EOF) {
 			break
 		} else if err != nil {
 			return result, err
@@ -68,7 +69,11 @@ func loadFixture(options fixtureOptions) (declarations, error) {
 			continue
 		}
 		group := o.GroupVersionKind().Group
-		if !strings.HasSuffix(group, ".stacks.org") || o.GroupVersionKind().Version != "v1alpha2" || o.GetName() == "" || strings.HasSuffix(o.GetKind(), "Request") || o.GetKind() == "StacksNetworkParticipant" || o.GetKind() == "StacksGenesis" {
+		if !strings.HasSuffix(group, ".stacks.org") || o.GroupVersionKind().Version != "v1alpha2" ||
+			o.GetName() == "" ||
+			strings.HasSuffix(o.GetKind(), "Request") ||
+			o.GetKind() == "StacksNetworkParticipant" ||
+			o.GetKind() == "StacksGenesis" {
 			return result, fmt.Errorf("fixture contains unsupported non-declaration %s", o.GetKind())
 		}
 		if len(o.GetOwnerReferences()) != 0 || len(o.GetFinalizers()) != 0 {
@@ -93,7 +98,11 @@ func loadFixture(options fixtureOptions) (declarations, error) {
 		return result, fmt.Errorf("fixture has no network")
 	}
 	root := result.root
-	for key, value := range map[string]string{"bitcoin": options.bitcoinImage, "stacksNode": options.stacksImage, "stacksSigner": options.signerImage} {
+	for key, value := range map[string]string{
+		"bitcoin":      options.bitcoinImage,
+		"stacksNode":   options.stacksImage,
+		"stacksSigner": options.signerImage,
+	} {
 		if value == "" || strings.HasSuffix(value, ":latest") {
 			return result, fmt.Errorf("explicit non-latest %s image required", key)
 		}
@@ -105,9 +114,25 @@ func loadFixture(options fixtureOptions) (declarations, error) {
 	if err != nil {
 		return result, err
 	}
-	if options.variant == "minimal14" {
+	switch options.variant {
+	case "minimal14":
 		selected := map[string]bool{}
-		for _, name := range []string{"btc-01", "btc-02", "btc-07", "miner-01", "signer-node-01", "signer-node-02", "signer-01", "signer-02", "stacker-01", "stacker-02", "blocks", "traffic", "sbtc", "faucet"} {
+		for _, name := range []string{
+			"btc-01",
+			"btc-02",
+			"btc-07",
+			"miner-01",
+			"signer-node-01",
+			"signer-node-02",
+			"signer-01",
+			"signer-02",
+			"stacker-01",
+			"stacker-02",
+			"blocks",
+			"traffic",
+			"sbtc",
+			"faucet",
+		} {
 			selected[name] = true
 		}
 		reduced := []any{}
@@ -128,11 +153,25 @@ func loadFixture(options fixtureOptions) (declarations, error) {
 		_ = unstructured.SetNestedSlice(root.Object, reduced, "spec", "participants")
 		for _, o := range result.reusable {
 			if o.GetKind() == "BitcoinBlockProduction" && o.GetName() == "blocks" {
-				_ = unstructured.SetNestedSlice(o.Object, []any{map[string]any{"nodeRef": map[string]any{"name": "btc-01"}, "weight": int64(1)}, map[string]any{"nodeRef": map[string]any{"name": "btc-02"}, "weight": int64(1)}}, "spec", "targets")
-				_ = unstructured.SetNestedSlice(o.Object, []any{map[string]any{"name": "miner-wallet-01"}}, "spec", "initialization", "minerWalletRefs")
+				_ = unstructured.SetNestedSlice(
+					o.Object,
+					[]any{
+						map[string]any{"nodeRef": map[string]any{"name": "btc-01"}, "weight": int64(1)},
+						map[string]any{"nodeRef": map[string]any{"name": "btc-02"}, "weight": int64(1)},
+					},
+					"spec",
+					"targets",
+				)
+				_ = unstructured.SetNestedSlice(
+					o.Object,
+					[]any{map[string]any{"name": "miner-wallet-01"}},
+					"spec",
+					"initialization",
+					"minerWalletRefs",
+				)
 			}
 		}
-	} else if options.variant == "full30" {
+	case "full30":
 		actors := 0
 		for _, raw := range participants {
 			p, _ := raw.(map[string]any)
@@ -144,7 +183,7 @@ func loadFixture(options fixtureOptions) (declarations, error) {
 		if actors != 30 {
 			return result, fmt.Errorf("full30 requires exactly 30 actors, found %d", actors)
 		}
-	} else {
+	default:
 		return result, fmt.Errorf("variant must be minimal14 or full30")
 	}
 	if options.cadence < time.Second || options.cadence > time.Hour {
@@ -182,7 +221,18 @@ func replacePlacement(value any, nodeMap map[string]string) {
 func TestFixtureVariantsPreservePublicDeclarations(t *testing.T) {
 	for _, variant := range []string{"minimal14", "full30"} {
 		t.Run(variant, func(t *testing.T) {
-			d, err := loadFixture(fixtureOptions{path: defaultFixture, namespace: "fresh-test", variant: variant, bitcoinImage: "bitcoin:test", stacksImage: "stacks:test", signerImage: "signer:test", cadence: 5 * time.Second, nodeMap: map[string]string{"stacks-k8s-worker": "selected-node"}})
+			d, err := loadFixture(
+				fixtureOptions{
+					path:         defaultFixture,
+					namespace:    "fresh-test",
+					variant:      variant,
+					bitcoinImage: "bitcoin:test",
+					stacksImage:  "stacks:test",
+					signerImage:  "signer:test",
+					cadence:      5 * time.Second,
+					nodeMap:      map[string]string{"stacks-k8s-worker": "selected-node"},
+				},
+			)
 			if err != nil {
 				t.Fatal(err)
 			}

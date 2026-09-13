@@ -43,12 +43,14 @@ type faucetTestNode struct {
 func (n *faucetTestNode) Info(context.Context) (rpc.Info, error) {
 	return rpc.Info{NetworkID: 0x80000000, BurnHeight: 300}, nil
 }
+
 func (n *faucetTestNode) Account(ctx context.Context, address string) (rpc.Account, error) {
 	if n.beforeAccount != nil {
 		n.beforeAccount()
 	}
 	return n.memoryNode.Account(ctx, address)
 }
+
 func (n *faucetTestNode) Submit(ctx context.Context, tx transaction.Transaction) error {
 	n.sent = append(n.sent, tx)
 	err := n.memoryNode.Submit(ctx, tx)
@@ -56,7 +58,9 @@ func (n *faucetTestNode) Submit(ctx context.Context, tx transaction.Transaction)
 		n.afterSend()
 	}
 	if n.rejected {
-		body, _ := json.Marshal(map[string]string{"error": "transaction rejected", "txid": tx.TxID, "reason": "BadNonce"})
+		body, _ := json.Marshal(
+			map[string]string{"error": "transaction rejected", "txid": tx.TxID, "reason": "BadNonce"},
+		)
 		return rpc.ClassifySubmissionRejection(400, body, tx.TxID)
 	}
 	return err
@@ -69,12 +73,18 @@ type faucetTestClient struct {
 	patches                               int
 }
 
-func (c *faucetTestClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+func (c *faucetTestClient) Get(
+	ctx context.Context,
+	key client.ObjectKey,
+	obj client.Object,
+	opts ...client.GetOption,
+) error {
 	if c.readFailure {
 		return apierrors.NewServiceUnavailable("API unavailable")
 	}
 	return c.Client.Get(ctx, key, obj, opts...)
 }
+
 func (c *faucetTestClient) Status() client.SubResourceWriter {
 	return &faucetTestStatus{SubResourceWriter: c.Client.Status(), parent: c}
 }
@@ -84,9 +94,15 @@ type faucetTestStatus struct {
 	parent *faucetTestClient
 }
 
-func (w *faucetTestStatus) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.SubResourcePatchOption) error {
+func (w *faucetTestStatus) Patch(
+	ctx context.Context,
+	obj client.Object,
+	patch client.Patch,
+	_ ...client.SubResourcePatchOption,
+) error {
 	p, ok := obj.(*stacks.StacksFaucetRequest)
-	if !ok || p.Status.Execution == nil || p.Status.Admission != nil || p.Status.Phase != "" || patch.Type() != types.ApplyPatchType {
+	if !ok || p.Status.Execution == nil || p.Status.Admission != nil || p.Status.Phase != "" ||
+		patch.Type() != types.ApplyPatchType {
 		return errors.New("faucet wrote outside execution subtree")
 	}
 	c := w.parent
@@ -99,7 +115,11 @@ func (w *faucetTestStatus) Patch(ctx context.Context, obj client.Object, patch c
 		return err
 	}
 	if current.UID != p.UID || current.ResourceVersion != p.ResourceVersion {
-		return apierrors.NewConflict(schema.GroupResource{Group: stacks.GroupVersion.Group, Resource: "stacksfaucetrequests"}, p.Name, errors.New("identity changed"))
+		return apierrors.NewConflict(
+			schema.GroupResource{Group: stacks.GroupVersion.Group, Resource: "stacksfaucetrequests"},
+			p.Name,
+			errors.New("identity changed"),
+		)
 	}
 	current.Status.Execution = p.Status.Execution.DeepCopy()
 	if err := c.Client.Status().Update(ctx, &current); err != nil {
@@ -113,7 +133,9 @@ func (w *faucetTestStatus) Patch(ctx context.Context, obj client.Object, patch c
 }
 
 // faucetFixture binds one immutable request to the same worker identity used for all retries.
-func faucetFixture(t *testing.T) (*FaucetRole, *faucetTestNode, *faucetTestClient, *stacks.StacksFaucetRequest, *stacksworker.Snapshot, *time.Time) {
+func faucetFixture(
+	t *testing.T,
+) (*FaucetRole, *faucetTestNode, *faucetTestClient, *stacks.StacksFaucetRequest, *stacksworker.Snapshot, *time.Time) {
 	t.Helper()
 	ctx := context.Background()
 	now := time.Date(2026, 9, 11, 12, 0, 0, 0, time.UTC)
@@ -126,14 +148,91 @@ func faucetFixture(t *testing.T) (*FaucetRole, *faucetTestNode, *faucetTestClien
 	}
 	r.Namespace, r.ParticipantUID, r.PodUID = "test", "faucet", "pod"
 	r.Now = func() time.Time { return now }
-	root := &api.StacksNetwork{ObjectMeta: metav1.ObjectMeta{Name: "network", Namespace: "test", UID: "root"}, Spec: api.StacksNetworkSpec{Operation: "Running", Participants: []api.Participant{{Name: "faucet", Kind: "StacksFaucet"}}}, Status: api.StacksNetworkStatus{Identities: []api.InstanceIdentity{{Name: "faucet", UID: "faucet", Worker: &api.WorkerSession{Pod: api.WorkerPodBinding{Kind: "Pod", Name: "worker", UID: "pod"}, ProfileDigest: "sha256:" + strings.Repeat("a", 64)}}}}}
-	p := &api.StacksNetworkParticipant{ObjectMeta: metav1.ObjectMeta{Name: "faucet-instance", Namespace: "test", UID: "faucet", OwnerReferences: []metav1.OwnerReference{{APIVersion: api.GroupVersion.String(), Kind: "StacksNetwork", Name: root.Name, UID: root.UID, Controller: ptr.To(true)}}}, Spec: api.StacksNetworkParticipantSpec{Kind: "StacksFaucet", NetworkUID: "root", ParticipantName: "faucet"}, Status: api.ParticipantStatus{Admission: &api.Admission{PolicyDigest: "policy"}, Execution: &api.WorkerExecutionStatus{PodUID: "pod", ProcessNonce: "process"}}}
-	request := &stacks.StacksFaucetRequest{ObjectMeta: metav1.ObjectMeta{Name: "request", Namespace: "test", UID: "request", CreationTimestamp: metav1.NewTime(now)}, Spec: stacks.StacksFaucetRequestSpec{NetworkUID: "root", FaucetRef: common.NameRef{Name: "faucet"}, Destination: stacks.Recipient{Address: &destination.Address}, AmountMicroSTX: "100", Timeout: "5m"}}
-	request.Status.Admission = &stacks.FaucetAdmission{Decision: "Admitted", Reason: "WorkerBound", ExpiresAt: now.Add(5 * time.Minute).Format(time.RFC3339Nano), NetworkUID: "root", Faucet: &stacks.FaucetBinding{Kind: "StacksNetworkParticipant", Name: p.Name, UID: p.UID}, Worker: &stacks.FaucetBinding{Kind: "Pod", Name: "worker", UID: "pod"}, ProfileDigest: root.Status.Identities[0].Worker.ProfileDigest, SourceAccount: &stacks.FaucetBinding{Kind: "StacksAccount", Name: "sender", UID: "source"}, Target: &stacks.FaucetBinding{Kind: "StacksNetworkParticipant", Name: "node", UID: "node"}, Destination: destination.Address, AmountMicroSTX: "100", FeeMicroSTX: "3000"}
+	root := &api.StacksNetwork{
+		ObjectMeta: metav1.ObjectMeta{Name: "network", Namespace: "test", UID: "root"},
+		Spec: api.StacksNetworkSpec{
+			Operation:    "Running",
+			Participants: []api.Participant{{Name: "faucet", Kind: "StacksFaucet"}},
+		},
+		Status: api.StacksNetworkStatus{
+			Identities: []api.InstanceIdentity{
+				{
+					Name: "faucet",
+					UID:  "faucet",
+					Worker: &api.WorkerSession{
+						Pod:           api.WorkerPodBinding{Kind: "Pod", Name: "worker", UID: "pod"},
+						ProfileDigest: "sha256:" + strings.Repeat("a", 64),
+					},
+				},
+			},
+		},
+	}
+	p := &api.StacksNetworkParticipant{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "faucet-instance",
+			Namespace: "test",
+			UID:       "faucet",
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion: api.GroupVersion.String(),
+					Kind:       "StacksNetwork",
+					Name:       root.Name,
+					UID:        root.UID,
+					Controller: ptr.To(true),
+				},
+			},
+		},
+		Spec: api.StacksNetworkParticipantSpec{
+			Kind:            "StacksFaucet",
+			NetworkUID:      "root",
+			ParticipantName: "faucet",
+		},
+		Status: api.ParticipantStatus{
+			Admission: &api.Admission{PolicyDigest: "policy"},
+			Execution: &api.WorkerExecutionStatus{PodUID: "pod", ProcessNonce: "process"},
+		},
+	}
+	request := &stacks.StacksFaucetRequest{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "request",
+			Namespace:         "test",
+			UID:               "request",
+			CreationTimestamp: metav1.NewTime(now),
+		},
+		Spec: stacks.StacksFaucetRequestSpec{
+			NetworkUID:     "root",
+			FaucetRef:      common.NameRef{Name: "faucet"},
+			Destination:    stacks.Recipient{Address: &destination.Address},
+			AmountMicroSTX: "100",
+			Timeout:        "5m",
+		},
+	}
+	request.Status.Admission = &stacks.FaucetAdmission{
+		Decision:       "Admitted",
+		Reason:         "WorkerBound",
+		ExpiresAt:      now.Add(5 * time.Minute).Format(time.RFC3339Nano),
+		NetworkUID:     "root",
+		Faucet:         &stacks.FaucetBinding{Kind: "StacksNetworkParticipant", Name: p.Name, UID: p.UID},
+		Worker:         &stacks.FaucetBinding{Kind: "Pod", Name: "worker", UID: "pod"},
+		ProfileDigest:  root.Status.Identities[0].Worker.ProfileDigest,
+		SourceAccount:  &stacks.FaucetBinding{Kind: "StacksAccount", Name: "sender", UID: "source"},
+		Target:         &stacks.FaucetBinding{Kind: "StacksNetworkParticipant", Name: "node", UID: "node"},
+		Destination:    destination.Address,
+		AmountMicroSTX: "100",
+		FeeMicroSTX:    "3000",
+	}
 	scheme := runtime.NewScheme()
 	_ = api.AddToScheme(scheme)
 	_ = stacks.AddToScheme(scheme)
-	base := fake.NewClientBuilder().WithScheme(scheme).WithObjectTracker(clienttesting.NewObjectTracker(scheme, serializer.NewCodecFactory(scheme).UniversalDecoder())).WithStatusSubresource(&stacks.StacksFaucetRequest{}, &api.StacksNetworkParticipant{}).WithObjects(root, p, request).Build()
+	base := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjectTracker(clienttesting.NewObjectTracker(
+			scheme,
+			serializer.NewCodecFactory(scheme).UniversalDecoder(),
+		)).
+		WithStatusSubresource(&stacks.StacksFaucetRequest{}, &api.StacksNetworkParticipant{}).
+		WithObjects(root, p, request).
+		Build()
 	c := &faucetTestClient{Client: base}
 	r.Client = c
 	if err := c.Get(ctx, client.ObjectKeyFromObject(request), request); err != nil {
@@ -144,7 +243,11 @@ func faucetFixture(t *testing.T) (*FaucetRole, *faucetTestNode, *faucetTestClien
 	r.Resolve = func(context.Context, stacksworker.Snapshot, *stacks.FaucetAdmission) (FaucetInputs, error) {
 		return FaucetInputs{Node: node, StartHeight: 252}, nil
 	}
-	snapshot := &stacksworker.Snapshot{Network: root, Participant: p, Authorize: func(context.Context) error { return nil }}
+	snapshot := &stacksworker.Snapshot{
+		Network:     root,
+		Participant: p,
+		Authorize:   func(context.Context) error { return nil },
+	}
 	notifyFaucet(t, r, request, false)
 	return r, node, c, request, snapshot, &now
 }
@@ -157,6 +260,7 @@ func notifyFaucet(t *testing.T, r *FaucetRole, request *stacks.StacksFaucetReque
 	}
 	r.CollectionChanged(r.CollectionWatches()[0], &unstructured.Unstructured{Object: object}, deleted)
 }
+
 func faucetStep(t *testing.T, r *FaucetRole, s *stacksworker.Snapshot) stacksworker.RoleResult {
 	t.Helper()
 	result, err := r.Step(context.Background(), *s)
@@ -249,7 +353,8 @@ func TestFaucetDeletionRetainsUnknownNonceAndThenPublishesSummary(t *testing.T) 
 		t.Fatal(err)
 	}
 	deleted := faucetStep(t, r, s)
-	if deleted.Pending != 1 || deleted.Faucet.Orphaned != 1 || deleted.Faucet.LastDeletedOutcome == nil || r.stream.Pending() != 1 {
+	if deleted.Pending != 1 || deleted.Faucet.Orphaned != 1 || deleted.Faucet.LastDeletedOutcome == nil ||
+		r.stream.Pending() != 1 {
 		t.Fatal("deletion cancelled submitted transfer or erased evidence")
 	}
 	n.inclusion = rpc.Inclusion{Found: true, Success: true, BlockID: strings.Repeat("d", 64)}
@@ -268,7 +373,14 @@ func TestFaucetDeletionRetainsUnknownNonceAndThenPublishesSummary(t *testing.T) 
 }
 
 func TestFaucetDeadlinesPauseDeletionAndFreshReadsPreventNewSend(t *testing.T) {
-	for _, change := range []string{"expired", "pause", "cached", "delete-final-read", "deadline-final-read", "API-final-read"} {
+	for _, change := range []string{
+		"expired",
+		"pause",
+		"cached",
+		"delete-final-read",
+		"deadline-final-read",
+		"API-final-read",
+	} {
 		t.Run(change, func(t *testing.T) {
 			r, n, c, request, s, now := faucetFixture(t)
 			switch change {
@@ -279,7 +391,7 @@ func TestFaucetDeadlinesPauseDeletionAndFreshReadsPreventNewSend(t *testing.T) {
 			case "cached":
 				s.CachedApplied = true
 			case "delete-final-read":
-				s.Authorize = func(context.Context) error { return c.Delete(context.Background(), request) }
+				s.Authorize = func(ctx context.Context) error { return c.Delete(ctx, request) }
 			case "deadline-final-read":
 				n.beforeAccount = func() { *now = now.Add(5 * time.Minute) }
 			case "API-final-read":
@@ -332,15 +444,17 @@ func TestFaucetFundsRejectionReadFailureAndNonceConflictDiffer(t *testing.T) {
 				n.rejected = true
 			}
 			result := faucetStep(t, r, s)
-			if change == "funds" {
+			switch {
+			case change == "funds":
 				if result.Faucet.Rejected != 1 || result.Pending != 0 || n.sends != 0 {
 					t.Fatal("definite insufficient balance not rejected before send")
 				}
-			} else if change == "submitted-rejection" {
-				if result.Pending != 0 || n.sends != 1 || result.Transactions.Rejected != 1 || result.Faucet.Rejected != 1 {
+			case change == "submitted-rejection":
+				if result.Pending != 0 || n.sends != 1 || result.Transactions.Rejected != 1 ||
+					result.Faucet.Rejected != 1 {
 					t.Fatal("native refusal did not settle request")
 				}
-			} else if result.Faucet.Rejected != 0 || n.sends != 0 || result.Pending != 1 {
+			case result.Faucet.Rejected != 0 || n.sends != 0 || result.Pending != 1:
 				t.Fatalf("unknown read or nonce conflict invented rejection: %+v", result)
 			}
 		})
@@ -350,31 +464,40 @@ func TestFaucetFundsRejectionReadFailureAndNonceConflictDiffer(t *testing.T) {
 func TestFaucetQueueIsBoundedAndOrderedWithoutLifetimeDedup(t *testing.T) {
 	r, n, c, request, s, _ := faucetFixture(t)
 	for i := 0; i < faucetrequest.Capacity+5; i++ {
-		copy := request.DeepCopy()
-		copy.Name = fmt.Sprintf("r-%04d", i)
-		copy.UID = types.UID(copy.Name)
-		copy.ResourceVersion = ""
-		copy.CreationTimestamp = metav1.NewTime(request.CreationTimestamp.Add(-time.Second))
-		copy.Status.Admission.ExpiresAt = copy.CreationTimestamp.Add(5 * time.Minute).UTC().Format(time.RFC3339Nano)
-		status := copy.Status.DeepCopy()
-		if err := c.Create(context.Background(), copy); err != nil {
+		snapshot := request.DeepCopy()
+		snapshot.Name = fmt.Sprintf("r-%04d", i)
+		snapshot.UID = types.UID(snapshot.Name)
+		snapshot.ResourceVersion = ""
+		snapshot.CreationTimestamp = metav1.NewTime(request.CreationTimestamp.Add(-time.Second))
+		snapshot.Status.Admission.ExpiresAt = snapshot.CreationTimestamp.Add(5 * time.Minute).
+			UTC().
+			Format(time.RFC3339Nano)
+		status := snapshot.Status.DeepCopy()
+		if err := c.Create(context.Background(), snapshot); err != nil {
 			t.Fatal(err)
 		}
-		copy.Status = *status
-		if err := c.Client.Status().Update(context.Background(), copy); err != nil {
+		snapshot.Status = *status
+		if err := c.Client.Status().Update(context.Background(), snapshot); err != nil {
 			t.Fatal(err)
 		}
-		if i == 0 && !r.matches(copy, *s) {
-			t.Fatalf("queue fixture invalid: %+v admission=%+v", copy.ObjectMeta, copy.Status.Admission)
+		if i == 0 && !r.matches(snapshot, *s) {
+			t.Fatalf("queue fixture invalid: %+v admission=%+v", snapshot.ObjectMeta, snapshot.Status.Admission)
 		}
-		notifyFaucet(t, r, copy, false)
+		notifyFaucet(t, r, snapshot, false)
 	}
 	if len(r.notices) != faucetrequest.Capacity || !r.rescan {
 		t.Fatal("notification capacity unbounded or overflow forgotten")
 	}
 	result := faucetStep(t, r, s)
 	if n.sends != 1 || r.pendingUID != "r-0000" || len(r.notices)+len(r.entries) > faucetrequest.Capacity {
-		t.Fatalf("best-effort order or local capacity violated: sends=%d pending=%s notices=%d entries=%d result=%+v", n.sends, r.pendingUID, len(r.notices), len(r.entries), result)
+		t.Fatalf(
+			"best-effort order or local capacity violated: sends=%d pending=%s notices=%d entries=%d result=%+v",
+			n.sends,
+			r.pendingUID,
+			len(r.notices),
+			len(r.entries),
+			result,
+		)
 	}
 }
 
@@ -403,7 +526,8 @@ func TestFaucetDrainRefusesQueuedWorkAndRetainsSubmittedWork(t *testing.T) {
 				if err := c.Get(context.Background(), client.ObjectKeyFromObject(request), &current); err != nil {
 					t.Fatal(err)
 				}
-				if !result.Done || n.sends != 0 || !current.Status.Execution.NoSend || current.Status.Execution.Reason != "WorkerStoppedBeforeSend" {
+				if !result.Done || n.sends != 0 || !current.Status.Execution.NoSend ||
+					current.Status.Execution.Reason != "WorkerStoppedBeforeSend" {
 					t.Fatal("queued shutdown did not retain affirmative refusal")
 				}
 			}
@@ -467,7 +591,9 @@ func TestFaucetNativeRejectionSurvivesPublicationLossWithoutResend(t *testing.T)
 				t.Fatal(err)
 			}
 			e := saved.Status.Execution
-			if got.Pending != 0 || e == nil || e.Phase != "Rejected" || e.Reason != "RejectedBadNonce" || e.NoSend || e.TxID != n.sent[0].TxID || e.InclusionBlockID != "" {
+			if got.Pending != 0 || e == nil || e.Phase != "Rejected" || e.Reason != "RejectedBadNonce" || e.NoSend ||
+				e.TxID != n.sent[0].TxID ||
+				e.InclusionBlockID != "" {
 				t.Fatalf("rejection evidence: %+v", e)
 			}
 			notifyFaucet(t, r, request, false)

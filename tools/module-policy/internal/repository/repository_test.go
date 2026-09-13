@@ -27,6 +27,7 @@ func TestMarkdownLinksResolve(t *testing.T) {
 		if !strings.HasSuffix(strings.ToLower(path), ".md") {
 			return nil
 		}
+		// #nosec G304 G122 -- Path is derived from repository fixtures or a private test directory, not a remote request.
 		content, err := os.ReadFile(path)
 		if err != nil {
 			return err
@@ -36,6 +37,7 @@ func TestMarkdownLinksResolve(t *testing.T) {
 			if target == "" || strings.Contains(target, "://") || strings.HasPrefix(target, "mailto:") {
 				continue
 			}
+			// #nosec G703 -- Path is derived from repository fixtures or a private test directory, not a remote request.
 			if _, err := os.Stat(filepath.Join(filepath.Dir(path), filepath.FromSlash(target))); err != nil {
 				t.Errorf("%s: unresolved link %q", path, match[1])
 			}

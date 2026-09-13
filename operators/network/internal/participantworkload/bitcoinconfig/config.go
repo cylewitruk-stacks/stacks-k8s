@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	common "github.com/cylewitruk-stacks/stacks-k8s/apis/network/common/v1alpha2"
+	api "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha2"
 	"k8s.io/apimachinery/pkg/util/validation"
 )
 
@@ -34,7 +35,25 @@ func baseName(name string) string {
 // contained rejects options which escape the single mounted document or managed process.
 func contained(name string) bool {
 	switch baseName(name) {
-	case "conf", "includeconf", "datadir", "blocksdir", "walletdir", "wallet", "settings", "pid", "daemon", "daemonwait", "startupnotify", "blocknotify", "walletnotify", "alertnotify", "shutdownnotify", "loadblock", "debuglogfile", "stopatheight", "stopafterblockimport":
+	case "conf",
+		"includeconf",
+		"datadir",
+		"blocksdir",
+		"walletdir",
+		"wallet",
+		"settings",
+		"pid",
+		"daemon",
+		"daemonwait",
+		"startupnotify",
+		"blocknotify",
+		"walletnotify",
+		"alertnotify",
+		"shutdownnotify",
+		"loadblock",
+		"debuglogfile",
+		"stopatheight",
+		"stopafterblockimport":
 		return false
 	}
 	return true
@@ -47,7 +66,33 @@ func protected(name string) bool {
 		return true
 	}
 	switch name {
-	case "regtest", "chain", "testnet", "testnet4", "signet", "signetchallenge", "signetseednode", "vbparams", "testactivationheight", "mocktime", "server", "listen", "bind", "whitebind", "port", "externalip", "addnode", "connect", "proxy", "onion", "onlynet", "dnsseed", "fixedseeds", "networkactive", "txindex", "prune", "disablewallet":
+	case "regtest",
+		"chain",
+		"testnet",
+		"testnet4",
+		"signet",
+		"signetchallenge",
+		"signetseednode",
+		"vbparams",
+		"testactivationheight",
+		"mocktime",
+		"server",
+		"listen",
+		"bind",
+		"whitebind",
+		"port",
+		"externalip",
+		"addnode",
+		"connect",
+		"proxy",
+		"onion",
+		"onlynet",
+		"dnsseed",
+		"fixedseeds",
+		"networkactive",
+		"txindex",
+		"prune",
+		"disablewallet":
 		return true
 	}
 	return !contained(name)
@@ -61,24 +106,33 @@ func ValidateCustomization(config *common.Config) error {
 	if config.SecretRef != nil && config.Overrides != nil {
 		return fmt.Errorf("configuration sources are exclusive")
 	}
-	if config.Compatibility != nil && *config.Compatibility != "Managed" && *config.Compatibility != "Unverified" {
+	if config.Compatibility != nil && *config.Compatibility != common.CompatibilityManaged &&
+		*config.Compatibility != common.CompatibilityUnverified {
 		return fmt.Errorf("unsupported configuration compatibility")
 	}
-	if ref := config.SecretRef; ref != nil && (len(validation.IsDNS1123Subdomain(ref.Name)) != 0 || len(validation.IsConfigMapKey(ref.Key)) != 0) {
+	if ref := config.SecretRef; ref != nil &&
+		(len(validation.IsDNS1123Subdomain(ref.Name)) != 0 || len(validation.IsConfigMapKey(ref.Key)) != 0) {
 		return fmt.Errorf("invalid configuration Secret reference")
 	}
 	aliases := map[string]bool{}
 	for _, ref := range config.ServiceRefs {
-		if len(validation.IsDNS1123Label(ref.Alias)) != 0 || aliases[ref.Alias] || len(validation.IsDNS1123Label(ref.Name)) != 0 {
+		if len(validation.IsDNS1123Label(ref.Alias)) != 0 || aliases[ref.Alias] ||
+			len(validation.IsDNS1123Label(ref.Name)) != 0 {
 			return fmt.Errorf("invalid or duplicate Service alias")
 		}
-		if !((ref.Kind == "BitcoinNode" || ref.Kind == "StacksNode") && (ref.Endpoint == "rpc" || ref.Endpoint == "p2p") || ref.Kind == "StacksSigner" && ref.Endpoint == "events") {
+		supportedEndpoint := (ref.Kind == string(api.ParticipantBitcoinNode) ||
+			ref.Kind == string(api.ParticipantStacksNode)) &&
+			(ref.Endpoint == common.EndpointRPC ||
+				ref.Endpoint == common.EndpointP2P) ||
+			ref.Kind == string(api.ParticipantStacksSigner) &&
+				ref.Endpoint == common.EndpointEvents
+		if !supportedEndpoint {
 			return fmt.Errorf("unsupported Service endpoint")
 		}
 		aliases[ref.Alias] = true
 	}
 	if len(aliases) > 0 && config.SecretRef == nil {
-		return fmt.Errorf("Service substitutions require a complete configuration Secret")
+		return fmt.Errorf("service substitutions require a complete configuration Secret")
 	}
 	_, err := overrides(config)
 	return err
@@ -96,13 +150,13 @@ func Apply(generated, custom []byte, config *common.Config, services map[string]
 	if config == nil {
 		return generated, true, nil
 	}
-	verified := config.Compatibility == nil || *config.Compatibility != "Unverified"
+	verified := config.Compatibility == nil || *config.Compatibility != common.CompatibilityUnverified
 	if config.SecretRef != nil {
 		text := string(custom)
 		for _, ref := range config.ServiceRefs {
 			host := services[ref.Alias]
 			if len(validation.IsDNS1123Subdomain(host)) != 0 {
-				return nil, false, fmt.Errorf("Service alias unavailable")
+				return nil, false, fmt.Errorf("service alias unavailable")
 			}
 			text = strings.ReplaceAll(text, "${SERVICE:"+ref.Alias+"}", host)
 		}
@@ -171,7 +225,8 @@ func parse(data []byte) (document, error) {
 			continue
 		}
 		if strings.HasPrefix(line, "[") {
-			if line != "[regtest]" && line != "[main]" && line != "[test]" && line != "[testnet4]" && line != "[signet]" {
+			if line != "[regtest]" && line != "[main]" && line != "[test]" && line != "[testnet4]" &&
+				line != "[signet]" {
 				return nil, fmt.Errorf("unsupported Bitcoin configuration section")
 			}
 			section = line[1 : len(line)-1]
@@ -231,7 +286,7 @@ func overrides(config *common.Config) (document, error) {
 			case json.Number:
 				text = string(value)
 			default:
-				return fmt.Errorf("Bitcoin option requires scalar values")
+				return fmt.Errorf("expected scalar values for Bitcoin option")
 			}
 			if strings.ContainsAny(text, "\r\n\x00#") || text != strings.TrimSpace(text) {
 				return fmt.Errorf("invalid Bitcoin option value")

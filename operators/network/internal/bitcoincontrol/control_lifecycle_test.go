@@ -38,8 +38,32 @@ type controlFixture struct {
 func newControlFixture(t *testing.T) *controlFixture {
 	t.Helper()
 	f := &controlFixture{}
-	f.root = &api.StacksNetwork{ObjectMeta: metav1.ObjectMeta{Name: "network", Namespace: "test", UID: "root", Generation: 3}, Spec: api.StacksNetworkSpec{Operation: "Stopped"}}
-	f.p = &api.StacksNetworkParticipant{ObjectMeta: metav1.ObjectMeta{Name: "participant", Namespace: "test", UID: "participant", Generation: 2, OwnerReferences: []metav1.OwnerReference{{APIVersion: api.GroupVersion.String(), Kind: "StacksNetwork", Name: "network", UID: f.root.UID, Controller: ptr.To(true)}}}, Spec: api.StacksNetworkParticipantSpec{NetworkUID: f.root.UID, ParticipantName: "core", Kind: "BitcoinNode"}}
+	f.root = &api.StacksNetwork{
+		ObjectMeta: metav1.ObjectMeta{Name: "network", Namespace: "test", UID: "root", Generation: 3},
+		Spec:       api.StacksNetworkSpec{Operation: "Stopped"},
+	}
+	f.p = &api.StacksNetworkParticipant{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "participant",
+			Namespace:  "test",
+			UID:        "participant",
+			Generation: 2,
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion: api.GroupVersion.String(),
+					Kind:       "StacksNetwork",
+					Name:       "network",
+					UID:        f.root.UID,
+					Controller: ptr.To(true),
+				},
+			},
+		},
+		Spec: api.StacksNetworkParticipantSpec{
+			NetworkUID:      f.root.UID,
+			ParticipantName: "core",
+			Kind:            "BitcoinNode",
+		},
+	}
 	// The production renderer supplies the same deterministic Deployment identity.
 	f.p.Status.Admission = &api.Admission{}
 	f.p.Status.Runtime = &api.ParticipantRuntimeStatus{}
@@ -49,39 +73,121 @@ func newControlFixture(t *testing.T) *controlFixture {
 			t.Fatal(err)
 		}
 	}
-	f.deployment = &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: controlDeploymentName(f.p), Namespace: "test", UID: "deployment", Generation: 4, OwnerReferences: []metav1.OwnerReference{{APIVersion: api.GroupVersion.String(), Kind: "StacksNetworkParticipant", Name: f.p.Name, UID: f.p.UID, Controller: ptr.To(true)}}}, Spec: appsv1.DeploymentSpec{Replicas: ptr.To[int32](0)}, Status: appsv1.DeploymentStatus{ObservedGeneration: 4}}
-	f.replica = &appsv1.ReplicaSet{ObjectMeta: metav1.ObjectMeta{Name: "replica", Namespace: "test", UID: "replica", OwnerReferences: []metav1.OwnerReference{{APIVersion: "apps/v1", Kind: "Deployment", Name: f.deployment.Name, UID: f.deployment.UID, Controller: ptr.To(true)}}}}
+	f.deployment = &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       controlDeploymentName(f.p),
+			Namespace:  "test",
+			UID:        "deployment",
+			Generation: 4,
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion: api.GroupVersion.String(),
+					Kind:       "StacksNetworkParticipant",
+					Name:       f.p.Name,
+					UID:        f.p.UID,
+					Controller: ptr.To(true),
+				},
+			},
+		},
+		Spec:   appsv1.DeploymentSpec{Replicas: ptr.To[int32](0)},
+		Status: appsv1.DeploymentStatus{ObservedGeneration: 4},
+	}
+	f.replica = &appsv1.ReplicaSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "replica",
+			Namespace: "test",
+			UID:       "replica",
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion: "apps/v1",
+					Kind:       "Deployment",
+					Name:       f.deployment.Name,
+					UID:        f.deployment.UID,
+					Controller: ptr.To(true),
+				},
+			},
+		},
+	}
 	f.replica.Spec.Replicas = ptr.To[int32](0)
 	labels := labels(f.p, "support")
 	labels["network.stacks.org/worker-role"] = "bitcoin-control"
-	f.pod = &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "control-pod", Namespace: "test", UID: "pod", Labels: labels, Finalizers: []string{ControlPodFinalizer}, OwnerReferences: []metav1.OwnerReference{{APIVersion: "apps/v1", Kind: "ReplicaSet", Name: f.replica.Name, UID: f.replica.UID, Controller: ptr.To(true)}}}, Spec: corev1.PodSpec{NodeName: "node", Containers: []corev1.Container{{Name: "control", Image: "control:test"}}}, Status: corev1.PodStatus{Phase: corev1.PodRunning, ContainerStatuses: []corev1.ContainerStatus{{Name: "control", State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}}}}}}
-	f.c = fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(f.p, f.pod, f.deployment).WithObjects(f.root, f.p, f.deployment, f.replica, f.pod).WithInterceptorFuncs(interceptor.Funcs{SubResourcePatch: func(ctx context.Context, c client.Client, sub string, obj client.Object, patch client.Patch, opts ...client.SubResourcePatchOption) error {
-		f.writes++
-		p := obj.(*api.StacksNetworkParticipant)
-		options := &client.SubResourcePatchOptions{}
-		for _, option := range opts {
-			option.ApplyToSubResourcePatch(options)
-		}
-		if sub != "status" || patch.Type() != types.ApplyPatchType || options.FieldManager != ControlLifecycleManager || p.Status.BitcoinControl == nil || p.Status.Runtime != nil || p.Status.Admission != nil || p.Status.Execution != nil || len(p.Status.Conditions) != 0 {
-			t.Fatal("control status widened SSA ownership")
-		}
-		if f.failPublication {
-			return apierrors.NewConflict(schema.GroupResource{Group: api.GroupVersion.Group, Resource: "stacksnetworkparticipants"}, p.Name, fmt.Errorf("injected status conflict"))
-		}
-		var current api.StacksNetworkParticipant
-		if err := c.Get(ctx, client.ObjectKeyFromObject(p), &current); err != nil {
-			return err
-		}
-		if current.ResourceVersion != p.ResourceVersion {
-			return fmt.Errorf("stale test publication")
-		}
-		current.Status.BitcoinControl = p.Status.BitcoinControl
-		if err := c.Status().Update(ctx, &current); err != nil {
-			return err
-		}
-		*p = current
-		return nil
-	}}).Build()
+	f.pod = &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "control-pod",
+			Namespace:  "test",
+			UID:        "pod",
+			Labels:     labels,
+			Finalizers: []string{ControlPodFinalizer},
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion: "apps/v1",
+					Kind:       "ReplicaSet",
+					Name:       f.replica.Name,
+					UID:        f.replica.UID,
+					Controller: ptr.To(true),
+				},
+			},
+		},
+		Spec: corev1.PodSpec{
+			NodeName:   "node",
+			Containers: []corev1.Container{{Name: "control", Image: "control:test"}},
+		},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+			ContainerStatuses: []corev1.ContainerStatus{
+				{Name: "control", State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}}},
+			},
+		},
+	}
+	f.c = fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(f.p, f.pod, f.deployment).
+		WithObjects(f.root, f.p, f.deployment, f.replica, f.pod).
+		WithInterceptorFuncs(interceptor.Funcs{SubResourcePatch: func(
+			ctx context.Context,
+			c client.Client,
+			sub string,
+			obj client.Object,
+			patch client.Patch,
+			opts ...client.SubResourcePatchOption,
+		) error {
+			f.writes++
+			p := obj.(*api.StacksNetworkParticipant)
+			options := &client.SubResourcePatchOptions{}
+			for _, option := range opts {
+				option.ApplyToSubResourcePatch(options)
+			}
+			if sub != "status" || patch.Type() != types.ApplyPatchType ||
+				options.FieldManager != ControlLifecycleManager ||
+				p.Status.BitcoinControl == nil ||
+				p.Status.Runtime != nil ||
+				p.Status.Admission != nil ||
+				p.Status.Execution != nil ||
+				len(p.Status.Conditions) != 0 {
+				t.Fatal("control status widened SSA ownership")
+			}
+			if f.failPublication {
+				return apierrors.NewConflict(
+					schema.GroupResource{Group: api.GroupVersion.Group, Resource: "stacksnetworkparticipants"},
+					p.Name,
+					fmt.Errorf("injected status conflict"),
+				)
+			}
+			var current api.StacksNetworkParticipant
+			if err := c.Get(ctx, client.ObjectKeyFromObject(p), &current); err != nil {
+				return err
+			}
+			if current.ResourceVersion != p.ResourceVersion {
+				return fmt.Errorf("stale test publication")
+			}
+			current.Status.BitcoinControl = p.Status.BitcoinControl
+			if err := c.Status().Update(ctx, &current); err != nil {
+				return err
+			}
+			*p = current
+			return nil
+		}}).
+		Build()
 	f.r = WorkloadReconciler{Client: f.c, Reader: f.c}
 	f.refresh(t)
 	return f
@@ -111,7 +217,9 @@ func (f *controlFixture) terminal(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.pod.Status.Phase = corev1.PodFailed
-	f.pod.Status.ContainerStatuses[0].State = corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{Reason: "Error", ExitCode: 1}}
+	f.pod.Status.ContainerStatuses[0].State = corev1.ContainerState{
+		Terminated: &corev1.ContainerStateTerminated{Reason: "Error", ExitCode: 1},
+	}
 	if err := f.c.Status().Update(context.Background(), f.pod); err != nil {
 		t.Fatal(err)
 	}
@@ -168,7 +276,8 @@ func TestControlMissingBoundProcessRemainsUnknown(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.reconcile(t)
-	if state := f.p.Status.BitcoinControl; state.Terminated || state.Reason != "TerminationUnknown" || len(state.Pods) != 1 {
+	if state := f.p.Status.BitcoinControl; state.Terminated || state.Reason != "TerminationUnknown" ||
+		len(state.Pods) != 1 {
 		t.Fatal("missing process became termination evidence", state)
 	}
 }
@@ -194,7 +303,8 @@ func TestControlTerminationRefreshesControlGenerationWithoutRPC(t *testing.T) {
 	f.reconcile(t)
 	f.root.Generation++
 	f.reconcile(t)
-	if state := f.p.Status.BitcoinControl; !state.Terminated || state.NetworkGeneration != f.root.Generation || state.ObservedGeneration != f.p.Generation {
+	if state := f.p.Status.BitcoinControl; !state.Terminated || state.NetworkGeneration != f.root.Generation ||
+		state.ObservedGeneration != f.p.Generation {
 		t.Fatal("terminal evidence did not acknowledge current controls")
 	}
 }
@@ -207,7 +317,12 @@ func TestControlAllDeclaredProcessesMustTerminate(t *testing.T) {
 	if controlPodTerminated(pod) {
 		t.Fatal("missing init termination accepted")
 	}
-	pod.Status.InitContainerStatuses = []corev1.ContainerStatus{{Name: "init", State: corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{Reason: "Completed"}}}}
+	pod.Status.InitContainerStatuses = []corev1.ContainerStatus{
+		{
+			Name:  "init",
+			State: corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{Reason: "Completed"}},
+		},
+	}
 	if !controlPodTerminated(pod) {
 		t.Fatal("complete process exits rejected")
 	}
@@ -256,7 +371,9 @@ func TestControlDeploymentReplacementRetainsPriorPodIdentity(t *testing.T) {
 	}
 	f.reconcile(t)
 	state := f.p.Status.BitcoinControl
-	if state.DeploymentRef.UID != "replacement" || len(state.Pods) != 1 || state.Pods[0].Deployment.UID != "deployment" || state.Terminated {
+	if state.DeploymentRef.UID != "replacement" || len(state.Pods) != 1 ||
+		state.Pods[0].Deployment.UID != "deployment" ||
+		state.Terminated {
 		t.Fatal("replacement erased predecessor evidence", state)
 	}
 }
@@ -293,7 +410,9 @@ func TestControlRetainedReplicaCannotCreateAfterTermination(t *testing.T) {
 
 func TestControlUnreachableProcessRemainsUnknown(t *testing.T) {
 	f := newControlFixture(t)
-	f.pod.Status.Conditions = []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionUnknown, Reason: "NodeNotReady"}}
+	f.pod.Status.Conditions = []corev1.PodCondition{
+		{Type: corev1.PodReady, Status: corev1.ConditionUnknown, Reason: "NodeNotReady"},
+	}
 	if err := f.c.Status().Update(context.Background(), f.pod); err != nil {
 		t.Fatal(err)
 	}
@@ -304,7 +423,13 @@ func TestControlUnreachableProcessRemainsUnknown(t *testing.T) {
 }
 
 func TestControlForegroundDestructionRequiresConfirmedTermination(t *testing.T) {
-	for _, mode := range []string{"destroying", "stopped", "running-pod", "missing-pod", "remaining-controller"} {
+	for _, mode := range []string{
+		"destroying",
+		"stopped",
+		"running-pod",
+		"missing-pod",
+		"remaining-controller",
+	} {
 		t.Run(mode, func(t *testing.T) {
 			f := newControlFixture(t)
 			f.replica.Labels = f.pod.Labels
@@ -347,7 +472,8 @@ func TestControlForegroundDestructionRequiresConfirmedTermination(t *testing.T) 
 			if state.Terminated != (mode == "destroying") {
 				t.Fatalf("unexpected termination for %s: %+v", mode, state)
 			}
-			if mode == "destroying" && (state.Reason != "Terminated" || len(state.Pods) != 1 || !state.Pods[0].Terminated) {
+			if mode == "destroying" &&
+				(state.Reason != "Terminated" || len(state.Pods) != 1 || !state.Pods[0].Terminated) {
 				t.Fatalf("destruction lost exact process evidence: %+v", state)
 			}
 		})

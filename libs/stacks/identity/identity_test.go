@@ -8,7 +8,13 @@ import (
 )
 
 func TestScalarBoundsAndPublicValidation(t *testing.T) {
-	for _, key := range []string{"", strings.Repeat("0", 64), strings.Repeat("f", 64), strings.Repeat("1", 62), strings.Repeat("1", 64) + "02"} {
+	for _, key := range []string{
+		"",
+		strings.Repeat("0", 64),
+		strings.Repeat("f", 64),
+		strings.Repeat("1", 62),
+		strings.Repeat("1", 64) + "02",
+	} {
 		if _, err := FromPrivate(key); err == nil {
 			t.Fatalf("accepted invalid scalar of length %d", len(key))
 		}
@@ -71,7 +77,13 @@ func TestDescriptorRejectsUnsupportedFormats(t *testing.T) {
 	if err != nil || address != valid.BitcoinAddress {
 		t.Fatalf("public descriptor: %v", err)
 	}
-	for _, descriptor := range []string{"wpkh(" + key + ")", "pkh(" + key + ")#checksum", "pkh(xprv123/*)", "pkh(00)", "pkh(" + key[:64] + ")"} {
+	for _, descriptor := range []string{
+		"wpkh(" + key + ")",
+		"pkh(" + key + ")#checksum",
+		"pkh(xprv123/*)",
+		"pkh(00)",
+		"pkh(" + key[:64] + ")",
+	} {
 		if _, _, err := FromDescriptor(descriptor); err == nil {
 			t.Fatalf("unsupported descriptor accepted: %s", descriptor)
 		}

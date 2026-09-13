@@ -20,18 +20,29 @@ import (
 func (h *harness) qualifySharedDefinitions(ctx context.Context, before snapshot) (snapshot, error) {
 	names := []string{"shared-bitcoin-a", "shared-bitcoin-b"}
 	definition := &bitcoin.BitcoinNode{}
-	if err := h.c.Get(ctx, client.ObjectKey{Namespace: h.config.namespace, Name: "btc-07"}, definition); err != nil {
+	if err := h.c.Get(ctx, client.ObjectKey{
+		Namespace: h.config.namespace,
+		Name:      "btc-07",
+	}, definition); err != nil {
 		return before, err
 	}
 	wallet := &bitcoin.BitcoinWallet{}
-	if err := h.c.Get(ctx, client.ObjectKey{Namespace: h.config.namespace, Name: "miner-wallet-01"}, wallet); err != nil {
+	if err := h.c.Get(
+		ctx,
+		client.ObjectKey{Namespace: h.config.namespace, Name: "miner-wallet-01"},
+		wallet,
+	); err != nil {
 		return before, err
 	}
 	if wallet.Spec.KeySource == nil || wallet.Spec.KeySource.StacksMinerAccountRef == nil {
 		return before, fmt.Errorf("shared qualification requires the fixture's derived miner wallet")
 	}
 	account := &stacks.StacksAccount{}
-	if err := h.c.Get(ctx, client.ObjectKey{Namespace: h.config.namespace, Name: wallet.Spec.KeySource.StacksMinerAccountRef.Name}, account); err != nil {
+	if err := h.c.Get(
+		ctx,
+		client.ObjectKey{Namespace: h.config.namespace, Name: wallet.Spec.KeySource.StacksMinerAccountRef.Name},
+		account,
+	); err != nil {
 		return before, err
 	}
 	if wallet.UID == "" || account.UID == "" || wallet.Status.BitcoinAddress == "" {
@@ -60,7 +71,13 @@ func (h *harness) qualifySharedDefinitions(ctx context.Context, before snapshot)
 	if err != nil {
 		return before, err
 	}
-	epochs := map[string]actorEpoch{"btc-07": {Participant: initial.Identity, Runtime: *initial.Status.Runtime.DeepCopy(), Storage: originalStorage}}
+	epochs := map[string]actorEpoch{
+		"btc-07": {
+			Participant: initial.Identity,
+			Runtime:     *initial.Status.Runtime.DeepCopy(),
+			Storage:     originalStorage,
+		},
+	}
 	err = h.changeActors(ctx, func(root *api.StacksNetwork) error {
 		for _, name := range names {
 			for _, id := range root.Status.Identities {
@@ -73,57 +90,86 @@ func (h *harness) qualifySharedDefinitions(ctx context.Context, before snapshot)
 					return fmt.Errorf("shared name already declared")
 				}
 			}
-			root.Spec.Participants = append(root.Spec.Participants, api.Participant{Name: name, Kind: "BitcoinNode", Definition: api.Definition{Ref: &common.NameRef{Name: definition.Name}}, Overrides: &api.Configuration{BitcoinNode: &bitcoin.BitcoinNodeSpec{ActorFields: common.ActorFields{Storage: &common.Storage{Size: ptr.To("1Gi"), RetainOnDelete: ptr.To(false)}}}}})
+			root.Spec.Participants = append(
+				root.Spec.Participants,
+				api.Participant{
+					Name:       name,
+					Kind:       "BitcoinNode",
+					Definition: api.Definition{Ref: &common.NameRef{Name: definition.Name}},
+					Overrides: &api.Configuration{
+						BitcoinNode: &bitcoin.BitcoinNodeSpec{
+							ActorFields: common.ActorFields{
+								Storage: &common.Storage{Size: ptr.To("1Gi"), RetainOnDelete: ptr.To(false)},
+							},
+						},
+					},
+				},
+			)
 		}
 		return nil
 	})
 	if err != nil {
 		return before, err
 	}
-	ready, err := h.wait(ctx, "shared-definitions-ready", h.config.progressTimeout, true, func(s snapshot) (bool, error) {
-		for _, name := range names {
-			found := false
-			for _, p := range s.Participants {
-				if p.Name != name || p.Kind != "BitcoinNode" {
-					continue
-				}
-				if p.Status.Admission == nil || p.Status.Admission.Source.UID != definition.UID || p.Status.Admission.Source.Name != definition.Name || p.Status.Runtime == nil {
-					return false, nil
-				}
-				for _, r := range s.Executions {
-					if r.ParticipantUID != p.Identity.UID {
+	ready, err := h.wait(
+		ctx,
+		"shared-definitions-ready",
+		h.config.progressTimeout,
+		true,
+		func(s snapshot) (bool, error) {
+			for _, name := range names {
+				found := false
+				for _, p := range s.Participants {
+					if p.Name != name || p.Kind != "BitcoinNode" {
 						continue
 					}
-					view, e := (actionSelection{Participant: p, Execution: r.Identity}).observe(s)
-					if e != nil || view.Height <= height {
-						continue
+					if p.Status.Admission == nil || p.Status.Admission.Source.UID != definition.UID ||
+						p.Status.Admission.Source.Name != definition.Name ||
+						p.Status.Runtime == nil {
+						return false, nil
 					}
-					for _, w := range view.Wallets {
-						if w.Wallet.UID == wallet.UID && w.Wallet.Name == wallet.Name && w.Address == wallet.Status.BitcoinAddress && w.Ready {
-							storage, e := h.actorClaim(ctx, p.Status.Runtime)
-							if e != nil {
-								return false, e
-							}
-							current := actorEpoch{Participant: p.Identity, Runtime: *p.Status.Runtime.DeepCopy(), Storage: storage, Height: uint64(view.Height)}
-							for other, epoch := range epochs {
-								if other != name {
-									if e := newStorageEpoch(epoch, current); e != nil {
-										return false, e
+					for _, r := range s.Executions {
+						if r.ParticipantUID != p.Identity.UID {
+							continue
+						}
+						view, e := (actionSelection{Participant: p, Execution: r.Identity}).observe(s)
+						if e != nil || view.Height < 0 || view.Height <= height {
+							continue
+						}
+						for _, w := range view.Wallets {
+							if w.Wallet.UID == wallet.UID && w.Wallet.Name == wallet.Name &&
+								w.Address == wallet.Status.BitcoinAddress &&
+								w.Ready {
+								storage, e := h.actorClaim(ctx, p.Status.Runtime)
+								if e != nil {
+									return false, e
+								}
+								current := actorEpoch{
+									Participant: p.Identity,
+									Runtime:     *p.Status.Runtime.DeepCopy(),
+									Storage:     storage,
+									Height:      uint64(view.Height),
+								}
+								for other, epoch := range epochs {
+									if other != name {
+										if e := newStorageEpoch(epoch, current); e != nil {
+											return false, e
+										}
 									}
 								}
+								epochs[name] = current
+								found = true
 							}
-							epochs[name] = current
-							found = true
 						}
 					}
 				}
+				if !found {
+					return false, nil
+				}
 			}
-			if !found {
-				return false, nil
-			}
-		}
-		return true, h.checkActorGuard(ctx, guard, s)
-	})
+			return true, h.checkActorGuard(ctx, guard, s)
+		},
+	)
 	if err != nil {
 		return ready, err
 	}
@@ -131,7 +177,15 @@ func (h *harness) qualifySharedDefinitions(ctx context.Context, before snapshot)
 	if err != nil {
 		return ready, err
 	}
-	if err = h.event("shared-definition-runtime", map[string]any{"definition": objectIdentity(definition), "wallet": objectIdentity(wallet), "account": objectIdentity(account), "epochs": epochs}); err != nil {
+	if err = h.event(
+		"shared-definition-runtime",
+		map[string]any{
+			"definition": objectIdentity(definition),
+			"wallet":     objectIdentity(wallet),
+			"account":    objectIdentity(account),
+			"epochs":     epochs,
+		},
+	); err != nil {
 		return ready, err
 	}
 	err = h.changeActors(ctx, func(root *api.StacksNetwork) error {
@@ -168,7 +222,8 @@ func (h *harness) qualifySharedDefinitions(ctx context.Context, before snapshot)
 		if err = h.c.Get(ctx, client.ObjectKeyFromObject(original), current); err != nil {
 			return ready, err
 		}
-		if current.GetUID() != original.GetUID() || current.GetGeneration() != original.GetGeneration() || current.GetDeletionTimestamp() != nil {
+		if current.GetUID() != original.GetUID() || current.GetGeneration() != original.GetGeneration() ||
+			current.GetDeletionTimestamp() != nil {
 			return ready, fmt.Errorf("reusable definition/key changed during shared runtime disposal")
 		}
 	}
@@ -177,13 +232,23 @@ func (h *harness) qualifySharedDefinitions(ctx context.Context, before snapshot)
 	if err = h.c.Get(ctx, client.ObjectKeyFromObject(wallet), currentWallet); err != nil {
 		return ready, err
 	}
-	if currentWallet.Status.BitcoinAddress != wallet.Status.BitcoinAddress || !reflect.DeepEqual(currentWallet.Spec, wallet.Spec) {
+	if currentWallet.Status.BitcoinAddress != wallet.Status.BitcoinAddress ||
+		!reflect.DeepEqual(currentWallet.Spec, wallet.Spec) {
 		return ready, fmt.Errorf("shared wallet identity changed")
 	}
-	if err = h.event("shared-definitions-retained", map[string]any{"definitionUID": definition.UID, "walletUID": wallet.UID, "accountUID": account.UID}); err != nil {
+	if err = h.event(
+		"shared-definitions-retained",
+		map[string]any{"definitionUID": definition.UID, "walletUID": wallet.UID, "accountUID": account.UID},
+	); err != nil {
 		return ready, err
 	}
-	ready, err = h.wait(ctx, "shared-disposal-ready", 5*time.Minute, true, func(s snapshot) (bool, error) { _, ok := progress(s); return ok, nil })
+	ready, err = h.wait(
+		ctx,
+		"shared-disposal-ready",
+		5*time.Minute,
+		true,
+		func(s snapshot) (bool, error) { _, ok := progress(s); return ok, nil },
+	)
 	if err != nil {
 		return ready, err
 	}

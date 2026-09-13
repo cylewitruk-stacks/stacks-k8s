@@ -84,36 +84,43 @@ func (r *TransferRole) now() time.Time {
 }
 
 // Step observes pending work even while paused and never catches up missed opportunities.
-func (r *TransferRole) Step(ctx context.Context, snapshot stacksworker.Snapshot) (result stacksworker.RoleResult, stepErr error) {
+func (r *TransferRole) Step(
+	ctx context.Context,
+	snapshot stacksworker.Snapshot,
+) (result stacksworker.RoleResult, stepErr error) {
 	now := r.now()
 	defer func() {
 		r.observeTraffic(ctx, now)
 		result.Traffic = r.trafficEvidence()
-		result.RequeueAfter = min(result.RequeueAfter, time.Duration(foundation.ObservationPolicy().PollIntervalSeconds)*time.Second)
+		result.RequeueAfter = min(
+			result.RequeueAfter,
+			time.Duration(foundation.ObservationPolicy().PollIntervalSeconds)*time.Second,
+		)
 	}()
 	if r.stream.Pending() != 0 {
 		reason, err := r.stream.Observe(ctx, now)
 		r.captureInclusion()
 		// Preserve the post-send result even if a subsequent observation is unavailable.
 		if err != nil {
-			return r.result("InclusionUnavailable", time.Second), nil
+			return r.result(reasonInclusionUnavailable, time.Second), nil
 		}
 		return r.result(reason, time.Second), nil
 	}
 	if snapshot.Paused {
-		return r.result("Paused", time.Second), nil
+		return r.result(reasonPaused, time.Second), nil
 	}
 	if r.Resolve == nil || snapshot.Participant == nil || snapshot.Participant.Status.Admission == nil {
-		return r.result("PolicyUnavailable", time.Second), nil
+		return r.result(reasonPolicyUnavailable, time.Second), nil
 	}
 	input, resolved, err := r.inputs.resolve(ctx, snapshot, r.applied, r.Resolve, cloneTransferInputs)
 	if err != nil {
-		return r.result("DependenciesUnavailable", time.Second), nil
+		return r.result(reasonDependenciesUnavailable, time.Second), nil
 	}
 	snapshot = resolved
-	if input.Node == nil || input.Amount == 0 || input.Fee == 0 || input.Interval < time.Second || input.Interval > time.Hour {
+	if input.Node == nil || input.Amount == 0 || input.Fee == 0 || input.Interval < time.Second ||
+		input.Interval > time.Hour {
 		r.inputs.invalidate(snapshot, r.applied)
-		return r.result("InvalidPolicy", time.Second), nil
+		return r.result(reasonInvalidPolicy, time.Second), nil
 	}
 	r.inputs.remember(snapshot, input, cloneTransferInputs)
 	r.interval = input.Interval
@@ -123,7 +130,7 @@ func (r *TransferRole) Step(ctx context.Context, snapshot stacksworker.Snapshot)
 		r.next = now
 	}
 	if now.Before(r.next) {
-		reason := "WaitingCadence"
+		reason := reasonWaitingCadence
 		if r.stream.rejectionReason != "" {
 			reason = r.stream.rejectionReason
 		}
@@ -131,19 +138,38 @@ func (r *TransferRole) Step(ctx context.Context, snapshot stacksworker.Snapshot)
 	}
 	info, err := input.Node.Info(ctx)
 	if err != nil {
-		return r.result("ChainUnavailable", time.Second), nil
+		return r.result(reasonChainUnavailable, time.Second), nil
 	}
 	if info.NetworkID != 0x80000000 {
-		return r.result("ChainIdentityMismatch", time.Second), nil
+		return r.result(reasonChainIdentityMismatch, time.Second), nil
 	}
 	if info.BurnHeight < input.StartHeight {
-		return r.result("AwaitingEpoch3", time.Second), nil
+		return r.result(reasonAwaitingEpoch3, time.Second), nil
 	}
 	amount := new(big.Int).Add(new(big.Int).SetUint64(input.Amount), new(big.Int).SetUint64(input.Fee))
 	before := r.stream.facts.Offered
-	reason, err := r.stream.Offer(ctx, r.now, input.Node, amount, r.authorize(snapshot, input), func(nonce uint64) (transaction.Transaction, error) {
-		return transaction.Transfer(transaction.Options{Version: transaction.Testnet, ChainID: 0x80000000, Nonce: nonce, Fee: input.Fee, PostConditionMode: transaction.Deny, PrivateKey: r.key}, input.Recipient, input.Amount, "")
-	})
+	reason, err := r.stream.Offer(
+		ctx,
+		r.now,
+		input.Node,
+		amount,
+		r.authorize(snapshot, input),
+		func(nonce uint64) (transaction.Transaction, error) {
+			return transaction.Transfer(
+				transaction.Options{
+					Version:           transaction.Testnet,
+					ChainID:           0x80000000,
+					Nonce:             nonce,
+					Fee:               input.Fee,
+					PostConditionMode: transaction.Deny,
+					PrivateKey:        r.key,
+				},
+				input.Recipient,
+				input.Amount,
+				"",
+			)
+		},
+	)
 	if err != nil {
 		return r.result(reason, time.Second), nil
 	}
@@ -164,17 +190,30 @@ func (r *TransferRole) Drain(ctx context.Context, _ stacksworker.Snapshot) (stac
 	r.captureInclusion()
 	r.observeTraffic(ctx, r.now())
 	pending := r.stream.Pending()
-	return stacksworker.DrainResult{Done: pending == 0, Settled: pending == 0, Pending: pending, Transactions: r.stream.Facts(), Traffic: r.trafficEvidence()}, err
+	return stacksworker.DrainResult{
+		Done:         pending == 0,
+		Settled:      pending == 0,
+		Pending:      pending,
+		Transactions: r.stream.Facts(),
+		Traffic:      r.trafficEvidence(),
+	}, err
 }
 
 // result copies public facts so status retries cannot alias later nonce-stream updates.
 func (r *TransferRole) result(reason string, delay time.Duration) stacksworker.RoleResult {
 	blocked := true
 	switch reason {
-	case "Paused", "WaitingCadence", "Accepted", "Included", "Idle", "AwaitingInclusion":
+	case reasonPaused, reasonWaitingCadence, reasonAccepted, reasonIncluded, reasonIdle, reasonAwaitingInclusion:
 		blocked = false
 	}
-	return stacksworker.RoleResult{AppliedPolicyDigest: r.applied, Pending: r.stream.Pending(), Reason: reason, Blocked: blocked, RequeueAfter: delay, Transactions: r.stream.Facts()}
+	return stacksworker.RoleResult{
+		AppliedPolicyDigest: r.applied,
+		Pending:             r.stream.Pending(),
+		Reason:              reason,
+		Blocked:             blocked,
+		RequeueAfter:        delay,
+		Transactions:        r.stream.Facts(),
+	}
 }
 
 // cloneTransferInputs copies the immutable client and scalar transfer policy.

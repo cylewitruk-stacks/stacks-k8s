@@ -1,3 +1,4 @@
+// Command rbac-check validates the observability chart permissions.
 package main
 
 import (

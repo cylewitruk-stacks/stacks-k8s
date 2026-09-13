@@ -61,8 +61,16 @@ type BitcoinConfigReport struct {
 	Verified bool `json:"verified"`
 }
 
-const actorMethods = "getblockchaininfo,getnetworkinfo,getblockcount,getblockhash,getblockheader,getblock,getrawtransaction,getrawmempool,getmempoolinfo,estimatesmartfee,listunspent,gettransaction,getwalletinfo,getaddressinfo,sendrawtransaction,listwallets"
-const controlMethods = actorMethods + ",createwallet,loadwallet,unloadwallet,listwalletdir,importdescriptors,getdescriptorinfo,listdescriptors,validateaddress,generatetoaddress,getnewaddress,getpeerinfo,getchaintips,gettxout,addnode,disconnectnode,setnetworkactive,invalidateblock,reconsiderblock"
+const (
+	actorMethods = "getblockchaininfo,getnetworkinfo,getblockcount,getblockhash,getblockheader," +
+		"getblock,getrawtransaction,getrawmempool,getmempoolinfo,estimatesmartfee," +
+		"listunspent,gettransaction,getwalletinfo,getaddressinfo,sendrawtransaction," +
+		"listwallets"
+	controlMethods = actorMethods + ",createwallet,loadwallet,unloadwallet,listwalletdir,importdescriptors," +
+		"getdescriptorinfo,listdescriptors,validateaddress,generatetoaddress," +
+		"getnewaddress,getpeerinfo,getchaintips,gettxout,addnode,disconnectnode," +
+		"setnetworkactive,invalidateblock,reconsiderblock"
+)
 
 // RunBitcoinConfigResolver runs only inside the scoped Job process.
 func RunBitcoinConfigResolver(ctx context.Context, c client.Client, in BitcoinConfigInput) error {
@@ -80,7 +88,7 @@ func RunBitcoinConfigResolver(ctx context.Context, c client.Client, in BitcoinCo
 	if err := generateCredential(ctx, c, control, "control"); err != nil {
 		return err
 	}
-	if err := generateCredential(ctx, c, actor, "actor"); err != nil {
+	if err := generateCredential(ctx, c, actor, common.BitcoinActorRPCUsername); err != nil {
 		return err
 	}
 	config, err := resolverSecret(ctx, c, in, in.Config)
@@ -93,7 +101,9 @@ func RunBitcoinConfigResolver(ctx context.Context, c client.Client, in BitcoinCo
 	}
 	var custom []byte
 	if in.Custom != nil {
-		if in.Customization == nil || in.Customization.SecretRef == nil || in.Customization.SecretRef.Name != in.Custom.Binding.Name || in.Customization.SecretRef.Key != in.Custom.Key {
+		if in.Customization == nil || in.Customization.SecretRef == nil ||
+			in.Customization.SecretRef.Name != in.Custom.Binding.Name ||
+			in.Customization.SecretRef.Key != in.Custom.Key {
 			return fmt.Errorf("custom configuration binding disagrees")
 		}
 		secret, err := readPrivateInput(ctx, c, in.Namespace, *in.Custom)
@@ -119,18 +129,29 @@ func RunBitcoinConfigResolver(ctx context.Context, c client.Client, in BitcoinCo
 		base := config.DeepCopy()
 		config.Data = map[string][]byte{"bitcoin.conf": data}
 		config.Immutable = ptr.To(true)
-		if err := c.Patch(ctx, config, client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{})); err != nil {
+		if err := c.Patch(
+			ctx,
+			config,
+			client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{}),
+		); err != nil {
 			return err
 		}
 	}
 	var report corev1.ConfigMap
-	if err := c.Get(ctx, types.NamespacedName{Namespace: in.Namespace, Name: in.Report.Name}, &report); err != nil {
+	if err := c.Get(ctx, types.NamespacedName{
+		Namespace: in.Namespace,
+		Name:      in.Report.Name,
+	}, &report); err != nil {
 		return err
 	}
 	if report.UID != in.Report.UID || !resolverOwned(&report, in.ParticipantUID) || report.DeletionTimestamp != nil {
 		return fmt.Errorf("resolver report identity changed")
 	}
-	result := BitcoinConfigReport{InputDigest: digest(in), ConfigDigest: digest(string(config.Data["bitcoin.conf"])), Verified: verified}
+	result := BitcoinConfigReport{
+		InputDigest:  digest(in),
+		ConfigDigest: digest(string(config.Data["bitcoin.conf"])),
+		Verified:     verified,
+	}
 	data, _ = json.Marshal(result)
 	if current := report.Data["report.json"]; current != "" {
 		if current != string(data) {
@@ -149,12 +170,19 @@ func RunBitcoinConfigResolver(ctx context.Context, c client.Client, in BitcoinCo
 // resolverOwned verifies ownership of a scoped resolver input or output.
 func resolverOwned(obj metav1.Object, uid types.UID) bool {
 	owner := metav1.GetControllerOf(obj)
-	return owner != nil && owner.APIVersion == api.GroupVersion.String() && owner.Kind == "StacksNetworkParticipant" && owner.UID == uid
+	return owner != nil && owner.APIVersion == api.GroupVersion.String() &&
+		owner.Kind == api.KindStacksNetworkParticipant &&
+		owner.UID == uid
 }
 
 // resolverSecret reads private data only inside a resolver with exact UID checks.
-func resolverSecret(ctx context.Context, c client.Client, in BitcoinConfigInput, ref common.Binding) (*corev1.Secret, error) {
-	if ref.UID == "" || ref.Kind != "Secret" {
+func resolverSecret(
+	ctx context.Context,
+	c client.Client,
+	in BitcoinConfigInput,
+	ref common.Binding,
+) (*corev1.Secret, error) {
+	if ref.UID == "" || ref.Kind != common.KindSecret {
 		return nil, fmt.Errorf("missing exact Secret binding")
 	}
 	var secret corev1.Secret
@@ -183,7 +211,10 @@ func generateCredential(ctx context.Context, c client.Client, secret *corev1.Sec
 		return err
 	}
 	base := secret.DeepCopy()
-	secret.Data = map[string][]byte{"username": []byte(username), "password": []byte(hex.EncodeToString(random[:]))}
+	secret.Data = map[string][]byte{
+		"username": []byte(username),
+		"password": []byte(hex.EncodeToString(random[:])),
+	}
 	secret.Immutable = ptr.To(true)
 	return c.Patch(ctx, secret, client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{}))
 }
@@ -191,7 +222,9 @@ func generateCredential(ctx context.Context, c client.Client, secret *corev1.Sec
 // renderConfig renders authenticated Core configuration with disjoint RPC method sets.
 func renderConfig(seeds []string, actor, control *corev1.Secret) (string, error) {
 	var out strings.Builder
-	out.WriteString("regtest=1\nserver=1\nlisten=1\ntxindex=1\nprinttoconsole=1\nfallbackfee=0.0002\nrpcwhitelistdefault=1\n")
+	out.WriteString(
+		"regtest=1\nserver=1\nlisten=1\ntxindex=1\nprinttoconsole=1\nfallbackfee=0.0002\nrpcwhitelistdefault=1\n",
+	)
 	for _, credentials := range []*corev1.Secret{actor, control} {
 		// Secret UIDs provide a unique salt while keeping rendering deterministic.
 		saltBytes := sha256.Sum256([]byte(credentials.UID))
@@ -200,7 +233,13 @@ func renderConfig(seeds []string, actor, control *corev1.Secret) (string, error)
 		mac.Write(credentials.Data["password"])
 		fmt.Fprintf(&out, "rpcauth=%s:%s$%x\n", credentials.Data["username"], salt, mac.Sum(nil))
 	}
-	fmt.Fprintf(&out, "rpcwhitelist=actor:%s\nrpcwhitelist=control:%s\n[regtest]\nrpcbind=0.0.0.0\nrpcallowip=0.0.0.0/0\nrpcport=18443\nport=18444\n", actorMethods, controlMethods)
+	fmt.Fprintf(
+		&out,
+		"rpcwhitelist=actor:%s\nrpcwhitelist=control:%s\n[regtest]\nrpcbind=0.0.0.0\nrpcallow"+
+			"ip=0.0.0.0/0\nrpcport=18443\nport=18444\n",
+		actorMethods,
+		controlMethods,
+	)
 	for _, seed := range seeds {
 		if strings.ContainsAny(seed, "\r\n= \t") || seed == "" {
 			return "", fmt.Errorf("invalid peer seed")
@@ -212,29 +251,79 @@ func renderConfig(seeds []string, actor, control *corev1.Secret) (string, error)
 
 // BitcoinConfigRules grants only named resolver inputs and output patches.
 func BitcoinConfigRules(in BitcoinConfigInput) []rbacv1.PolicyRule {
-	rules := []rbacv1.PolicyRule{{APIGroups: []string{""}, Resources: []string{"secrets"}, ResourceNames: []string{in.Config.Name, in.ControlCredentials.Name, in.ActorCredentials.Name}, Verbs: []string{"get", "patch"}}, {APIGroups: []string{""}, Resources: []string{"configmaps"}, ResourceNames: []string{in.Report.Name}, Verbs: []string{"get", "patch"}}}
+	rules := []rbacv1.PolicyRule{
+		{
+			APIGroups:     []string{""},
+			Resources:     []string{"secrets"},
+			ResourceNames: []string{in.Config.Name, in.ControlCredentials.Name, in.ActorCredentials.Name},
+			Verbs:         []string{"get", "patch"},
+		},
+		{
+			APIGroups:     []string{""},
+			Resources:     []string{"configmaps"},
+			ResourceNames: []string{in.Report.Name},
+			Verbs:         []string{"get", "patch"},
+		},
+	}
 	if in.Custom != nil {
-		rules = append(rules, rbacv1.PolicyRule{APIGroups: []string{""}, Resources: []string{"secrets"}, ResourceNames: []string{in.Custom.Binding.Name}, Verbs: []string{"get"}})
+		rules = append(
+			rules,
+			rbacv1.PolicyRule{
+				APIGroups:     []string{""},
+				Resources:     []string{"secrets"},
+				ResourceNames: []string{in.Custom.Binding.Name},
+				Verbs:         []string{"get"},
+			},
+		)
 	}
 	return rules
 }
 
 // provisionResolver creates one input-bound Job and its narrow named-resource permissions.
-func (r *Reconciler) provisionResolver(ctx context.Context, p *api.StacksNetworkParticipant, in BitcoinConfigInput) error {
+func (r *Reconciler) provisionResolver(
+	ctx context.Context,
+	p *api.StacksNetworkParticipant,
+	in BitcoinConfigInput,
+) error {
 	data, _ := json.Marshal(in)
-	return r.provisionConfigurationJob(ctx, p, in.PolicyDigest, "resolve-bitcoin-config", data, BitcoinConfigRules(in), p.Status.Admission.Configuration.BitcoinNode.WorkerPlacement, in.Report.Name)
+	return r.provisionConfigurationJob(
+		ctx,
+		p,
+		in.PolicyDigest,
+		ModeResolveBitcoinConfig,
+		data,
+		BitcoinConfigRules(in),
+		p.Status.Admission.Configuration.BitcoinNode.WorkerPlacement,
+		in.Report.Name,
+	)
 }
 
 // provisionConfigurationJob shares bounded support-job lifecycle across native renderers.
-func (r *Reconciler) provisionConfigurationJob(ctx context.Context, p *api.StacksNetworkParticipant, revision, mode string, data []byte, rules []rbacv1.PolicyRule, placement *common.Placement, inputConfigMap string) error {
+func (r *Reconciler) provisionConfigurationJob(
+	ctx context.Context,
+	p *api.StacksNetworkParticipant,
+	revision, mode string,
+	data []byte,
+	rules []rbacv1.PolicyRule,
+	placement *common.Placement,
+	inputConfigMap string,
+) error {
 	if r.ResolverImage == "" {
 		return fmt.Errorf("resolver image is required")
 	}
 	purpose := "resolve-" + strings.TrimPrefix(revision, "sha256:")
-	metadata := objectMeta(p, purpose, "support")
+	metadata := objectMeta(p, purpose, api.RoleSupport)
 	account := &corev1.ServiceAccount{ObjectMeta: metadata}
 	role := &rbacv1.Role{ObjectMeta: metadata, Rules: rules}
-	binding := &rbacv1.RoleBinding{ObjectMeta: metadata, RoleRef: rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: "Role", Name: metadata.Name}, Subjects: []rbacv1.Subject{{Kind: "ServiceAccount", Name: metadata.Name, Namespace: p.Namespace}}}
+	binding := &rbacv1.RoleBinding{
+		ObjectMeta: metadata,
+		RoleRef:    rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: common.KindRole, Name: metadata.Name},
+		Subjects: []rbacv1.Subject{{
+			Kind:      common.KindServiceAccount,
+			Name:      metadata.Name,
+			Namespace: p.Namespace,
+		}},
+	}
 	for _, object := range []client.Object{account, role, binding} {
 		if err := r.createOwned(ctx, p, object); err != nil {
 			return err
@@ -246,7 +335,7 @@ func (r *Reconciler) provisionConfigurationJob(ctx context.Context, p *api.Stack
 			BackoffLimit:          ptr.To[int32](3),
 			ActiveDeadlineSeconds: ptr.To[int64](120),
 			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{Labels: Labels(p, "support")},
+				ObjectMeta: metav1.ObjectMeta{Labels: Labels(p, api.RoleSupport)},
 				Spec: corev1.PodSpec{
 					ServiceAccountName: metadata.Name,
 					RestartPolicy:      corev1.RestartPolicyNever,
@@ -271,9 +360,19 @@ func (r *Reconciler) provisionConfigurationJob(ctx context.Context, p *api.Stack
 		pod := &job.Spec.Template.Spec
 		pod.Containers[0].Args = []string{"--mode=" + mode, "--input-file=/input/input.json"}
 		pod.Containers[0].VolumeMounts = []corev1.VolumeMount{{Name: "input", MountPath: "/input", ReadOnly: true}}
-		pod.Volumes = []corev1.Volume{{Name: "input", VolumeSource: corev1.VolumeSource{ConfigMap: &corev1.ConfigMapVolumeSource{LocalObjectReference: corev1.LocalObjectReference{Name: inputConfigMap}, Items: []corev1.KeyToPath{{Key: "input.json", Path: "input.json"}}}}}}
+		pod.Volumes = []corev1.Volume{
+			{
+				Name: "input",
+				VolumeSource: corev1.VolumeSource{
+					ConfigMap: &corev1.ConfigMapVolumeSource{
+						LocalObjectReference: corev1.LocalObjectReference{Name: inputConfigMap},
+						Items:                []corev1.KeyToPath{{Key: "input.json", Path: "input.json"}},
+					},
+				},
+			},
+		}
 	}
-	applyPlacement(&job.Spec.Template.Spec, placement, Labels(p, "support"))
+	applyPlacement(&job.Spec.Template.Spec, placement, Labels(p, api.RoleSupport))
 	if err := r.createOwned(ctx, p, job); err != nil {
 		return err
 	}
@@ -281,7 +380,8 @@ func (r *Reconciler) provisionConfigurationJob(ctx context.Context, p *api.Stack
 	if err := r.Reader.Get(ctx, client.ObjectKeyFromObject(job), &current); err != nil {
 		return err
 	}
-	if len(current.Spec.Template.Spec.Containers) != 1 || digest(current.Spec.Template.Spec.Containers[0].Args) != digest(job.Spec.Template.Spec.Containers[0].Args) {
+	if len(current.Spec.Template.Spec.Containers) != 1 ||
+		digest(current.Spec.Template.Spec.Containers[0].Args) != digest(job.Spec.Template.Spec.Containers[0].Args) {
 		return fmt.Errorf("resolver Job input changed")
 	}
 	for _, condition := range current.Status.Conditions {

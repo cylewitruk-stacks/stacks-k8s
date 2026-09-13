@@ -39,15 +39,23 @@ func (n *poxNode) Account(context.Context, string) (rpc.Account, error) {
 	if n.present {
 		locked, _ = clarity.Uint128(n.amount.String())
 	}
-	return rpc.Account{Nonce: n.nonce, Balance: clarity.Uint(1000000), Locked: locked, UnlockHeight: (n.first + n.period) * 20}, nil
+	return rpc.Account{
+		Nonce:        n.nonce,
+		Balance:      clarity.Uint(1000000),
+		Locked:       locked,
+		UnlockHeight: (n.first + n.period) * 20,
+	}, nil
 }
+
 func (n *poxNode) Submit(_ context.Context, tx transaction.Transaction) error {
 	n.sent = append(n.sent, tx)
 	return n.submitErr
 }
+
 func (n *poxNode) Inclusion(context.Context, string) (rpc.Inclusion, error) {
 	return rpc.Inclusion{Found: n.included, Success: n.executionSuccess, BlockID: strings.Repeat("b", 64)}, nil
 }
+
 func (n *poxNode) Info(context.Context) (rpc.Info, error) {
 	n.infos++
 	tip := strings.Repeat("a", 64)
@@ -66,29 +74,51 @@ func (n *poxNode) ChainView(ctx context.Context) (rpc.ChainView, error) {
 		consensus = strings.Repeat("e", 40)
 		index = strings.Repeat("f", 64)
 	}
-	return rpc.ChainView{Info: info, ConsensusHash: consensus, BurnConsensusHash: strings.Repeat("b", 40), IndexBlockID: index, FullySynced: true}, e
+	return rpc.ChainView{
+		Info:              info,
+		ConsensusHash:     consensus,
+		BurnConsensusHash: strings.Repeat("b", 40),
+		IndexBlockID:      index,
+		FullySynced:       true,
+	}, e
 }
+
 func (n *poxNode) AccountAt(ctx context.Context, address, tip string) (rpc.Account, error) {
 	if tip != strings.Repeat("d", 64) {
 		return rpc.Account{}, errors.New("account read was not pinned")
 	}
 	return n.Account(ctx, address)
 }
+
 func (n *poxNode) PoXAt(ctx context.Context, tip string) (rpc.PoX, error) {
 	if tip != strings.Repeat("d", 64) {
 		return rpc.PoX{}, errors.New("PoX read was not pinned")
 	}
 	return n.PoX(ctx)
 }
-func (n *poxNode) ReadOnlyAt(ctx context.Context, tip, sender, address, contract, method string, args []clarity.Value) (clarity.Value, error) {
+
+func (n *poxNode) ReadOnlyAt(
+	ctx context.Context,
+	tip, sender, address, contract, method string,
+	args []clarity.Value,
+) (clarity.Value, error) {
 	if tip != strings.Repeat("d", 64) {
 		return clarity.Value{}, errors.New("contract read was not pinned")
 	}
 	return n.ReadOnly(ctx, sender, address, contract, method, args)
 }
+
 func (n *poxNode) PoX(context.Context) (rpc.PoX, error) {
-	return rpc.PoX{Contract: PoX4Contract, BurnHeight: n.burn, RewardCycle: n.cycle, CycleLength: 20, MinThreshold: clarity.Uint(1), BlocksUntilPrepare: 5}, nil
+	return rpc.PoX{
+		Contract:           PoX4Contract,
+		BurnHeight:         n.burn,
+		RewardCycle:        n.cycle,
+		CycleLength:        20,
+		MinThreshold:       clarity.Uint(1),
+		BlocksUntilPrepare: 5,
+	}, nil
 }
+
 func (n *poxNode) ReadOnly(_ context.Context, _, _, _, method string, args []clarity.Value) (clarity.Value, error) {
 	if !n.present {
 		return clarity.Value{Type: clarity.None}, nil
@@ -103,9 +133,18 @@ func (n *poxNode) ReadOnly(_ context.Context, _, _, _, method string, args []cla
 		for i := uint64(0); i < n.period; i++ {
 			indexes = append(indexes, clarity.Uint(100+i))
 		}
-		fields := map[string]clarity.Value{"pox-addr": address, "first-reward-cycle": clarity.Uint(n.first), "lock-period": clarity.Uint(n.period), "reward-set-indexes": {Type: clarity.List, Items: indexes}, "delegated-to": {Type: clarity.None}}
+		fields := map[string]clarity.Value{
+			"pox-addr":           address,
+			"first-reward-cycle": clarity.Uint(n.first),
+			"lock-period":        clarity.Uint(n.period),
+			"reward-set-indexes": {Type: clarity.List, Items: indexes},
+			"delegated-to":       {Type: clarity.None},
+		}
 		if n.mismatch == "delegated" {
-			fields["delegated-to"] = clarity.Value{Type: clarity.Some, Items: []clarity.Value{{Type: clarity.StandardPrincipal, Text: n.holder}}}
+			fields["delegated-to"] = clarity.Value{
+				Type:  clarity.Some,
+				Items: []clarity.Value{{Type: clarity.StandardPrincipal, Text: n.holder}},
+			}
 		}
 		return clarity.Value{Type: clarity.Some, Items: []clarity.Value{{Type: clarity.Tuple, Fields: fields}}}, nil
 	}
@@ -129,7 +168,12 @@ func (n *poxNode) ReadOnly(_ context.Context, _, _, _, method string, args []cla
 	if n.mismatch == "holder" {
 		holder.Text = "ST000000000000000000002AMW42H"
 	}
-	fields := map[string]clarity.Value{"pox-addr": address, "total-ustx": amount, "stacker": {Type: clarity.Some, Items: []clarity.Value{holder}}, "signer": {Type: clarity.Buffer, Bytes: public}}
+	fields := map[string]clarity.Value{
+		"pox-addr":   address,
+		"total-ustx": amount,
+		"stacker":    {Type: clarity.Some, Items: []clarity.Value{holder}},
+		"signer":     {Type: clarity.Buffer, Bytes: public},
+	}
 	return clarity.Value{Type: clarity.Some, Items: []clarity.Value{{Type: clarity.Tuple, Fields: fields}}}, nil
 }
 
@@ -145,11 +189,36 @@ func newPoXFixture(t *testing.T) (*PoX4Role, *poxNode, stacksworker.Snapshot) {
 		t.Fatal(err)
 	}
 	role.Now = func() time.Time { return time.Date(2026, 9, 11, 12, 0, 0, 0, time.UTC) }
-	node := &poxNode{holder: holder.Address, signer: signer.PublicKey, nonce: 7, burn: 210, cycle: 10, first: 11, period: 2, amount: big.NewInt(100000)}
-	role.Resolve = func(context.Context, stacksworker.Snapshot) (PoX4Inputs, error) {
-		return PoX4Inputs{InitialCohort: true, Node: node, Holder: holder.Address, SignerPublicKey: signer.PublicKey, Amount: big.NewInt(100000), LockCycles: 2, RenewWhenRemainingCycles: 1, TargetCycle: 12, EnrollmentCeiling: 234, Epoch3Height: 252}, nil
+	node := &poxNode{
+		holder: holder.Address,
+		signer: signer.PublicKey,
+		nonce:  7,
+		burn:   210,
+		cycle:  10,
+		first:  11,
+		period: 2,
+		amount: big.NewInt(100000),
 	}
-	snapshot := stacksworker.Snapshot{Participant: &api.StacksNetworkParticipant{Status: api.ParticipantStatus{Admission: &api.Admission{PolicyDigest: "policy"}}}, Authorize: func(context.Context) error { return nil }}
+	role.Resolve = func(context.Context, stacksworker.Snapshot) (PoX4Inputs, error) {
+		return PoX4Inputs{
+			InitialCohort:            true,
+			Node:                     node,
+			Holder:                   holder.Address,
+			SignerPublicKey:          signer.PublicKey,
+			Amount:                   big.NewInt(100000),
+			LockCycles:               2,
+			RenewWhenRemainingCycles: 1,
+			TargetCycle:              12,
+			EnrollmentCeiling:        234,
+			Epoch3Height:             252,
+		}, nil
+	}
+	snapshot := stacksworker.Snapshot{
+		Participant: &api.StacksNetworkParticipant{
+			Status: api.ParticipantStatus{Admission: &api.Admission{PolicyDigest: "policy"}},
+		},
+		Authorize: func(context.Context) error { return nil },
+	}
 	return role, node, snapshot
 }
 
@@ -170,7 +239,11 @@ func TestPoX4LegacyPostconditionSettlesWithoutInclusionAttribution(t *testing.T)
 	node.nonce = 8
 	snapshot.Paused = true
 	settled, _ := role.Step(ctx, snapshot)
-	if settled.Pending != 0 || settled.Reason != "StateObserved" || settled.PoX4 == nil || settled.PoX4.TargetCycle != 12 || settled.Transactions.PostconditionObserved != 1 || settled.Transactions.Included != 0 || settled.Transactions.LastInclusion != nil {
+	if settled.Pending != 0 || settled.Reason != "StateObserved" || settled.PoX4 == nil ||
+		settled.PoX4.TargetCycle != 12 ||
+		settled.Transactions.PostconditionObserved != 1 ||
+		settled.Transactions.Included != 0 ||
+		settled.Transactions.LastInclusion != nil {
 		t.Fatalf("state convergence falsely attributed inclusion: %+v", settled)
 	}
 	next, _ := role.Step(ctx, snapshot)
@@ -180,7 +253,17 @@ func TestPoX4LegacyPostconditionSettlesWithoutInclusionAttribution(t *testing.T)
 }
 
 func TestPoX4PostconditionRejectsNonceInterferenceAndMismatchedFacts(t *testing.T) {
-	for _, mismatch := range []string{"nonce-low", "nonce-high", "signer", "holder", "amount", "payout", "delegated", "tip", "consensus"} {
+	for _, mismatch := range []string{
+		"nonce-low",
+		"nonce-high",
+		"signer",
+		"holder",
+		"amount",
+		"payout",
+		"delegated",
+		"tip",
+		"consensus",
+	} {
 		t.Run(mismatch, func(t *testing.T) {
 			role, node, snapshot := newPoXFixture(t)
 			ctx := context.Background()
@@ -217,7 +300,8 @@ func TestPoX4RenewalUsesSameStreamAndNativeEpoch3Inclusion(t *testing.T) {
 	node.burn = 252
 	node.cycle = 12
 	renewal, _ := role.Step(ctx, snapshot)
-	if renewal.Pending != 1 || len(node.sent) != 2 || role.goal.kind != "PoX4Extension" || role.goal.first != 12 || role.goal.end != 14 {
+	if renewal.Pending != 1 || len(node.sent) != 2 || role.goal.kind != "PoX4Extension" || role.goal.first != 12 ||
+		role.goal.end != 14 {
 		t.Fatalf("incorrect renewal: %+v", renewal)
 	}
 	node.included = true
@@ -226,7 +310,10 @@ func TestPoX4RenewalUsesSameStreamAndNativeEpoch3Inclusion(t *testing.T) {
 	node.first = 12
 	node.period = 2
 	completed, _ := role.Step(ctx, snapshot)
-	if completed.Pending != 0 || completed.Transactions.Included != 1 || completed.Transactions.PostconditionObserved != 1 || completed.PoX4 == nil || completed.PoX4.TargetCycle != 13 {
+	if completed.Pending != 0 || completed.Transactions.Included != 1 ||
+		completed.Transactions.PostconditionObserved != 1 ||
+		completed.PoX4 == nil ||
+		completed.PoX4.TargetCycle != 13 {
 		t.Fatalf("renewal did not confirm exact inclusion and state: %+v", completed)
 	}
 }
@@ -262,7 +349,13 @@ func TestNoncePostconditionPreservesPendingOnInvalidEvidence(t *testing.T) {
 	role, node, snapshot := newPoXFixture(t)
 	_, _ = role.Step(context.Background(), snapshot)
 	id := node.sent[0].TxID
-	proof := api.TransactionPostcondition{TxID: id, Kind: "PoX4Enrollment", StateDigest: "sha256:" + strings.Repeat("a", 64), StacksTip: strings.Repeat("b", 64), ObservedAt: metav1.NewTime(role.now())}
+	proof := api.TransactionPostcondition{
+		TxID:        id,
+		Kind:        "PoX4Enrollment",
+		StateDigest: "sha256:" + strings.Repeat("a", 64),
+		StacksTip:   strings.Repeat("b", 64),
+		ObservedAt:  metav1.NewTime(role.now()),
+	}
 	for _, change := range []string{"txid", "nonce", "digest", "tip", "kind"} {
 		invalid := proof
 		nonce := uint64(8)

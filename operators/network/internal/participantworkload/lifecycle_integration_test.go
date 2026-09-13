@@ -29,7 +29,15 @@ import (
 )
 
 func TestActorAPILifecycleAndStatusIsolation(t *testing.T) {
-	environment := &envtest.Environment{CRDDirectoryPaths: []string{filepath.Join("..", "..", "..", "..", "charts", "stacks-network-operator", "crds")}, ErrorIfCRDPathMissing: true, DownloadBinaryAssets: true, DownloadBinaryAssetsVersion: "1.37.0", BinaryAssetsDirectory: filepath.Join(os.TempDir(), "stacks-network-operator-envtest")}
+	environment := &envtest.Environment{
+		CRDDirectoryPaths: []string{
+			filepath.Join("..", "..", "..", "..", "charts", "stacks-network-operator", "crds"),
+		},
+		ErrorIfCRDPathMissing:       true,
+		DownloadBinaryAssets:        true,
+		DownloadBinaryAssetsVersion: "1.37.0",
+		BinaryAssetsDirectory:       filepath.Join(os.TempDir(), "stacks-network-operator-envtest"),
+	}
 	config, err := environment.Start()
 	if err != nil {
 		t.Fatal(err)
@@ -72,7 +80,26 @@ func TestActorAPILifecycleAndStatusIsolation(t *testing.T) {
 			p.ResourceVersion = ""
 			p.Status = api.ParticipantStatus{}
 			must(c.Create(ctx, p))
-			must(participantstatus.Apply(ctx, c, p, api.ParticipantStatus{Admission: admission, Conditions: []metav1.Condition{{Type: "Resolved", Status: metav1.ConditionTrue, Reason: "Admitted", Message: "Admitted", LastTransitionTime: metav1.Now()}}}, participantstatus.AggregateManager))
+			must(
+				participantstatus.Apply(
+					ctx,
+					c,
+					p,
+					api.ParticipantStatus{
+						Admission: admission,
+						Conditions: []metav1.Condition{
+							{
+								Type:               "Resolved",
+								Status:             metav1.ConditionTrue,
+								Reason:             "Admitted",
+								Message:            "Admitted",
+								LastTransitionTime: metav1.Now(),
+							},
+						},
+					},
+					participantstatus.AggregateManager,
+				),
+			)
 			r := Reconciler{Client: c, Reader: c, Kind: kind}
 			render := func() (*appsv1.StatefulSet, error) {
 				if kind == "BitcoinNode" {
@@ -92,23 +119,103 @@ func TestActorAPILifecycleAndStatusIsolation(t *testing.T) {
 					t.Fatal("unchanged reconciliation rolled actor generation")
 				}
 			}
-			state := api.ParticipantRuntimeStatus{ObservedGeneration: p.Generation, PolicyDigest: admission.PolicyDigest, WorkloadRefs: []common.Binding{*binding("StatefulSet", workload)}}
+			state := api.ParticipantRuntimeStatus{
+				ObservedGeneration: p.Generation,
+				PolicyDigest:       admission.PolicyDigest,
+				WorkloadRefs:       []common.Binding{*binding("StatefulSet", workload)},
+			}
 			if kind != "BitcoinNode" {
 				state.ConfigurationDigest = "sha256:configuration"
 				state.EventAuthSecretRef = nativeRuntimeFixture().EventAuthSecretRef
 			}
 			if kind == "StacksNode" {
-				state.Protocol = &api.StacksProtocolObservation{Available: true, Reason: "Observed", PodUID: "pod-uid", ContainerID: "containerd://native", ConfigurationDigest: state.ConfigurationDigest, GenesisUID: "genesis-uid", ObservedAt: metav1.Now(), LastHeightAdvancedAt: metav1.Now(), HighestStacksHeight: 30, StacksHeight: 30, BurnHeight: 240, PoXBurnHeight: 240, NetworkID: 0x80000000, PreparedSet: &api.PreparedSignerSetObservation{Cycle: 12, Available: true, Threshold: "9007199254740993", Signers: []api.PreparedSignerObservation{{PublicKey: "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798", Weight: 7, StackedAmount: "340282366920938463463374607431768211455"}}, ObservedAt: metav1.Now()}}
+				state.Protocol = &api.StacksProtocolObservation{
+					Available:            true,
+					Reason:               "Observed",
+					PodUID:               "pod-uid",
+					ContainerID:          "containerd://native",
+					ConfigurationDigest:  state.ConfigurationDigest,
+					GenesisUID:           "genesis-uid",
+					ObservedAt:           metav1.Now(),
+					LastHeightAdvancedAt: metav1.Now(),
+					HighestStacksHeight:  30,
+					StacksHeight:         30,
+					BurnHeight:           240,
+					PoXBurnHeight:        240,
+					NetworkID:            0x80000000,
+					PreparedSet: &api.PreparedSignerSetObservation{
+						Cycle:     12,
+						Available: true,
+						Threshold: "9007199254740993",
+						Signers: []api.PreparedSignerObservation{
+							{
+								PublicKey:     "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+								Weight:        7,
+								StackedAmount: "340282366920938463463374607431768211455",
+							},
+						},
+						ObservedAt: metav1.Now(),
+					},
+				}
 			}
-			must(participantstatus.Apply(ctx, c, p, api.ParticipantStatus{Runtime: &state, Conditions: []metav1.Condition{{Type: "WorkloadReady", Status: metav1.ConditionFalse, Reason: "Pending", Message: "Pod pending", LastTransitionTime: metav1.Now()}}}, r.fieldManager()))
-			if kind == "StacksNode" && (p.Status.Runtime.Protocol == nil || p.Status.Runtime.Protocol.PreparedSet.Signers[0].StackedAmount != "340282366920938463463374607431768211455") {
+			must(
+				participantstatus.Apply(
+					ctx,
+					c,
+					p,
+					api.ParticipantStatus{
+						Runtime: &state,
+						Conditions: []metav1.Condition{
+							{
+								Type:               "WorkloadReady",
+								Status:             metav1.ConditionFalse,
+								Reason:             "Pending",
+								Message:            "Pod pending",
+								LastTransitionTime: metav1.Now(),
+							},
+						},
+					},
+					r.fieldManager(),
+				),
+			)
+			if kind == "StacksNode" &&
+				(p.Status.Runtime.Protocol == nil ||
+					p.Status.Runtime.Protocol.PreparedSet.Signers[0].StackedAmount !=
+						"340282366920938463463374607431768211455") {
 				t.Fatal("API lost exact native protocol facts")
 			}
 			if p.Status.Admission == nil || p.Status.Admission.PolicyDigest != admission.PolicyDigest {
 				t.Fatal("domain status overwrote aggregate admission")
 			}
-			pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: workload.Name + "-0", Namespace: p.Namespace, Labels: workload.Spec.Template.Labels, Finalizers: workload.Spec.Template.Finalizers, OwnerReferences: []metav1.OwnerReference{{APIVersion: "apps/v1", Kind: "StatefulSet", Name: workload.Name, UID: workload.UID, Controller: ptr.To(true)}}}, Spec: *workload.Spec.Template.Spec.DeepCopy()}
-			pod.Spec.Volumes = append(pod.Spec.Volumes, corev1.Volume{Name: "data", VolumeSource: corev1.VolumeSource{PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{ClaimName: "data-" + workload.Name + "-0"}}})
+			pod := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       workload.Name + "-0",
+					Namespace:  p.Namespace,
+					Labels:     workload.Spec.Template.Labels,
+					Finalizers: workload.Spec.Template.Finalizers,
+					OwnerReferences: []metav1.OwnerReference{
+						{
+							APIVersion: "apps/v1",
+							Kind:       "StatefulSet",
+							Name:       workload.Name,
+							UID:        workload.UID,
+							Controller: ptr.To(true),
+						},
+					},
+				},
+				Spec: *workload.Spec.Template.Spec.DeepCopy(),
+			}
+			pod.Spec.Volumes = append(
+				pod.Spec.Volumes,
+				corev1.Volume{
+					Name: "data",
+					VolumeSource: corev1.VolumeSource{
+						PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+							ClaimName: "data-" + workload.Name + "-0",
+						},
+					},
+				},
+			)
 			must(c.Create(ctx, pod))
 			state.PodRef = binding("Pod", pod)
 			reason, err := r.shutdown(ctx, p, &state, false)
@@ -117,7 +224,9 @@ func TestActorAPILifecycleAndStatusIsolation(t *testing.T) {
 				t.Fatal("scale request asserted process termination")
 			}
 			must(c.Get(ctx, client.ObjectKeyFromObject(workload), workload))
-			if *workload.Spec.Replicas != 0 || workload.Spec.PersistentVolumeClaimRetentionPolicy.WhenScaled != appsv1.RetainPersistentVolumeClaimRetentionPolicyType {
+			if *workload.Spec.Replicas != 0 ||
+				workload.Spec.PersistentVolumeClaimRetentionPolicy.WhenScaled !=
+					appsv1.RetainPersistentVolumeClaimRetentionPolicyType {
 				t.Fatal("scale-down lost retained storage")
 			}
 			// Envtest has no kubelet; model the never-scheduled Pod deletion explicitly.
@@ -179,7 +288,19 @@ func verifyShutdownReconcile(t *testing.T, ctx context.Context, c client.Client)
 				p.Namespace = strings.ToLower(string(kind)) + "-" + mode
 				must(c.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: p.Namespace}}))
 				admission := p.Status.Admission
-				root := &api.StacksNetwork{ObjectMeta: metav1.ObjectMeta{Name: "network", Namespace: p.Namespace}, Spec: api.StacksNetworkSpec{Operation: "Stopped", Participants: []api.Participant{{Name: p.Spec.ParticipantName, Kind: kind, Definition: api.Definition{Inline: &p.Spec.Configuration}}}}}
+				root := &api.StacksNetwork{
+					ObjectMeta: metav1.ObjectMeta{Name: "network", Namespace: p.Namespace},
+					Spec: api.StacksNetworkSpec{
+						Operation: "Stopped",
+						Participants: []api.Participant{
+							{
+								Name:       p.Spec.ParticipantName,
+								Kind:       kind,
+								Definition: api.Definition{Inline: &p.Spec.Configuration},
+							},
+						},
+					},
+				}
 				if mode == "suspend" {
 					root.Spec.Operation = "Running"
 					root.Spec.Participants[0].Control = &api.Control{Suspended: ptr.To(true)}
@@ -194,7 +315,15 @@ func verifyShutdownReconcile(t *testing.T, ctx context.Context, c client.Client)
 				must(c.Create(ctx, p))
 				root.Status.Identities = []api.InstanceIdentity{{Name: p.Spec.ParticipantName, UID: p.UID}}
 				must(c.Status().Update(ctx, root))
-				must(participantstatus.Apply(ctx, c, p, api.ParticipantStatus{Admission: admission}, participantstatus.AggregateManager))
+				must(
+					participantstatus.Apply(
+						ctx,
+						c,
+						p,
+						api.ParticipantStatus{Admission: admission},
+						participantstatus.AggregateManager,
+					),
+				)
 				var workload *appsv1.StatefulSet
 				var err error
 				if kind == "BitcoinNode" {
@@ -207,9 +336,30 @@ func verifyShutdownReconcile(t *testing.T, ctx context.Context, c client.Client)
 				must(c.Create(ctx, workload))
 				workload.Status.ObservedGeneration = workload.Generation
 				must(c.Status().Update(ctx, workload))
-				pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: workload.Name + "-0", Namespace: p.Namespace, Labels: workload.Spec.Template.Labels, Finalizers: []string{PodFinalizer}, OwnerReferences: []metav1.OwnerReference{{APIVersion: "apps/v1", Kind: "StatefulSet", Name: workload.Name, UID: workload.UID, Controller: ptr.To(true)}}}, Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "actor", Image: "actor:test"}}}}
+				pod := &corev1.Pod{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:       workload.Name + "-0",
+						Namespace:  p.Namespace,
+						Labels:     workload.Spec.Template.Labels,
+						Finalizers: []string{PodFinalizer},
+						OwnerReferences: []metav1.OwnerReference{
+							{
+								APIVersion: "apps/v1",
+								Kind:       "StatefulSet",
+								Name:       workload.Name,
+								UID:        workload.UID,
+								Controller: ptr.To(true),
+							},
+						},
+					},
+					Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "actor", Image: "actor:test"}}},
+				}
 				must(c.Create(ctx, pod))
-				state := &api.ParticipantRuntimeStatus{ObservedGeneration: p.Generation, PodRef: binding("Pod", pod), WorkloadRefs: []common.Binding{*binding("StatefulSet", workload)}}
+				state := &api.ParticipantRuntimeStatus{
+					ObservedGeneration: p.Generation,
+					PodRef:             binding("Pod", pod),
+					WorkloadRefs:       []common.Binding{*binding("StatefulSet", workload)},
+				}
 				must(participantstatus.Apply(ctx, c, p, api.ParticipantStatus{Runtime: state}, r.fieldManager()))
 				// Envtest has no kubelet or GC: explicitly delete the never-scheduled Pod.
 				must(c.Delete(ctx, pod))
@@ -226,7 +376,11 @@ func verifyShutdownReconcile(t *testing.T, ctx context.Context, c client.Client)
 				must(c.Get(ctx, key, p))
 				must(c.Get(ctx, client.ObjectKeyFromObject(pod), pod))
 				condition := meta.FindStatusCondition(p.Status.Conditions, "WorkloadReady")
-				if result.RequeueAfter != 5*time.Second || p.Status.Runtime == nil || !p.Status.Runtime.Terminated || condition == nil || condition.Reason != "Stopping" || !controllerutil.ContainsFinalizer(p, r.finalizer()) || !controllerutil.ContainsFinalizer(pod, PodFinalizer) {
+				if result.RequeueAfter != 5*time.Second || p.Status.Runtime == nil || !p.Status.Runtime.Terminated ||
+					condition == nil ||
+					condition.Reason != "Stopping" ||
+					!controllerutil.ContainsFinalizer(p, r.finalizer()) ||
+					!controllerutil.ContainsFinalizer(pod, PodFinalizer) {
 					t.Fatalf("first termination pass settled early: result=%+v status=%+v", result, p.Status)
 				}
 				for range 3 {

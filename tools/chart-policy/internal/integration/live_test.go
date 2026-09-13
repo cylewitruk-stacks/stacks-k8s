@@ -35,7 +35,11 @@ func TestLiveNativeDelay(t *testing.T) {
 	if kubeconfig == "" || kubecontext == "" {
 		t.Fatal("explicit STACKS_CHAOS_KUBECONFIG and STACKS_CHAOS_CONTEXT required")
 	}
-	config, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(&clientcmd.ClientConfigLoadingRules{ExplicitPath: kubeconfig}, &clientcmd.ConfigOverrides{CurrentContext: kubecontext}).ClientConfig()
+	config, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
+		&clientcmd.ClientConfigLoadingRules{ExplicitPath: kubeconfig},
+		&clientcmd.ConfigOverrides{CurrentContext: kubecontext},
+	).
+		ClientConfig()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,13 +62,17 @@ func TestLiveNativeDelay(t *testing.T) {
 	}
 	native := func(name string) *unstructured.Unstructured {
 		o := &unstructured.Unstructured{}
-		o.SetGroupVersionKind(schema.GroupVersionKind{Group: "chaos-mesh.org", Version: "v1alpha1", Kind: "NetworkChaos"})
+		o.SetGroupVersionKind(
+			schema.GroupVersionKind{Group: "chaos-mesh.org", Version: "v1alpha1", Kind: "NetworkChaos"},
+		)
 		o.SetNamespace(ns)
 		o.SetName(name)
 		return o
 	}
 	list := &unstructured.UnstructuredList{}
-	list.SetGroupVersionKind(schema.GroupVersionKind{Group: "chaos-mesh.org", Version: "v1alpha1", Kind: "NetworkChaosList"})
+	list.SetGroupVersionKind(
+		schema.GroupVersionKind{Group: "chaos-mesh.org", Version: "v1alpha1", Kind: "NetworkChaosList"},
+	)
 	if err := admin.List(ctx, list, client.InNamespace(ns)); err != nil {
 		t.Fatal(err)
 	}
@@ -72,14 +80,20 @@ func TestLiveNativeDelay(t *testing.T) {
 		t.Fatal("qualification requires an empty NetworkChaos namespace")
 	}
 	destination := &corev1.Pod{}
-	if err := admin.Get(ctx, client.ObjectKey{Namespace: ns, Name: "chaos-bitcoin-2-0"}, destination); err != nil {
+	if err := admin.Get(ctx, client.ObjectKey{
+		Namespace: ns,
+		Name:      "chaos-bitcoin-2-0",
+	}, destination); err != nil {
 		t.Fatal(err)
 	}
 	if destination.Status.PodIP == "" {
 		t.Fatal("destination has no Pod IP")
 	}
 	secret := &corev1.Secret{}
-	if err := admin.Get(ctx, client.ObjectKey{Namespace: ns, Name: "stacks-bitcoin-observer-rpc"}, secret); err != nil {
+	if err := admin.Get(ctx, client.ObjectKey{
+		Namespace: ns,
+		Name:      "stacks-bitcoin-observer-rpc",
+	}, secret); err != nil {
 		t.Fatal(err)
 	}
 	var credentials struct {
@@ -98,7 +112,28 @@ func TestLiveNativeDelay(t *testing.T) {
 		var samples []time.Duration
 		for range 3 {
 			callctx, stop := context.WithTimeout(ctx, 10*time.Second)
-			command := exec.CommandContext(callctx, "kubectl", "--kubeconfig", kubeconfig, "--context", kubecontext, "-n", ns, "exec", "-i", "chaos-bitcoin-0", "--", "bitcoin-cli", "-regtest", "-rpcconnect="+destination.Status.PodIP, "-rpcport=18443", "-rpcuser="+credentials.Username, "-stdinrpcpass", "getblockcount")
+			// #nosec G204 G702 -- Fixed executable and separate arguments from the test harness; no shell evaluation.
+			command := exec.CommandContext(
+				callctx,
+				"kubectl",
+				"--kubeconfig",
+				kubeconfig,
+				"--context",
+				kubecontext,
+				"-n",
+				ns,
+				"exec",
+				"-i",
+				"chaos-bitcoin-0",
+				"--",
+				"bitcoin-cli",
+				"-regtest",
+				"-rpcconnect="+destination.Status.PodIP,
+				"-rpcport=18443",
+				"-rpcuser="+credentials.Username,
+				"-stdinrpcpass",
+				"getblockcount",
+			)
 			command.Stdin = strings.NewReader(credentials.Password + "\n")
 			start := time.Now()
 			output, err := command.Output()
@@ -119,7 +154,9 @@ func TestLiveNativeDelay(t *testing.T) {
 	progress := func() int64 {
 		t.Helper()
 		o := &unstructured.Unstructured{}
-		o.SetGroupVersionKind(schema.GroupVersionKind{Group: "bitcoin.stacks.org", Version: "v1alpha1", Kind: "BitcoinProductionTarget"})
+		o.SetGroupVersionKind(
+			schema.GroupVersionKind{Group: "bitcoin.stacks.org", Version: "v1alpha1", Kind: "BitcoinProductionTarget"},
+		)
 		if err := admin.Get(ctx, client.ObjectKey{Namespace: ns, Name: "chaos-bitcoin-2"}, o); err != nil {
 			t.Fatal(err)
 		}
@@ -184,7 +221,10 @@ func TestLiveNativeDelay(t *testing.T) {
 		if err := chaosprofile.BindActors(ctx, admin, fault, "bitcoin", "bitcoin-2"); err != nil {
 			t.Fatal(err)
 		}
-		for _, path := range [][]string{{"spec", "selector", "namespaces"}, {"spec", "target", "selector", "namespaces"}} {
+		for _, path := range [][]string{
+			{"spec", "selector", "namespaces"},
+			{"spec", "target", "selector", "namespaces"},
+		} {
 			_ = unstructured.SetNestedStringSlice(fault.Object, []string{ns}, path...)
 		}
 		name := "qualification-" + mode
@@ -221,11 +261,19 @@ func TestLiveNativeDelay(t *testing.T) {
 		if err := chaosprofile.BindActors(ctx, admin, extra, "bitcoin", "bitcoin-2"); err != nil {
 			t.Fatal(err)
 		}
-		for _, path := range [][]string{{"spec", "selector", "namespaces"}, {"spec", "target", "selector", "namespaces"}} {
+		for _, path := range [][]string{
+			{"spec", "selector", "namespaces"},
+			{"spec", "target", "selector", "namespaces"},
+		} {
 			_ = unstructured.SetNestedStringSlice(extra.Object, []string{ns}, path...)
 		}
 		extra.SetName("qualification-extra")
-		if err := admin.Create(ctx, extra, client.DryRunAll); err == nil || !strings.Contains(err.Error(), "exceeded quota") {
+		if err := admin.Create(
+			ctx,
+			extra,
+			client.DryRunAll,
+		); err == nil ||
+			!strings.Contains(err.Error(), "exceeded quota") {
 			t.Fatalf("one-object quota not enforced: %v", err)
 		}
 		if mode == "cancellation" {
@@ -241,8 +289,17 @@ func TestLiveNativeDelay(t *testing.T) {
 			})
 		} else {
 			// Controller replacement must retain the native fault and eventually recover it.
-			for _, args := range [][]string{{"rollout", "restart", "deployment/chaos-controller-manager"}, {"rollout", "status", "deployment/chaos-controller-manager", "--timeout=20s"}} {
-				command := exec.CommandContext(ctx, "kubectl", append([]string{"--kubeconfig", kubeconfig, "--context", kubecontext, "-n", "chaos-mesh"}, args...)...)
+			for _, args := range [][]string{
+				{"rollout", "restart", "deployment/chaos-controller-manager"},
+				{"rollout", "status", "deployment/chaos-controller-manager", "--timeout=20s"},
+			} {
+				// #nosec G204 G702 -- Fixed executable and separate arguments from the test harness; no shell evaluation.
+				command := exec.CommandContext(
+					ctx,
+					"kubectl",
+					append(
+						[]string{"--kubeconfig", kubeconfig, "--context", kubecontext, "-n", "chaos-mesh"},
+						args...)...)
 				if output, err := command.CombinedOutput(); err != nil {
 					t.Fatalf("controller restart: %v: %s", err, output)
 				}

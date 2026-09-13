@@ -46,7 +46,7 @@ type BitcoinBlockOffer struct {
 	// Mode distinguishes frozen bootstrap advancement from completed-initialization baseline authority.
 	// Omission preserves existing bootstrap records.
 	// +kubebuilder:validation:Enum=Bootstrap;Baseline
-	Mode string `json:"mode,omitempty"`
+	Mode OfferMode `json:"mode,omitempty"`
 	// Target binds the sole selected participant for a baseline opportunity.
 	Target *common.Binding `json:"target,omitempty"`
 	// Initialization binds the retained network scheduler record.
@@ -122,7 +122,7 @@ type BitcoinArmedRPC struct {
 	Target BitcoinTargetIdentity `json:"target"`
 	// Method selects one bounded supported RPC.
 	// +kubebuilder:validation:Enum=CreateWallet;LoadWallet;ImportDescriptor;UnloadWallet;Generate;InvalidateBlock;ReconsiderBlock
-	Method string `json:"method"`
+	Method RPCMethod `json:"method"`
 	// Wallet supplies required wallet-specific inputs.
 	Wallet *BitcoinWalletOperation `json:"wallet,omitempty"`
 	// Offer preserves an immutable generation opportunity snapshot.
@@ -201,7 +201,7 @@ type BitcoinExecutionStatus struct {
 	Observation *BitcoinObservation `json:"observation,omitempty"`
 	// Phase distinguishes idle/active/uncertain execution without claiming quiescence.
 	// +kubebuilder:validation:Enum=Idle;Armed;Blocked;Abandoned
-	Phase string `json:"phase,omitempty"`
+	Phase ExecutionPhase `json:"phase,omitempty"`
 }
 
 // FrozenBitcoinWallet preserves initial public funding identity.
@@ -300,7 +300,7 @@ type BitcoinInitializationStatus struct {
 	PreparedAt *metav1.Time `json:"preparedAt,omitempty"`
 	// Phase is a truthful first-gate hold/progress observation.
 	// +kubebuilder:validation:Enum=Waiting;Preparing;Paused;Held;Blocked;Abandoned
-	Phase string `json:"phase,omitempty"`
+	Phase InitializationPhase `json:"phase,omitempty"`
 	// Reason is a bounded machine-readable hold classification.
 	Reason string `json:"reason,omitempty"`
 }
@@ -319,7 +319,7 @@ type BitcoinDrainStatus struct {
 	CompletedAt metav1.Time `json:"completedAt"`
 	// Outcome distinguishes settled local execution from retained Armed uncertainty.
 	// +kubebuilder:validation:Enum=Drained;Uncertain
-	Outcome string `json:"outcome"`
+	Outcome DrainOutcome `json:"outcome"`
 }
 
 // BitcoinControlAcknowledgement reports a bounded worker control observation.
@@ -330,7 +330,7 @@ type BitcoinControlAcknowledgement struct {
 	ProcessNonce string `json:"processNonce"`
 	// Operation is the acknowledged desired operation.
 	// +kubebuilder:validation:Enum=Paused
-	Operation string `json:"operation"`
+	Operation ControlOperation `json:"operation"`
 	// ObservedAt is the first successful acknowledgement time for this process and revision.
 	ObservedAt metav1.Time `json:"observedAt"`
 	// HeartbeatAt proves this process still observes pause without an outstanding send.

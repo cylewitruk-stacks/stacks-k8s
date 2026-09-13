@@ -42,7 +42,7 @@ type fakeRPC struct {
 }
 
 func (f *fakeRPC) Check(context.Context, string, string) error { return nil }
-func (f *fakeRPC) Generate(ctx context.Context, endpoint, address, id string) (string, error) {
+func (f *fakeRPC) Generate(ctx context.Context, _, _, _ string) (string, error) {
 	f.mu.Lock()
 	f.calls = append(f.calls, "Generate")
 	fail, wait, after := f.fail, f.wait, f.after
@@ -66,13 +66,18 @@ func (f *fakeRPC) Generate(ctx context.Context, endpoint, address, id string) (s
 	}
 	return fmt.Sprintf("%064x", height), nil
 }
-func (f *fakeRPC) Call(ctx context.Context, endpoint, id, method string, args []any, out any) error {
+
+func (f *fakeRPC) Call(_ context.Context, _, _, method string, args []any, out any) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	var value any
 	switch method {
 	case "getblockchaininfo":
-		value = map[string]any{"chain": "regtest", "blocks": f.height, "bestblockhash": fmt.Sprintf("%064x", f.height)}
+		value = map[string]any{
+			"chain":         "regtest",
+			"blocks":        f.height,
+			"bestblockhash": fmt.Sprintf("%064x", f.height),
+		}
 	case "listwallets":
 		loaded := append([]string{}, f.extraLoaded...)
 		if f.loaded {
@@ -96,7 +101,14 @@ func (f *fakeRPC) Call(ctx context.Context, endpoint, id, method string, args []
 	case "listunspent":
 		value = []any{}
 		if f.height >= 101 {
-			value = []any{map[string]any{"address": testAddress, "confirmations": f.height, "txid": fmt.Sprintf("%064x", 1), "vout": 0}}
+			value = []any{
+				map[string]any{
+					"address":       testAddress,
+					"confirmations": f.height,
+					"txid":          fmt.Sprintf("%064x", 1),
+					"vout":          0,
+				},
+			}
 		}
 	case "gettxout":
 		value = map[string]any{"coinbase": true, "confirmations": f.height}
@@ -137,8 +149,10 @@ func (f *fakeRPC) Call(ctx context.Context, endpoint, id, method string, args []
 }
 func (f *fakeRPC) count() int { f.mu.Lock(); defer f.mu.Unlock(); return len(f.calls) }
 
-const testDescriptor = "pkh(0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798)"
-const testAddress = "mrCDrCybB6J1vRfbwM5hemdJz73FwDBC8r"
+const (
+	testDescriptor = "pkh(0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798)"
+	testAddress    = "mrCDrCybB6J1vRfbwM5hemdJz73FwDBC8r"
+)
 
 // testFixture contains one fully identity-bound Bitcoin target and a frozen first gate.
 type testFixture struct {
@@ -155,80 +169,357 @@ type testFixture struct {
 func newFixture(t *testing.T) *testFixture {
 	t.Helper()
 	scheme := runtime.NewScheme()
-	for _, add := range []func(*runtime.Scheme) error{api.AddToScheme, bitcoin.AddToScheme, corev1.AddToScheme, appsv1.AddToScheme, rbacv1.AddToScheme} {
+	for _, add := range []func(*runtime.Scheme) error{
+		api.AddToScheme,
+		bitcoin.AddToScheme,
+		corev1.AddToScheme,
+		appsv1.AddToScheme,
+		rbacv1.AddToScheme,
+	} {
 		if e := add(scheme); e != nil {
 			t.Fatal(e)
 		}
 	}
 	now := time.Date(2026, 9, 11, 12, 0, 0, 0, time.UTC)
-	root := &api.StacksNetwork{ObjectMeta: metav1.ObjectMeta{Name: "network", Namespace: "test", UID: "network-uid", Generation: 1}, Spec: api.StacksNetworkSpec{Operation: "Running", Participants: []api.Participant{{Name: "bitcoin", Kind: "BitcoinNode"}, {Name: "production", Kind: "BitcoinBlockProduction"}}}, Status: api.StacksNetworkStatus{Identities: []api.InstanceIdentity{{Name: "bitcoin", UID: "node-uid"}, {Name: "production", UID: "production-uid"}}, Bitcoin: &api.BitcoinRuntimeStatus{ExecutionRefs: []common.Binding{{Kind: "BitcoinExecution", Name: "execution", UID: "execution-uid"}}, InitializationRef: &common.Binding{Kind: "BitcoinInitialization", Name: "initialization", UID: "init-uid"}}}}
-	owner := metav1.OwnerReference{APIVersion: api.GroupVersion.String(), Kind: "StacksNetwork", Name: root.Name, UID: root.UID, Controller: ptr.To(true)}
-	walletBinding := common.Binding{Kind: "BitcoinWallet", Name: "miner", UID: "wallet-uid", Fingerprint: "wallet-digest"}
-	node := &api.StacksNetworkParticipant{ObjectMeta: metav1.ObjectMeta{Name: "node", Namespace: "test", UID: "node-uid", Generation: 1, OwnerReferences: []metav1.OwnerReference{owner}}, Spec: api.StacksNetworkParticipantSpec{NetworkUID: root.UID, ParticipantName: "bitcoin", Kind: "BitcoinNode"}, Status: api.ParticipantStatus{Admission: &api.Admission{Configuration: api.Configuration{BitcoinNode: &bitcoin.BitcoinNodeSpec{WalletRefs: ptr.To([]common.NameRef{{Name: "miner"}})}}, Dependencies: []common.Binding{walletBinding}}}}
+	root := &api.StacksNetwork{
+		ObjectMeta: metav1.ObjectMeta{Name: "network", Namespace: "test", UID: "network-uid", Generation: 1},
+		Spec: api.StacksNetworkSpec{
+			Operation: "Running",
+			Participants: []api.Participant{
+				{Name: "bitcoin", Kind: "BitcoinNode"},
+				{Name: "production", Kind: "BitcoinBlockProduction"},
+			},
+		},
+		Status: api.StacksNetworkStatus{
+			Identities: []api.InstanceIdentity{
+				{Name: "bitcoin", UID: "node-uid"},
+				{Name: "production", UID: "production-uid"},
+			},
+			Bitcoin: &api.BitcoinRuntimeStatus{
+				ExecutionRefs: []common.Binding{
+					{Kind: "BitcoinExecution", Name: "execution", UID: "execution-uid"},
+				},
+				InitializationRef: &common.Binding{
+					Kind: "BitcoinInitialization",
+					Name: "initialization",
+					UID:  "init-uid",
+				},
+			},
+		},
+	}
+	owner := metav1.OwnerReference{
+		APIVersion: api.GroupVersion.String(),
+		Kind:       "StacksNetwork",
+		Name:       root.Name,
+		UID:        root.UID,
+		Controller: ptr.To(true),
+	}
+	walletBinding := common.Binding{
+		Kind:        "BitcoinWallet",
+		Name:        "miner",
+		UID:         "wallet-uid",
+		Fingerprint: "wallet-digest",
+	}
+	node := &api.StacksNetworkParticipant{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "node",
+			Namespace:       "test",
+			UID:             "node-uid",
+			Generation:      1,
+			OwnerReferences: []metav1.OwnerReference{owner},
+		},
+		Spec: api.StacksNetworkParticipantSpec{
+			NetworkUID:      root.UID,
+			ParticipantName: "bitcoin",
+			Kind:            "BitcoinNode",
+		},
+		Status: api.ParticipantStatus{
+			Admission: &api.Admission{
+				Configuration: api.Configuration{
+					BitcoinNode: &bitcoin.BitcoinNodeSpec{WalletRefs: ptr.To([]common.NameRef{{Name: "miner"}})},
+				},
+				Dependencies: []common.Binding{walletBinding},
+			},
+		},
+	}
 	node.Status.Admission.PolicyDigest = foundation.Digest(node.Status.Admission.Configuration)
 	node.Spec.Configuration = node.Status.Admission.Configuration
-	node.Status.Runtime = &api.ParticipantRuntimeStatus{PolicyDigest: node.Status.Admission.PolicyDigest, WorkloadRefs: []common.Binding{{Kind: "StatefulSet", Name: "actor", UID: "actor-uid"}}, ConfigRef: &common.Binding{Kind: "Secret", Name: "config", UID: "config-uid"}, RPCSecretRef: &common.Binding{Kind: "Secret", Name: "rpc", UID: "rpc-uid"}, PodRef: &common.Binding{Kind: "Pod", Name: "actor-0", UID: "pod-uid"}, ContainerID: "containerd://bitcoin", Endpoints: []api.RuntimeEndpoint{{Name: "rpc", Host: "rpc.test.svc", Port: 18443}}}
+	node.Status.Runtime = &api.ParticipantRuntimeStatus{
+		PolicyDigest: node.Status.Admission.PolicyDigest,
+		WorkloadRefs: []common.Binding{{Kind: "StatefulSet", Name: "actor", UID: "actor-uid"}},
+		ConfigRef:    &common.Binding{Kind: "Secret", Name: "config", UID: "config-uid"},
+		RPCSecretRef: &common.Binding{Kind: "Secret", Name: "rpc", UID: "rpc-uid"},
+		PodRef:       &common.Binding{Kind: "Pod", Name: "actor-0", UID: "pod-uid"},
+		ContainerID:  "containerd://bitcoin",
+		Endpoints:    []api.RuntimeEndpoint{{Name: "rpc", Host: "rpc.test.svc", Port: 18443}},
+	}
 	duration := common.Duration("1s")
-	production := &api.StacksNetworkParticipant{ObjectMeta: metav1.ObjectMeta{Name: "production", Namespace: "test", UID: "production-uid", Generation: 1, OwnerReferences: []metav1.OwnerReference{owner}}, Spec: api.StacksNetworkParticipantSpec{NetworkUID: root.UID, ParticipantName: "production", Kind: "BitcoinBlockProduction"}, Status: api.ParticipantStatus{Admission: &api.Admission{Configuration: api.Configuration{BitcoinBlockProduction: &bitcoin.BitcoinBlockProductionSpec{Schedule: &bitcoin.BitcoinBlockScheduleSpec{Cadence: bitcoin.Cadence{Mode: "Fixed", Interval: &duration}}}}}}}
+	production := &api.StacksNetworkParticipant{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "production",
+			Namespace:       "test",
+			UID:             "production-uid",
+			Generation:      1,
+			OwnerReferences: []metav1.OwnerReference{owner},
+		},
+		Spec: api.StacksNetworkParticipantSpec{
+			NetworkUID:      root.UID,
+			ParticipantName: "production",
+			Kind:            "BitcoinBlockProduction",
+		},
+		Status: api.ParticipantStatus{
+			Admission: &api.Admission{
+				Configuration: api.Configuration{
+					BitcoinBlockProduction: &bitcoin.BitcoinBlockProductionSpec{
+						Schedule: &bitcoin.BitcoinBlockScheduleSpec{
+							Cadence: bitcoin.Cadence{Mode: "Fixed", Interval: &duration},
+						},
+					},
+				},
+			},
+		},
+	}
 	production.Status.Admission.PolicyDigest = foundation.Digest(production.Status.Admission.Configuration)
 	for _, participant := range []*api.StacksNetworkParticipant{node, production} {
-		participant.Status.Conditions = []metav1.Condition{{Type: "AdmissionReady", Status: metav1.ConditionTrue, Reason: "RetainedPolicyEligible", Message: "Retained policy eligible", ObservedGeneration: participant.Generation, LastTransitionTime: metav1.NewTime(now)}}
+		participant.Status.Conditions = []metav1.Condition{
+			{
+				Type:               "AdmissionReady",
+				Status:             metav1.ConditionTrue,
+				Reason:             "RetainedPolicyEligible",
+				Message:            "Retained policy eligible",
+				ObservedGeneration: participant.Generation,
+				LastTransitionTime: metav1.NewTime(now),
+			},
+		}
 	}
-	record := &bitcoin.BitcoinExecution{ObjectMeta: metav1.ObjectMeta{Name: "execution", Namespace: "test", UID: "execution-uid", OwnerReferences: []metav1.OwnerReference{owner}}, Spec: bitcoin.BitcoinExecutionSpec{NetworkUID: root.UID, Participant: binding("StacksNetworkParticipant", node)}}
-	wallet := bitcoin.FrozenBitcoinWallet{Wallet: walletBinding, Name: "miner", Address: testAddress, Descriptor: testDescriptor}
-	initial := &bitcoin.BitcoinInitialization{ObjectMeta: metav1.ObjectMeta{Name: "initialization", Namespace: "test", UID: "init-uid", OwnerReferences: []metav1.OwnerReference{owner}}, Spec: bitcoin.BitcoinInitializationSpec{NetworkUID: root.UID, Production: binding("StacksNetworkParticipant", production), Target: binding("StacksNetworkParticipant", node), Nodes: []common.Binding{binding("StacksNetworkParticipant", node)}, MinimumHeight: 203, MatureOutputsPerMiner: 1, MinerWallets: []bitcoin.FrozenBitcoinWallet{wallet}, PayoutWallet: wallet}}
-	powner := metav1.OwnerReference{APIVersion: api.GroupVersion.String(), Kind: "StacksNetworkParticipant", Name: node.Name, UID: node.UID, Controller: ptr.To(true)}
-	sts := &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: "actor", Namespace: "test", UID: "actor-uid", OwnerReferences: []metav1.OwnerReference{powner}}, Spec: appsv1.StatefulSetSpec{Replicas: ptr.To[int32](1)}}
-	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "actor-0", Namespace: "test", UID: "pod-uid", Labels: labels(node, "actor"), OwnerReferences: []metav1.OwnerReference{{APIVersion: "apps/v1", Kind: "StatefulSet", Name: sts.Name, UID: sts.UID, Controller: ptr.To(true)}}}, Status: corev1.PodStatus{PodIP: "127.0.0.1", ContainerStatuses: []corev1.ContainerStatus{{Name: "bitcoin", ContainerID: node.Status.Runtime.ContainerID, Ready: true, State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}}}}}}
-	service := &corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "rpc", Namespace: "test", UID: "service-uid", OwnerReferences: []metav1.OwnerReference{powner}}, Spec: corev1.ServiceSpec{Selector: labels(node, "actor"), Ports: []corev1.ServicePort{{Name: "rpc", Port: 18443}}}}
-	genesis := &api.StacksGenesis{ObjectMeta: metav1.ObjectMeta{Name: "genesis", Namespace: "test", UID: "genesis-uid", OwnerReferences: []metav1.OwnerReference{owner}}, Spec: api.StacksGenesisSpec{Source: api.GenesisSource{NetworkUID: root.UID}, Bootstrap: api.Bootstrap{Gates: []api.Gate{{Name: "PrepareBitcoin", BitcoinCeiling: 203}, {Name: "EnrollPoX4", BitcoinCeiling: 234, TargetCycle: ptr.To[int64](12)}}}, Chain: api.Chain{Epochs: []api.Epoch{{Name: "2.5", StartHeight: 209}, {Name: "3.0", StartHeight: 252}}}}}
+	record := &bitcoin.BitcoinExecution{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "execution",
+			Namespace:       "test",
+			UID:             "execution-uid",
+			OwnerReferences: []metav1.OwnerReference{owner},
+		},
+		Spec: bitcoin.BitcoinExecutionSpec{
+			NetworkUID:  root.UID,
+			Participant: binding("StacksNetworkParticipant", node),
+		},
+	}
+	wallet := bitcoin.FrozenBitcoinWallet{
+		Wallet:     walletBinding,
+		Name:       "miner",
+		Address:    testAddress,
+		Descriptor: testDescriptor,
+	}
+	initial := &bitcoin.BitcoinInitialization{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "initialization",
+			Namespace:       "test",
+			UID:             "init-uid",
+			OwnerReferences: []metav1.OwnerReference{owner},
+		},
+		Spec: bitcoin.BitcoinInitializationSpec{
+			NetworkUID:            root.UID,
+			Production:            binding("StacksNetworkParticipant", production),
+			Target:                binding("StacksNetworkParticipant", node),
+			Nodes:                 []common.Binding{binding("StacksNetworkParticipant", node)},
+			MinimumHeight:         203,
+			MatureOutputsPerMiner: 1,
+			MinerWallets:          []bitcoin.FrozenBitcoinWallet{wallet},
+			PayoutWallet:          wallet,
+		},
+	}
+	powner := metav1.OwnerReference{
+		APIVersion: api.GroupVersion.String(),
+		Kind:       "StacksNetworkParticipant",
+		Name:       node.Name,
+		UID:        node.UID,
+		Controller: ptr.To(true),
+	}
+	sts := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "actor",
+			Namespace:       "test",
+			UID:             "actor-uid",
+			OwnerReferences: []metav1.OwnerReference{powner},
+		},
+		Spec: appsv1.StatefulSetSpec{Replicas: ptr.To[int32](1)},
+	}
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "actor-0",
+			Namespace: "test",
+			UID:       "pod-uid",
+			Labels:    labels(node, "actor"),
+			OwnerReferences: []metav1.OwnerReference{
+				{APIVersion: "apps/v1", Kind: "StatefulSet", Name: sts.Name, UID: sts.UID, Controller: ptr.To(true)},
+			},
+		},
+		Status: corev1.PodStatus{
+			PodIP: "127.0.0.1",
+			ContainerStatuses: []corev1.ContainerStatus{
+				{
+					Name:        "bitcoin",
+					ContainerID: node.Status.Runtime.ContainerID,
+					Ready:       true,
+					State:       corev1.ContainerState{Running: &corev1.ContainerStateRunning{}},
+				},
+			},
+		},
+	}
+	service := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "rpc",
+			Namespace:       "test",
+			UID:             "service-uid",
+			OwnerReferences: []metav1.OwnerReference{powner},
+		},
+		Spec: corev1.ServiceSpec{
+			Selector: labels(node, "actor"),
+			Ports:    []corev1.ServicePort{{Name: "rpc", Port: 18443}},
+		},
+	}
+	genesis := &api.StacksGenesis{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "genesis",
+			Namespace:       "test",
+			UID:             "genesis-uid",
+			OwnerReferences: []metav1.OwnerReference{owner},
+		},
+		Spec: api.StacksGenesisSpec{
+			Source: api.GenesisSource{NetworkUID: root.UID},
+			Bootstrap: api.Bootstrap{
+				Gates: []api.Gate{
+					{Name: "PrepareBitcoin", BitcoinCeiling: 203},
+					{Name: "EnrollPoX4", BitcoinCeiling: 234, TargetCycle: ptr.To[int64](12)},
+				},
+			},
+			Chain: api.Chain{Epochs: []api.Epoch{{Name: "2.5", StartHeight: 209}, {Name: "3.0", StartHeight: 252}}},
+		},
+	}
 	genesisRef := binding("StacksGenesis", genesis)
 	genesisRef.Fingerprint = foundation.Digest(genesis.Spec)
 	initial.Spec.Genesis = genesisRef
 	root.Status.GenesisRef = &genesisRef
 	root.Status.GenesisDigest = foundation.Digest(genesis.Spec.Chain)
-	objects := []client.Object{root, node, production, record, initial, genesis, sts, pod, service, &bitcoin.BitcoinWallet{ObjectMeta: metav1.ObjectMeta{Name: "miner", Namespace: "test", UID: "wallet-uid"}, Spec: bitcoin.BitcoinWalletSpec{WatchOnly: ptr.To(true)}, Status: common.ResolutionStatus{Digest: "wallet-digest", Descriptor: testDescriptor, BitcoinAddress: testAddress}}}
-	for _, name := range []string{"rpc", "config"} {
-		objects = append(objects, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "test", UID: types.UID(name + "-uid"), OwnerReferences: []metav1.OwnerReference{powner}}, Immutable: ptr.To(true)})
+	objects := []client.Object{
+		root,
+		node,
+		production,
+		record,
+		initial,
+		genesis,
+		sts,
+		pod,
+		service,
+		&bitcoin.BitcoinWallet{
+			ObjectMeta: metav1.ObjectMeta{Name: "miner", Namespace: "test", UID: "wallet-uid"},
+			Spec:       bitcoin.BitcoinWalletSpec{WatchOnly: ptr.To(true)},
+			Status: common.ResolutionStatus{
+				Digest:         "wallet-digest",
+				Descriptor:     testDescriptor,
+				BitcoinAddress: testAddress,
+			},
+		},
 	}
-	c := fake.NewClientBuilder().WithScheme(scheme).WithObjectTracker(clientgotesting.NewObjectTracker(scheme, serializer.NewCodecFactory(scheme).UniversalDecoder())).WithStatusSubresource(root, node, production, record, initial, pod).WithObjects(objects...).WithInterceptorFuncs(interceptor.Funcs{
-		Create: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.CreateOption) error {
-			if obj.GetUID() == "" {
-				obj.SetUID(types.UID(obj.GetName() + "-uid"))
-			}
-			return c.Create(ctx, obj, opts...)
-		},
-		SubResourcePatch: func(ctx context.Context, c client.Client, sub string, obj client.Object, patch client.Patch, opts ...client.SubResourcePatchOption) error {
-			p, ok := obj.(*api.StacksNetworkParticipant)
-			if !ok || sub != "status" || patch.Type() != types.ApplyPatchType || p.Status.BitcoinControl == nil && p.Status.Scheduling == nil {
-				return c.SubResource(sub).Patch(ctx, obj, patch, opts...)
-			}
-			current := &api.StacksNetworkParticipant{}
-			if e := c.Get(ctx, client.ObjectKeyFromObject(p), current); e != nil {
-				return e
-			}
-			if p.Status.BitcoinControl != nil {
-				current.Status.BitcoinControl = p.Status.BitcoinControl
-			}
-			if p.Status.Scheduling != nil {
-				current.Status.Scheduling = p.Status.Scheduling
-			}
-			if e := c.Status().Update(ctx, current); e != nil {
-				return e
-			}
-			*p = *current
-			return nil
-		},
-	}).Build()
+	for _, name := range []string{"rpc", "config"} {
+		objects = append(
+			objects,
+			&corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:            name,
+					Namespace:       "test",
+					UID:             types.UID(name + "-uid"),
+					OwnerReferences: []metav1.OwnerReference{powner},
+				},
+				Immutable: ptr.To(true),
+			},
+		)
+	}
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjectTracker(clientgotesting.NewObjectTracker(
+			scheme,
+			serializer.NewCodecFactory(scheme).UniversalDecoder(),
+		)).
+		WithStatusSubresource(root, node, production, record, initial, pod).
+		WithObjects(objects...).
+		WithInterceptorFuncs(interceptor.Funcs{
+			Create: func(
+				ctx context.Context,
+				c client.WithWatch,
+				obj client.Object,
+				opts ...client.CreateOption,
+			) error {
+				if obj.GetUID() == "" {
+					obj.SetUID(types.UID(obj.GetName() + "-uid"))
+				}
+				return c.Create(ctx, obj, opts...)
+			},
+			SubResourcePatch: func(
+				ctx context.Context,
+				c client.Client,
+				sub string,
+				obj client.Object,
+				patch client.Patch,
+				opts ...client.SubResourcePatchOption,
+			) error {
+				p, ok := obj.(*api.StacksNetworkParticipant)
+				if !ok || sub != "status" || patch.Type() != types.ApplyPatchType ||
+					p.Status.BitcoinControl == nil && p.Status.Scheduling == nil {
+					return c.SubResource(sub).Patch(ctx, obj, patch, opts...)
+				}
+				current := &api.StacksNetworkParticipant{}
+				if e := c.Get(ctx, client.ObjectKeyFromObject(p), current); e != nil {
+					return e
+				}
+				if p.Status.BitcoinControl != nil {
+					current.Status.BitcoinControl = p.Status.BitcoinControl
+				}
+				if p.Status.Scheduling != nil {
+					current.Status.Scheduling = p.Status.Scheduling
+				}
+				if e := c.Status().Update(ctx, current); e != nil {
+					return e
+				}
+				*p = *current
+				return nil
+			},
+		}).
+		Build()
 	rpc := &fakeRPC{exists: true, loaded: true, imported: true}
-	worker := &Worker{Client: c, Reader: c, RPC: rpc, Input: WorkerInput{Namespace: "test", RecordName: record.Name, RecordUID: record.UID, CredentialsName: "rpc", CredentialsUID: "rpc-uid"}, Now: func() time.Time { return now }, ProcessNonce: "process-one", DrainTimeout: time.Second}
+	worker := &Worker{
+		Client: c,
+		Reader: c,
+		RPC:    rpc,
+		Input: WorkerInput{
+			Namespace:       "test",
+			RecordName:      record.Name,
+			RecordUID:       record.UID,
+			CredentialsName: "rpc",
+			CredentialsUID:  "rpc-uid",
+		},
+		Now:          func() time.Time { return now },
+		ProcessNonce: "process-one",
+		DrainTimeout: time.Second,
+	}
 	if e := worker.defaults(); e != nil {
 		t.Fatal(e)
 	}
-	f := &testFixture{c: c, worker: worker, rpc: rpc, root: root, node: node, production: production, record: record, initial: initial, now: now}
+	f := &testFixture{
+		c:          c,
+		worker:     worker,
+		rpc:        rpc,
+		root:       root,
+		node:       node,
+		production: production,
+		record:     record,
+		initial:    initial,
+		now:        now,
+	}
 	t.Cleanup(worker.drain)
 	return f
 }
+
 func (f *testFixture) readRecord(t *testing.T) *bitcoin.BitcoinExecution {
 	t.Helper()
 	record := &bitcoin.BitcoinExecution{}
@@ -237,9 +528,21 @@ func (f *testFixture) readRecord(t *testing.T) *bitcoin.BitcoinExecution {
 	}
 	return record
 }
+
 func (f *testFixture) offer(t *testing.T, height int64) {
 	t.Helper()
-	offer := &bitcoin.BitcoinBlockOffer{Initialization: binding("BitcoinInitialization", f.initial), Production: binding("StacksNetworkParticipant", f.production), PolicyDigest: f.production.Status.Admission.PolicyDigest, Number: 1, Address: testAddress, Wallet: f.initial.Spec.PayoutWallet.Wallet, ExpectedHeight: height, ExpectedTip: fmt.Sprintf("%064x", height), Ceiling: 203, ExpiresAt: metav1.NewTime(f.now.Add(time.Minute))}
+	offer := &bitcoin.BitcoinBlockOffer{
+		Initialization: binding("BitcoinInitialization", f.initial),
+		Production:     binding("StacksNetworkParticipant", f.production),
+		PolicyDigest:   f.production.Status.Admission.PolicyDigest,
+		Number:         1,
+		Address:        testAddress,
+		Wallet:         f.initial.Spec.PayoutWallet.Wallet,
+		ExpectedHeight: height,
+		ExpectedTip:    fmt.Sprintf("%064x", height),
+		Ceiling:        203,
+		ExpiresAt:      metav1.NewTime(f.now.Add(time.Minute)),
+	}
 	initial := &bitcoin.BitcoinInitialization{}
 	if e := f.c.Get(context.Background(), client.ObjectKeyFromObject(f.initial), initial); e != nil {
 		t.Fatal(e)
@@ -255,6 +558,7 @@ func (f *testFixture) offer(t *testing.T, height int64) {
 	}
 	f.rpc.height = height
 }
+
 func eventually(t *testing.T, condition func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(3 * time.Second)
@@ -276,7 +580,8 @@ func TestWalletMutationsUseSameAuthority(t *testing.T) {
 		}
 		eventually(t, func() bool {
 			r := f.readRecord(t)
-			return r.Status.LastReceipt != nil && r.Status.LastReceipt.Request.Method == method && r.Status.Armed == nil
+			return r.Status.LastReceipt != nil && string(r.Status.LastReceipt.Request.Method) == method &&
+				r.Status.Armed == nil
 		})
 	}
 	if e := f.worker.Step(context.Background()); e != nil {
@@ -290,6 +595,7 @@ func TestWalletMutationsUseSameAuthority(t *testing.T) {
 		t.Fatal("receipt released shared reservation")
 	}
 }
+
 func TestGenerateOnceAndHoldAfterAmbiguousReceipt(t *testing.T) {
 	for _, fail := range []bool{false, true} {
 		t.Run(fmt.Sprint(fail), func(t *testing.T) {
@@ -303,7 +609,14 @@ func TestGenerateOnceAndHoldAfterAmbiguousReceipt(t *testing.T) {
 			if !fail {
 				eventually(t, func() bool { return f.readRecord(t).Status.CompletedOffer == 1 })
 			}
-			replacement := &Worker{Client: f.c, Reader: f.c, RPC: f.rpc, Input: f.worker.Input, Now: f.worker.Now, ProcessNonce: "replacement"}
+			replacement := &Worker{
+				Client:       f.c,
+				Reader:       f.c,
+				RPC:          f.rpc,
+				Input:        f.worker.Input,
+				Now:          f.worker.Now,
+				ProcessNonce: "replacement",
+			}
 			if e := replacement.defaults(); e != nil {
 				t.Fatal(e)
 			}
@@ -340,7 +653,11 @@ type failingStatusWriter struct {
 	owner *failingStatusClient
 }
 
-func (w failingStatusWriter) Update(ctx context.Context, obj client.Object, opts ...client.SubResourceUpdateOption) error {
+func (w failingStatusWriter) Update(
+	ctx context.Context,
+	obj client.Object,
+	opts ...client.SubResourceUpdateOption,
+) error {
 	record, ok := obj.(*bitcoin.BitcoinExecution)
 	if ok && w.owner.fail.Load() && (record.Status.Armed != nil || record.Status.LastReceipt != nil) {
 		if w.owner.afterCommit {
@@ -352,6 +669,7 @@ func (w failingStatusWriter) Update(ctx context.Context, obj client.Object, opts
 	}
 	return w.SubResourceWriter.Update(ctx, obj, opts...)
 }
+
 func TestLostArmAcknowledgementNeverSends(t *testing.T) {
 	f := newFixture(t)
 	f.offer(t, 1)
@@ -372,6 +690,7 @@ func TestLostArmAcknowledgementNeverSends(t *testing.T) {
 		t.Fatal("re-read Armed authorized resend")
 	}
 }
+
 func TestReceiptSurvivesAPIOutage(t *testing.T) {
 	f := newFixture(t)
 	f.offer(t, 1)
@@ -392,6 +711,7 @@ func TestReceiptSurvivesAPIOutage(t *testing.T) {
 		t.Fatal("receipt retry changed evidence or replayed RPC")
 	}
 }
+
 func TestCurrentIdentityAndCeilingFailClosed(t *testing.T) {
 	for _, change := range []string{"ceiling", "credentials", "process", "failed"} {
 		t.Run(change, func(t *testing.T) {
@@ -418,6 +738,7 @@ func TestCurrentIdentityAndCeilingFailClosed(t *testing.T) {
 		})
 	}
 }
+
 func TestPauseAcknowledgementWaitsForOutstandingSend(t *testing.T) {
 	f := newFixture(t)
 	f.offer(t, 1)
@@ -449,6 +770,7 @@ func TestPauseAcknowledgementWaitsForOutstandingSend(t *testing.T) {
 		t.Fatal("missing bound pause acknowledgement")
 	}
 }
+
 func TestWorkerResourcesAreScoped(t *testing.T) {
 	f := newFixture(t)
 	objects, e := WorkerResources(f.node, f.record, f.initial, "worker:test", 1)
@@ -469,7 +791,10 @@ func TestWorkerResourcesAreScoped(t *testing.T) {
 				}
 			}
 		case *appsv1.Deployment:
-			if len(obj.Spec.Template.Spec.Volumes) != 1 || obj.Spec.Template.Spec.Volumes[0].Secret.SecretName != "rpc" || obj.Spec.Strategy.Type != appsv1.RecreateDeploymentStrategyType || *obj.Spec.Template.Spec.TerminationGracePeriodSeconds != 45 {
+			if len(obj.Spec.Template.Spec.Volumes) != 1 ||
+				obj.Spec.Template.Spec.Volumes[0].Secret.SecretName != "rpc" ||
+				obj.Spec.Strategy.Type != appsv1.RecreateDeploymentStrategyType ||
+				*obj.Spec.Template.Spec.TerminationGracePeriodSeconds != 45 {
 				t.Fatal("worker transport/termination scope differs")
 			}
 		}
@@ -481,18 +806,33 @@ func TestPublicWalletRejectsPrivateProfile(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	if _, e = publicWallet(&bitcoin.BitcoinWallet{Spec: bitcoin.BitcoinWalletSpec{WatchOnly: ptr.To(false)}, Status: common.ResolutionStatus{Digest: "digest", Descriptor: testDescriptor, BitcoinAddress: testAddress}}); e == nil {
+	if _, e = publicWallet(
+		&bitcoin.BitcoinWallet{
+			Spec:   bitcoin.BitcoinWalletSpec{WatchOnly: ptr.To(false)},
+			Status: common.ResolutionStatus{Digest: "digest", Descriptor: testDescriptor, BitcoinAddress: testAddress},
+		},
+	); e == nil {
 		t.Fatal("silently accepted private wallet profile")
 	}
 }
 
 // schedulerFor uses a deterministic clock and complete production policy.
 func (f *testFixture) schedulerFor() *Scheduler {
-	return &Scheduler{Client: f.c, Reader: f.c, Now: func() time.Time { return f.now }, Draw: func(int64) int64 { return 0 }, Freshness: 10 * time.Second}
+	return &Scheduler{
+		Client:    f.c,
+		Reader:    f.c,
+		Now:       func() time.Time { return f.now },
+		Draw:      func(int64) int64 { return 0 },
+		Freshness: 10 * time.Second,
+	}
 }
+
 func (f *testFixture) reconcile(t *testing.T, s *Scheduler) {
 	t.Helper()
-	if _, e := s.Reconcile(context.Background(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(f.initial)}); e != nil {
+	if _, e := s.Reconcile(
+		context.Background(),
+		ctrl.Request{NamespacedName: client.ObjectKeyFromObject(f.initial)},
+	); e != nil {
 		t.Fatal(e)
 	}
 }

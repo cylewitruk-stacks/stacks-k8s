@@ -20,7 +20,11 @@ import (
 
 // TestArtifactRetentionWaitsForParticipantDisposal checks each shared kind and acknowledgement loss.
 func TestArtifactRetentionWaitsForParticipantDisposal(t *testing.T) {
-	for _, object := range []client.Object{&api.StacksGenesis{}, &bitcoin.BitcoinExecution{}, &bitcoin.BitcoinInitialization{}} {
+	for _, object := range []client.Object{
+		&api.StacksGenesis{},
+		&bitcoin.BitcoinExecution{},
+		&bitcoin.BitcoinInitialization{},
+	} {
 		t.Run(fmt.Sprintf("%T", object), func(t *testing.T) {
 			ctx := context.Background()
 			scheme := runtime.NewScheme()
@@ -33,17 +37,49 @@ func TestArtifactRetentionWaitsForParticipantDisposal(t *testing.T) {
 			object.SetNamespace("test")
 			object.SetUID("artifact")
 			object.SetFinalizers([]string{ArtifactFinalizer, "other.example/retain"})
-			object.SetOwnerReferences([]metav1.OwnerReference{{APIVersion: api.GroupVersion.String(), Kind: "StacksNetwork", Name: "network", UID: "root", Controller: ptr.To(true)}})
-			p := &api.StacksNetworkParticipant{ObjectMeta: metav1.ObjectMeta{Name: "p", Namespace: "test", UID: "participant", Finalizers: []string{"domain.example/drain"}}, Spec: api.StacksNetworkParticipantSpec{NetworkUID: "root"}}
+			object.SetOwnerReferences(
+				[]metav1.OwnerReference{
+					{
+						APIVersion: api.GroupVersion.String(),
+						Kind:       "StacksNetwork",
+						Name:       "network",
+						UID:        "root",
+						Controller: ptr.To(true),
+					},
+				},
+			)
+			p := &api.StacksNetworkParticipant{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "p",
+					Namespace:  "test",
+					UID:        "participant",
+					Finalizers: []string{"domain.example/drain"},
+				},
+				Spec: api.StacksNetworkParticipantSpec{NetworkUID: "root"},
+			}
 			patches := 0
 			fail := false
-			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(object, p).WithInterceptorFuncs(interceptor.Funcs{Patch: func(ctx context.Context, c client.WithWatch, o client.Object, patch client.Patch, opts ...client.PatchOption) error {
-				patches++
-				if fail {
-					return apierrors.NewConflict(schema.GroupResource{Group: api.GroupVersion.Group, Resource: "artifacts"}, o.GetName(), fmt.Errorf("injected"))
-				}
-				return c.Patch(ctx, o, patch, opts...)
-			}}).Build()
+			c := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(object, p).
+				WithInterceptorFuncs(interceptor.Funcs{Patch: func(
+					ctx context.Context,
+					c client.WithWatch,
+					o client.Object,
+					patch client.Patch,
+					opts ...client.PatchOption,
+				) error {
+					patches++
+					if fail {
+						return apierrors.NewConflict(
+							schema.GroupResource{Group: api.GroupVersion.Group, Resource: "artifacts"},
+							o.GetName(),
+							fmt.Errorf("injected"),
+						)
+					}
+					return c.Patch(ctx, o, patch, opts...)
+				}}).
+				Build()
 			must := func(err error) {
 				t.Helper()
 				if err != nil {

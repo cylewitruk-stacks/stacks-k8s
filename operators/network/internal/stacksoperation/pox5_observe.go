@@ -159,11 +159,13 @@ func observePoX5(ctx context.Context, input PoX5Inputs, target uint64, now time.
 		}
 		s.end = s.first + cycles
 		amount := st.Fields["amount-ustx"]
-		if amount.Type != clarity.UInt || amount.Integer == nil || amount.Integer.Sign() <= 0 || amount.Integer.BitLen() > 128 {
+		if amount.Type != clarity.UInt || amount.Integer == nil || amount.Integer.Sign() <= 0 ||
+			amount.Integer.BitLen() > 128 {
 			return s, errors.New("PoX5 amount malformed")
 		}
 		s.amount = new(big.Int).Set(amount.Integer)
-		s.conflict = s.conflict || st.Fields["signer"].Type != clarity.ContractPrincipal || st.Fields["signer"].Text != input.manager()
+		s.conflict = s.conflict || st.Fields["signer"].Type != clarity.ContractPrincipal ||
+			st.Fields["signer"].Text != input.manager()
 		if target >= s.first && target < s.end {
 			membership, err := read("get-signer-cycle-membership", holder, clarity.Uint(target))
 			if err != nil {
@@ -190,9 +192,33 @@ func observePoX5(ctx context.Context, input PoX5Inputs, target uint64, now time.
 				return s, err
 			}
 			memberAmount := member.Fields["amount-ustx"]
-			matched := s.sourceFound && !s.conflict && s.registered && s.granted && s.amount.Cmp(input.Amount) == 0 && s.holder.Locked.Integer != nil && s.holder.Locked.Integer.Cmp(input.Amount) == 0 && s.holder.UnlockHeight == unlockHeight && unlockHeight > s.view.BurnHeight && member.Fields["signer"].Type == clarity.ContractPrincipal && member.Fields["signer"].Text == input.manager() && sameAmount(memberAmount, input.Amount) && sameAmount(delegated, input.Amount) && included.Type == clarity.True
+			matched := s.sourceFound && !s.conflict && s.registered && s.granted && s.amount.Cmp(input.Amount) == 0 &&
+				s.holder.Locked.Integer != nil &&
+				s.holder.Locked.Integer.Cmp(input.Amount) == 0 &&
+				s.holder.UnlockHeight == unlockHeight &&
+				unlockHeight > s.view.BurnHeight &&
+				member.Fields["signer"].Type == clarity.ContractPrincipal &&
+				member.Fields["signer"].Text == input.manager() &&
+				sameAmount(memberAmount, input.Amount) &&
+				sameAmount(delegated, input.Amount) &&
+				included.Type == clarity.True
 			if matched {
-				s.observation = &api.PoX5EnrollmentObservation{Holder: input.Holder, Manager: input.manager(), ManagerSourceDigest: sourceDigest(expected), SignerPublicKey: input.SignerPublicKey, AmountMicroSTX: input.Amount.String(), DelegatedAmountMicroSTX: delegated.Integer.String(), FirstCycle: s.first, EndCycleExclusive: s.end, TargetCycle: target, TargetCycleMatched: true, UnlockHeight: unlockHeight, StacksTip: tip, BurnHeight: s.view.BurnHeight, ObservedAt: metav1.NewTime(now.UTC())}
+				s.observation = &api.PoX5EnrollmentObservation{
+					Holder:                  input.Holder,
+					Manager:                 input.manager(),
+					ManagerSourceDigest:     sourceDigest(expected),
+					SignerPublicKey:         input.SignerPublicKey,
+					AmountMicroSTX:          input.Amount.String(),
+					DelegatedAmountMicroSTX: delegated.Integer.String(),
+					FirstCycle:              s.first,
+					EndCycleExclusive:       s.end,
+					TargetCycle:             target,
+					TargetCycleMatched:      true,
+					UnlockHeight:            unlockHeight,
+					StacksTip:               tip,
+					BurnHeight:              s.view.BurnHeight,
+					ObservedAt:              metav1.NewTime(now.UTC()),
+				}
 			}
 		}
 	}

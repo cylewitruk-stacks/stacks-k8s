@@ -94,7 +94,15 @@ func observePoX4(ctx context.Context, input PoX4Inputs, targetCycle uint64, now 
 	if err != nil {
 		return state, err
 	}
-	info, err := input.Node.ReadOnlyAt(ctx, before.IndexBlockID, input.Holder, pox4Address, "pox-4", "get-stacker-info", []clarity.Value{principal})
+	info, err := input.Node.ReadOnlyAt(
+		ctx,
+		before.IndexBlockID,
+		input.Holder,
+		pox4Address,
+		"pox-4",
+		"get-stacker-info",
+		[]clarity.Value{principal},
+	)
 	if err != nil {
 		return state, err
 	}
@@ -114,7 +122,8 @@ func observePoX4(ctx context.Context, input PoX4Inputs, targetCycle uint64, now 
 		}
 		state.first, state.end = first, first+period
 		indexes := tuple.Fields["reward-set-indexes"]
-		if indexes.Type != clarity.List || uint64(len(indexes.Items)) != period || tuple.Fields["delegated-to"].Type != clarity.None {
+		if indexes.Type != clarity.List || uint64(len(indexes.Items)) != period ||
+			tuple.Fields["delegated-to"].Type != clarity.None {
 			return state, errors.New("direct PoX state unavailable")
 		}
 		if targetCycle >= first && targetCycle < state.end {
@@ -122,7 +131,15 @@ func observePoX4(ctx context.Context, input PoX4Inputs, targetCycle uint64, now 
 			if err != nil {
 				return state, err
 			}
-			entry, err := input.Node.ReadOnlyAt(ctx, before.IndexBlockID, input.Holder, pox4Address, "pox-4", "get-reward-set-pox-address", []clarity.Value{clarity.Uint(targetCycle), clarity.Uint(index)})
+			entry, err := input.Node.ReadOnlyAt(
+				ctx,
+				before.IndexBlockID,
+				input.Holder,
+				pox4Address,
+				"pox-4",
+				"get-reward-set-pox-address",
+				[]clarity.Value{clarity.Uint(targetCycle), clarity.Uint(index)},
+			)
 			if err != nil {
 				return state, err
 			}
@@ -151,12 +168,33 @@ func observePoX4(ctx context.Context, input PoX4Inputs, targetCycle uint64, now 
 			if err != nil {
 				return state, err
 			}
-			if amount.Type != clarity.UInt || amount.Integer == nil || state.account.Locked.Integer == nil || state.account.Locked.Type != clarity.UInt {
+			if amount.Type != clarity.UInt || amount.Integer == nil || state.account.Locked.Integer == nil ||
+				state.account.Locked.Type != clarity.UInt {
 				return state, errors.New("incomplete PoX amount")
 			}
-			matched := state.account.UnlockHeight > before.BurnHeight && bytes.Equal(actualPayout, expectedPayout) && bytes.Equal(rewardPayout, expectedPayout) && amount.Integer.Cmp(input.Amount) == 0 && state.account.Locked.Integer.Cmp(input.Amount) == 0 && holder.Type == clarity.Some && len(holder.Items) == 1 && holder.Items[0].Type == clarity.StandardPrincipal && holder.Items[0].Text == input.Holder && signer.Type == clarity.Buffer && bytes.Equal(signer.Bytes, public)
+			matched := state.account.UnlockHeight > before.BurnHeight && bytes.Equal(actualPayout, expectedPayout) &&
+				bytes.Equal(rewardPayout, expectedPayout) &&
+				amount.Integer.Cmp(input.Amount) == 0 &&
+				state.account.Locked.Integer.Cmp(input.Amount) == 0 &&
+				holder.Type == clarity.Some &&
+				len(holder.Items) == 1 &&
+				holder.Items[0].Type == clarity.StandardPrincipal &&
+				holder.Items[0].Text == input.Holder &&
+				signer.Type == clarity.Buffer &&
+				bytes.Equal(signer.Bytes, public)
 			if matched {
-				state.observation = &api.PoX4EnrollmentObservation{Holder: input.Holder, SignerPublicKey: input.SignerPublicKey, AmountMicroSTX: input.Amount.String(), FirstCycle: first, EndCycleExclusive: state.end, TargetCycle: targetCycle, TargetCycleMatched: true, StacksTip: before.IndexBlockID, BurnHeight: before.BurnHeight, ObservedAt: metav1.NewTime(now.UTC())}
+				state.observation = &api.PoX4EnrollmentObservation{
+					Holder:             input.Holder,
+					SignerPublicKey:    input.SignerPublicKey,
+					AmountMicroSTX:     input.Amount.String(),
+					FirstCycle:         first,
+					EndCycleExclusive:  state.end,
+					TargetCycle:        targetCycle,
+					TargetCycleMatched: true,
+					StacksTip:          before.IndexBlockID,
+					BurnHeight:         before.BurnHeight,
+					ObservedAt:         metav1.NewTime(now.UTC()),
+				}
 			}
 		}
 	}

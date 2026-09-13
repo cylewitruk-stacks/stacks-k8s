@@ -1,6 +1,7 @@
 package foundation
 
 import (
+	api "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha2"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -10,8 +11,8 @@ import (
 )
 
 const (
-	managedByLabel    = "app.kubernetes.io/managed-by"
-	foundationManager = "stacks-network-operator"
+	managedByLabel    = api.LabelManagedBy
+	foundationManager = api.ManagedByNetworkOperator
 )
 
 // CacheOptions excludes unrelated runtime objects without filtering user declarations.

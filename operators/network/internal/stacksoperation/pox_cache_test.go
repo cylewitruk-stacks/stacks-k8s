@@ -100,14 +100,15 @@ func TestPoX5TransientFallbackUsesOnlyPriorValidatedBindings(t *testing.T) {
 	s.Participant = s.Participant.DeepCopy()
 	s.Participant.Status.Admission.PolicyDigest = "unvalidated-update"
 	s.AppliedFallback = func(digest string, err error) (stacksworker.Snapshot, bool) {
-		if digest != "policy" || err != transient {
+		if digest != "policy" || !errors.Is(err, transient) {
 			t.Fatal("fallback used wrong policy/error")
 		}
 		return fallback, true
 	}
 	s.Authorize = func(context.Context) error { t.Fatal("new unvalidated authority was used"); return nil }
 	got, _ := r.Step(ctx, s)
-	if got.Pending != 1 || len(n.sent) != 1 || authorized != 1 || remembered != 1 || got.AppliedPolicyDigest != "policy" {
+	if got.Pending != 1 || len(n.sent) != 1 || authorized != 1 || remembered != 1 ||
+		got.AppliedPolicyDigest != "policy" {
 		t.Fatalf("fallback did not retain actually applied policy: %+v", got)
 	}
 }

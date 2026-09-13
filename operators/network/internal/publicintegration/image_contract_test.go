@@ -11,9 +11,17 @@ import (
 
 // TestActorQualificationImageRollRequiresSameDataAndDistinctImage guards the mixed-image evidence predicate.
 func TestActorQualificationImageRollRequiresSameDataAndDistinctImage(t *testing.T) {
-	old := actorEpoch{Participant: identity{UID: "actor"}, Runtime: api.ParticipantRuntimeStatus{PodRef: &common.Binding{UID: "old-pod"}, ImageID: "old-image"}, Storage: actorStorage{Claim: identity{UID: "claim"}, Volume: "volume"}}
+	old := actorEpoch{
+		Participant: identity{UID: "actor"},
+		Runtime:     api.ParticipantRuntimeStatus{PodRef: &common.Binding{UID: "old-pod"}, ImageID: "old-image"},
+		Storage:     actorStorage{Claim: identity{UID: "claim"}, Volume: "volume"},
+	}
 	fresh := func() actorEpoch {
-		return actorEpoch{Participant: old.Participant, Runtime: api.ParticipantRuntimeStatus{PodRef: &common.Binding{UID: "new-pod"}, ImageID: "new-image"}, Storage: old.Storage}
+		return actorEpoch{
+			Participant: old.Participant,
+			Runtime:     api.ParticipantRuntimeStatus{PodRef: &common.Binding{UID: "new-pod"}, ImageID: "new-image"},
+			Storage:     old.Storage,
+		}
 	}
 	if err := sameActorStorageAcrossImageRoll(old, fresh()); err != nil {
 		t.Fatal(err)

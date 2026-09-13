@@ -3,6 +3,7 @@ package actionrbac
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"reflect"
@@ -21,7 +22,7 @@ func Validate(reader io.Reader) error {
 	for {
 		object := &unstructured.Unstructured{}
 		if err := decoder.Decode(object); err != nil {
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				break
 			}
 			return fmt.Errorf("decode rendered chart: %w", err)
@@ -67,10 +68,12 @@ func Validate(reader io.Reader) error {
 		return fmt.Errorf("controller Role differs from the exact permission contract")
 	}
 	binding := bindings[0]
-	if binding.RoleRef.APIGroup != rbacv1.GroupName || binding.RoleRef.Kind != "Role" || binding.RoleRef.Name != roles[0].Name {
+	if binding.RoleRef.APIGroup != rbacv1.GroupName || binding.RoleRef.Kind != "Role" ||
+		binding.RoleRef.Name != roles[0].Name {
 		return fmt.Errorf("RoleBinding does not reference the rendered Role")
 	}
-	if len(binding.Subjects) != 1 || binding.Subjects[0].Kind != "ServiceAccount" || binding.Subjects[0].Name == "" || binding.Subjects[0].Namespace != binding.Namespace {
+	if len(binding.Subjects) != 1 || binding.Subjects[0].Kind != "ServiceAccount" || binding.Subjects[0].Name == "" ||
+		binding.Subjects[0].Namespace != binding.Namespace {
 		return fmt.Errorf("RoleBinding must select one same-namespace ServiceAccount")
 	}
 	return nil
@@ -80,15 +83,36 @@ func Validate(reader io.Reader) error {
 func expectedRules(generation, reorganization bool) []rbacv1.PolicyRule {
 	rules := []rbacv1.PolicyRule{
 		{APIGroups: []string{"network.stacks.org"}, Resources: []string{"stacksnetworks"}, Verbs: []string{"get"}},
-		{APIGroups: []string{"bitcoin.stacks.org"}, Resources: []string{"bitcoinblockproductions", "bitcoinproductiontargets"}, Verbs: []string{"get"}},
-		{APIGroups: []string{"coordination.k8s.io"}, Resources: []string{"leases"}, Verbs: []string{"get", "list", "watch", "create", "update", "patch", "delete"}},
+		{
+			APIGroups: []string{"bitcoin.stacks.org"},
+			Resources: []string{"bitcoinblockproductions", "bitcoinproductiontargets"},
+			Verbs:     []string{"get"},
+		},
+		{
+			APIGroups: []string{"coordination.k8s.io"},
+			Resources: []string{"leases"},
+			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+		},
 		{APIGroups: []string{""}, Resources: []string{"events"}, Verbs: []string{"create", "patch"}},
 	}
-	for resource, enabled := range map[string]bool{"bitcoinblockgenerations": generation, "bitcoinreorganizations": reorganization} {
+	for resource, enabled := range map[string]bool{
+		"bitcoinblockgenerations": generation,
+		"bitcoinreorganizations":  reorganization,
+	} {
 		if enabled {
-			rules = append(rules,
-				rbacv1.PolicyRule{APIGroups: []string{"actions.stacks.org"}, Resources: []string{resource}, Verbs: []string{"get", "list", "watch", "patch"}},
-				rbacv1.PolicyRule{APIGroups: []string{"actions.stacks.org"}, Resources: []string{resource + "/status"}, Verbs: []string{"get", "patch"}})
+			rules = append(
+				rules,
+				rbacv1.PolicyRule{
+					APIGroups: []string{"actions.stacks.org"},
+					Resources: []string{resource},
+					Verbs:     []string{"get", "list", "watch", "patch"},
+				},
+				rbacv1.PolicyRule{
+					APIGroups: []string{"actions.stacks.org"},
+					Resources: []string{resource + "/status"},
+					Verbs:     []string{"get", "patch"},
+				},
+			)
 		}
 	}
 	return rules

@@ -11,13 +11,29 @@ import (
 	common "github.com/cylewitruk-stacks/stacks-k8s/apis/network/common/v1alpha2"
 	stacks "github.com/cylewitruk-stacks/stacks-k8s/apis/network/stacks/v1alpha2"
 	api "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha2"
+	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/objectref"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/protocolcontracts"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-var epochNames = []string{"1.0", "2.0", "2.05", "2.1", "2.2", "2.3", "2.4", "2.5", "3.0", "3.1", "3.2", "3.3", "3.4", "4.0"}
+var epochNames = []string{
+	"1.0",
+	"2.0",
+	"2.05",
+	"2.1",
+	"2.2",
+	"2.3",
+	"2.4",
+	"2.5",
+	"3.0",
+	"3.1",
+	"3.2",
+	"3.3",
+	"3.4",
+	"4.0",
+}
 
 // DefaultEpochs returns a fresh copy of the supported activation profile.
 func DefaultEpochs() []api.Epoch {
@@ -28,17 +44,21 @@ func DefaultEpochs() []api.Epoch {
 	}
 	return result
 }
+
 func validateEpochs(epochs []api.Epoch) error {
 	if len(epochs) != len(epochNames) {
 		return fmt.Errorf("complete fourteen-epoch schedule required")
 	}
 	for i, e := range epochs {
-		if e.Name != epochNames[i] || e.StartHeight < 0 || e.StartHeight > math.MaxUint32 || i < 2 && e.StartHeight != 0 || i > 0 && e.StartHeight < epochs[i-1].StartHeight {
+		if e.Name != epochNames[i] || e.StartHeight < 0 || e.StartHeight > math.MaxUint32 ||
+			i < 2 && e.StartHeight != 0 ||
+			i > 0 && e.StartHeight < epochs[i-1].StartHeight {
 			return fmt.Errorf("invalid ordered epoch schedule")
 		}
 	}
 	return nil
 }
+
 func gates(epochs []api.Epoch, pox api.PoX) ([]api.Gate, error) {
 	if err := validateEpochs(epochs); err != nil {
 		return nil, err
@@ -55,14 +75,35 @@ func gates(epochs []api.Epoch, pox api.PoX) ([]api.Gate, error) {
 	// Keep confirmation opportunities available until the last height at which
 	// PoX-5 accepts enrollment for the first waterfall cycle.
 	enroll5 := secondCycle*l - p - 1
-	if firstCycle < 1 || enroll4 <= epochs[7].StartHeight+1 || nakamoto-1 <= enroll4 || waterfall-1 <= nakamoto || enroll5 < waterfall+2 || secondCycle*l-1 <= enroll5 {
+	if firstCycle < 1 || enroll4 <= epochs[7].StartHeight+1 || nakamoto-1 <= enroll4 || waterfall-1 <= nakamoto ||
+		enroll5 < waterfall+2 ||
+		secondCycle*l-1 <= enroll5 {
 		return nil, fmt.Errorf("epoch schedule leaves insufficient enrollment and initialization windows")
 	}
-	return []api.Gate{{Name: "PrepareBitcoin", BitcoinCeiling: epochs[2].StartHeight}, {Name: "EnrollPoX4", BitcoinCeiling: enroll4, TargetCycle: ptr.To(firstCycle)}, {Name: "PrepareNakamoto", BitcoinCeiling: nakamoto - 1, TargetCycle: ptr.To(firstCycle)}, {Name: "PreparePoX5", BitcoinCeiling: waterfall - 1}, {Name: "EnrollPoX5", BitcoinCeiling: enroll5, TargetCycle: ptr.To(secondCycle)}, {Name: "PrepareWaterfall", BitcoinCeiling: secondCycle*l - 1, TargetCycle: ptr.To(secondCycle)}}, nil
+	return []api.Gate{
+		{Name: api.GatePrepareBitcoin, BitcoinCeiling: epochs[2].StartHeight},
+		{Name: api.GateEnrollPoX4, BitcoinCeiling: enroll4, TargetCycle: ptr.To(firstCycle)},
+		{Name: api.GatePrepareNakamoto, BitcoinCeiling: nakamoto - 1, TargetCycle: ptr.To(firstCycle)},
+		{Name: api.GatePreparePoX5, BitcoinCeiling: waterfall - 1},
+		{Name: api.GateEnrollPoX5, BitcoinCeiling: enroll5, TargetCycle: ptr.To(secondCycle)},
+		{Name: api.GatePrepareWaterfall, BitcoinCeiling: secondCycle*l - 1, TargetCycle: ptr.To(secondCycle)},
+	}, nil
 }
 
-func compileGenesis(ctx context.Context, r client.Reader, root *api.StacksNetwork, all map[string]*candidate) (api.StacksGenesisSpec, error) {
-	spec := api.StacksGenesisSpec{Chain: api.Chain{Profile: root.Spec.Profile, Epochs: DefaultEpochs(), PoX: api.PoX{RewardCycleLength: 20, PrepareLength: 5}}, Source: api.GenesisSource{NetworkUID: root.UID}}
+func compileGenesis(
+	ctx context.Context,
+	r client.Reader,
+	root *api.StacksNetwork,
+	all map[string]*candidate,
+) (api.StacksGenesisSpec, error) {
+	spec := api.StacksGenesisSpec{
+		Chain: api.Chain{
+			Profile: root.Spec.Profile,
+			Epochs:  DefaultEpochs(),
+			PoX:     api.PoX{RewardCycleLength: 20, PrepareLength: 5},
+		},
+		Source: api.GenesisSource{NetworkUID: root.UID},
+	}
 	if spec.Chain.Profile == "" {
 		spec.Chain.Profile = "regtest-pox4-pox5-v1"
 	}
@@ -71,11 +112,19 @@ func compileGenesis(ctx context.Context, r client.Reader, root *api.StacksNetwor
 	}
 	if root.Spec.EpochScheduleRef != nil {
 		var schedule api.StacksEpochSchedule
-		if err := r.Get(ctx, types.NamespacedName{Namespace: root.Namespace, Name: root.Spec.EpochScheduleRef.Name}, &schedule); err != nil || schedule.DeletionTimestamp != nil {
+		if err := r.Get(
+			ctx,
+			types.NamespacedName{Namespace: root.Namespace, Name: root.Spec.EpochScheduleRef.Name},
+			&schedule,
+		); err != nil ||
+			schedule.DeletionTimestamp != nil {
 			return spec, fmt.Errorf("epoch schedule unavailable")
 		}
 		spec.Chain.Epochs = schedule.Spec.Epochs
-		spec.Source.Dependencies = append(spec.Source.Dependencies, binding("StacksEpochSchedule", &schedule, Digest(schedule.Spec)))
+		spec.Source.Dependencies = append(
+			spec.Source.Dependencies,
+			objectref.WithFingerprint(objectref.EpochSchedule(&schedule), Digest(schedule.Spec)),
+		)
 	}
 	if root.Spec.Genesis != nil && root.Spec.Genesis.PoX != nil {
 		spec.Chain.PoX = *root.Spec.Genesis.PoX
@@ -90,7 +139,12 @@ func compileGenesis(ctx context.Context, r client.Reader, root *api.StacksNetwor
 	var total uint64
 	allocate := func(ref common.NameRef, amount common.Amount) error {
 		var a stacks.StacksAccount
-		if err := r.Get(ctx, types.NamespacedName{Namespace: root.Namespace, Name: ref.Name}, &a); err != nil || !resolved(&a) {
+		if err := r.Get(
+			ctx,
+			types.NamespacedName{Namespace: root.Namespace, Name: ref.Name},
+			&a,
+		); err != nil ||
+			!resolved(&a) {
 			return fmt.Errorf("genesis account %s unavailable", ref.Name)
 		}
 		n, err := strconv.ParseUint(string(amount), 10, 64)
@@ -144,7 +198,12 @@ func compileGenesis(ctx context.Context, r client.Reader, root *api.StacksNetwor
 			continue
 		}
 		counts[c.instance.Spec.Kind]++
-		req := api.BootstrapRequirement{Kind: c.instance.Spec.Kind, Participant: binding("StacksNetworkParticipant", c.instance, ""), PolicyDigest: Digest(v), Dependencies: c.dependencies}
+		req := api.BootstrapRequirement{
+			Kind:         c.instance.Spec.Kind,
+			Participant:  objectref.Participant(c.instance),
+			PolicyDigest: Digest(v),
+			Dependencies: c.dependencies,
+		}
 		if v.StacksNode != nil {
 			req.MiningEnabled = ptr.To(v.StacksNode.Mining != nil && ptr.Deref(v.StacksNode.Mining.Enabled, false))
 		}
@@ -155,7 +214,13 @@ func compileGenesis(ctx context.Context, r client.Reader, root *api.StacksNetwor
 		sort.Strings(accountNames)
 		for _, name := range accountNames {
 			a := c.accounts[name]
-			req.Accounts = append(req.Accounts, api.PublicAccount{Binding: binding("StacksAccount", a, a.Status.Digest), Identity: *a.Status.Identity})
+			req.Accounts = append(
+				req.Accounts,
+				api.PublicAccount{
+					Binding:  objectref.WithFingerprint(objectref.Account(a), a.Status.Digest),
+					Identity: *a.Status.Identity,
+				},
+			)
 		}
 		if v.StacksFaucet != nil {
 			f := v.StacksFaucet
@@ -170,7 +235,9 @@ func compileGenesis(ctx context.Context, r client.Reader, root *api.StacksNetwor
 			n := v.StacksNode
 			wallet := c.wallets[n.Mining.BitcoinWalletRef.Name]
 			a := c.accounts[n.IdentityAccountRef.Name]
-			if wallet == nil || a == nil || wallet.Spec.KeySource == nil || wallet.Spec.KeySource.StacksMinerAccountRef == nil || wallet.Spec.KeySource.StacksMinerAccountRef.Name != a.Name {
+			if wallet == nil || a == nil || wallet.Spec.KeySource == nil ||
+				wallet.Spec.KeySource.StacksMinerAccountRef == nil ||
+				wallet.Spec.KeySource.StacksMinerAccountRef.Name != a.Name {
 				return spec, fmt.Errorf("miner wallet must derive from its identity account")
 			}
 			node := all[n.BitcoinNodeRef.Name]
@@ -213,7 +280,11 @@ func compileGenesis(ctx context.Context, r client.Reader, root *api.StacksNetwor
 				return spec, err
 			}
 			req.RegistryInitialization = s.Initialization
-			spec.Chain.Contracts = api.ContractBindings{Deployer: c.accounts[s.DeployerAccountRef.Name].Status.Identity.Address, Bundle: *s.Bundle, SourceHashes: map[string]string{}}
+			spec.Chain.Contracts = api.ContractBindings{
+				Deployer:     c.accounts[s.DeployerAccountRef.Name].Status.Identity.Address,
+				Bundle:       *s.Bundle,
+				SourceHashes: map[string]string{},
+			}
 			var pins struct {
 				Contracts []protocolcontracts.Source `json:"contracts"`
 			}
@@ -232,12 +303,22 @@ func compileGenesis(ctx context.Context, r client.Reader, root *api.StacksNetwor
 		if v.BitcoinBlockProduction != nil {
 			production = c
 			wallet := c.wallets[v.BitcoinBlockProduction.PayoutWalletRef.Name]
-			req.BitcoinPayoutWallet = ptrBinding(binding("BitcoinWallet", wallet, wallet.Status.Digest))
+			req.BitcoinPayoutWallet = ptrBinding(
+				objectref.WithFingerprint(objectref.BitcoinWallet(wallet), wallet.Status.Digest),
+			)
 			req.BitcoinInitialization = v.BitcoinBlockProduction.Initialization
 		}
 		spec.Bootstrap.Requirements = append(spec.Bootstrap.Requirements, req)
 	}
-	for _, kind := range []api.ParticipantKind{"BitcoinNode", "StacksNode", "StacksSigner", "StacksStacker", "StacksContractSet", "StacksTransactionProduction", "BitcoinBlockProduction"} {
+	for _, kind := range []api.ParticipantKind{
+		api.ParticipantBitcoinNode,
+		api.ParticipantStacksNode,
+		api.ParticipantStacksSigner,
+		api.ParticipantStacksStacker,
+		api.ParticipantStacksContractSet,
+		api.ParticipantStacksTransactionProduction,
+		api.ParticipantBitcoinBlockProduction,
+	} {
 		if counts[kind] == 0 {
 			return spec, fmt.Errorf("initial network requires %s", kind)
 		}
@@ -252,7 +333,7 @@ func compileGenesis(ctx context.Context, r client.Reader, root *api.StacksNetwor
 	}
 	init := production.configuration.BitcoinBlockProduction.Initialization
 	if init.MinimumHeight != spec.Bootstrap.Gates[0].BitcoinCeiling {
-		return spec, fmt.Errorf("Bitcoin initialization height must match the first gate")
+		return spec, fmt.Errorf("initial Bitcoin height must match the first gate")
 	}
 	if 100+int64(len(minerWallets))*int64(init.MatureOutputsPerMiner) > init.MinimumHeight {
 		return spec, fmt.Errorf("initial gate cannot mature the requested miner outputs")
@@ -281,9 +362,15 @@ func compileGenesis(ctx context.Context, r client.Reader, root *api.StacksNetwor
 		}
 	}
 	for address, amount := range balances {
-		spec.Chain.Allocations = append(spec.Chain.Allocations, api.Allocation{Address: address, AmountMicroSTX: common.Amount(strconv.FormatUint(amount, 10))})
+		spec.Chain.Allocations = append(
+			spec.Chain.Allocations,
+			api.Allocation{Address: address, AmountMicroSTX: common.Amount(strconv.FormatUint(amount, 10))},
+		)
 	}
-	sort.Slice(spec.Chain.Allocations, func(i, j int) bool { return spec.Chain.Allocations[i].Address < spec.Chain.Allocations[j].Address })
+	sort.Slice(
+		spec.Chain.Allocations,
+		func(i, j int) bool { return spec.Chain.Allocations[i].Address < spec.Chain.Allocations[j].Address },
+	)
 	accountNames := make([]string, 0, len(accounts))
 	for name := range accounts {
 		accountNames = append(accountNames, name)
@@ -291,7 +378,10 @@ func compileGenesis(ctx context.Context, r client.Reader, root *api.StacksNetwor
 	sort.Strings(accountNames)
 	for _, name := range accountNames {
 		a := accounts[name]
-		spec.Source.Dependencies = append(spec.Source.Dependencies, binding("StacksAccount", a, a.Status.Digest))
+		spec.Source.Dependencies = append(
+			spec.Source.Dependencies,
+			objectref.WithFingerprint(objectref.Account(a), a.Status.Digest),
+		)
 	}
 	spec.Source.InputDigest = semanticInputDigest(spec, all)
 	data, err := json.Marshal(spec)

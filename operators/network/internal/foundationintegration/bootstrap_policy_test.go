@@ -23,7 +23,17 @@ import (
 )
 
 // verifyBootstrapGatePolicyRelease checks compatible rolls and the last affected gate on a real API server.
-func verifyBootstrapGatePolicyRelease(t *testing.T, ctx context.Context, c client.Client, r *foundation.Reconciler, request ctrl.Request, root *api.StacksNetwork, genesis *api.StacksGenesis, cfg *rest.Config, scheme *runtime.Scheme) {
+func verifyBootstrapGatePolicyRelease(
+	t *testing.T,
+	ctx context.Context,
+	c client.Client,
+	r *foundation.Reconciler,
+	request ctrl.Request,
+	root *api.StacksNetwork,
+	genesis *api.StacksGenesis,
+	cfg *rest.Config,
+	scheme *runtime.Scheme,
+) {
 	t.Helper()
 	var node stacks.StacksNode
 	if err := c.Get(ctx, client.ObjectKey{Namespace: root.Namespace, Name: "miner-01"}, &node); err != nil {
@@ -32,12 +42,16 @@ func verifyBootstrapGatePolicyRelease(t *testing.T, ctx context.Context, c clien
 	oldNode := participant(t, ctx, c, root, "miner-01")
 	originalNode := node.Spec.DeepCopy()
 	node.Spec.Image = ptr.To("example.invalid/stacks:compatible-roll")
-	node.Spec.Resources = &corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("250m")}}
+	node.Spec.Resources = &corev1.ResourceRequirements{
+		Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("250m")},
+	}
 	updateObject(t, ctx, c, &node)
 	driveRoot(t, ctx, c, r, request, root)
 	rolled := participant(t, ctx, c, root, "miner-01")
 	requireReason(t, rolled, "Admitted")
-	if rolled.UID != oldNode.UID || rolled.Status.Admission.PolicyDigest == oldNode.Status.Admission.PolicyDigest || *rolled.Status.Admission.Configuration.StacksNode.Image != *node.Spec.Image || meta.IsStatusConditionTrue(rolled.Status.Conditions, "PolicyDeferred") {
+	if rolled.UID != oldNode.UID || rolled.Status.Admission.PolicyDigest == oldNode.Status.Admission.PolicyDigest ||
+		*rolled.Status.Admission.Configuration.StacksNode.Image != *node.Spec.Image ||
+		meta.IsStatusConditionTrue(rolled.Status.Conditions, "PolicyDeferred") {
 		t.Fatal("compatible actor roll was deferred or replaced its instance")
 	}
 	node.Spec = *originalNode
@@ -55,11 +69,18 @@ func verifyBootstrapGatePolicyRelease(t *testing.T, ctx context.Context, c clien
 	driveRoot(t, ctx, c, r, request, root)
 	deferred := participant(t, ctx, c, root, "stacker-01")
 	requireReason(t, deferred, "BootstrapPending")
-	if !reflect.DeepEqual(deferred.Status.Admission, prior) || !meta.IsStatusConditionTrue(deferred.Status.Conditions, "PolicyDeferred") {
+	if !reflect.DeepEqual(deferred.Status.Admission, prior) ||
+		!meta.IsStatusConditionTrue(deferred.Status.Conditions, "PolicyDeferred") {
 		t.Fatal("conflicting amount did not retain the whole captured policy")
 	}
 	// Complete every earlier gate; the prepared waterfall set still depends on original enrollment.
-	state := &api.InitializationStatus{GenesisUID: genesis.UID, GenesisDigest: root.Status.GenesisDigest, GateIndex: int32(len(genesis.Spec.Bootstrap.Gates) - 1), AuthorizedCeiling: genesis.Spec.Bootstrap.Gates[len(genesis.Spec.Bootstrap.Gates)-1].BitcoinCeiling}
+	state := &api.InitializationStatus{
+		GenesisUID:    genesis.UID,
+		GenesisDigest: root.Status.GenesisDigest,
+		// #nosec G115 -- Small deterministic fixture counters/values are bounded by the test setup.
+		GateIndex:         int32(len(genesis.Spec.Bootstrap.Gates) - 1),
+		AuthorizedCeiling: genesis.Spec.Bootstrap.Gates[len(genesis.Spec.Bootstrap.Gates)-1].BitcoinCeiling,
+	}
 	now := metav1.Now()
 	for i, gate := range genesis.Spec.Bootstrap.Gates {
 		observation := api.GateObservation{Name: gate.Name}
@@ -78,7 +99,10 @@ func verifyBootstrapGatePolicyRelease(t *testing.T, ctx context.Context, c clien
 	verifyInstalledPolicyRelease(t, ctx, c, cfg, scheme, root, &stacker)
 	admitted := participant(t, ctx, c, root, "stacker-01")
 	requireReason(t, admitted, "Admitted")
-	if *admitted.Status.Admission.Configuration.StacksStacker.AmountMicroSTX != *stacker.Spec.AmountMicroSTX || meta.IsStatusConditionTrue(admitted.Status.Conditions, "PolicyDeferred") || root.Status.GenesisRef.UID != genesis.UID || !root.Status.Initialization.Completed {
+	if *admitted.Status.Admission.Configuration.StacksStacker.AmountMicroSTX != *stacker.Spec.AmountMicroSTX ||
+		meta.IsStatusConditionTrue(admitted.Status.Conditions, "PolicyDeferred") ||
+		root.Status.GenesisRef.UID != genesis.UID ||
+		!root.Status.Initialization.Completed {
 		t.Fatal("latest policy was not admitted after the last affected gate")
 	}
 	stacker.Spec = *original
@@ -90,7 +114,14 @@ func verifyBootstrapGatePolicyRelease(t *testing.T, ctx context.Context, c clien
 }
 
 // verifyTrafficRecipientReplacement keeps both recipient forms protected while controls remain independent.
-func verifyTrafficRecipientReplacement(t *testing.T, ctx context.Context, c client.Client, r *foundation.Reconciler, request ctrl.Request, root *api.StacksNetwork) {
+func verifyTrafficRecipientReplacement(
+	t *testing.T,
+	ctx context.Context,
+	c client.Client,
+	r *foundation.Reconciler,
+	request ctrl.Request,
+	root *api.StacksNetwork,
+) {
 	t.Helper()
 	var traffic stacks.StacksTransactionProduction
 	if err := c.Get(ctx, client.ObjectKey{Namespace: root.Namespace, Name: "traffic"}, &traffic); err != nil {
@@ -98,7 +129,10 @@ func verifyTrafficRecipientReplacement(t *testing.T, ctx context.Context, c clie
 	}
 	original := traffic.Spec.DeepCopy()
 	prior := participant(t, ctx, c, root, "traffic").Status.Admission.DeepCopy()
-	for _, recipient := range []*stacks.Recipient{{AccountRef: &common.NameRef{Name: "admin-01"}}, {Address: ptr.To("ST000000000000000000002AMW42H")}} {
+	for _, recipient := range []*stacks.Recipient{
+		{AccountRef: &common.NameRef{Name: "admin-01"}},
+		{Address: ptr.To("ST000000000000000000002AMW42H")},
+	} {
 		traffic.Spec.Recipient = recipient
 		updateObject(t, ctx, c, &traffic)
 		for i := range root.Spec.Participants {
@@ -110,7 +144,8 @@ func verifyTrafficRecipientReplacement(t *testing.T, ctx context.Context, c clie
 		driveRoot(t, ctx, c, r, request, root)
 		got := participant(t, ctx, c, root, "traffic")
 		requireReason(t, got, "RequiresReplacement")
-		if !reflect.DeepEqual(got.Status.Admission, prior) || got.Spec.Control == nil || ptr.Deref(got.Spec.Control.Paused, false) != (recipient.AccountRef != nil) {
+		if !reflect.DeepEqual(got.Status.Admission, prior) || got.Spec.Control == nil ||
+			ptr.Deref(got.Spec.Control.Paused, false) != (recipient.AccountRef != nil) {
 			t.Fatal("recipient rejection changed admission or blocked controls")
 		}
 	}

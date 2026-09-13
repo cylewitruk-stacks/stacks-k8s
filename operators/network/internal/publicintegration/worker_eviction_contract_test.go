@@ -17,16 +17,82 @@ import (
 )
 
 // evictionContractFixture supplies API facts without creating a cluster client or sending eviction.
-func evictionContractFixture(t *testing.T) (*harness, evictionSelection, *api.StacksNetwork, *api.StacksNetworkParticipant, *corev1.Pod) {
+func evictionContractFixture(
+	t *testing.T,
+) (*harness, evictionSelection, *api.StacksNetwork, *api.StacksNetworkParticipant, *corev1.Pod) {
 	t.Helper()
 	root := waitRoot()
-	session := api.WorkerSession{Pod: api.WorkerPodBinding{Kind: "Pod", Name: "worker", UID: "pod"}, ProfileDigest: "profile"}
-	execution := api.WorkerExecutionStatus{PodUID: "pod", ProcessNonce: "process", ProfileDigest: "profile", Phase: "Active", ObservedAt: metav1.Now(), Transactions: &api.TransactionExecutionStatus{Included: 1}}
-	p := &api.StacksNetworkParticipant{ObjectMeta: metav1.ObjectMeta{Name: "participant", Namespace: root.Namespace, UID: "participant", OwnerReferences: []metav1.OwnerReference{{APIVersion: api.GroupVersion.String(), Kind: "StacksNetwork", Name: root.Name, UID: root.UID, Controller: ptr.To(true)}}}, Spec: api.StacksNetworkParticipantSpec{NetworkUID: root.UID, ParticipantName: "traffic", Kind: "StacksTransactionProduction"}, Status: api.ParticipantStatus{Execution: &execution}}
+	session := api.WorkerSession{
+		Pod:           api.WorkerPodBinding{Kind: "Pod", Name: "worker", UID: "pod"},
+		ProfileDigest: "profile",
+	}
+	execution := api.WorkerExecutionStatus{
+		PodUID:        "pod",
+		ProcessNonce:  "process",
+		ProfileDigest: "profile",
+		Phase:         "Active",
+		ObservedAt:    metav1.Now(),
+		Transactions:  &api.TransactionExecutionStatus{Included: 1},
+	}
+	p := &api.StacksNetworkParticipant{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "participant",
+			Namespace: root.Namespace,
+			UID:       "participant",
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion: api.GroupVersion.String(),
+					Kind:       "StacksNetwork",
+					Name:       root.Name,
+					UID:        root.UID,
+					Controller: ptr.To(true),
+				},
+			},
+		},
+		Spec: api.StacksNetworkParticipantSpec{
+			NetworkUID:      root.UID,
+			ParticipantName: "traffic",
+			Kind:            "StacksTransactionProduction",
+		},
+		Status: api.ParticipantStatus{Execution: &execution},
+	}
 	root.Status.Identities = []api.InstanceIdentity{{Name: "traffic", UID: p.UID, Worker: session.DeepCopy()}}
 	root.Status.ObservationPolicy = &api.ObservationPolicy{PollIntervalSeconds: 2, RPCAllowanceSeconds: 10}
-	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "worker", Namespace: root.Namespace, UID: "pod", OwnerReferences: []metav1.OwnerReference{{APIVersion: api.GroupVersion.String(), Kind: "StacksNetworkParticipant", Name: p.Name, UID: p.UID, Controller: ptr.To(true)}}}, Status: corev1.PodStatus{Phase: corev1.PodFailed, ContainerStatuses: []corev1.ContainerStatus{{Name: "worker", ContainerID: "container", State: corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{Reason: "Error", ExitCode: 137}}}}}}
-	selected := evictionSelection{Participant: objectIdentity(p), LogicalName: "traffic", Session: session, Execution: execution, ContainerID: "container"}
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "worker",
+			Namespace: root.Namespace,
+			UID:       "pod",
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion: api.GroupVersion.String(),
+					Kind:       "StacksNetworkParticipant",
+					Name:       p.Name,
+					UID:        p.UID,
+					Controller: ptr.To(true),
+				},
+			},
+		},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodFailed,
+			ContainerStatuses: []corev1.ContainerStatus{
+				{
+					Name:        "worker",
+					ContainerID: "container",
+					State: corev1.ContainerState{
+						Terminated: &corev1.ContainerStateTerminated{Reason: "Error", ExitCode: 137},
+					},
+				},
+			},
+		},
+	}
+	selected := evictionSelection{
+		Participant: objectIdentity(p),
+		LogicalName: "traffic",
+		Session:     session,
+		Execution:   execution,
+		ContainerID: "container",
+	}
 	scheme := runtime.NewScheme()
 	if err := api.AddToScheme(scheme); err != nil {
 		t.Fatal(err)
@@ -34,11 +100,27 @@ func evictionContractFixture(t *testing.T) (*harness, evictionSelection, *api.St
 	if err := corev1.AddToScheme(scheme); err != nil {
 		t.Fatal(err)
 	}
-	return &harness{rootUID: root.UID, config: liveConfig{fixtureOptions: fixtureOptions{namespace: root.Namespace}}, c: fake.NewClientBuilder().WithScheme(scheme).Build()}, selected, root, p, pod
+	return &harness{
+		rootUID: root.UID,
+		config:  liveConfig{fixtureOptions: fixtureOptions{namespace: root.Namespace}},
+		c:       fake.NewClientBuilder().WithScheme(scheme).Build(),
+	}, selected, root, p, pod
 }
 
 func TestWorkerEvictionPreservesUncertaintyAndRejectsReplacement(t *testing.T) {
-	for _, mode := range []string{"terminated", "running", "unknown-status", "missing", "retained-termination", "replacement-pod", "second-pod", "process-restart", "replacement-binding", "missing-binding", "replacement-root"} {
+	for _, mode := range []string{
+		"terminated",
+		"running",
+		"unknown-status",
+		"missing",
+		"retained-termination",
+		"replacement-pod",
+		"second-pod",
+		"process-restart",
+		"replacement-binding",
+		"missing-binding",
+		"replacement-root",
+	} {
 		t.Run(mode, func(t *testing.T) {
 			h, selected, root, p, pod := evictionContractFixture(t)
 			objects := []client.Object{root, p}
@@ -71,7 +153,10 @@ func TestWorkerEvictionPreservesUncertaintyAndRejectsReplacement(t *testing.T) {
 			}
 			h.c = fake.NewClientBuilder().WithScheme(h.c.Scheme()).WithObjects(objects...).Build()
 			view, err := h.readEvictionView(context.Background(), selected)
-			rejected := mode == "replacement-pod" || mode == "second-pod" || mode == "process-restart" || mode == "replacement-binding" || mode == "missing-binding" || mode == "replacement-root"
+			rejected := mode == "replacement-pod" || mode == "second-pod" || mode == "process-restart" ||
+				mode == "replacement-binding" ||
+				mode == "missing-binding" ||
+				mode == "replacement-root"
 			if (err != nil) != rejected {
 				t.Fatalf("error=%v", err)
 			}
@@ -86,10 +171,25 @@ func TestWorkerEvictionPreservesUncertaintyAndRejectsReplacement(t *testing.T) {
 }
 
 func TestWorkerEvictionSelectionRequiresCurrentBoundExecution(t *testing.T) {
-	for _, mode := range []string{"valid", "stale", "nonce-missing", "unbound", "shutdown", "different-pod", "failed"} {
+	for _, mode := range []string{
+		"valid",
+		"stale",
+		"nonce-missing",
+		"unbound",
+		"shutdown",
+		"different-pod",
+		"failed",
+	} {
 		t.Run(mode, func(t *testing.T) {
 			_, _, root, p, _ := evictionContractFixture(t)
-			s := snapshot{At: time.Now().UTC(), Operation: "Running", Status: root.Status, Participants: []participantEvidence{{Identity: objectIdentity(p), Name: "traffic", Kind: p.Spec.Kind, Status: p.Status}}}
+			s := snapshot{
+				At:        time.Now().UTC(),
+				Operation: "Running",
+				Status:    root.Status,
+				Participants: []participantEvidence{
+					{Identity: objectIdentity(p), Name: "traffic", Kind: p.Spec.Kind, Status: p.Status},
+				},
+			}
 			switch mode {
 			case "stale":
 				s.At = s.At.Add(17 * time.Second)

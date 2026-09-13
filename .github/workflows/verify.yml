@@ -15,6 +15,21 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  lint:
+    name: Go lint and formatting
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: operators/network/go.mod
+          cache-dependency-path: '**/go.sum'
+      - uses: golangci/golangci-lint-action@v9
+        with:
+          version-file: .golangci-lint-version
+          install-only: true
+      - run: make -k lint fmt-check
+
   chart-policy:
     name: Chart policy and native admission
     runs-on: ubuntu-latest

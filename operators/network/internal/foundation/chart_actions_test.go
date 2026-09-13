@@ -2,6 +2,7 @@ package foundation
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"os/exec"
 	"path/filepath"
@@ -19,9 +20,14 @@ func TestFoundationOptionalActionPermissions(t *testing.T) {
 	for _, enabled := range []bool{false, true} {
 		args := []string{"template", "foundation", chart, "--kube-version", "1.37.0"}
 		if enabled {
-			args = append(args, "--set", "bitcoinActions.generationEnabled=true,bitcoinActions.reorganizationEnabled=true")
+			args = append(
+				args,
+				"--set",
+				"bitcoinActions.generationEnabled=true,bitcoinActions.reorganizationEnabled=true",
+			)
 		}
-		out, err := exec.Command("helm", args...).CombinedOutput()
+		// #nosec G204 -- Fixed executable and separate arguments from the test harness; no shell evaluation.
+		out, err := exec.CommandContext(t.Context(), "helm", args...).CombinedOutput()
 		if err != nil {
 			t.Fatalf("render %v %s", err, out)
 		}
@@ -30,7 +36,7 @@ func TestFoundationOptionalActionPermissions(t *testing.T) {
 		for {
 			var object unstructured.Unstructured
 			err := decoder.Decode(&object)
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				break
 			}
 			if err != nil {

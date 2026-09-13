@@ -15,12 +15,17 @@ import (
 )
 
 // projectWorkers advances exact-Pod bindings through the aggregate's single status writer.
-func (r *Reconciler) projectWorkers(ctx context.Context, root *api.StacksNetwork, participants []api.StacksNetworkParticipant) (bool, map[types.UID]bool, error) {
+func (r *Reconciler) projectWorkers(
+	ctx context.Context,
+	root *api.StacksNetwork,
+	participants []api.StacksNetworkParticipant,
+) (bool, map[types.UID]bool, error) {
 	pending := false
 	unstarted := map[types.UID]bool{}
 	for i := range participants {
 		cached := &participants[i]
-		if cached.Spec.NetworkUID != root.UID || !metav1.IsControlledBy(cached, root) || !managementKind(cached.Spec.Kind) {
+		if cached.Spec.NetworkUID != root.UID || !metav1.IsControlledBy(cached, root) ||
+			!managementKind(cached.Spec.Kind) {
 			continue
 		}
 		p := cached.DeepCopy()
@@ -43,8 +48,14 @@ func (r *Reconciler) projectWorkers(ctx context.Context, root *api.StacksNetwork
 			unstarted[p.UID] = true
 		}
 		if fact.Failed {
-			set(root, "Failed", metav1.ConditionTrue, fact.Reason, "A bound management worker cannot continue; recreate the network")
-			root.Status.Phase = "Failed"
+			set(
+				root,
+				api.ConditionFailed,
+				metav1.ConditionTrue,
+				fact.Reason,
+				"A bound management worker cannot continue; recreate the network",
+			)
+			root.Status.Phase = api.NetworkPhaseFailed
 		}
 		if (fact.Unknown && !unstarted[p.UID]) || fact.Changed {
 			pending = true
@@ -70,7 +81,8 @@ func workersPaused(root *api.StacksNetwork, participants []api.StacksNetworkPart
 		}
 		var p *api.StacksNetworkParticipant
 		for i := range participants {
-			if participants[i].UID == id.UID && participants[i].Spec.NetworkUID == root.UID && metav1.IsControlledBy(&participants[i], root) {
+			if participants[i].UID == id.UID && participants[i].Spec.NetworkUID == root.UID &&
+				metav1.IsControlledBy(&participants[i], root) {
 				p = &participants[i]
 				break
 			}
@@ -79,7 +91,11 @@ func workersPaused(root *api.StacksNetwork, participants []api.StacksNetworkPart
 			return false
 		}
 		e := p.Status.Execution
-		if e.PodUID != id.Worker.Pod.UID || e.ProfileDigest != id.Worker.ProfileDigest || e.ProcessNonce == "" || e.ObservedGeneration != p.Generation || e.NetworkGeneration != root.Generation || e.Phase != "Paused" || !fresh(e.ObservedAt, now) {
+		if e.PodUID != id.Worker.Pod.UID || e.ProfileDigest != id.Worker.ProfileDigest || e.ProcessNonce == "" ||
+			e.ObservedGeneration != p.Generation ||
+			e.NetworkGeneration != root.Generation ||
+			e.Phase != api.WorkerPhasePaused ||
+			!fresh(e.ObservedAt, now) {
 			return false
 		}
 	}

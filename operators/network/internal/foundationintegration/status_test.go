@@ -27,30 +27,64 @@ func verifySharedParticipantStatus(t *testing.T, ctx context.Context, c client.C
 	if err := c.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: ns}}); err != nil {
 		t.Fatal(err)
 	}
-	p := &api.StacksNetworkParticipant{ObjectMeta: metav1.ObjectMeta{Name: "participant", Namespace: ns}, Spec: api.StacksNetworkParticipantSpec{NetworkUID: "test-network", ParticipantName: "btc", Kind: "BitcoinNode", Source: api.Source{Generation: 1, Digest: "test"}, Configuration: api.Configuration{BitcoinNode: &bitcoin.BitcoinNodeSpec{}}}}
+	p := &api.StacksNetworkParticipant{
+		ObjectMeta: metav1.ObjectMeta{Name: "participant", Namespace: ns},
+		Spec: api.StacksNetworkParticipantSpec{
+			NetworkUID:      "test-network",
+			ParticipantName: "btc",
+			Kind:            "BitcoinNode",
+			Source:          api.Source{Generation: 1, Digest: "test"},
+			Configuration:   api.Configuration{BitcoinNode: &bitcoin.BitcoinNodeSpec{}},
+		},
+	}
 	if err := c.Create(ctx, p); err != nil {
 		t.Fatal(err)
 	}
 	mk := func(typ, reason string) metav1.Condition {
-		return metav1.Condition{Type: typ, Status: metav1.ConditionTrue, Reason: reason, Message: reason, ObservedGeneration: p.Generation, LastTransitionTime: metav1.Now()}
+		return metav1.Condition{
+			Type:               typ,
+			Status:             metav1.ConditionTrue,
+			Reason:             reason,
+			Message:            reason,
+			ObservedGeneration: p.Generation,
+			LastTransitionTime: metav1.Now(),
+		}
 	}
 	// Seed the actual pre-migration representation, not SSA-created test state.
 	before := p.DeepCopy()
 	p.Status.Admission = &api.Admission{PolicyDigest: "old-policy", Configuration: p.Spec.Configuration}
-	p.Status.Conditions = []metav1.Condition{mk("Resolved", "Admitted"), mk("WorkloadReady", "RuntimeNotImplemented")}
-	if err := c.Status().Patch(ctx, p, client.MergeFromWithOptions(before, client.MergeFromWithOptimisticLock{}), client.FieldOwner("foundation")); err != nil {
+	p.Status.Conditions = []metav1.Condition{
+		mk("Resolved", "Admitted"),
+		mk("WorkloadReady", "RuntimeNotImplemented"),
+	}
+	if err := c.Status().
+		Patch(
+			ctx,
+			p,
+			client.MergeFromWithOptions(
+				before,
+				client.MergeFromWithOptimisticLock{},
+			),
+			client.FieldOwner("foundation"),
+		); err != nil {
 		t.Fatal(err)
 	}
 	// Match the real aggregate call: candidate admission aliases the fetched participant.
 	p.Status.Admission.PolicyDigest = "policy"
-	aggregate := api.ParticipantStatus{Admission: p.Status.Admission, Conditions: append([]metav1.Condition(nil), p.Status.Conditions...)}
+	aggregate := api.ParticipantStatus{
+		Admission:  p.Status.Admission,
+		Conditions: append([]metav1.Condition(nil), p.Status.Conditions...),
+	}
 	if err := participantstatus.Apply(ctx, c, p, aggregate, participantstatus.AggregateManager); err != nil {
 		t.Fatal(err)
 	}
 	if p.Status.Admission.PolicyDigest != "policy" {
 		t.Fatal("migration overwrote aliased candidate admission")
 	}
-	domain := api.ParticipantStatus{Runtime: &api.ParticipantRuntimeStatus{ObservedGeneration: p.Generation, PolicyDigest: "policy"}, Conditions: []metav1.Condition{mk("WorkloadReady", "ActorReady")}}
+	domain := api.ParticipantStatus{
+		Runtime:    &api.ParticipantRuntimeStatus{ObservedGeneration: p.Generation, PolicyDigest: "policy"},
+		Conditions: []metav1.Condition{mk("WorkloadReady", "ActorReady")},
+	}
 	const domainManager = "stacks-network-domain-bitcoinnode"
 	if err := participantstatus.Apply(ctx, c, p, domain, domainManager); err != nil {
 		t.Fatal(err)
@@ -62,7 +96,8 @@ func verifySharedParticipantStatus(t *testing.T, ctx context.Context, c client.C
 	if err := participantstatus.Apply(ctx, c, p, aggregate, participantstatus.AggregateManager); err != nil {
 		t.Fatal(err)
 	}
-	if p.Status.Runtime == nil || p.Status.Runtime.PolicyDigest != "policy" || meta.FindStatusCondition(p.Status.Conditions, "WorkloadReady").Reason != "ActorReady" {
+	if p.Status.Runtime == nil || p.Status.Runtime.PolicyDigest != "policy" ||
+		meta.FindStatusCondition(p.Status.Conditions, "WorkloadReady").Reason != "ActorReady" {
 		t.Fatal("aggregate erased domain state during handoff")
 	}
 	if err := participantstatus.Apply(ctx, c, stale, domain, domainManager); !apierrors.IsConflict(err) {
@@ -73,7 +108,9 @@ func verifySharedParticipantStatus(t *testing.T, ctx context.Context, c client.C
 	if err := participantstatus.Apply(ctx, c, p, domain, domainManager); err != nil {
 		t.Fatal(err)
 	}
-	if meta.FindStatusCondition(p.Status.Conditions, "WorkloadReady") != nil || meta.FindStatusCondition(p.Status.Conditions, "Resolved") == nil || p.Status.Admission == nil {
+	if meta.FindStatusCondition(p.Status.Conditions, "WorkloadReady") != nil ||
+		meta.FindStatusCondition(p.Status.Conditions, "Resolved") == nil ||
+		p.Status.Admission == nil {
 		t.Fatalf("condition deletion crossed ownership: %+v", p.Status)
 	}
 	domain.Runtime = nil
@@ -86,7 +123,14 @@ func verifySharedParticipantStatus(t *testing.T, ctx context.Context, c client.C
 }
 
 // verifyRuntimeConditionHandoff tests the aggregate's unchanged-policy fast path during rollout.
-func verifyRuntimeConditionHandoff(t *testing.T, ctx context.Context, c client.Client, r *foundation.Reconciler, request ctrl.Request, root *api.StacksNetwork) {
+func verifyRuntimeConditionHandoff(
+	t *testing.T,
+	ctx context.Context,
+	c client.Client,
+	r *foundation.Reconciler,
+	request ctrl.Request,
+	root *api.StacksNetwork,
+) {
 	t.Helper()
 	var name string
 	for _, entry := range root.Spec.Participants {
@@ -100,7 +144,18 @@ func verifyRuntimeConditionHandoff(t *testing.T, ctx context.Context, c client.C
 	}
 	p := participant(t, ctx, c, root, name)
 	priorResolved := *meta.FindStatusCondition(p.Status.Conditions, "Resolved")
-	domain := api.ParticipantStatus{Conditions: []metav1.Condition{{Type: "WorkloadReady", Status: metav1.ConditionTrue, Reason: "ActorReady", Message: "ActorReady", ObservedGeneration: p.Generation, LastTransitionTime: metav1.Now()}}}
+	domain := api.ParticipantStatus{
+		Conditions: []metav1.Condition{
+			{
+				Type:               "WorkloadReady",
+				Status:             metav1.ConditionTrue,
+				Reason:             "ActorReady",
+				Message:            "ActorReady",
+				ObservedGeneration: p.Generation,
+				LastTransitionTime: metav1.Now(),
+			},
+		},
+	}
 	const owner = "stacks-network-domain-bitcoinnode"
 	if err := participantstatus.Apply(ctx, c, p, domain, owner); err != nil {
 		t.Fatal(err)
@@ -113,7 +168,11 @@ func verifyRuntimeConditionHandoff(t *testing.T, ctx context.Context, c client.C
 	if participantstatus.OwnsCondition(p, participantstatus.AggregateManager, "WorkloadReady") {
 		t.Fatal("unchanged admission retained fallback field ownership")
 	}
-	if got := meta.FindStatusCondition(p.Status.Conditions, "Resolved"); got == nil || !reflect.DeepEqual(*got, priorResolved) {
+	if got := meta.FindStatusCondition(
+		p.Status.Conditions,
+		"Resolved",
+	); got == nil ||
+		!reflect.DeepEqual(*got, priorResolved) {
 		t.Fatal("handoff required an unrelated condition change")
 	}
 	if got := meta.FindStatusCondition(p.Status.Conditions, "WorkloadReady"); got == nil || got.Reason != "ActorReady" {

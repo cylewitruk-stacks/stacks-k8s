@@ -28,11 +28,31 @@ func transferFixture(t *testing.T) (*TransferRole, *trafficNode, stacksworker.Sn
 	now := time.Unix(1000, 0)
 	role.Now = func() time.Time { return now }
 	node := &trafficNode{memoryNode: nodeFixture(), info: rpc.Info{NetworkID: 0x80000000, BurnHeight: 300}}
-	input := &TransferInputs{Node: node, Recipient: public.Address, Amount: 1, Fee: 1, Interval: 10 * time.Second, StartHeight: 251, Target: api.TrafficObservation{TargetParticipantUID: "target", TargetPodUID: "pod", TargetContainerID: "container", TargetConfigurationDigest: "config", GenesisUID: "genesis"}}
+	input := &TransferInputs{
+		Node:        node,
+		Recipient:   public.Address,
+		Amount:      1,
+		Fee:         1,
+		Interval:    10 * time.Second,
+		StartHeight: 251,
+		Target: api.TrafficObservation{
+			TargetParticipantUID:      "target",
+			TargetPodUID:              "pod",
+			TargetContainerID:         "container",
+			TargetConfigurationDigest: "config",
+			GenesisUID:                "genesis",
+		},
+	}
 	role.Resolve = func(context.Context, stacksworker.Snapshot) (TransferInputs, error) { return *input, nil }
-	snapshot := stacksworker.Snapshot{Participant: &api.StacksNetworkParticipant{Status: api.ParticipantStatus{Admission: &api.Admission{PolicyDigest: "policy"}}}, Authorize: permit}
+	snapshot := stacksworker.Snapshot{
+		Participant: &api.StacksNetworkParticipant{
+			Status: api.ParticipantStatus{Admission: &api.Admission{PolicyDigest: "policy"}},
+		},
+		Authorize: permit,
+	}
 	return role, node, snapshot, input, &now
 }
+
 func TestTrafficCanonicalRecheckPreservesProgressAndReorgKnowledge(t *testing.T) {
 	r, node, s, _, now := transferFixture(t)
 	ctx := context.Background()
@@ -45,14 +65,19 @@ func TestTrafficCanonicalRecheckPreservesProgressAndReorgKnowledge(t *testing.T)
 	got, _ = r.Step(ctx, s)
 	first := got.Transactions.LastInclusion.ObservedAt
 	observed := got.Traffic.ObservedAt
-	if got.Traffic == nil || !got.Traffic.Available || !got.Traffic.Found || got.Traffic.SubmittedBurnHeight != 300 || got.Traffic.TargetPodUID != "pod" || got.Traffic.ProgressWindowSeconds != 130 {
+	if got.Traffic == nil || !got.Traffic.Available || !got.Traffic.Found || got.Traffic.SubmittedBurnHeight != 300 ||
+		got.Traffic.TargetPodUID != "pod" ||
+		got.Traffic.ProgressWindowSeconds != 130 {
 		t.Fatalf("missing exact first evidence: %+v", got)
 	}
 	s.Paused = true
 	*now = now.Add(2 * time.Second)
 	node.info.BurnHeight = 301
 	got, _ = r.Step(ctx, s)
-	if !got.Traffic.Available || got.Traffic.BurnHeight != 301 || !got.Traffic.ObservedAt.After(observed.Time) || got.Transactions.Included != 1 || !got.Transactions.LastInclusion.ObservedAt.Equal(&first) || node.sends != 1 {
+	if !got.Traffic.Available || got.Traffic.BurnHeight != 301 || !got.Traffic.ObservedAt.After(observed.Time) ||
+		got.Transactions.Included != 1 ||
+		!got.Transactions.LastInclusion.ObservedAt.Equal(&first) ||
+		node.sends != 1 {
 		t.Fatal("paused recheck recounted or freshened progress")
 	}
 	originalReport := got.Traffic.DeepCopy()
@@ -66,10 +91,12 @@ func TestTrafficCanonicalRecheckPreservesProgressAndReorgKnowledge(t *testing.T)
 	node.inclusion = rpc.Inclusion{}
 	*now = now.Add(2 * time.Second)
 	got, _ = r.Step(ctx, s)
-	if !got.Traffic.Available || got.Traffic.Found || got.Traffic.Success || got.Traffic.BlockID != "" || !got.Transactions.LastInclusion.ObservedAt.Equal(&first) {
+	if !got.Traffic.Available || got.Traffic.Found || got.Traffic.Success || got.Traffic.BlockID != "" ||
+		!got.Transactions.LastInclusion.ObservedAt.Equal(&first) {
 		t.Fatal("canonical removal not exposed independently of original inclusion")
 	}
 }
+
 func TestTrafficRechecksOriginalTargetWhileNewPolicyIsPending(t *testing.T) {
 	r, original, s, input, now := transferFixture(t)
 	ctx := context.Background()
@@ -85,7 +112,11 @@ func TestTrafficRechecksOriginalTargetWhileNewPolicyIsPending(t *testing.T) {
 	s.Participant.Status.Admission.PolicyDigest = "next-policy"
 	*now = now.Add(2 * time.Second)
 	got, _ := r.Step(ctx, s)
-	if next.sends != 1 || got.AppliedPolicyDigest != "next-policy" || got.Traffic.TargetPodUID != "pod" || got.Traffic.EffectiveIntervalSeconds != 60 || got.Traffic.ProgressWindowSeconds != 190 || got.Traffic.TxID != first.Traffic.TxID || got.Traffic.SubmittedBurnHeight != 300 {
+	if next.sends != 1 || got.AppliedPolicyDigest != "next-policy" || got.Traffic.TargetPodUID != "pod" ||
+		got.Traffic.EffectiveIntervalSeconds != 60 ||
+		got.Traffic.ProgressWindowSeconds != 190 ||
+		got.Traffic.TxID != first.Traffic.TxID ||
+		got.Traffic.SubmittedBurnHeight != 300 {
 		t.Fatalf("old inclusion retargeted or cadence stale: %+v", got)
 	}
 	original.inclusion = rpc.Inclusion{}
@@ -97,10 +128,12 @@ func TestTrafficRechecksOriginalTargetWhileNewPolicyIsPending(t *testing.T) {
 	next.inclusion = rpc.Inclusion{Found: true, Success: true, BlockID: strings.Repeat("c", 64)}
 	*now = now.Add(2 * time.Second)
 	got, _ = r.Step(ctx, s)
-	if got.Traffic.TargetPodUID != "new-pod" || got.Traffic.SubmittedBurnHeight != 305 || got.Transactions.Included != 2 {
+	if got.Traffic.TargetPodUID != "new-pod" || got.Traffic.SubmittedBurnHeight != 305 ||
+		got.Transactions.Included != 2 {
 		t.Fatal("new inclusion lost its original submission binding")
 	}
 }
+
 func TestTrafficPreparedIngressRollWithdrawsAuthorization(t *testing.T) {
 	r, node, s, input, _ := transferFixture(t)
 	reads := 0
@@ -117,6 +150,7 @@ func TestTrafficPreparedIngressRollWithdrawsAuthorization(t *testing.T) {
 		t.Fatal("prepared bytes sent after ingress incarnation changed")
 	}
 }
+
 func TestTrafficFallbackUsesOnlyActuallyAppliedInputs(t *testing.T) {
 	r, node, s, input, now := transferFixture(t)
 	ctx := context.Background()
@@ -160,9 +194,14 @@ func TestTrafficFallbackUsesOnlyActuallyAppliedInputs(t *testing.T) {
 		t.Fatal("invalidated cache revived offline")
 	}
 }
+
 func TestContractCacheClonesPublicCollections(t *testing.T) {
 	cache := appliedInputs[ContractInputs]{}
-	s := stacksworker.Snapshot{Participant: &api.StacksNetworkParticipant{Status: api.ParticipantStatus{Admission: &api.Admission{PolicyDigest: "one"}}}}
+	s := stacksworker.Snapshot{
+		Participant: &api.StacksNetworkParticipant{
+			Status: api.ParticipantStatus{Admission: &api.Admission{PolicyDigest: "one"}},
+		},
+	}
 	input := ContractInputs{SourceHashes: map[string]string{"contract": "hash"}, SignerPublicKeys: []string{"key"}}
 	cache.remember(s, input, cloneContractInputs)
 	input.SourceHashes["contract"] = "changed"
@@ -205,7 +244,8 @@ func TestContractSurvivingAppliedCacheContinuesNativeConvergence(t *testing.T) {
 		return ContractInputs{}, nil
 	}
 	next, _ := r.Step(ctx, s)
-	if len(node.sent) != 2 || next.Pending != 1 || next.AppliedPolicyDigest != first.AppliedPolicyDigest || remembered != 1 {
+	if len(node.sent) != 2 || next.Pending != 1 || next.AppliedPolicyDigest != first.AppliedPolicyDigest ||
+		remembered != 1 {
 		t.Fatal("cached role failed to continue declared convergence")
 	}
 	node.sources[r.sources[1].Name] = r.sources[1].Source
@@ -259,8 +299,15 @@ func TestTrafficFirstRecheckUnavailablePreservesInclusionAndRecovers(t *testing.
 					transactions = result.Transactions
 					traffic = result.Traffic
 				}
-				if err != nil || traffic != nil || transactions == nil || transactions.Included != 1 || transactions.LastInclusion == nil || node.sends != 1 {
-					t.Fatalf("inclusion lost or invalid observation exposed: traffic=%+v facts=%+v err=%v", traffic, transactions, err)
+				if err != nil || traffic != nil || transactions == nil || transactions.Included != 1 ||
+					transactions.LastInclusion == nil ||
+					node.sends != 1 {
+					t.Fatalf(
+						"inclusion lost or invalid observation exposed: traffic=%+v facts=%+v err=%v",
+						traffic,
+						transactions,
+						err,
+					)
 				}
 				inclusion := transactions.LastInclusion.DeepCopy()
 				node.viewErr = nil
@@ -268,7 +315,11 @@ func TestTrafficFirstRecheckUnavailablePreservesInclusionAndRecovers(t *testing.
 				s.Paused = true
 				*now = now.Add(2 * time.Second)
 				recovered, e := r.Step(ctx, s)
-				if e != nil || recovered.Traffic == nil || !recovered.Traffic.Available || recovered.Traffic.ObservedAt.IsZero() || recovered.Transactions.Included != 1 || !reflect.DeepEqual(inclusion, recovered.Transactions.LastInclusion) || node.sends != 1 {
+				if e != nil || recovered.Traffic == nil || !recovered.Traffic.Available ||
+					recovered.Traffic.ObservedAt.IsZero() ||
+					recovered.Transactions.Included != 1 ||
+					!reflect.DeepEqual(inclusion, recovered.Transactions.LastInclusion) ||
+					node.sends != 1 {
 					t.Fatalf("recheck failed to recover independently of receipt: %+v %v", recovered, e)
 				}
 			})

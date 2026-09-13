@@ -50,6 +50,7 @@ func Load(directory string) ([]Source, error) {
 	for i := range pins.Contracts {
 		item := &pins.Contracts[i]
 		path := filepath.Join(directory, item.Name+".clar")
+		// #nosec G304 -- Caller selects the bundle directory; embedded names and hashes pin each source.
 		file, err := os.Open(path)
 		if err != nil {
 			return nil, fmt.Errorf("read pinned contract %s: %w", path, err)

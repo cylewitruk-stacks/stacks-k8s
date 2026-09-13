@@ -38,7 +38,11 @@ type Client struct {
 // New creates a client with bounded connection establishment and no connection reuse.
 func New(credentials Credentials) *Client {
 	return &Client{credentials: credentials, client: &http.Client{
-		Transport:     &http.Transport{Proxy: nil, DialContext: (&net.Dialer{Timeout: 3 * time.Second}).DialContext, DisableKeepAlives: true},
+		Transport: &http.Transport{
+			Proxy:             nil,
+			DialContext:       (&net.Dialer{Timeout: 3 * time.Second}).DialContext,
+			DisableKeepAlives: true,
+		},
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}}
 }
@@ -51,19 +55,26 @@ func (r *Client) Check(ctx context.Context, endpoint, address string) error {
 	var chain struct {
 		Chain string `json:"chain"`
 	}
-	if err := r.Call(ctx, endpoint, "preflight-chain", "getblockchaininfo", []any{}, &chain); err != nil {
+	if err := r.Call(ctx, endpoint, "preflight-chain", MethodGetBlockchainInfo, []any{}, &chain); err != nil {
 		return err
 	}
 	if chain.Chain == "" {
 		return fmt.Errorf("RPC preflight omitted chain identity")
 	}
-	if chain.Chain != "regtest" {
+	if chain.Chain != ChainRegtest {
 		return fmt.Errorf("%w: target is not regtest", ErrInvalidPreflight)
 	}
 	var validation struct {
 		Valid *bool `json:"isvalid"`
 	}
-	if err := r.Call(ctx, endpoint, "preflight-address", "validateaddress", []any{address}, &validation); err != nil {
+	if err := r.Call(
+		ctx,
+		endpoint,
+		"preflight-address",
+		MethodValidateAddress,
+		[]any{address},
+		&validation,
+	); err != nil {
 		return err
 	}
 	if validation.Valid == nil {
@@ -78,14 +89,18 @@ func (r *Client) Check(ctx context.Context, endpoint, address string) error {
 // Generate requests exactly one block and requires an attributable success receipt.
 func (r *Client) Generate(ctx context.Context, endpoint, address, id string) (string, error) {
 	var hashes []string
-	if err := r.Call(ctx, endpoint, id, "generatetoaddress", []any{1, address, 1000000}, &hashes); err != nil {
+	if err := r.Call(ctx, endpoint, id, MethodGenerateToAddress, []any{
+		1,
+		address,
+		1000000,
+	}, &hashes); err != nil {
 		return "", err
 	}
 	if len(hashes) != 1 || len(hashes[0]) != 64 {
 		return "", fmt.Errorf("incomplete generation receipt")
 	}
 	for _, c := range hashes[0] {
-		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
 			return "", fmt.Errorf("invalid block hash")
 		}
 	}
@@ -111,7 +126,7 @@ func (r *Client) Call(ctx context.Context, endpoint, id, method string, params [
 	if err != nil {
 		return fmt.Errorf("RPC transport did not yield a receipt")
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }() // Read/cleanup completion cannot change the operation's result.
 	if response.StatusCode != http.StatusOK {
 		return fmt.Errorf("RPC HTTP status %d", response.StatusCode)
 	}
@@ -124,7 +139,11 @@ func (r *Client) Call(ctx context.Context, endpoint, id, method string, params [
 	if err != nil || len(data) > 65536 {
 		return fmt.Errorf("RPC receipt unreadable or oversized")
 	}
-	if err := json.Unmarshal(data, &envelope); err != nil || envelope.ID != id || (len(envelope.Error) != 0 && string(envelope.Error) != "null") {
+	if err := json.Unmarshal(
+		data,
+		&envelope,
+	); err != nil || envelope.ID != id ||
+		(len(envelope.Error) != 0 && string(envelope.Error) != "null") {
 		return fmt.Errorf("RPC did not return a matching success receipt")
 	}
 	if err := json.Unmarshal(envelope.Result, result); err != nil {

@@ -10,7 +10,7 @@ import (
 func TestMountedKeyIsBoundedAndErrorsDoNotDiscloseInput(t *testing.T) {
 	for _, value := range []string{"private-secret-invalid", strings.Repeat("f", 257), strings.Repeat("0", 64)} {
 		path := filepath.Join(t.TempDir(), "key")
-		if err := os.WriteFile(path, []byte(value), 0600); err != nil {
+		if err := os.WriteFile(path, []byte(value), 0o600); err != nil {
 			t.Fatal(err)
 		}
 		key, err := mountedKey(path)
@@ -20,7 +20,7 @@ func TestMountedKeyIsBoundedAndErrorsDoNotDiscloseInput(t *testing.T) {
 	}
 	path := filepath.Join(t.TempDir(), "key")
 	value := strings.Repeat("0", 63) + "1"
-	if err := os.WriteFile(path, []byte(value+"\n"), 0600); err != nil {
+	if err := os.WriteFile(path, []byte(value+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	key, err := mountedKey(path)

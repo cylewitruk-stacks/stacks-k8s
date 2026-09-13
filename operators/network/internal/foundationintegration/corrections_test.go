@@ -24,16 +24,38 @@ import (
 )
 
 // verifyLateSignerAttachments exercises permanent constraints after an actual genesis capture.
-func verifyLateSignerAttachments(t *testing.T, ctx context.Context, c client.Client, r *foundation.Reconciler, request ctrl.Request, root *api.StacksNetwork) {
+func verifyLateSignerAttachments(
+	t *testing.T,
+	ctx context.Context,
+	c client.Client,
+	r *foundation.Reconciler,
+	request ctrl.Request,
+	root *api.StacksNetwork,
+) {
 	t.Helper()
 	original := *root.Spec.DeepCopy()
 	admitted := participant(t, ctx, c, root, "signer-01")
 	extra := func(name, node string) api.Participant {
-		return api.Participant{Name: name, Kind: "StacksSigner", Definition: api.Definition{Ref: &common.NameRef{Name: "signer-01"}}, Overrides: &api.Configuration{StacksSigner: &stacks.StacksSignerSpec{NodeRef: &common.NameRef{Name: node}}}}
+		return api.Participant{
+			Name:       name,
+			Kind:       "StacksSigner",
+			Definition: api.Definition{Ref: &common.NameRef{Name: "signer-01"}},
+			Overrides: &api.Configuration{
+				StacksSigner: &stacks.StacksSignerSpec{NodeRef: &common.NameRef{Name: node}},
+			},
+		}
 	}
-	root.Spec.Participants = append(root.Spec.Participants,
-		extra("late-z", "late-node"), extra("aaa-conflict", "signer-node-01"), extra("late-a", "late-node"),
-		api.Participant{Name: "late-node", Kind: "StacksNode", Definition: api.Definition{Ref: &common.NameRef{Name: "signer-node-01"}}})
+	root.Spec.Participants = append(
+		root.Spec.Participants,
+		extra("late-z", "late-node"),
+		extra("aaa-conflict", "signer-node-01"),
+		extra("late-a", "late-node"),
+		api.Participant{
+			Name:       "late-node",
+			Kind:       "StacksNode",
+			Definition: api.Definition{Ref: &common.NameRef{Name: "signer-node-01"}},
+		},
+	)
 	updateObject(t, ctx, c, root)
 	driveRoot(t, ctx, c, r, request, root)
 	for _, name := range []string{"aaa-conflict", "late-z"} {
@@ -51,7 +73,8 @@ func verifyLateSignerAttachments(t *testing.T, ctx context.Context, c client.Cli
 	winner := participant(t, ctx, c, root, "late-a")
 	requireReason(t, winner, "Admitted")
 	// Both legal signers intentionally share an account; this is not key exclusivity.
-	if winner.Status.Admission.Configuration.StacksSigner.AccountRef.Name != admitted.Status.Admission.Configuration.StacksSigner.AccountRef.Name {
+	if winner.Status.Admission.Configuration.StacksSigner.AccountRef.Name !=
+		admitted.Status.Admission.Configuration.StacksSigner.AccountRef.Name {
 		t.Fatal("fixture lost shared account")
 	}
 	// A lexically earlier addition cannot displace the newly established admission either.
@@ -74,15 +97,30 @@ type missingAccountReader struct {
 	key client.ObjectKey
 }
 
-func (r *missingAccountReader) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+func (r *missingAccountReader) Get(
+	ctx context.Context,
+	key client.ObjectKey,
+	obj client.Object,
+	opts ...client.GetOption,
+) error {
 	if _, ok := obj.(*stacks.StacksAccount); ok && key == r.key {
-		return apierrors.NewNotFound(schema.GroupResource{Group: "stacks.stacks.org", Resource: "stacksaccounts"}, key.Name)
+		return apierrors.NewNotFound(
+			schema.GroupResource{Group: "stacks.stacks.org", Resource: "stacksaccounts"},
+			key.Name,
+		)
 	}
 	return r.Reader.Get(ctx, key, obj, opts...)
 }
 
 // verifyRetainedDependencyFailure keeps the old policy as evidence while its own input is unavailable.
-func verifyRetainedDependencyFailure(t *testing.T, ctx context.Context, c client.Client, r *foundation.Reconciler, request ctrl.Request, root *api.StacksNetwork) {
+func verifyRetainedDependencyFailure(
+	t *testing.T,
+	ctx context.Context,
+	c client.Client,
+	r *foundation.Reconciler,
+	request ctrl.Request,
+	root *api.StacksNetwork,
+) {
 	t.Helper()
 	old := participant(t, ctx, c, root, "traffic")
 	var definition stacks.StacksTransactionProduction
@@ -93,12 +131,17 @@ func verifyRetainedDependencyFailure(t *testing.T, ctx context.Context, c client
 	definition.Spec.Interval = ptr.To(common.Duration("20s"))
 	updateObject(t, ctx, c, &definition)
 	reader := r.Reader
-	r.Reader = &missingAccountReader{Reader: reader, key: client.ObjectKey{Namespace: root.Namespace, Name: spec.Recipient.AccountRef.Name}}
+	r.Reader = &missingAccountReader{
+		Reader: reader,
+		key:    client.ObjectKey{Namespace: root.Namespace, Name: spec.Recipient.AccountRef.Name},
+	}
 	defer func() { r.Reader = reader }()
 	driveRoot(t, ctx, c, r, request, root)
 	p := participant(t, ctx, c, root, "traffic")
 	requireReason(t, p, "DependencyUnavailable")
-	if !meta.IsStatusConditionFalse(p.Status.Conditions, "Resolved") || !reflect.DeepEqual(p.Status.Admission, old.Status.Admission) || root.Status.Phase == "Failed" {
+	if !meta.IsStatusConditionFalse(p.Status.Conditions, "Resolved") ||
+		!reflect.DeepEqual(p.Status.Admission, old.Status.Admission) ||
+		root.Status.Phase == "Failed" {
 		t.Fatal("unavailable retained admission erased or authorized, or root failed")
 	}
 	requireReason(t, participant(t, ctx, c, root, "signer-01"), "Admitted")
@@ -124,7 +167,19 @@ func verifyResolutionConditions(t *testing.T, ctx context.Context, c client.Clie
 	if err := c.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: ns}}); err != nil {
 		t.Fatal(err)
 	}
-	root := &api.StacksNetwork{ObjectMeta: metav1.ObjectMeta{Name: "network", Namespace: ns}, Spec: api.StacksNetworkSpec{Operation: "Paused", Participants: []api.Participant{{Name: "missing", Kind: "BitcoinNode", Definition: api.Definition{Ref: &common.NameRef{Name: "absent"}}}}}}
+	root := &api.StacksNetwork{
+		ObjectMeta: metav1.ObjectMeta{Name: "network", Namespace: ns},
+		Spec: api.StacksNetworkSpec{
+			Operation: "Paused",
+			Participants: []api.Participant{
+				{
+					Name:       "missing",
+					Kind:       "BitcoinNode",
+					Definition: api.Definition{Ref: &common.NameRef{Name: "absent"}},
+				},
+			},
+		},
+	}
 	if err := c.Create(ctx, root); err != nil {
 		t.Fatal(err)
 	}
@@ -162,11 +217,18 @@ func verifyResolutionConditions(t *testing.T, ctx context.Context, c client.Clie
 		t.Fatalf("withdrawal falsely resolved: %+v", condition)
 	}
 	root.Spec.Operation = "Stopped"
-	root.Spec.Participants = []api.Participant{{Name: "never-resolved", Kind: "BitcoinNode", Definition: api.Definition{Inline: &api.Configuration{BitcoinNode: &bitcoin.BitcoinNodeSpec{}}}}}
+	root.Spec.Participants = []api.Participant{
+		{
+			Name:       "never-resolved",
+			Kind:       "BitcoinNode",
+			Definition: api.Definition{Inline: &api.Configuration{BitcoinNode: &bitcoin.BitcoinNodeSpec{}}},
+		},
+	}
 	updateObject(t, ctx, c, root)
 	driveRoot(t, ctx, c, r, request, root)
 	condition = meta.FindStatusCondition(root.Status.Conditions, "Resolved")
-	if root.Status.Phase != "Stopped" || condition.Status != metav1.ConditionUnknown || condition.ObservedGeneration != root.Generation {
+	if root.Status.Phase != "Stopped" || condition.Status != metav1.ConditionUnknown ||
+		condition.ObservedGeneration != root.Generation {
 		t.Fatalf("stopped intent falsely resolved: %+v", root.Status)
 	}
 	// The paused, completely resolved cohort is asserted by the main freeze test.

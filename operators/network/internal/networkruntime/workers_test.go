@@ -26,8 +26,37 @@ func TestRootProjectsShutdownBeforeDeletionAndRetainsMissingWorkerFailure(t *tes
 			p.Spec.Kind = "StacksTransactionProduction"
 			root.Spec.Participants = []api.Participant{{Name: p.Spec.ParticipantName, Kind: p.Spec.Kind}}
 			digest := "sha256:" + strings.Repeat("a", 64)
-			pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: stacksworker.Name(p), Namespace: p.Namespace, UID: "worker", Labels: map[string]string{"network.stacks.org/network-uid": string(root.UID), "network.stacks.org/participant-uid": string(p.UID)}, Annotations: map[string]string{"network.stacks.org/worker-profile": digest}, OwnerReferences: []metav1.OwnerReference{{APIVersion: api.GroupVersion.String(), Kind: "StacksNetworkParticipant", Name: p.Name, UID: p.UID, Controller: ptr.To(true)}}}}
-			root.Status.Identities = []api.InstanceIdentity{{Name: p.Spec.ParticipantName, UID: p.UID, Worker: &api.WorkerSession{Pod: api.WorkerPodBinding{Kind: "Pod", Name: pod.Name, UID: pod.UID}, ProfileDigest: digest}}}
+			pod := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      stacksworker.Name(p),
+					Namespace: p.Namespace,
+					UID:       "worker",
+					Labels: map[string]string{
+						"network.stacks.org/network-uid":     string(root.UID),
+						"network.stacks.org/participant-uid": string(p.UID),
+					},
+					Annotations: map[string]string{"network.stacks.org/worker-profile": digest},
+					OwnerReferences: []metav1.OwnerReference{
+						{
+							APIVersion: api.GroupVersion.String(),
+							Kind:       "StacksNetworkParticipant",
+							Name:       p.Name,
+							UID:        p.UID,
+							Controller: ptr.To(true),
+						},
+					},
+				},
+			}
+			root.Status.Identities = []api.InstanceIdentity{
+				{
+					Name: p.Spec.ParticipantName,
+					UID:  p.UID,
+					Worker: &api.WorkerSession{
+						Pod:           api.WorkerPodBinding{Kind: "Pod", Name: pod.Name, UID: pod.UID},
+						ProfileDigest: digest,
+					},
+				},
+			}
 			objects := []client.Object{p, pod}
 			switch mode {
 			case "stop":
@@ -49,7 +78,8 @@ func TestRootProjectsShutdownBeforeDeletionAndRetainsMissingWorkerFailure(t *tes
 			}
 			session := root.Status.Identities[0].Worker
 			if mode == "missing" {
-				if root.Status.Phase != "Failed" || !meta.IsStatusConditionTrue(root.Status.Conditions, "Failed") || session.Pod.UID != "worker" {
+				if root.Status.Phase != "Failed" || !meta.IsStatusConditionTrue(root.Status.Conditions, "Failed") ||
+					session.Pod.UID != "worker" {
 					t.Fatal("worker loss lost identity or failed to latch")
 				}
 				return
@@ -58,7 +88,7 @@ func TestRootProjectsShutdownBeforeDeletionAndRetainsMissingWorkerFailure(t *tes
 			if mode == "delete" {
 				expected = "NetworkDeleting"
 			}
-			if session.Shutdown == nil || session.Shutdown.Reason != expected || session.Disposal != nil {
+			if session.Shutdown == nil || string(session.Shutdown.Reason) != expected || session.Disposal != nil {
 				t.Fatalf("incorrect disposal ordering: %+v", session)
 			}
 			if root.Status.Phase == "Stopped" {
@@ -69,7 +99,16 @@ func TestRootProjectsShutdownBeforeDeletionAndRetainsMissingWorkerFailure(t *tes
 }
 
 func TestNetworkPauseRequiresCurrentWorkerAcknowledgementWithoutClaimingSettlement(t *testing.T) {
-	for _, mode := range []string{"acknowledged", "pending", "missing", "stale", "old-root", "old-control", "other-pod", "active"} {
+	for _, mode := range []string{
+		"acknowledged",
+		"pending",
+		"missing",
+		"stale",
+		"old-root",
+		"old-control",
+		"other-pod",
+		"active",
+	} {
 		t.Run(mode, func(t *testing.T) {
 			now := time.Now()
 			root, _, participants := cohortFixture(now)

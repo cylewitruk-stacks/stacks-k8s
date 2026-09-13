@@ -26,11 +26,16 @@ func clonePoX5Inputs(input PoX5Inputs) PoX5Inputs {
 
 // cachedPolicyMatches binds a typed input to the runtime's actually applied snapshot.
 func cachedPolicyMatches(snapshot stacksworker.Snapshot, digest, applied string) bool {
-	return snapshot.CachedApplied && digest != "" && digest == applied && snapshot.Participant != nil && snapshot.Participant.Status.Admission != nil && snapshot.Participant.Status.Admission.PolicyDigest == digest
+	return snapshot.CachedApplied && digest != "" && digest == applied && snapshot.Participant != nil &&
+		snapshot.Participant.Status.Admission != nil &&
+		snapshot.Participant.Status.Admission.PolicyDigest == digest
 }
 
 // inputs uses a retained complete policy only under the runtime's explicit surviving-session authority.
-func (r *PoX4Role) inputs(ctx context.Context, snapshot stacksworker.Snapshot) (PoX4Inputs, stacksworker.Snapshot, error) {
+func (r *PoX4Role) inputs(
+	ctx context.Context,
+	snapshot stacksworker.Snapshot,
+) (PoX4Inputs, stacksworker.Snapshot, error) {
 	if snapshot.CachedApplied {
 		if r.cached != nil && cachedPolicyMatches(snapshot, r.cachedDigest, r.applied) {
 			return clonePoX4Inputs(*r.cached), snapshot, nil
@@ -52,7 +57,10 @@ func (r *PoX4Role) inputs(ctx context.Context, snapshot stacksworker.Snapshot) (
 }
 
 // inputs retains administrator and holder bindings together when the Kubernetes API is transiently unavailable.
-func (r *StackerRole) inputs(ctx context.Context, snapshot stacksworker.Snapshot) (PoX5Inputs, stacksworker.Snapshot, error) {
+func (r *StackerRole) inputs(
+	ctx context.Context,
+	snapshot stacksworker.Snapshot,
+) (PoX5Inputs, stacksworker.Snapshot, error) {
 	if snapshot.CachedApplied {
 		if r.cached != nil && cachedPolicyMatches(snapshot, r.cachedDigest, r.applied) {
 			return clonePoX5Inputs(*r.cached), snapshot, nil
@@ -88,7 +96,15 @@ func poxBlocked(reason string, pending int32) bool {
 		return false
 	}
 	switch reason {
-	case "Paused", "StateObserved", "Included", "Idle", "PoX4EnrollmentObserved", "PoX5EnrollmentObserved", "PoX4InclusionObservedAtTransition", "PoX5PostconditionObserved", "AwaitingMaintenanceWindow":
+	case reasonPaused,
+		reasonStateObserved,
+		reasonIncluded,
+		reasonIdle,
+		reasonPoX4EnrollmentObserved,
+		reasonPoX5EnrollmentObserved,
+		reasonPoX4InclusionObservedAtTransition,
+		reasonPoX5PostconditionObserved,
+		reasonAwaitingMaintenanceWindow:
 		return false
 	}
 	return true

@@ -52,7 +52,17 @@ func TestBitcoinSourceWithdrawalBlocksSendsAndKeepsNativeObservations(t *testing
 				source := pinBitcoinSource(t, f, participant)
 				switch mode {
 				case "withdrawn":
-					meta.SetStatusCondition(&participant.Status.Conditions, metav1.Condition{Type: "AdmissionReady", Status: metav1.ConditionFalse, ObservedGeneration: participant.Generation, Reason: "IdentityUnavailable", Message: "Retained dependency lost", LastTransitionTime: metav1.NewTime(f.now)})
+					meta.SetStatusCondition(
+						&participant.Status.Conditions,
+						metav1.Condition{
+							Type:               "AdmissionReady",
+							Status:             metav1.ConditionFalse,
+							ObservedGeneration: participant.Generation,
+							Reason:             "IdentityUnavailable",
+							Message:            "Retained dependency lost",
+							LastTransitionTime: metav1.NewTime(f.now),
+						},
+					)
 					if err := f.c.Status().Update(t.Context(), participant); err != nil {
 						t.Fatal(err)
 					}
@@ -87,7 +97,8 @@ func TestBitcoinSourceWithdrawalBlocksSendsAndKeepsNativeObservations(t *testing
 				if mode == "newer-rejected" {
 					want = 1
 				}
-				if f.rpc.count() != want || record.Status.Armed != nil || record.Status.Observation == nil || record.Status.Observation.Height != 200 {
+				if f.rpc.count() != want || record.Status.Armed != nil || record.Status.Observation == nil ||
+					record.Status.Observation.Height != 200 {
 					t.Fatalf("source mode=%s sends=%d record=%+v", mode, f.rpc.count(), record.Status)
 				}
 			})
@@ -111,7 +122,11 @@ func TestBitcoinSourceLossKeepsBaselineReceiptAccounting(t *testing.T) {
 	}
 	received := metav1.NewTime(f.now)
 	record.Status.CompletedOffer = offer.Number
-	record.Status.LastReceipt = &bitcoin.BitcoinRPCReceipt{Request: bitcoin.BitcoinArmedRPC{Method: "Generate", Offer: offer, Target: record.Status.Observation.Target}, BlockHash: strings.Repeat("b", 64), ReceivedAt: received}
+	record.Status.LastReceipt = &bitcoin.BitcoinRPCReceipt{
+		Request:    bitcoin.BitcoinArmedRPC{Method: "Generate", Offer: offer, Target: record.Status.Observation.Target},
+		BlockHash:  strings.Repeat("b", 64),
+		ReceivedAt: received,
+	}
 	if err := f.c.Status().Update(t.Context(), record); err != nil {
 		t.Fatal(err)
 	}
@@ -121,7 +136,9 @@ func TestBitcoinSourceLossKeepsBaselineReceiptAccounting(t *testing.T) {
 	f.reconcile(t, scheduler)
 	f.reconcile(t, scheduler)
 	state := f.readInitial(t).Status
-	if state.Baseline.Scheduling.Acknowledged != 1 || !state.Baseline.Scheduling.LastAcknowledgedAt.Equal(&received) || !generationAccounted(f.readInitial(t), record) || state.Offer != nil {
+	if state.Baseline.Scheduling.Acknowledged != 1 || !state.Baseline.Scheduling.LastAcknowledgedAt.Equal(&received) ||
+		!generationAccounted(f.readInitial(t), record) ||
+		state.Offer != nil {
 		t.Fatal("source withdrawal lost accounting or kept send offer", state)
 	}
 }
@@ -153,7 +170,8 @@ func TestBitcoinSourceLossKeepsFiniteCompensation(t *testing.T) {
 		f.worker.workers.Wait()
 	}
 	state := f.readRecord(t).Status.Action
-	if !state.CleanupAcknowledged || state.BlocksGenerated != 0 || fmt.Sprint(rpc.sequence) != "[invalidateblock reconsiderblock]" {
+	if !state.CleanupAcknowledged || state.BlocksGenerated != 0 ||
+		fmt.Sprint(rpc.sequence) != "[invalidateblock reconsiderblock]" {
 		t.Fatalf("source loss prevented bounded compensation: %+v sequence=%v", state, rpc.sequence)
 	}
 }
@@ -192,7 +210,9 @@ func TestBitcoinSourceLossKeepsBootstrapReceiptAccounting(t *testing.T) {
 	}
 	f.reconcile(t, f.schedulerFor())
 	state := f.readInitial(t).Status
-	if state.LastAccountedOffer != 1 || state.Offer != nil || state.Reason != "ProductionSourceUnavailable" || len(state.Funded) != 1 || state.Funded[0].Outputs != 1 {
+	if state.LastAccountedOffer != 1 || state.Offer != nil || state.Reason != "ProductionSourceUnavailable" ||
+		len(state.Funded) != 1 ||
+		state.Funded[0].Outputs != 1 {
 		t.Fatal("bootstrap receipt was lost or next offer survived source withdrawal", state)
 	}
 }

@@ -20,7 +20,12 @@ import (
 func (f *faultFixture) producerPod() *corev1.Pod {
 	f.t.Helper()
 	pods := &corev1.PodList{}
-	if err := f.admin.List(f.ctx, pods, client.InNamespace(f.namespace), client.MatchingLabels{"app.kubernetes.io/name": "bitcoin-production"}); err != nil {
+	if err := f.admin.List(
+		f.ctx,
+		pods,
+		client.InNamespace(f.namespace),
+		client.MatchingLabels{"app.kubernetes.io/name": "bitcoin-production"},
+	); err != nil {
 		f.t.Fatal(err)
 	}
 	for i := range pods.Items {
@@ -35,7 +40,13 @@ func (f *faultFixture) producerPod() *corev1.Pod {
 // controlFault deliberately requires administrator authority outside the public actor-only profile.
 func (f *faultFixture) controlFault(name, duration string) *unstructured.Unstructured {
 	fault := f.partition(name, "unused", "bitcoin", duration)
-	_ = unstructured.SetNestedStringMap(fault.Object, map[string]string{"app.kubernetes.io/name": "bitcoin-production"}, "spec", "selector", "labelSelectors")
+	_ = unstructured.SetNestedStringMap(
+		fault.Object,
+		map[string]string{"app.kubernetes.io/name": "bitcoin-production"},
+		"spec",
+		"selector",
+		"labelSelectors",
+	)
 	return fault
 }
 
@@ -55,7 +66,10 @@ func TestLiveProducerControlLoss(t *testing.T) {
 		s, _, _ := unstructured.NestedString(o.Object, "status", key)
 		return s
 	}
-	if height, _ := f.chain("bitcoin"); height != 0 || f.receipts("bitcoin") != 0 || state(ledger(), "dispatchID") != "" {
+	if height, _ := f.chain(
+		"bitcoin",
+	); height != 0 || f.receipts("bitcoin") != 0 ||
+		state(ledger(), "dispatchID") != "" {
 		t.Fatal("control test requires a fresh unused receipt-delay fixture")
 	}
 	f.wait("ready producer", 30*time.Second, func() bool { return f.producerPod() != nil })
@@ -124,11 +138,16 @@ func TestLiveProducerControlLoss(t *testing.T) {
 	if err := logCommand.Wait(); err != nil {
 		t.Fatalf("drain log stream: %v", err)
 	}
-	if !strings.Contains(drainLog.String(), "Bitcoin receipt drain exhausted; unresolved ledgers remain closed") || !strings.Contains(drainLog.String(), `"pending":1`) {
+	if !strings.Contains(drainLog.String(), "Bitcoin receipt drain exhausted; unresolved ledgers remain closed") ||
+		!strings.Contains(drainLog.String(), `"pending":1`) {
 		t.Fatal("old process did not report bounded drain exhaustion with an outstanding collector")
 	}
 	// A Running replacement may still be waiting for the prior leader lease to expire.
-	f.wait("unresolved replacement stays closed", 60*time.Second, func() bool { return state(ledger(), "phase") == "Blocked" })
+	f.wait(
+		"unresolved replacement stays closed",
+		60*time.Second,
+		func() bool { return state(ledger(), "phase") == "Blocked" },
+	)
 	if !f.condition(fault.GetName(), "AllInjected") || f.condition(fault.GetName(), "AllRecovered") {
 		t.Fatal("control loss expired before restart evidence")
 	}
@@ -137,7 +156,9 @@ func TestLiveProducerControlLoss(t *testing.T) {
 	deadline := time.Now().Add(12 * time.Second)
 	for time.Now().Before(deadline) {
 		current := ledger()
-		if state(current, "dispatchID") != dispatch || state(current, "dispatchState") != "Armed" || state(current, "phase") != "Blocked" || f.receipts("bitcoin") != 0 {
+		if state(current, "dispatchID") != dispatch || state(current, "dispatchState") != "Armed" ||
+			state(current, "phase") != "Blocked" ||
+			f.receipts("bitcoin") != 0 {
 			t.Fatal("ambiguous dispatch was reopened or incorrectly accounted")
 		}
 		if height, _ := f.chain("bitcoin"); height != 1 {
@@ -146,5 +167,10 @@ func TestLiveProducerControlLoss(t *testing.T) {
 		time.Sleep(time.Second)
 	}
 	f.pod("bitcoin")
-	t.Logf("producer UID=%s -> %s; dispatchID=%s remains Armed/Blocked; Core blocks=1, receipts=0 after restoration", old.UID, replacement.UID, dispatch)
+	t.Logf(
+		"producer UID=%s -> %s; dispatchID=%s remains Armed/Blocked; Core blocks=1, receipts=0 after restoration",
+		old.UID,
+		replacement.UID,
+		dispatch,
+	)
 }

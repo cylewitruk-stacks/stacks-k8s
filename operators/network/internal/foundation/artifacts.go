@@ -40,11 +40,18 @@ func (r *ArtifactReconciler) Reconcile(ctx context.Context, request ctrl.Request
 		return ctrl.Result{}, nil
 	}
 	owner := metav1.GetControllerOf(object)
-	if owner == nil || owner.APIVersion != api.GroupVersion.String() || owner.Kind != "StacksNetwork" || owner.Name != "network" || owner.UID == "" {
+	if owner == nil || owner.APIVersion != api.GroupVersion.String() || owner.Kind != api.KindStacksNetwork ||
+		owner.Name != "network" ||
+		owner.UID == "" {
 		return ctrl.Result{}, fmt.Errorf("shared artifact network ownership unavailable")
 	}
 	var participants api.StacksNetworkParticipantList
-	if err := r.Reader.List(ctx, &participants, client.InNamespace(object.GetNamespace()), client.Limit(1001)); err != nil {
+	if err := r.Reader.List(
+		ctx,
+		&participants,
+		client.InNamespace(object.GetNamespace()),
+		client.Limit(1001),
+	); err != nil {
 		return ctrl.Result{}, err
 	}
 	if participants.Continue != "" || len(participants.Items) > 1000 {
@@ -59,7 +66,11 @@ func (r *ArtifactReconciler) Reconcile(ctx context.Context, request ctrl.Request
 	}
 	base := object.DeepCopyObject().(client.Object)
 	controllerutil.RemoveFinalizer(object, ArtifactFinalizer)
-	return ctrl.Result{}, r.Client.Patch(ctx, object, client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{}))
+	return ctrl.Result{}, r.Client.Patch(
+		ctx,
+		object,
+		client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{}),
+	)
 }
 
 // SetupWithManager watches deletion requests; retained artifacts poll only while disposal is pending.
@@ -67,6 +78,8 @@ func (r *ArtifactReconciler) SetupWithManager(manager ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(manager).Named(r.Name).For(r.Object).
 		WithEventFilter(predicate.Funcs{UpdateFunc: func(e event.UpdateEvent) bool {
 			a, b := e.ObjectOld, e.ObjectNew
-			return a.GetUID() != b.GetUID() || !equal(a.GetDeletionTimestamp(), b.GetDeletionTimestamp()) || !equal(a.GetOwnerReferences(), b.GetOwnerReferences()) || !equal(a.GetFinalizers(), b.GetFinalizers())
+			return a.GetUID() != b.GetUID() || !equal(a.GetDeletionTimestamp(), b.GetDeletionTimestamp()) ||
+				!equal(a.GetOwnerReferences(), b.GetOwnerReferences()) ||
+				!equal(a.GetFinalizers(), b.GetFinalizers())
 		}}).Complete(r)
 }

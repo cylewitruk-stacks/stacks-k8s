@@ -10,9 +10,7 @@ import (
 	networkapi "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha2"
 	observationv1alpha1 "github.com/cylewitruk-stacks/stacks-k8s/operators/observability/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -59,23 +57,6 @@ func (r Reader) Observe(ctx context.Context, namespace, name, expectedDigest str
 		return Snapshot{}, fmt.Errorf("topology reader requires an uncached API reader")
 	}
 	return r.observeParticipants(ctx, namespace, name, expectedDigest)
-}
-func containerImage(containers []corev1.Container, name string) string {
-	for _, container := range containers {
-		if container.Name == name {
-			return container.Image
-		}
-	}
-	return ""
-}
-
-func controlledBy(object client.Object, kind string, uid types.UID) bool {
-	owner := controllerOwner(object)
-	return owner != nil && owner.Kind == kind && owner.UID == uid
-}
-
-func controllerOwner(object client.Object) *metav1.OwnerReference {
-	return metav1.GetControllerOf(object)
 }
 
 func podReady(pod *corev1.Pod) bool {

@@ -9,7 +9,11 @@ import (
 )
 
 func TestNakamotoTipRequiresNativeHeaderAndMatchingIdentity(t *testing.T) {
-	view := ChainView{Info: Info{StacksHeight: 3}, ConsensusHash: strings.Repeat("a", 40), IndexBlockID: strings.Repeat("b", 64)}
+	view := ChainView{
+		Info:          Info{StacksHeight: 3},
+		ConsensusHash: strings.Repeat("a", 40),
+		IndexBlockID:  strings.Repeat("b", 64),
+	}
 	valid := fmt.Sprintf(`{"anchored_header":{"Nakamoto":{"chain_length":3,"consensus_hash":%q}}}`, view.ConsensusHash)
 	for _, tc := range []struct {
 		name, body    string
@@ -22,7 +26,13 @@ func TestNakamotoTipRequiresNativeHeaderAndMatchingIdentity(t *testing.T) {
 		{"null", `{"anchored_header":{"Nakamoto":null}}`, 200, false, true},
 		{"height absent", strings.Replace(valid, `"chain_length":3,`, "", 1), 200, false, true},
 		{"height differs", strings.Replace(valid, `"chain_length":3`, `"chain_length":4`, 1), 200, false, true},
-		{"consensus differs", strings.ReplaceAll(valid, view.ConsensusHash, strings.Repeat("c", 40)), 200, false, true},
+		{
+			"consensus differs",
+			strings.ReplaceAll(valid, view.ConsensusHash, strings.Repeat("c", 40)),
+			200,
+			false,
+			true,
+		},
 		{"ambiguous family", `{"anchored_header":{"Epoch2":{},"Nakamoto":{}}}`, 200, false, true},
 		{"unknown family", `{"anchored_header":{"Future":{}}}`, 200, false, true},
 		{"missing endpoint", valid, 404, false, true},
@@ -36,7 +46,9 @@ func TestNakamotoTipRequiresNativeHeaderAndMatchingIdentity(t *testing.T) {
 					t.Errorf("unexpected request: %s %s", r.Method, r.URL)
 				}
 				w.WriteHeader(tc.code)
-				fmt.Fprint(w, tc.body)
+				if _, err := fmt.Fprint(w, tc.body); err != nil {
+					t.Error(err)
+				}
 			})
 			got, err := c.NakamotoTip(context.Background(), view)
 			if got != tc.want || (err != nil) != tc.wantErr || calls != 1 {

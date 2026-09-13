@@ -16,7 +16,11 @@ import (
 // A separate short context permits diagnostics even when the main test deadline expires.
 func (f *faultFixture) logCycleContext(stage string) {
 	f.t.Helper()
-	f.t.Logf("cycle context stage=%q capturedAt=%s (sequential, not an atomic snapshot)", stage, time.Now().UTC().Format(time.RFC3339Nano))
+	f.t.Logf(
+		"cycle context stage=%q capturedAt=%s (sequential, not an atomic snapshot)",
+		stage,
+		time.Now().UTC().Format(time.RFC3339Nano),
+	)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	// Use the same observer-only RPC as other Core probes, without a fatal Pod lookup.
@@ -29,7 +33,11 @@ func (f *faultFixture) logCycleContext(stage string) {
 
 	for _, actor := range []string{"miner", "signer-node"} {
 		pod := &corev1.Pod{}
-		if err := f.admin.Get(ctx, client.ObjectKey{Namespace: f.namespace, Name: f.network + "-" + actor + "-0"}, pod); err != nil {
+		if err := f.admin.Get(
+			ctx,
+			client.ObjectKey{Namespace: f.namespace, Name: f.network + "-" + actor + "-0"},
+			pod,
+		); err != nil {
 			f.t.Logf("cycle context actor=%s Pod identity unavailable", actor)
 			continue
 		}
@@ -44,7 +52,13 @@ func (f *faultFixture) logCycleContext(stage string) {
 			continue
 		}
 		encoded, _ := json.Marshal(pox)
-		f.t.Logf("cycle context actor=%s PodUID=%s phaseFromReportedBounds=%s pox=%s", actor, pod.UID, pox.phase(), encoded)
+		f.t.Logf(
+			"cycle context actor=%s PodUID=%s phaseFromReportedBounds=%s pox=%s",
+			actor,
+			pod.UID,
+			pox.phase(),
+			encoded,
+		)
 	}
 }
 

@@ -15,7 +15,17 @@ var GroupVersion = schema.GroupVersion{Group: "network.stacks.org", Version: "v1
 
 // AddToScheme registers root, participant and genesis resource kinds.
 func AddToScheme(s *runtime.Scheme) error {
-	s.AddKnownTypes(GroupVersion, &StacksNetwork{}, &StacksNetworkList{}, &StacksNetworkParticipant{}, &StacksNetworkParticipantList{}, &StacksGenesis{}, &StacksGenesisList{}, &StacksEpochSchedule{}, &StacksEpochScheduleList{})
+	s.AddKnownTypes(
+		GroupVersion,
+		&StacksNetwork{},
+		&StacksNetworkList{},
+		&StacksNetworkParticipant{},
+		&StacksNetworkParticipantList{},
+		&StacksGenesis{},
+		&StacksGenesisList{},
+		&StacksEpochSchedule{},
+		&StacksEpochScheduleList{},
+	)
 	metav1.AddToGroupVersion(s, GroupVersion)
 	return nil
 }
@@ -54,7 +64,7 @@ type StacksNetworkStatus struct {
 	// ObservationPolicy identifies release freshness and progress parameters.
 	ObservationPolicy *ObservationPolicy `json:"observationPolicy,omitempty"`
 	// Phase reports the observed lifecycle, not protocol health.
-	Phase string `json:"phase,omitempty"`
+	Phase NetworkPhase `json:"phase,omitempty"`
 	// InputDigest identifies semantic candidate inputs.
 	InputDigest string `json:"inputDigest,omitempty"`
 	// GenesisRef binds the immutable artifact.
@@ -225,7 +235,7 @@ type PublicAccount struct {
 // Gate describes the fixed profile's initial observation boundary.
 type Gate struct {
 	// Name identifies one convergence gate.
-	Name string `json:"name"`
+	Name GateName `json:"name"`
 	// BitcoinCeiling bounds new generation.
 	BitcoinCeiling int64 `json:"bitcoinCeiling"`
 	// TargetCycle identifies required enrollment coverage when applicable.

@@ -29,25 +29,56 @@ func clientFor(t *testing.T, handler http.HandlerFunc) *Client {
 	}
 	return c
 }
+
 func TestNativeObservations(t *testing.T) {
 	c := clientFor(t, func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/v2/info":
-			fmt.Fprintf(w, `{"network_id":1,"burn_block_height":203,"stacks_tip_height":12,"stacks_tip":"%s"}`, strings.Repeat("1", 64))
+			if _, err := fmt.Fprintf(
+				w,
+				`{"network_id":1,"burn_block_height":203,"stacks_tip_height":12,"stacks_tip":"%s"}`,
+				strings.Repeat("1", 64),
+			); err != nil {
+				t.Error(err)
+			}
 		case "/v2/accounts/" + testAddress:
-			io.WriteString(w, `{"nonce":18446744073709551615,"balance":"0xffffffffffffffffffffffffffffffff","locked":"0x1","unlock_height":300}`)
+			if _, err := io.WriteString(
+				w,
+				`{"nonce":18446744073709551615,"balance":"0xffffffffffffffffffffffffffffffff",`+
+					`"locked":"0x1","unlock_height":300}`,
+			); err != nil {
+				t.Error(err)
+			}
 		case "/v2/pox":
-			fmt.Fprintf(w, `{"contract_id":"%s.pox-4","current_burnchain_block_height":203,"reward_cycle_id":10,"reward_cycle_length":20,"next_cycle":{"min_threshold_ustx":340282366920938463463374607431768211455,"blocks_until_prepare_phase":-1}}`, testAddress)
+			if _, err := fmt.Fprintf(
+				w,
+				`{"contract_id":"%s.pox-4","current_burnchain_block_height":203,`+
+					`"reward_cycle_id":10,"reward_cycle_length":20,`+
+					`"next_cycle":{"min_threshold_ustx":340282366920938463463374607431768211455,`+
+					`"blocks_until_prepare_phase":-1}}`,
+				testAddress,
+			); err != nil {
+				t.Error(err)
+			}
 		case "/v2/data_var/" + testAddress + "/pox-4/example":
-			io.WriteString(w, `{"data":"0x03"}`)
+			if _, err := io.WriteString(w, `{"data":"0x03"}`); err != nil {
+				t.Error(err)
+			}
 		case "/v2/contracts/call-read/" + testAddress + "/pox-4/example":
 			body, _ := io.ReadAll(r.Body)
 			if r.Method != "POST" || !strings.Contains(string(body), `"arguments":["0x03"]`) {
 				t.Error("wrong read-only body")
 			}
-			io.WriteString(w, `{"okay":true,"result":"0x070100000000000000000000000000000001"}`)
+			if _, err := io.WriteString(
+				w,
+				`{"okay":true,"result":"0x070100000000000000000000000000000001"}`,
+			); err != nil {
+				t.Error(err)
+			}
 		case "/v2/contracts/source/" + testAddress + "/example":
-			io.WriteString(w, `{"source":"(ok u1)"}`)
+			if _, err := io.WriteString(w, `{"source":"(ok u1)"}`); err != nil {
+				t.Error(err)
+			}
 		default:
 			http.NotFound(w, r)
 		}
@@ -58,11 +89,13 @@ func TestNativeObservations(t *testing.T) {
 		t.Fatalf("info: %+v %v", info, e)
 	}
 	account, e := c.Account(ctx, testAddress)
-	if e != nil || account.Balance.Integer.String() != "340282366920938463463374607431768211455" || account.Nonce != ^uint64(0) {
+	if e != nil || account.Balance.Integer.String() != "340282366920938463463374607431768211455" ||
+		account.Nonce != ^uint64(0) {
 		t.Fatalf("account: %+v %v", account, e)
 	}
 	pox, e := c.PoX(ctx)
-	if e != nil || pox.MinThreshold.Integer.String() != "340282366920938463463374607431768211455" || pox.BlocksUntilPrepare != -1 {
+	if e != nil || pox.MinThreshold.Integer.String() != "340282366920938463463374607431768211455" ||
+		pox.BlocksUntilPrepare != -1 {
 		t.Fatalf("pox: %+v %v", pox, e)
 	}
 	variable, e := c.DataVariable(ctx, testAddress, "pox-4", "example")
@@ -82,10 +115,20 @@ func TestNativeObservations(t *testing.T) {
 		t.Fatal("absence conflated with error")
 	}
 }
+
 func TestMalformedObservations(t *testing.T) {
-	for _, body := range []string{`{}`, `{"network_id":1,"burn_block_height":0,"stacks_tip_height":0}`, `{"nonce":0,"balance":"0x-1","locked":"0x0","unlock_height":0}`, `{"nonce":0,"balance":"0x100000000000000000000000000000000","locked":"0x0","unlock_height":0}`} {
+	for _, body := range []string{
+		`{}`,
+		`{"network_id":1,"burn_block_height":0,"stacks_tip_height":0}`,
+		`{"nonce":0,"balance":"0x-1","locked":"0x0","unlock_height":0}`,
+		`{"nonce":0,"balance":"0x100000000000000000000000000000000","locked":"0x0","unlock_height":0}`,
+	} {
 		t.Run(body, func(t *testing.T) {
-			c := clientFor(t, func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, body) })
+			c := clientFor(t, func(w http.ResponseWriter, _ *http.Request) {
+				if _, err := io.WriteString(w, body); err != nil {
+					t.Error(err)
+				}
+			})
 			if _, e := c.Info(context.Background()); e == nil {
 				t.Fatal("accepted incomplete info")
 			}
@@ -98,12 +141,17 @@ func TestMalformedObservations(t *testing.T) {
 		})
 	}
 	for _, data := range []string{"0x", "0xff", "0x0300", "03"} {
-		c := clientFor(t, func(w http.ResponseWriter, r *http.Request) { fmt.Fprintf(w, `{"data":%q}`, data) })
+		c := clientFor(t, func(w http.ResponseWriter, _ *http.Request) {
+			if _, err := fmt.Fprintf(w, `{"data":%q}`, data); err != nil {
+				t.Error(err)
+			}
+		})
 		if _, e := c.DataVariable(context.Background(), testAddress, "sample", "value"); e == nil {
 			t.Fatal("accepted invalid Clarity")
 		}
 	}
 }
+
 func TestSubmissionAndExactInclusion(t *testing.T) {
 	tx := transaction.Transaction{Bytes: []byte{1, 2, 3}}
 	tx.TxID = transaction.ID(tx.Bytes)
@@ -115,10 +163,18 @@ func TestSubmissionAndExactInclusion(t *testing.T) {
 			if hex.EncodeToString(raw) != "010203" {
 				t.Error("submission bytes changed")
 			}
-			fmt.Fprintf(w, `"0x%s"`, tx.TxID)
+			if _, err := fmt.Fprintf(w, `"0x%s"`, tx.TxID); err != nil {
+				t.Error(err)
+			}
 			return
 		}
-		fmt.Fprintf(w, `{"tx":"010203","result":"(ok true)","index_block_hash":"%s","is_canonical":true}`, strings.Repeat("a", 64))
+		if _, err := fmt.Fprintf(
+			w,
+			`{"tx":"010203","result":"(ok true)","index_block_hash":"%s","is_canonical":true}`,
+			strings.Repeat("a", 64),
+		); err != nil {
+			t.Error(err)
+		}
 	})
 	if e := c.Submit(context.Background(), tx); e != nil {
 		t.Fatal(e)
@@ -132,23 +188,32 @@ func TestSubmissionAndExactInclusion(t *testing.T) {
 	}
 	for _, body := range []string{`"different"`, `{"error":"secret rejection"}`} {
 		count.Store(0)
-		c := clientFor(t, func(w http.ResponseWriter, r *http.Request) {
+		c := clientFor(t, func(w http.ResponseWriter, _ *http.Request) {
 			count.Add(1)
 			w.WriteHeader(500)
-			io.WriteString(w, body)
+			if _, err := io.WriteString(w, body); err != nil {
+				t.Error(err)
+			}
 		})
 		e := c.Submit(context.Background(), tx)
 		if e == nil || strings.Contains(e.Error(), "secret") || count.Load() != 1 {
 			t.Fatalf("ambiguous submission: %v count %d", e, count.Load())
 		}
 	}
-	c = clientFor(t, func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintf(w, `{"tx":"010204","result":"(ok true)","index_block_hash":"%s","is_canonical":true}`, strings.Repeat("a", 64))
+	c = clientFor(t, func(w http.ResponseWriter, _ *http.Request) {
+		if _, err := fmt.Fprintf(
+			w,
+			`{"tx":"010204","result":"(ok true)","index_block_hash":"%s","is_canonical":true}`,
+			strings.Repeat("a", 64),
+		); err != nil {
+			t.Error(err)
+		}
 	})
 	if _, e := c.Inclusion(context.Background(), tx.TxID); e == nil {
 		t.Fatal("accepted mismatched consensus bytes")
 	}
 }
+
 func TestTransportBoundsAndRedirects(t *testing.T) {
 	var count atomic.Int32
 	c := clientFor(t, func(w http.ResponseWriter, r *http.Request) {
@@ -158,7 +223,11 @@ func TestTransportBoundsAndRedirects(t *testing.T) {
 	if _, e := c.Info(context.Background()); e == nil || count.Load() != 1 {
 		t.Fatal("followed redirect")
 	}
-	c = clientFor(t, func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, strings.Repeat("x", 200)) })
+	c = clientFor(t, func(w http.ResponseWriter, _ *http.Request) {
+		if _, err := io.WriteString(w, strings.Repeat("x", 200)); err != nil {
+			t.Error(err)
+		}
+	})
 	c.maxBytes = 100
 	if _, e := c.Info(context.Background()); e == nil {
 		t.Fatal("accepted oversized body")
@@ -168,13 +237,19 @@ func TestTransportBoundsAndRedirects(t *testing.T) {
 	if _, e := c.Info(ctx); e == nil {
 		t.Fatal("ignored cancellation")
 	}
-	for _, endpoint := range []string{"ftp://localhost", "http://user:pass@localhost", "http://localhost/path", "http://localhost?x=1", "http://localhost#fragment"} {
+	for _, endpoint := range []string{
+		"ftp://localhost",
+		"http://user:pass@localhost",
+		"http://localhost/path",
+		"http://localhost?x=1",
+		"http://localhost#fragment",
+	} {
 		if _, e := New(Config{Endpoint: endpoint, Timeout: time.Second, MaxResponseBytes: 100}); e == nil {
 			t.Fatal("accepted invalid endpoint")
 		}
 	}
 	count.Store(0)
-	c = clientFor(t, func(w http.ResponseWriter, r *http.Request) { count.Add(1) })
+	c = clientFor(t, func(_ http.ResponseWriter, _ *http.Request) { count.Add(1) })
 	if _, e := c.Account(context.Background(), "../info"); e == nil || count.Load() != 0 {
 		t.Fatal("sent invalid address")
 	}

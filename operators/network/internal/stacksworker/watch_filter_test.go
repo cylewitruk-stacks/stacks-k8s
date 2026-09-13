@@ -16,7 +16,10 @@ func TestNamedWatchFiltersObservationFeedback(t *testing.T) {
 		"spec":     map[string]any{"control": map[string]any{"paused": false}},
 		"status": map[string]any{
 			"admission": map[string]any{"policyDigest": "original"},
-			"runtime":   map[string]any{"podRef": map[string]any{"uid": "pod"}, "protocol": map[string]any{"observedAt": "old", "stacksHeight": int64(1)}},
+			"runtime": map[string]any{
+				"podRef":   map[string]any{"uid": "pod"},
+				"protocol": map[string]any{"observedAt": "old", "stacksHeight": int64(1)},
+			},
 			"execution": map[string]any{"observedAt": "old", "pending": int64(1)},
 		},
 	}}

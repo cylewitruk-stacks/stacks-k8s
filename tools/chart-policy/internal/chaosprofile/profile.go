@@ -4,6 +4,7 @@ package chaosprofile
 import (
 	"context"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -21,9 +22,12 @@ import (
 )
 
 // Version and SchemaSHA256 pin the unmodified upstream NetworkChaos wire contract.
-const Version = "2.8.4"
-const SchemaSHA256 = "d151d3d38cfb4e906df457a2927a8bad8872241655b0267e08e3315b1b615974"
-const schemaURL = "https://raw.githubusercontent.com/chaos-mesh/chaos-mesh/v2.8.4/helm/chaos-mesh/crds/chaos-mesh.org_networkchaos.yaml"
+const (
+	Version      = "2.8.4"
+	SchemaSHA256 = "d151d3d38cfb4e906df457a2927a8bad8872241655b0267e08e3315b1b615974"
+	schemaURL    = "https://raw.githubusercontent.com/chaos-mesh/chaos-mesh/v2.8.4/helm/chaos-mesh/" +
+		"crds/chaos-mesh.org_networkchaos.yaml"
+)
 
 // Decode reads rendered Kubernetes objects without altering their wire representation.
 func Decode(reader io.Reader) ([]*unstructured.Unstructured, error) {
@@ -32,7 +36,7 @@ func Decode(reader io.Reader) ([]*unstructured.Unstructured, error) {
 	for {
 		object := &unstructured.Unstructured{}
 		if err := decoder.Decode(object); err != nil {
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				return result, nil
 			}
 			return nil, err
@@ -55,7 +59,14 @@ func Validate(objects []*unstructured.Unstructured) error {
 		}
 		kinds[o.GetKind()] = o
 	}
-	for _, kind := range []string{"ValidatingAdmissionPolicy", "ValidatingAdmissionPolicyBinding", "ServiceAccount", "Role", "RoleBinding", "ResourceQuota"} {
+	for _, kind := range []string{
+		"ValidatingAdmissionPolicy",
+		"ValidatingAdmissionPolicyBinding",
+		"ServiceAccount",
+		"Role",
+		"RoleBinding",
+		"ResourceQuota",
+	} {
 		if kinds[kind] == nil {
 			return fmt.Errorf("missing %s", kind)
 		}
@@ -67,19 +78,35 @@ func Validate(objects []*unstructured.Unstructured) error {
 	for _, pair := range []struct {
 		o  *unstructured.Unstructured
 		to any
-	}{{kinds["Role"], role}, {kinds["RoleBinding"], binding}, {kinds["ServiceAccount"], account}, {kinds["ResourceQuota"], quota}} {
+	}{
+		{kinds["Role"], role},
+		{kinds["RoleBinding"], binding},
+		{kinds["ServiceAccount"], account},
+		{kinds["ResourceQuota"], quota},
+	} {
 		if err := runtime.DefaultUnstructuredConverter.FromUnstructured(pair.o.Object, pair.to); err != nil {
 			return err
 		}
 	}
-	expected := []rbacv1.PolicyRule{{APIGroups: []string{"chaos-mesh.org"}, Resources: []string{"networkchaos"}, Verbs: []string{"get", "list", "watch", "create", "delete"}}}
+	expected := []rbacv1.PolicyRule{
+		{
+			APIGroups: []string{"chaos-mesh.org"},
+			Resources: []string{"networkchaos"},
+			Verbs:     []string{"get", "list", "watch", "create", "delete"},
+		},
+	}
 	if !reflect.DeepEqual(role.Rules, expected) {
 		return fmt.Errorf("agent Role differs from exact native-network permissions")
 	}
-	if role.Namespace == "" || binding.Namespace != role.Namespace || account.Namespace != role.Namespace || quota.Namespace != role.Namespace {
+	if role.Namespace == "" || binding.Namespace != role.Namespace || account.Namespace != role.Namespace ||
+		quota.Namespace != role.Namespace {
 		return fmt.Errorf("namespace mismatch")
 	}
-	if binding.RoleRef != (rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: "Role", Name: role.Name}) || !reflect.DeepEqual(binding.Subjects, []rbacv1.Subject{{Kind: "ServiceAccount", Name: account.Name, Namespace: role.Namespace}}) {
+	if binding.RoleRef != (rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: "Role", Name: role.Name}) ||
+		!reflect.DeepEqual(
+			binding.Subjects,
+			[]rbacv1.Subject{{Kind: "ServiceAccount", Name: account.Name, Namespace: role.Namespace}},
+		) {
 		return fmt.Errorf("agent binding mismatch")
 	}
 	if account.AutomountServiceAccountToken == nil || *account.AutomountServiceAccountToken {
@@ -95,18 +122,33 @@ func Validate(objects []*unstructured.Unstructured) error {
 		return err
 	}
 	scope := admissionv1.NamespacedScope
-	expectedMatch := &admissionv1.MatchResources{ResourceRules: []admissionv1.NamedRuleWithOperations{{RuleWithOperations: admissionv1.RuleWithOperations{
-		Operations: []admissionv1.OperationType{admissionv1.Create, admissionv1.Update},
-		Rule:       admissionv1.Rule{APIGroups: []string{"chaos-mesh.org"}, APIVersions: []string{"v1alpha1"}, Resources: []string{"networkchaos"}, Scope: &scope},
-	}}}}
+	expectedMatch := &admissionv1.MatchResources{
+		ResourceRules: []admissionv1.NamedRuleWithOperations{{RuleWithOperations: admissionv1.RuleWithOperations{
+			Operations: []admissionv1.OperationType{admissionv1.Create, admissionv1.Update},
+			Rule: admissionv1.Rule{
+				APIGroups:   []string{"chaos-mesh.org"},
+				APIVersions: []string{"v1alpha1"},
+				Resources:   []string{"networkchaos"},
+				Scope:       &scope,
+			},
+		}}},
+	}
 	if !reflect.DeepEqual(typedPolicy.Spec.MatchConstraints, expectedMatch) {
 		return fmt.Errorf("policy match constraints differ from exact namespaced native create/update coverage")
 	}
 	failure, _, _ := unstructured.NestedString(policy.Object, "spec", "failurePolicy")
 	name, _, _ := unstructured.NestedString(bound.Object, "spec", "policyName")
-	ns, _, _ := unstructured.NestedString(bound.Object, "spec", "matchResources", "namespaceSelector", "matchLabels", "kubernetes.io/metadata.name")
+	ns, _, _ := unstructured.NestedString(
+		bound.Object,
+		"spec",
+		"matchResources",
+		"namespaceSelector",
+		"matchLabels",
+		"kubernetes.io/metadata.name",
+	)
 	actions, _, _ := unstructured.NestedStringSlice(bound.Object, "spec", "validationActions")
-	if failure != "Fail" || name != policy.GetName() || ns != role.Namespace || !reflect.DeepEqual(actions, []string{"Deny"}) {
+	if failure != "Fail" || name != policy.GetName() || ns != role.Namespace ||
+		!reflect.DeepEqual(actions, []string{"Deny"}) {
 		return fmt.Errorf("admission must fail closed in the release namespace")
 	}
 	return nil
@@ -120,10 +162,14 @@ func Schema(ctx context.Context) (string, error) {
 	if !explicit {
 		path = filepath.Join(os.TempDir(), "stacks-chaos-networkchaos-"+Version+".yaml")
 	}
+	// #nosec G304 G703 -- Explicit local cache path; downloaded content is checksum-verified before use.
 	data, err := os.ReadFile(path)
 	if err == nil {
 		if fmt.Sprintf("%x", sha256.Sum256(data)) != SchemaSHA256 {
-			return "", fmt.Errorf("upstream schema checksum mismatch: %s; remove the cached file or supply the verified upstream CRD", path)
+			return "", fmt.Errorf(
+				"upstream schema checksum mismatch: %s; remove the cached file or supply the verified upstream CRD",
+				path,
+			)
 		}
 		return path, nil
 	}
@@ -138,7 +184,7 @@ func Schema(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }() // Read/cleanup completion cannot change the operation's result.
 	if response.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("schema download: HTTP %d", response.StatusCode)
 	}
@@ -153,14 +199,16 @@ func Schema(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer os.Remove(tmp.Name())
+	// #nosec G703 -- Explicit local cache path; downloaded content is checksum-verified before use.
+	defer func() { _ = os.Remove(tmp.Name()) }() // Read/cleanup completion cannot change the operation's result.
 	if _, err = tmp.Write(data); err != nil {
-		tmp.Close()
+		_ = tmp.Close() // Preserve the preceding write failure.
 		return "", err
 	}
 	if err = tmp.Close(); err != nil {
 		return "", err
 	}
+	// #nosec G703 -- Explicit local cache path; downloaded content is checksum-verified before use.
 	if err = os.Rename(tmp.Name(), path); err != nil {
 		return "", err
 	}

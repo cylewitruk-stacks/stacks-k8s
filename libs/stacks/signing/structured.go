@@ -14,7 +14,11 @@ func StructuredDigest(domain, message clarity.Value) ([32]byte, error) {
 	if domain.Type != clarity.Tuple {
 		return [32]byte{}, errors.New("SIP-018 domain must be a tuple")
 	}
-	for k, t := range map[string]clarity.Type{"name": clarity.ASCII, "version": clarity.ASCII, "chain-id": clarity.UInt} {
+	for k, t := range map[string]clarity.Type{
+		"name":     clarity.ASCII,
+		"version":  clarity.ASCII,
+		"chain-id": clarity.UInt,
+	} {
 		v, ok := domain.Fields[k]
 		if !ok || v.Type != t {
 			return [32]byte{}, errors.New("invalid SIP-018 domain")
@@ -54,7 +58,14 @@ func Structured(privateKey string, domain, message clarity.Value) ([65]byte, err
 
 // Domain creates the standard SIP-018 domain fields using an explicit chain ID.
 func Domain(name, version string, chainID uint32) clarity.Value {
-	return clarity.Value{Type: clarity.Tuple, Fields: map[string]clarity.Value{"name": {Type: clarity.ASCII, Text: name}, "version": {Type: clarity.ASCII, Text: version}, "chain-id": clarity.Uint(uint64(chainID))}}
+	return clarity.Value{
+		Type: clarity.Tuple,
+		Fields: map[string]clarity.Value{
+			"name":     {Type: clarity.ASCII, Text: name},
+			"version":  {Type: clarity.ASCII, Text: version},
+			"chain-id": clarity.Uint(uint64(chainID)),
+		},
+	}
 }
 
 // PoXAddress is an already resolved PoX reward-address wire representation.
@@ -74,7 +85,13 @@ func (a PoXAddress) Value() (clarity.Value, error) {
 	if a.Version > 6 || len(a.HashBytes) != length {
 		return clarity.Value{}, errors.New("unsupported PoX reward address")
 	}
-	return clarity.Value{Type: clarity.Tuple, Fields: map[string]clarity.Value{"version": {Type: clarity.Buffer, Bytes: []byte{a.Version}}, "hashbytes": {Type: clarity.Buffer, Bytes: append([]byte{}, a.HashBytes...)}}}, nil
+	return clarity.Value{
+		Type: clarity.Tuple,
+		Fields: map[string]clarity.Value{
+			"version":   {Type: clarity.Buffer, Bytes: []byte{a.Version}},
+			"hashbytes": {Type: clarity.Buffer, Bytes: append([]byte{}, a.HashBytes...)},
+		},
+	}, nil
 }
 
 // PoXAuthorization contains the explicit PoX-4 structured-message fields.
@@ -98,7 +115,7 @@ type PoXAuthorization struct {
 // PoX signs an explicit PoX-4 authorization without enrollment policy or RPC.
 func PoX(privateKey string, a PoXAuthorization) ([65]byte, error) {
 	switch a.Topic {
-	case "stack-stx", "stack-extend", "stack-increase", "agg-commit", "agg-increase":
+	case TopicStackSTX, TopicStackExtend, TopicStackIncrease, TopicAggregateCommit, TopicAggregateIncrease:
 	default:
 		return [65]byte{}, errors.New("unsupported PoX topic")
 	}
@@ -109,7 +126,17 @@ func PoX(privateKey string, a PoXAuthorization) ([65]byte, error) {
 	if e != nil {
 		return [65]byte{}, e
 	}
-	message := clarity.Value{Type: clarity.Tuple, Fields: map[string]clarity.Value{"pox-addr": address, "reward-cycle": clarity.Uint(a.RewardCycle), "topic": {Type: clarity.ASCII, Text: a.Topic}, "period": clarity.Uint(a.Period), "max-amount": a.MaxAmount, "auth-id": a.AuthID}}
+	message := clarity.Value{
+		Type: clarity.Tuple,
+		Fields: map[string]clarity.Value{
+			"pox-addr":     address,
+			"reward-cycle": clarity.Uint(a.RewardCycle),
+			"topic":        {Type: clarity.ASCII, Text: a.Topic},
+			"period":       clarity.Uint(a.Period),
+			"max-amount":   a.MaxAmount,
+			"auth-id":      a.AuthID,
+		},
+	}
 	return Structured(privateKey, Domain("pox-4-signer", "1.0.0", a.ChainID), message)
 }
 
@@ -122,6 +149,13 @@ func SignerGrant(privateKey, manager string, authID clarity.Value, chainID uint3
 	if authID.Type != clarity.UInt {
 		return [65]byte{}, errors.New("grant auth ID requires uint128")
 	}
-	message := clarity.Value{Type: clarity.Tuple, Fields: map[string]clarity.Value{"signer-manager": principal, "topic": {Type: clarity.ASCII, Text: "grant-authorization"}, "auth-id": authID}}
+	message := clarity.Value{
+		Type: clarity.Tuple,
+		Fields: map[string]clarity.Value{
+			"signer-manager": principal,
+			"topic":          {Type: clarity.ASCII, Text: TopicGrantAuthorization},
+			"auth-id":        authID,
+		},
+	}
 	return Structured(privateKey, Domain("pox-5-signer", "1.0.0", chainID), message)
 }

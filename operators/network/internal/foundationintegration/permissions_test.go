@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"os/exec"
 	"path/filepath"
@@ -30,13 +31,37 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 )
 
-func verifyManagerAndScopedJob(t *testing.T, ctx context.Context, c client.Client, cfg *rest.Config, scheme *runtime.Scheme) {
+func verifyManagerAndScopedJob(
+	t *testing.T,
+	ctx context.Context,
+	c client.Client,
+	cfg *rest.Config,
+	scheme *runtime.Scheme,
+) {
 	t.Helper()
 	ns := "foundation-permissions"
 	if err := c.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: ns}}); err != nil {
 		t.Fatal(err)
 	}
-	out, err := exec.Command("helm", "template", "foundation", filepath.Join("..", "..", "..", "..", "charts", "stacks-network-operator"), "--namespace", ns, "--kube-version", "1.37.0").CombinedOutput()
+	// #nosec G204 -- Fixed executable and separate arguments from the test harness; no shell evaluation.
+	out, err := exec.CommandContext(ctx,
+		"helm",
+		"template",
+		"foundation",
+		filepath.Join(
+			"..",
+			"..",
+			"..",
+			"..",
+			"charts",
+			"stacks-network-operator",
+		),
+		"--namespace",
+		ns,
+		"--kube-version",
+		"1.37.0",
+	).
+		CombinedOutput()
 	if err != nil {
 		t.Fatalf("render: %v %s", err, out)
 	}
@@ -44,7 +69,7 @@ func verifyManagerAndScopedJob(t *testing.T, ctx context.Context, c client.Clien
 	for {
 		var obj unstructured.Unstructured
 		err := decoder.Decode(&obj)
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
@@ -62,10 +87,29 @@ func verifyManagerAndScopedJob(t *testing.T, ctx context.Context, c client.Clien
 	}
 	scoped := rest.CopyConfig(cfg)
 	scoped.Impersonate = rest.ImpersonationConfig{UserName: "system:serviceaccount:" + ns + ":foundation"}
-	manager, err := ctrl.NewManager(scoped, ctrl.Options{Cache: foundation.CacheOptions(), Scheme: scheme, Metrics: metricsserver.Options{BindAddress: "0"}, HealthProbeBindAddress: "0", Client: client.Options{Cache: &client.CacheOptions{DisableFor: []client.Object{&corev1.Secret{}, &corev1.ServiceAccount{}, &rbacv1.Role{}, &rbacv1.RoleBinding{}}}}})
+	manager, err := ctrl.NewManager(
+		scoped,
+		ctrl.Options{
+			Cache:                  foundation.CacheOptions(),
+			Scheme:                 scheme,
+			Metrics:                metricsserver.Options{BindAddress: "0"},
+			HealthProbeBindAddress: "0",
+			Client: client.Options{
+				Cache: &client.CacheOptions{
+					DisableFor: []client.Object{
+						&corev1.Secret{},
+						&corev1.ServiceAccount{},
+						&rbacv1.Role{},
+						&rbacv1.RoleBinding{},
+					},
+				},
+			},
+		},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
+	//nolint:contextcheck // Manager setup registers lifetime indexes before the manager starts serving requests.
 	if err := foundation.Register(manager, "foundation:test"); err != nil {
 		t.Fatal(err)
 	}
@@ -113,7 +157,9 @@ func verifyManagerAndScopedJob(t *testing.T, ctx context.Context, c client.Clien
 		}
 	}
 	jobConfig := rest.CopyConfig(cfg)
-	jobConfig.Impersonate = rest.ImpersonationConfig{UserName: "system:serviceaccount:" + ns + ":" + job.Spec.Template.Spec.ServiceAccountName}
+	jobConfig.Impersonate = rest.ImpersonationConfig{
+		UserName: "system:serviceaccount:" + ns + ":" + job.Spec.Template.Spec.ServiceAccountName,
+	}
 	worker, err := client.New(jobConfig, client.Options{Scheme: scheme})
 	if err != nil {
 		t.Fatal(err)
@@ -134,10 +180,18 @@ func verifyManagerAndScopedJob(t *testing.T, ctx context.Context, c client.Clien
 		t.Fatalf("scoped resolver: %v", err)
 	}
 	var other corev1.Secret
-	if err := worker.Get(ctx, client.ObjectKey{Namespace: ns, Name: "unrelated"}, &other); !apierrors.IsForbidden(err) {
+	if err := worker.Get(ctx, client.ObjectKey{
+		Namespace: ns,
+		Name:      "unrelated",
+	}, &other); !apierrors.IsForbidden(err) {
 		t.Fatalf("unrelated Secret read not forbidden: %v", err)
 	}
-	if err := worker.Create(ctx, &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "unexpected", Namespace: ns}}); !apierrors.IsForbidden(err) {
+	if err := worker.Create(
+		ctx,
+		&corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "unexpected", Namespace: ns}},
+	); !apierrors.IsForbidden(
+		err,
+	) {
 		t.Fatalf("worker workload creation not forbidden: %v", err)
 	}
 	for time.Now().Before(deadline) {

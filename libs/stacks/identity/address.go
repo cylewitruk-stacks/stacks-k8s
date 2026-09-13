@@ -16,7 +16,7 @@ func DecodeAddress(address string) (byte, [20]byte, error) {
 		return 0, hash, errors.New("invalid Stacks address")
 	}
 	version := strings.IndexByte(c32, address[1])
-	if version < 0 {
+	if version < 0 || version >= 32 {
 		return 0, hash, errors.New("invalid address version")
 	}
 	n := new(big.Int)

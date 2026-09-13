@@ -27,7 +27,13 @@ type ActorIdentity struct {
 
 // Labels returns the five required selector labels.
 func (a ActorIdentity) Labels() map[string]string {
-	return map[string]string{"network.stacks.org/network": a.NetworkName, "network.stacks.org/network-uid": string(a.NetworkUID), "network.stacks.org/participant-uid": string(a.ParticipantUID), "network.stacks.org/actor": a.Name, "network.stacks.org/role": "actor"}
+	return map[string]string{
+		"network.stacks.org/network":         a.NetworkName,
+		"network.stacks.org/network-uid":     string(a.NetworkUID),
+		"network.stacks.org/participant-uid": string(a.ParticipantUID),
+		"network.stacks.org/actor":           a.Name,
+		"network.stacks.org/role":            "actor",
+	}
 }
 
 // ResolveActor reads current public identities and validates the exact observed actor Pod.
@@ -35,9 +41,14 @@ func (a ActorIdentity) Labels() map[string]string {
 func ResolveActor(ctx context.Context, reader client.Reader, namespace, actor string) (ActorIdentity, error) {
 	var result ActorIdentity
 	root := &unstructured.Unstructured{}
-	root.SetGroupVersionKind(schema.GroupVersionKind{Group: "network.stacks.org", Version: "v1alpha2", Kind: "StacksNetwork"})
+	root.SetGroupVersionKind(
+		schema.GroupVersionKind{Group: "network.stacks.org", Version: "v1alpha2", Kind: "StacksNetwork"},
+	)
 	if err := reader.Get(ctx, client.ObjectKey{Namespace: namespace, Name: "network"}, root); err != nil {
-		return result, fmt.Errorf("current v1alpha2 network required; legacy live fixtures are incompatible with UID-scoped profile: %w", err)
+		return result, fmt.Errorf(
+			"current v1alpha2 network required; legacy live fixtures are incompatible with UID-scoped profile: %w",
+			err,
+		)
 	}
 	if root.GetUID() == "" || root.GetDeletionTimestamp() != nil {
 		return result, fmt.Errorf("network identity unavailable")
@@ -46,7 +57,8 @@ func ResolveActor(ctx context.Context, reader client.Reader, namespace, actor st
 	participants, _, _ := unstructured.NestedSlice(root.Object, "spec", "participants")
 	for _, raw := range participants {
 		p, _ := raw.(map[string]any)
-		if p["name"] == actor && (p["kind"] == "BitcoinNode" || p["kind"] == "StacksNode" || p["kind"] == "StacksSigner") {
+		if p["name"] == actor &&
+			(p["kind"] == "BitcoinNode" || p["kind"] == "StacksNode" || p["kind"] == "StacksSigner") {
 			selectedKind, _ = p["kind"].(string)
 		}
 	}
@@ -65,7 +77,9 @@ func ResolveActor(ctx context.Context, reader client.Reader, namespace, actor st
 		return result, fmt.Errorf("actor participant UID unavailable")
 	}
 	list := &unstructured.UnstructuredList{}
-	list.SetGroupVersionKind(schema.GroupVersionKind{Group: "network.stacks.org", Version: "v1alpha2", Kind: "StacksNetworkParticipantList"})
+	list.SetGroupVersionKind(
+		schema.GroupVersionKind{Group: "network.stacks.org", Version: "v1alpha2", Kind: "StacksNetworkParticipantList"},
+	)
 	if err := reader.List(ctx, list, client.InNamespace(namespace)); err != nil {
 		return result, err
 	}
@@ -84,22 +98,42 @@ func ResolveActor(ctx context.Context, reader client.Reader, namespace, actor st
 	kind, _, _ := unstructured.NestedString(participant.Object, "spec", "kind")
 	podName, _, _ := unstructured.NestedString(participant.Object, "status", "runtime", "podRef", "name")
 	podUID, _, _ := unstructured.NestedString(participant.Object, "status", "runtime", "podRef", "uid")
-	if networkUID != string(root.GetUID()) || logicalName != actor || kind != selectedKind || podName == "" || podUID == "" {
+	if networkUID != string(root.GetUID()) || logicalName != actor || kind != selectedKind || podName == "" ||
+		podUID == "" {
 		return result, fmt.Errorf("actor runtime identity unavailable")
 	}
-	result = ActorIdentity{NetworkName: root.GetName(), NetworkUID: root.GetUID(), Name: actor, ParticipantUID: participant.GetUID(), PodName: podName, PodUID: types.UID(podUID)}
+	result = ActorIdentity{
+		NetworkName:    root.GetName(),
+		NetworkUID:     root.GetUID(),
+		Name:           actor,
+		ParticipantUID: participant.GetUID(),
+		PodName:        podName,
+		PodUID:         types.UID(podUID),
+	}
 	var pods corev1.PodList
-	if err := reader.List(ctx, &pods, client.InNamespace(namespace), client.MatchingLabels(result.Labels())); err != nil {
+	if err := reader.List(
+		ctx,
+		&pods,
+		client.InNamespace(namespace),
+		client.MatchingLabels(result.Labels()),
+	); err != nil {
 		return ActorIdentity{}, err
 	}
-	if len(pods.Items) != 1 || pods.Items[0].Name != podName || string(pods.Items[0].UID) != podUID || pods.Items[0].DeletionTimestamp != nil || pods.Items[0].Status.Phase != corev1.PodRunning {
+	if len(pods.Items) != 1 || pods.Items[0].Name != podName || string(pods.Items[0].UID) != podUID ||
+		pods.Items[0].DeletionTimestamp != nil ||
+		pods.Items[0].Status.Phase != corev1.PodRunning {
 		return ActorIdentity{}, fmt.Errorf("exact actor selector must resolve one current running Pod")
 	}
 	return result, nil
 }
 
 // BindActors replaces example placeholders using fresh identities on both sides.
-func BindActors(ctx context.Context, reader client.Reader, fault *unstructured.Unstructured, source, target string) error {
+func BindActors(
+	ctx context.Context,
+	reader client.Reader,
+	fault *unstructured.Unstructured,
+	source, target string,
+) error {
 	a, err := ResolveActor(ctx, reader, fault.GetNamespace(), source)
 	if err != nil {
 		return err
@@ -116,10 +150,16 @@ func BindActors(ctx context.Context, reader client.Reader, fault *unstructured.U
 		if i == 1 {
 			path = []string{"spec", "target", "selector"}
 		}
-		if err := unstructured.SetNestedStringMap(fault.Object, actor.Labels(), append(path, "labelSelectors")...); err != nil {
+		if err := unstructured.SetNestedStringMap(
+			fault.Object,
+			actor.Labels(),
+			append(path, "labelSelectors")...); err != nil {
 			return err
 		}
-		if err := unstructured.SetNestedStringSlice(fault.Object, []string{fault.GetNamespace()}, append(path, "namespaces")...); err != nil {
+		if err := unstructured.SetNestedStringSlice(
+			fault.Object,
+			[]string{fault.GetNamespace()},
+			append(path, "namespaces")...); err != nil {
 			return err
 		}
 	}

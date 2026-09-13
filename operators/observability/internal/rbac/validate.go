@@ -3,6 +3,7 @@ package rbac
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"reflect"
@@ -21,7 +22,7 @@ func Validate(reader io.Reader) error {
 	for {
 		object := &unstructured.Unstructured{}
 		if err := decoder.Decode(object); err != nil {
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				break
 			}
 			return fmt.Errorf("decode rendered chart: %w", err)
@@ -57,10 +58,12 @@ func Validate(reader io.Reader) error {
 		return fmt.Errorf("controller Role differs from the exact permission contract")
 	}
 	binding := bindings[0]
-	if binding.RoleRef.APIGroup != rbacv1.GroupName || binding.RoleRef.Kind != "Role" || binding.RoleRef.Name != roles[0].Name {
+	if binding.RoleRef.APIGroup != rbacv1.GroupName || binding.RoleRef.Kind != "Role" ||
+		binding.RoleRef.Name != roles[0].Name {
 		return fmt.Errorf("RoleBinding does not reference the rendered Role")
 	}
-	if len(binding.Subjects) != 1 || binding.Subjects[0].Kind != "ServiceAccount" || binding.Subjects[0].Name == "" || binding.Subjects[0].Namespace != binding.Namespace {
+	if len(binding.Subjects) != 1 || binding.Subjects[0].Kind != "ServiceAccount" || binding.Subjects[0].Name == "" ||
+		binding.Subjects[0].Namespace != binding.Namespace {
 		return fmt.Errorf("RoleBinding must select one same-namespace ServiceAccount")
 	}
 	return nil
@@ -68,13 +71,37 @@ func Validate(reader io.Reader) error {
 
 func expectedRules() []rbacv1.PolicyRule {
 	return []rbacv1.PolicyRule{
-		{APIGroups: []string{"observation.stacks.org"}, Resources: []string{"networkobservations"}, Verbs: []string{"get", "list", "watch"}},
-		{APIGroups: []string{"observation.stacks.org"}, Resources: []string{"networkobservations/status"}, Verbs: []string{"get", "update", "patch"}},
-		{APIGroups: []string{"network.stacks.org"}, Resources: []string{"stacksnetworks"}, Verbs: []string{"get", "list", "watch"}},
-		{APIGroups: []string{"network.stacks.org"}, Resources: []string{"stacksnetworkparticipants"}, Verbs: []string{"get", "list"}},
-		{APIGroups: []string{""}, Resources: []string{"pods", "services", "configmaps"}, Verbs: []string{"get", "list"}},
+		{
+			APIGroups: []string{"observation.stacks.org"},
+			Resources: []string{"networkobservations"},
+			Verbs:     []string{"get", "list", "watch"},
+		},
+		{
+			APIGroups: []string{"observation.stacks.org"},
+			Resources: []string{"networkobservations/status"},
+			Verbs:     []string{"get", "update", "patch"},
+		},
+		{
+			APIGroups: []string{"network.stacks.org"},
+			Resources: []string{"stacksnetworks"},
+			Verbs:     []string{"get", "list", "watch"},
+		},
+		{
+			APIGroups: []string{"network.stacks.org"},
+			Resources: []string{"stacksnetworkparticipants"},
+			Verbs:     []string{"get", "list"},
+		},
+		{
+			APIGroups: []string{""},
+			Resources: []string{"pods", "services", "configmaps"},
+			Verbs:     []string{"get", "list"},
+		},
 		{APIGroups: []string{"apps"}, Resources: []string{"statefulsets"}, Verbs: []string{"get", "list"}},
-		{APIGroups: []string{"coordination.k8s.io"}, Resources: []string{"leases"}, Verbs: []string{"get", "list", "watch", "create", "update", "patch", "delete"}},
+		{
+			APIGroups: []string{"coordination.k8s.io"},
+			Resources: []string{"leases"},
+			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+		},
 	}
 }
 

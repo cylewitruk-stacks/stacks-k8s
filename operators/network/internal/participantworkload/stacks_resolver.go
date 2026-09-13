@@ -97,14 +97,15 @@ func RunStacksCandidateConfigResolver(ctx context.Context, c client.Client, in S
 
 // runStacksConfigResolver shares exact private rendering with explicit candidate enrollment.
 func runStacksConfigResolver(ctx context.Context, c client.Client, in StacksConfigInput, candidate bool) error {
-	validGenesis := in.CandidateDigest == "" && in.Genesis.UID != "" && in.Genesis.Kind == "StacksGenesis"
+	validGenesis := in.CandidateDigest == "" && in.Genesis.UID != "" && in.Genesis.Kind == api.KindStacksGenesis
 	if candidate {
 		validGenesis = strings.HasPrefix(in.CandidateDigest, "sha256:") && in.Genesis.UID == "" && in.Genesis.Kind == ""
 	}
-	if in.Namespace == "" || in.ParticipantUID == "" || in.PolicyDigest == "" || !validGenesis || !strings.HasPrefix(in.Genesis.Fingerprint, "sha256:") {
+	if in.Namespace == "" || in.ParticipantUID == "" || in.PolicyDigest == "" || !validGenesis ||
+		!strings.HasPrefix(in.Genesis.Fingerprint, "sha256:") {
 		return fmt.Errorf("incomplete Stacks configuration binding")
 	}
-	if in.Kind != "StacksNode" && in.Kind != "StacksSigner" {
+	if in.Kind != api.ParticipantStacksNode && in.Kind != api.ParticipantStacksSigner {
 		return fmt.Errorf("unsupported Stacks actor kind")
 	}
 	key, err := readPrivateInput(ctx, c, in.Namespace, in.Key)
@@ -112,18 +113,24 @@ func runStacksConfigResolver(ctx context.Context, c client.Client, in StacksConf
 		return err
 	}
 	public, err := identity.FromPrivate(string(key.Data[in.Key.Key]))
-	if err != nil || public.Address != in.Identity.Address || !strings.EqualFold(public.PublicKey, in.Identity.PublicKey) {
+	if err != nil || public.Address != in.Identity.Address ||
+		!strings.EqualFold(public.PublicKey, in.Identity.PublicKey) {
 		return fmt.Errorf("private actor key disagrees with admitted public identity")
 	}
 	if in.EventAuth.OwnerUID == "" || in.EventAuth.Key != "token" {
 		return fmt.Errorf("node-owned event authentication is required")
 	}
 	var event *corev1.Secret
-	if in.Kind == "StacksNode" {
+	if in.Kind == api.ParticipantStacksNode {
 		if in.EventAuth.OwnerUID != in.ParticipantUID {
 			return fmt.Errorf("event authentication owner differs from node")
 		}
-		event, err = resolverSecret(ctx, c, BitcoinConfigInput{Namespace: in.Namespace, ParticipantUID: in.ParticipantUID}, in.EventAuth.Binding)
+		event, err = resolverSecret(
+			ctx,
+			c,
+			BitcoinConfigInput{Namespace: in.Namespace, ParticipantUID: in.ParticipantUID},
+			in.EventAuth.Binding,
+		)
 		if err == nil {
 			err = generateEventToken(ctx, c, event)
 		}
@@ -137,7 +144,7 @@ func runStacksConfigResolver(ctx context.Context, c client.Client, in StacksConf
 		return fmt.Errorf("invalid immutable event authentication")
 	}
 	var generated []byte
-	if in.Kind == "StacksNode" {
+	if in.Kind == api.ParticipantStacksNode {
 		if in.ActorRPC == nil || in.ActorRPC.OwnerUID == "" || digest(in.Node.Chain) != in.Genesis.Fingerprint {
 			return fmt.Errorf("node genesis or Bitcoin credential binding is incomplete")
 		}
@@ -145,7 +152,15 @@ func runStacksConfigResolver(ctx context.Context, c client.Client, in StacksConf
 		if err != nil {
 			return err
 		}
-		generated, err = stacksconfig.Node(in.Node, stacksconfig.NodeSecrets{PrivateKey: string(key.Data[in.Key.Key]), RPCUsername: string(rpc.Data["username"]), RPCPassword: string(rpc.Data["password"]), EventToken: string(event.Data["token"])})
+		generated, err = stacksconfig.Node(
+			in.Node,
+			stacksconfig.NodeSecrets{
+				PrivateKey:  string(key.Data[in.Key.Key]),
+				RPCUsername: string(rpc.Data["username"]),
+				RPCPassword: string(rpc.Data["password"]),
+				EventToken:  string(event.Data["token"]),
+			},
+		)
 		if err != nil {
 			return err
 		}
@@ -157,7 +172,9 @@ func runStacksConfigResolver(ctx context.Context, c client.Client, in StacksConf
 	}
 	var custom []byte
 	if in.Custom != nil {
-		if in.Customization == nil || in.Customization.SecretRef == nil || in.Customization.SecretRef.Name != in.Custom.Binding.Name || in.Customization.SecretRef.Key != in.Custom.Key {
+		if in.Customization == nil || in.Customization.SecretRef == nil ||
+			in.Customization.SecretRef.Name != in.Custom.Binding.Name ||
+			in.Customization.SecretRef.Key != in.Custom.Key {
 			return fmt.Errorf("custom configuration binding disagrees")
 		}
 		secret, err := readPrivateInput(ctx, c, in.Namespace, *in.Custom)
@@ -172,7 +189,12 @@ func runStacksConfigResolver(ctx context.Context, c client.Client, in StacksConf
 	if err != nil {
 		return err
 	}
-	config, err := resolverSecret(ctx, c, BitcoinConfigInput{Namespace: in.Namespace, ParticipantUID: in.ParticipantUID}, in.Config)
+	config, err := resolverSecret(
+		ctx,
+		c,
+		BitcoinConfigInput{Namespace: in.Namespace, ParticipantUID: in.ParticipantUID},
+		in.Config,
+	)
 	if err != nil {
 		return err
 	}
@@ -187,24 +209,35 @@ func runStacksConfigResolver(ctx context.Context, c client.Client, in StacksConf
 		base := config.DeepCopy()
 		config.Data = map[string][]byte{"config.toml": data}
 		config.Immutable = ptr.To(true)
-		if err := c.Patch(ctx, config, client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{})); err != nil {
+		if err := c.Patch(
+			ctx,
+			config,
+			client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{}),
+		); err != nil {
 			return err
 		}
 	}
-	result := StacksConfigReport{InputDigest: digest(in), ConfigDigest: digest(string(data)), GenesisDigest: in.Genesis.Fingerprint, Identity: in.Identity, Verified: verified}
+	result := StacksConfigReport{
+		InputDigest:   digest(in),
+		ConfigDigest:  digest(string(data)),
+		GenesisDigest: in.Genesis.Fingerprint,
+		Identity:      in.Identity,
+		Verified:      verified,
+	}
 	return writePublicConfigReport(ctx, c, in.Namespace, in.ParticipantUID, in.Report, result)
 }
 
 // readPrivateInput enforces immutable UID and optional node ownership inside the Job.
 func readPrivateInput(ctx context.Context, c client.Client, namespace string, in PrivateInput) (*corev1.Secret, error) {
-	if in.Binding.Kind != "Secret" || in.Binding.Name == "" || in.Binding.UID == "" {
+	if in.Binding.Kind != common.KindSecret || in.Binding.Name == "" || in.Binding.UID == "" {
 		return nil, fmt.Errorf("private input lacks exact identity")
 	}
 	var secret corev1.Secret
 	if err := c.Get(ctx, client.ObjectKey{Namespace: namespace, Name: in.Binding.Name}, &secret); err != nil {
 		return nil, err
 	}
-	if secret.UID != in.Binding.UID || secret.DeletionTimestamp != nil || !ptr.Deref(secret.Immutable, false) || (in.OwnerUID != "" && !resolverOwned(&secret, in.OwnerUID)) {
+	if secret.UID != in.Binding.UID || secret.DeletionTimestamp != nil || !ptr.Deref(secret.Immutable, false) ||
+		(in.OwnerUID != "" && !resolverOwned(&secret, in.OwnerUID)) {
 		return nil, fmt.Errorf("private input identity unavailable")
 	}
 	if in.Key != "" && len(secret.Data[in.Key]) == 0 {
@@ -235,8 +268,15 @@ func generateEventToken(ctx context.Context, c client.Client, secret *corev1.Sec
 }
 
 // writePublicConfigReport publishes one exact immutable logical result using optimistic locking.
-func writePublicConfigReport(ctx context.Context, c client.Client, namespace string, owner types.UID, ref common.Binding, result any) error {
-	if ref.Kind != "ConfigMap" || ref.UID == "" {
+func writePublicConfigReport(
+	ctx context.Context,
+	c client.Client,
+	namespace string,
+	owner types.UID,
+	ref common.Binding,
+	result any,
+) error {
+	if ref.Kind != common.KindConfigMap || ref.UID == "" {
 		return fmt.Errorf("public report binding missing")
 	}
 	var report corev1.ConfigMap
@@ -268,7 +308,7 @@ func writePublicConfigReport(ctx context.Context, c client.Client, namespace str
 func StacksConfigRules(in StacksConfigInput) []rbacv1.PolicyRule {
 	read := []string{in.Key.Binding.Name}
 	write := []string{in.Config.Name}
-	if in.Kind == "StacksNode" {
+	if in.Kind == api.ParticipantStacksNode {
 		write = append(write, in.EventAuth.Binding.Name)
 	} else {
 		read = append(read, in.EventAuth.Binding.Name)
@@ -281,5 +321,19 @@ func StacksConfigRules(in StacksConfigInput) []rbacv1.PolicyRule {
 	}
 	sort.Strings(read)
 	sort.Strings(write)
-	return []rbacv1.PolicyRule{{APIGroups: []string{""}, Resources: []string{"secrets"}, ResourceNames: read, Verbs: []string{"get"}}, {APIGroups: []string{""}, Resources: []string{"secrets"}, ResourceNames: write, Verbs: []string{"get", "patch"}}, {APIGroups: []string{""}, Resources: []string{"configmaps"}, ResourceNames: []string{in.Report.Name}, Verbs: []string{"get", "patch"}}}
+	return []rbacv1.PolicyRule{
+		{APIGroups: []string{""}, Resources: []string{"secrets"}, ResourceNames: read, Verbs: []string{"get"}},
+		{
+			APIGroups:     []string{""},
+			Resources:     []string{"secrets"},
+			ResourceNames: write,
+			Verbs:         []string{"get", "patch"},
+		},
+		{
+			APIGroups:     []string{""},
+			Resources:     []string{"configmaps"},
+			ResourceNames: []string{in.Report.Name},
+			Verbs:         []string{"get", "patch"},
+		},
+	}
 }

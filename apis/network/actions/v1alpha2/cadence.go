@@ -9,7 +9,7 @@ type GenerationCadence struct {
 	// Mode selects immediate, fixed, inclusive uniform, or explicit inter-block delays.
 	// +kubebuilder:validation:Enum=Immediate;Fixed;Uniform;Explicit
 	// +kubebuilder:validation:MaxLength=9
-	Mode string `json:"mode"`
+	Mode CadenceMode `json:"mode"`
 	// IntervalSeconds is the fixed receipt-relative delay.
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=60

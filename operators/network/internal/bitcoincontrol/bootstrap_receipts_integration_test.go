@@ -63,7 +63,10 @@ func TestBootstrapReceiptAPIOrdering(t *testing.T) {
 	}
 	must(c.Status().Update(ctx, initial))
 	must(c.Get(ctx, client.ObjectKeyFromObject(initial), initial))
-	if initial.Status.LastAccountedOffer != 1 || initial.Status.Offer.Number != 9 || len(initial.Status.Funded) != 1 || initial.Status.Funded[0].Outputs != 1 || !generationAccounted(initial, execution) || accountBootstrapReceipt(root, initial, execution) {
+	if initial.Status.LastAccountedOffer != 1 || initial.Status.Offer.Number != 9 || len(initial.Status.Funded) != 1 ||
+		initial.Status.Funded[0].Outputs != 1 ||
+		!generationAccounted(initial, execution) ||
+		accountBootstrapReceipt(root, initial, execution) {
 		t.Fatal("persisted receipt/cursor differ", initial.Status)
 	}
 }

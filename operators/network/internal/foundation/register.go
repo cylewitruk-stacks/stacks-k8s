@@ -1,8 +1,11 @@
 package foundation
 
 import (
+	bitcoin "github.com/cylewitruk-stacks/stacks-k8s/apis/network/bitcoin/v1alpha2"
+	stacks "github.com/cylewitruk-stacks/stacks-k8s/apis/network/stacks/v1alpha2"
 	api "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha2"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // RuntimeOptions installs supported domains and the aggregate-owned runtime projection.
@@ -17,7 +20,12 @@ type RuntimeOptions struct {
 
 // Register composes independent root, identity and definition controllers in one manager.
 func Register(manager ctrl.Manager, image string, options ...RuntimeOptions) error {
-	root := &Reconciler{Client: manager.GetClient(), Reader: manager.GetAPIReader(), Scheme: manager.GetScheme(), RuntimeKinds: map[api.ParticipantKind]bool{}}
+	root := &Reconciler{
+		Client:       manager.GetClient(),
+		Reader:       manager.GetAPIReader(),
+		Scheme:       manager.GetScheme(),
+		RuntimeKinds: map[api.ParticipantKind]bool{},
+	}
 	for _, option := range options {
 		for _, kind := range option.Kinds {
 			root.RuntimeKinds[kind] = true
@@ -33,13 +41,23 @@ func Register(manager ctrl.Manager, image string, options ...RuntimeOptions) err
 		return err
 	}
 	for _, wallet := range []bool{false, true} {
-		r := &IdentityReconciler{Client: manager.GetClient(), Reader: manager.GetAPIReader(), Scheme: manager.GetScheme(), Wallet: wallet, Image: image}
+		r := &IdentityReconciler{
+			Client: manager.GetClient(),
+			Reader: manager.GetAPIReader(),
+			Scheme: manager.GetScheme(),
+			Wallet: wallet,
+			Image:  image,
+		}
 		if err := r.SetupWithManager(manager); err != nil {
 			return err
 		}
 	}
-	for _, kind := range []string{"BitcoinNode", "StacksNode", "StacksSigner", "StacksStacker", "StacksFaucet", "StacksContractSet", "StacksTransactionProduction", "BitcoinBlockProduction", "StacksEpochSchedule", "BitcoinBlockSchedule"} {
-		r := &DefinitionReconciler{Client: manager.GetClient(), Scheme: manager.GetScheme(), Kind: kind}
+	for _, prototype := range []client.Object{
+		&bitcoin.BitcoinNode{}, &stacks.StacksNode{}, &stacks.StacksSigner{}, &stacks.StacksStacker{},
+		&stacks.StacksFaucet{}, &stacks.StacksContractSet{}, &stacks.StacksTransactionProduction{},
+		&bitcoin.BitcoinBlockProduction{}, &api.StacksEpochSchedule{}, &bitcoin.BitcoinBlockSchedule{},
+	} {
+		r := &DefinitionReconciler{Client: manager.GetClient(), Scheme: manager.GetScheme(), Prototype: prototype}
 		if err := r.SetupWithManager(manager); err != nil {
 			return err
 		}

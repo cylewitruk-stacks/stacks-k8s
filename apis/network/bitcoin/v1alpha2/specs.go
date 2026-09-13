@@ -51,7 +51,7 @@ type BitcoinWalletSpec struct {
 type Cadence struct {
 	// Mode selects fixed or uniform timing.
 	// +kubebuilder:validation:Enum=Fixed;Uniform
-	Mode string `json:"mode"`
+	Mode CadenceMode `json:"mode"`
 	// Interval is the fixed duration.
 	Interval *common.Duration `json:"interval,omitempty"`
 	// MinimumInterval bounds uniform timing.

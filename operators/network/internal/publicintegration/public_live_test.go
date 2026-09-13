@@ -33,10 +33,23 @@ func TestPublicBaselineLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Logf("public qualification context=%s namespace=%s variant=%s cadence=%s evidence=%s", config.kubecontext, config.namespace, config.variant, config.cadence, h.evidence)
+	t.Logf(
+		"public qualification context=%s namespace=%s variant=%s cadence=%s evidence=%s",
+		config.kubecontext,
+		config.namespace,
+		config.variant,
+		config.cadence,
+		h.evidence,
+	)
 	t.Cleanup(func() {
 		if err := h.cleanup(); err != nil {
-			t.Errorf("bounded cleanup incomplete for namespace %s UID=%s: %v; public evidence=%s", config.namespace, h.namespaceUID, err, h.evidence)
+			t.Errorf(
+				"bounded cleanup incomplete for namespace %s UID=%s: %v; public evidence=%s",
+				config.namespace,
+				h.namespaceUID,
+				err,
+				h.evidence,
+			)
 		}
 	})
 	signals, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -48,7 +61,8 @@ func TestPublicBaselineLifecycle(t *testing.T) {
 	}
 	initialized, err := h.wait(ctx, "initialized", config.timeout, true, func(s snapshot) (bool, error) {
 		_, ready := progress(s)
-		return condition(s, "Initialized", metav1.ConditionTrue) && condition(s, "Operational", metav1.ConditionTrue) && ready, nil
+		return condition(s, "Initialized", metav1.ConditionTrue) && condition(s, "Operational", metav1.ConditionTrue) &&
+			ready, nil
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -99,7 +113,8 @@ func TestPublicBaselineLifecycle(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if (os.Getenv("STACKS_PUBLIC_ACTORS") == "1" && os.Getenv("STACKS_PUBLIC_ACTORS_FIRST") != "1") || os.Getenv("STACKS_PUBLIC_FRESH_JOIN") == "1" {
+	if (os.Getenv("STACKS_PUBLIC_ACTORS") == "1" && os.Getenv("STACKS_PUBLIC_ACTORS_FIRST") != "1") ||
+		os.Getenv("STACKS_PUBLIC_FRESH_JOIN") == "1" {
 		progressing, err = h.qualifyActors(ctx, progressing)
 		if err != nil {
 			t.Fatal(err)
@@ -133,5 +148,10 @@ func TestPublicBaselineLifecycle(t *testing.T) {
 	if err := h.cleanup(); err != nil {
 		t.Fatal(err)
 	}
-	t.Logf("declaration→Initialized+Operational→native progress→optional operator rollout→optional faucet/actions/actors→pause/resume→Stopped→root deletion→reusable declarations retained→namespace deleted; evidence=%s", h.evidence)
+	t.Logf(
+		"declaration→Initialized+Operational→native progress→optional operator "+
+			"rollout→optional faucet/actions/actors→pause/resume→Stopped→root "+
+			"deletion→reusable declarations retained→namespace deleted; evidence=%s",
+		h.evidence,
+	)
 }

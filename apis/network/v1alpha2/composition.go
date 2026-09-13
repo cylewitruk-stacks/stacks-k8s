@@ -14,6 +14,25 @@ import (
 // +kubebuilder:validation:Enum=BitcoinNode;StacksNode;StacksSigner;StacksStacker;StacksFaucet;StacksContractSet;StacksTransactionProduction;BitcoinBlockProduction
 type ParticipantKind string
 
+const (
+	// ParticipantBitcoinNode selects the BitcoinNode participant domain.
+	ParticipantBitcoinNode ParticipantKind = bitcoin.KindBitcoinNode
+	// ParticipantStacksNode selects the StacksNode participant domain.
+	ParticipantStacksNode ParticipantKind = stacks.KindStacksNode
+	// ParticipantStacksSigner selects the StacksSigner participant domain.
+	ParticipantStacksSigner ParticipantKind = stacks.KindStacksSigner
+	// ParticipantStacksStacker selects the StacksStacker participant domain.
+	ParticipantStacksStacker ParticipantKind = stacks.KindStacksStacker
+	// ParticipantStacksFaucet selects the StacksFaucet participant domain.
+	ParticipantStacksFaucet ParticipantKind = stacks.KindStacksFaucet
+	// ParticipantStacksContractSet selects the StacksContractSet participant domain.
+	ParticipantStacksContractSet ParticipantKind = stacks.KindStacksContractSet
+	// ParticipantStacksTransactionProduction selects the StacksTransactionProduction participant domain.
+	ParticipantStacksTransactionProduction ParticipantKind = stacks.KindStacksTransactionProduction
+	// ParticipantBitcoinBlockProduction selects the BitcoinBlockProduction participant domain.
+	ParticipantBitcoinBlockProduction ParticipantKind = bitcoin.KindBitcoinBlockProduction
+)
+
 // Configuration contains exactly the branch selected by the outer kind.
 type Configuration struct {
 	// BitcoinNode configures Core.
@@ -193,7 +212,7 @@ type StacksNetworkSpec struct {
 	// +kubebuilder:default=Running
 	// +kubebuilder:validation:Enum=Running;Paused;Stopped
 	// +kubebuilder:validation:XValidation:rule="oldSelf != 'Stopped' || self == 'Stopped'",message="Stopped is terminal"
-	Operation string `json:"operation,omitempty"`
+	Operation NetworkOperation `json:"operation,omitempty"`
 	// Profile selects the supported immutable release profile.
 	// +kubebuilder:default=regtest-pox4-pox5-v1
 	// +kubebuilder:validation:Enum=regtest-pox4-pox5-v1

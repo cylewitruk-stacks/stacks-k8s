@@ -33,7 +33,10 @@ func nextGateFixture(t *testing.T) (*testFixture, *api.StacksNetworkParticipant,
 	actor.Status.Admission.PolicyDigest = foundation.Digest(actor.Status.Admission.Configuration)
 	actor.Status.Runtime.PolicyDigest = actor.Status.Admission.PolicyDigest
 	actor.Status.Runtime.ObservedGeneration = 1
-	actor.Status.Conditions = []metav1.Condition{{Type: "WorkloadReady", Status: metav1.ConditionTrue, ObservedGeneration: 1}, {Type: "ConfigVerified", Status: metav1.ConditionTrue, ObservedGeneration: 1}}
+	actor.Status.Conditions = []metav1.Condition{
+		{Type: "WorkloadReady", Status: metav1.ConditionTrue, ObservedGeneration: 1},
+		{Type: "ConfigVerified", Status: metav1.ConditionTrue, ObservedGeneration: 1},
+	}
 	stacker := f.node.DeepCopy()
 	stacker.Name = "stacker"
 	stacker.UID = "stacker-uid"
@@ -43,7 +46,18 @@ func nextGateFixture(t *testing.T) (*testFixture, *api.StacksNetworkParticipant,
 	stacker.Status.Admission.Configuration = api.Configuration{StacksStacker: &stacks.StacksStackerSpec{}}
 	stacker.Status.Admission.PolicyDigest = foundation.Digest(stacker.Status.Admission.Configuration)
 	digest := "sha256:" + strings.Repeat("e", 64)
-	stacker.Status.Execution = &api.WorkerExecutionStatus{PodUID: "worker-pod", ProcessNonce: "worker-process", ProfileDigest: digest, AppliedPolicyDigest: stacker.Status.Admission.PolicyDigest, ObservedGeneration: 1, NetworkGeneration: 1, Phase: "Active", ObservedAt: metav1.NewTime(f.now), Pending: 1, Transactions: &api.TransactionExecutionStatus{Offered: 1, LastTxID: strings.Repeat("a", 64)}}
+	stacker.Status.Execution = &api.WorkerExecutionStatus{
+		PodUID:              "worker-pod",
+		ProcessNonce:        "worker-process",
+		ProfileDigest:       digest,
+		AppliedPolicyDigest: stacker.Status.Admission.PolicyDigest,
+		ObservedGeneration:  1,
+		NetworkGeneration:   1,
+		Phase:               "Active",
+		ObservedAt:          metav1.NewTime(f.now),
+		Pending:             1,
+		Transactions:        &api.TransactionExecutionStatus{Offered: 1, LastTxID: strings.Repeat("a", 64)},
+	}
 	for _, p := range []*api.StacksNetworkParticipant{actor, stacker} {
 		if e := f.c.Create(ctx, p); e != nil {
 			t.Fatal(e)
@@ -53,7 +67,10 @@ func nextGateFixture(t *testing.T) (*testFixture, *api.StacksNetworkParticipant,
 	if e := f.c.Get(ctx, client.ObjectKey{Namespace: "test", Name: "genesis"}, &genesis); e != nil {
 		t.Fatal(e)
 	}
-	genesis.Spec.Bootstrap.Requirements = []api.BootstrapRequirement{{Kind: "StacksNode", MiningEnabled: ptr.To(true), Participant: binding("StacksNetworkParticipant", actor)}, {Kind: "StacksStacker", Participant: binding("StacksNetworkParticipant", stacker)}}
+	genesis.Spec.Bootstrap.Requirements = []api.BootstrapRequirement{
+		{Kind: "StacksNode", MiningEnabled: ptr.To(true), Participant: binding("StacksNetworkParticipant", actor)},
+		{Kind: "StacksStacker", Participant: binding("StacksNetworkParticipant", stacker)},
+	}
 	if e := f.c.Update(ctx, &genesis); e != nil {
 		t.Fatal(e)
 	}
@@ -70,13 +87,37 @@ func nextGateFixture(t *testing.T) (*testFixture, *api.StacksNetworkParticipant,
 		t.Fatal(e)
 	}
 	root := f.root.DeepCopy()
-	root.Spec.Participants = append(root.Spec.Participants, api.Participant{Name: "stacks", Kind: "StacksNode"}, api.Participant{Name: "stacker", Kind: "StacksStacker"})
+	root.Spec.Participants = append(
+		root.Spec.Participants,
+		api.Participant{Name: "stacks", Kind: "StacksNode"},
+		api.Participant{Name: "stacker", Kind: "StacksStacker"},
+	)
 	if e := f.c.Update(ctx, root); e != nil {
 		t.Fatal(e)
 	}
 	root.Status.GenesisRef = &ref
-	root.Status.Identities = append(root.Status.Identities, api.InstanceIdentity{Name: "stacks", UID: actor.UID}, api.InstanceIdentity{Name: "stacker", UID: stacker.UID, Worker: &api.WorkerSession{Pod: api.WorkerPodBinding{Kind: "Pod", Name: "worker", UID: "worker-pod"}, ProfileDigest: digest}})
-	root.Status.Initialization = &api.InitializationStatus{GenesisUID: genesis.UID, GenesisDigest: root.Status.GenesisDigest, GateIndex: 1, AuthorizedCeiling: 234, Gates: []api.GateObservation{{Name: "PrepareBitcoin", CompletedAt: ptr.To(metav1.NewTime(f.now))}, {Name: "EnrollPoX4"}}}
+	root.Status.Identities = append(
+		root.Status.Identities,
+		api.InstanceIdentity{Name: "stacks", UID: actor.UID},
+		api.InstanceIdentity{
+			Name: "stacker",
+			UID:  stacker.UID,
+			Worker: &api.WorkerSession{
+				Pod:           api.WorkerPodBinding{Kind: "Pod", Name: "worker", UID: "worker-pod"},
+				ProfileDigest: digest,
+			},
+		},
+	)
+	root.Status.Initialization = &api.InitializationStatus{
+		GenesisUID:        genesis.UID,
+		GenesisDigest:     root.Status.GenesisDigest,
+		GateIndex:         1,
+		AuthorizedCeiling: 234,
+		Gates: []api.GateObservation{
+			{Name: "PrepareBitcoin", CompletedAt: ptr.To(metav1.NewTime(f.now))},
+			{Name: "EnrollPoX4"},
+		},
+	}
 	if e := f.c.Status().Update(ctx, root); e != nil {
 		t.Fatal(e)
 	}
@@ -119,7 +160,11 @@ func TestPoX5ConfirmationWindow(t *testing.T) {
 		t.Run(fmt.Sprintf("frozen-ceiling-%d", ceiling), func(t *testing.T) {
 			f, actor, _ := nextGateFixture(t)
 			ctx := context.Background()
-			actor.Status.Runtime.Protocol = &api.StacksProtocolObservation{Available: false, Reason: "ObservationUnavailable", BurnHeight: 282}
+			actor.Status.Runtime.Protocol = &api.StacksProtocolObservation{
+				Available:  false,
+				Reason:     "ObservationUnavailable",
+				BurnHeight: 282,
+			}
 			if err := f.c.Status().Update(ctx, actor); err != nil {
 				t.Fatal(err)
 			}
@@ -127,7 +172,14 @@ func TestPoX5ConfirmationWindow(t *testing.T) {
 			if err := f.c.Get(ctx, client.ObjectKey{Namespace: "test", Name: "genesis"}, &genesis); err != nil {
 				t.Fatal(err)
 			}
-			genesis.Spec.Bootstrap.Gates = []api.Gate{{Name: "PrepareBitcoin", BitcoinCeiling: 203}, {Name: "EnrollPoX4", BitcoinCeiling: 234}, {Name: "PrepareNakamoto", BitcoinCeiling: 251}, {Name: "PreparePoX5", BitcoinCeiling: 281}, {Name: "EnrollPoX5", BitcoinCeiling: ceiling, TargetCycle: ptr.To(int64(15))}, {Name: "PrepareWaterfall", BitcoinCeiling: 299}}
+			genesis.Spec.Bootstrap.Gates = []api.Gate{
+				{Name: "PrepareBitcoin", BitcoinCeiling: 203},
+				{Name: "EnrollPoX4", BitcoinCeiling: 234},
+				{Name: "PrepareNakamoto", BitcoinCeiling: 251},
+				{Name: "PreparePoX5", BitcoinCeiling: 281},
+				{Name: "EnrollPoX5", BitcoinCeiling: ceiling, TargetCycle: ptr.To(int64(15))},
+				{Name: "PrepareWaterfall", BitcoinCeiling: 299},
+			}
 			if err := f.c.Update(ctx, &genesis); err != nil {
 				t.Fatal(err)
 			}
@@ -180,7 +232,10 @@ func TestPoX5ConfirmationWindow(t *testing.T) {
 				f.reconcile(t, scheduler)
 				_ = f.worker.Step(ctx)
 			}
-			if got := f.readInitial(t); got.Status.Reason != "FrozenGateReached" || got.Status.Funded[0].Outputs != 203 || f.rpc.count() != int(ceiling-284) {
+			if got := f.readInitial(
+				t,
+			); got.Status.Reason != "FrozenGateReached" || got.Status.Funded[0].Outputs != 203 ||
+				f.rpc.count() != int(ceiling-284) {
 				t.Fatalf("cutoff/funding changed: calls=%d status=%+v", f.rpc.count(), got.Status)
 			}
 		})
@@ -303,7 +358,18 @@ func TestFirstAnchorDemandAllowsConfirmationButNotMissingOrStaleNativeEvidence(t
 	}
 	runtime := actor.Status.Runtime
 	runtime.ConfigurationDigest = "configuration"
-	runtime.Protocol = &api.StacksProtocolObservation{Reason: "AwaitingFirstAnchor", NetworkID: 0x80000000, BurnHeight: 210, StacksTip: strings.Repeat("0", 64), FullySynced: true, ObservedAt: metav1.NewTime(f.now), GenesisUID: f.root.Status.GenesisRef.UID, PodUID: runtime.PodRef.UID, ContainerID: runtime.ContainerID, ConfigurationDigest: runtime.ConfigurationDigest}
+	runtime.Protocol = &api.StacksProtocolObservation{
+		Reason:              "AwaitingFirstAnchor",
+		NetworkID:           0x80000000,
+		BurnHeight:          210,
+		StacksTip:           strings.Repeat("0", 64),
+		FullySynced:         true,
+		ObservedAt:          metav1.NewTime(f.now),
+		GenesisUID:          f.root.Status.GenesisRef.UID,
+		PodUID:              runtime.PodRef.UID,
+		ContainerID:         runtime.ContainerID,
+		ConfigurationDigest: runtime.ConfigurationDigest,
+	}
 	if err := f.c.Status().Update(ctx, actor); err != nil {
 		t.Fatal(err)
 	}
@@ -316,9 +382,13 @@ func TestFirstAnchorDemandAllowsConfirmationButNotMissingOrStaleNativeEvidence(t
 	}
 	original := runtime.Protocol.DeepCopy()
 	for name, change := range map[string]func(*api.StacksProtocolObservation){
-		"failed read":       func(v *api.StacksProtocolObservation) { v.Reason = "ObservationUnavailable" },
-		"stale":             func(v *api.StacksProtocolObservation) { v.ObservedAt = metav1.NewTime(f.now.Add(-17 * time.Second)) },
-		"future":            func(v *api.StacksProtocolObservation) { v.ObservedAt = metav1.NewTime(f.now.Add(time.Second)) },
+		"failed read": func(v *api.StacksProtocolObservation) { v.Reason = "ObservationUnavailable" },
+		"stale": func(v *api.StacksProtocolObservation) {
+			v.ObservedAt = metav1.NewTime(f.now.Add(-17 * time.Second))
+		},
+		"future": func(v *api.StacksProtocolObservation) {
+			v.ObservedAt = metav1.NewTime(f.now.Add(time.Second))
+		},
 		"old pod":           func(v *api.StacksProtocolObservation) { v.PodUID = "old-pod" },
 		"old process":       func(v *api.StacksProtocolObservation) { v.ContainerID = "old-container" },
 		"old config":        func(v *api.StacksProtocolObservation) { v.ConfigurationDigest = "old-config" },
@@ -334,7 +404,17 @@ func TestFirstAnchorDemandAllowsConfirmationButNotMissingOrStaleNativeEvidence(t
 			if err := f.c.Status().Update(ctx, actor); err != nil {
 				t.Fatal(err)
 			}
-			if ready, err := advancementReady(ctx, f.c, f.root, f.readInitial(t), authority, 210, f.now); err != nil || ready {
+			if ready, err := advancementReady(
+				ctx,
+				f.c,
+				f.root,
+				//nolint:contextcheck // Fixture reads use testing.T.Context, independent of the exercised operation deadline.
+				f.readInitial(t),
+				authority,
+				210,
+				f.now,
+			); err != nil ||
+				ready {
 				t.Fatalf("invalid startup evidence accepted: %v %v", ready, err)
 			}
 		})
@@ -356,7 +436,18 @@ func TestFirstAnchorDemandEndsForTheCohort(t *testing.T) {
 	if err := f.c.Status().Update(ctx, stacker); err != nil {
 		t.Fatal(err)
 	}
-	empty := &api.StacksProtocolObservation{Reason: "AwaitingFirstAnchor", NetworkID: 0x80000000, BurnHeight: 210, StacksTip: strings.Repeat("0", 64), FullySynced: true, ObservedAt: metav1.NewTime(f.now), GenesisUID: f.root.Status.GenesisRef.UID, PodUID: miner.Status.Runtime.PodRef.UID, ContainerID: miner.Status.Runtime.ContainerID, ConfigurationDigest: miner.Status.Runtime.ConfigurationDigest}
+	empty := &api.StacksProtocolObservation{
+		Reason:              "AwaitingFirstAnchor",
+		NetworkID:           0x80000000,
+		BurnHeight:          210,
+		StacksTip:           strings.Repeat("0", 64),
+		FullySynced:         true,
+		ObservedAt:          metav1.NewTime(f.now),
+		GenesisUID:          f.root.Status.GenesisRef.UID,
+		PodUID:              miner.Status.Runtime.PodRef.UID,
+		ContainerID:         miner.Status.Runtime.ContainerID,
+		ConfigurationDigest: miner.Status.Runtime.ConfigurationDigest,
+	}
 	follower := miner.DeepCopy()
 	follower.Name, follower.UID, follower.ResourceVersion = "follower", "follower-uid", ""
 	follower.Spec.ParticipantName = "follower"
@@ -364,13 +455,26 @@ func TestFirstAnchorDemandEndsForTheCohort(t *testing.T) {
 	if err := f.c.Create(ctx, follower); err != nil {
 		t.Fatal(err)
 	}
-	f.root.Spec.Participants = append(f.root.Spec.Participants, api.Participant{Name: "follower", Kind: "StacksNode"})
-	f.root.Status.Identities = append(f.root.Status.Identities, api.InstanceIdentity{Name: "follower", UID: follower.UID})
+	f.root.Spec.Participants = append(f.root.Spec.Participants, api.Participant{
+		Name: "follower",
+		Kind: "StacksNode",
+	})
+	f.root.Status.Identities = append(
+		f.root.Status.Identities,
+		api.InstanceIdentity{Name: "follower", UID: follower.UID},
+	)
 	authority, err := currentGate(ctx, f.c, f.root, f.readInitial(t))
 	if err != nil {
 		t.Fatal(err)
 	}
-	authority.genesis.Spec.Bootstrap.Requirements = append(authority.genesis.Spec.Bootstrap.Requirements, api.BootstrapRequirement{Kind: "StacksNode", MiningEnabled: ptr.To(false), Participant: binding("StacksNetworkParticipant", follower)})
+	authority.genesis.Spec.Bootstrap.Requirements = append(
+		authority.genesis.Spec.Bootstrap.Requirements,
+		api.BootstrapRequirement{
+			Kind:          "StacksNode",
+			MiningEnabled: ptr.To(false),
+			Participant:   binding("StacksNetworkParticipant", follower),
+		},
+	)
 	for _, tc := range []struct {
 		name                        string
 		minerHeight, followerHeight uint64
@@ -394,6 +498,7 @@ func TestFirstAnchorDemandEndsForTheCohort(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
+			//nolint:contextcheck // Fixture reads use testing.T.Context, independent of the exercised operation deadline.
 			got, err := advancementReady(ctx, f.c, f.root, f.readInitial(t), authority, 210, f.now)
 			if err != nil || got != tc.want {
 				t.Fatalf("ready=%v err=%v", got, err)

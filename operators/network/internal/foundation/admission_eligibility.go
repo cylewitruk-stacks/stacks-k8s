@@ -46,12 +46,14 @@ func ValidateAdmissionSource(ctx context.Context, reader client.Reader, p *api.S
 // AdmissionReady requires a current aggregate eligibility decision for the retained policy.
 // Unknown or stale decisions are availability failures, not proof of identity loss.
 func AdmissionReady(p *api.StacksNetworkParticipant) error {
-	condition := meta.FindStatusCondition(p.Status.Conditions, "AdmissionReady")
+	condition := meta.FindStatusCondition(p.Status.Conditions, api.ConditionAdmissionReady)
 	if condition != nil && condition.Status == metav1.ConditionFalse {
 		return fmt.Errorf("retained admission ineligible: %s", condition.Reason)
 	}
 	if condition == nil || condition.ObservedGeneration != p.Generation || condition.Status != metav1.ConditionTrue {
-		return apierrors.NewServiceUnavailable("retained admission eligibility has not been observed for this generation")
+		return apierrors.NewServiceUnavailable(
+			"retained admission eligibility has not been observed for this generation",
+		)
 	}
 	return nil
 }
@@ -71,44 +73,58 @@ func ValidateAdmissionEligibility(ctx context.Context, reader client.Reader, p *
 }
 
 // admissionReadiness evaluates retained eligibility independently of candidate validation.
-func (r *Reconciler) admissionReadiness(ctx context.Context, root *api.StacksNetwork, p *api.StacksNetworkParticipant, dependencies *dependencyCheck) (metav1.ConditionStatus, string, string) {
+func (r *Reconciler) admissionReadiness(
+	ctx context.Context,
+	root *api.StacksNetwork,
+	p *api.StacksNetworkParticipant,
+	dependencies *dependencyCheck,
+) (metav1.ConditionStatus, string, string) {
 	if p.Status.Admission == nil || Digest(p.Status.Admission.Configuration) != p.Status.Admission.PolicyDigest {
-		return metav1.ConditionFalse, "AdmissionUnavailable", "No complete retained policy is available"
+		return metav1.ConditionFalse, api.ReasonAdmissionUnavailable, "No complete retained policy is available"
 	}
 	id := findIdentity(root.Status.Identities, p.Spec.ParticipantName)
 	selected := false
 	for _, entry := range root.Spec.Participants {
 		selected = selected || entry.Name == p.Spec.ParticipantName && entry.Kind == p.Spec.Kind
 	}
-	if !selected || id == nil || id.UID != p.UID || id.Removing || p.DeletionTimestamp != nil || p.Spec.NetworkUID != root.UID || !ownedUID(p, root.UID) {
-		return metav1.ConditionFalse, "IdentityUnavailable", "Retained participant identity is no longer eligible"
+	if !selected || id == nil || id.UID != p.UID || id.Removing || p.DeletionTimestamp != nil ||
+		p.Spec.NetworkUID != root.UID ||
+		!ownedUID(p, root.UID) {
+		return metav1.ConditionFalse, api.ReasonIdentityUnavailable, "Retained participant identity is no longer eligible"
 	}
 	if err := dependencies.source(ctx, p); err != nil {
-		return eligibilityFailure(err, "DefinitionUnavailable")
+		return eligibilityFailure(err, reasonDefinitionUnavailable)
 	}
 	if err := dependencies.validate(ctx, p.Status.Admission.Dependencies); err != nil {
-		return eligibilityFailure(err, "IdentityUnavailable")
+		return eligibilityFailure(err, api.ReasonIdentityUnavailable)
 	}
-	return metav1.ConditionTrue, "RetainedPolicyEligible", "Retained source and required identities remain eligible"
+	return metav1.ConditionTrue, reasonRetainedPolicyEligible, "Retained source and required identities remain eligible"
 }
 
 // eligibilityFailure preserves the difference between observed loss and a failed observation.
 func eligibilityFailure(err error, reason string) (metav1.ConditionStatus, string, string) {
 	if TransientAPIError(err) {
-		return metav1.ConditionUnknown, "ObservationUnavailable", "Retained admission identity could not be observed"
+		return metav1.ConditionUnknown, api.ReasonObservationUnavailable, "Retained admission identity could not be observed"
 	}
 	return metav1.ConditionFalse, reason, err.Error()
 }
 
 // TransientAPIError recognizes transport and API availability errors without masking denial or loss.
 func TransientAPIError(err error) bool {
-	if apierrors.IsForbidden(err) || apierrors.IsUnauthorized(err) || apierrors.IsNotFound(err) || errors.Is(err, context.Canceled) {
+	if apierrors.IsForbidden(err) || apierrors.IsUnauthorized(err) || apierrors.IsNotFound(err) ||
+		errors.Is(err, context.Canceled) {
 		return false
 	}
-	if apierrors.IsTimeout(err) || apierrors.IsServerTimeout(err) || apierrors.IsServiceUnavailable(err) || apierrors.IsTooManyRequests(err) || apierrors.IsInternalError(err) {
+	if apierrors.IsTimeout(err) || apierrors.IsServerTimeout(err) || apierrors.IsServiceUnavailable(err) ||
+		apierrors.IsTooManyRequests(err) ||
+		apierrors.IsInternalError(err) {
 		return true
 	}
-	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, syscall.ECONNRESET) || errors.Is(err, syscall.ECONNREFUSED) || errors.Is(err, syscall.EHOSTUNREACH) || errors.Is(err, syscall.ENETUNREACH) {
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) ||
+		errors.Is(err, syscall.ECONNRESET) ||
+		errors.Is(err, syscall.ECONNREFUSED) ||
+		errors.Is(err, syscall.EHOSTUNREACH) ||
+		errors.Is(err, syscall.ENETUNREACH) {
 		return true
 	}
 	var network net.Error

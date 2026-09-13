@@ -61,15 +61,25 @@ func TestRootWorkloadRoutingUsesCapturedNamesWithoutReader(t *testing.T) {
 
 func TestProductionProjectionOwnsNoAdmission(t *testing.T) {
 	f := newFixture(t)
-	f.production.Status.Conditions = []metav1.Condition{{Type: "Resolved", Status: metav1.ConditionTrue, Reason: "Admitted", LastTransitionTime: metav1.Now()}}
+	f.production.Status.Conditions = []metav1.Condition{
+		{Type: "Resolved", Status: metav1.ConditionTrue, Reason: "Admitted", LastTransitionTime: metav1.Now()},
+	}
 	status := productionStatus(f.production, "Held", "NextGateNotImplemented")
-	if status.Admission != nil || status.Runtime == nil || status.Runtime.PolicyDigest != f.production.Status.Admission.PolicyDigest || len(status.Conditions) != 1 || status.Conditions[0].Type != "WorkloadReady" || status.Conditions[0].Status != metav1.ConditionTrue {
+	if status.Admission != nil || status.Runtime == nil ||
+		status.Runtime.PolicyDigest != f.production.Status.Admission.PolicyDigest ||
+		len(status.Conditions) != 1 ||
+		status.Conditions[0].Type != "WorkloadReady" ||
+		status.Conditions[0].Status != metav1.ConditionTrue {
 		t.Fatal("production projection changed admission or misreported held scheduler")
 	}
 	if status.Runtime.Terminated {
 		t.Fatal("protocol hold treated as termination")
 	}
-	if state := productionStatus(f.production, "Waiting", "WalletsPreparing"); state.Conditions[0].Status != metav1.ConditionFalse {
+	if state := productionStatus(
+		f.production,
+		"Waiting",
+		"WalletsPreparing",
+	); state.Conditions[0].Status != metav1.ConditionFalse {
 		t.Fatal("unready targets claimed ready")
 	}
 }
@@ -81,12 +91,18 @@ type writeCounter struct {
 	lastPatch string
 }
 
-func (c *writeCounter) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
+func (c *writeCounter) Patch(
+	ctx context.Context,
+	obj client.Object,
+	patch client.Patch,
+	opts ...client.PatchOption,
+) error {
 	c.patches++
 	raw, _ := patch.Data(obj)
 	c.lastPatch = string(raw)
 	return c.Client.Patch(ctx, obj, patch, opts...)
 }
+
 func TestWorkerWorkloadRepairsDriftAndAvoidsUnchangedPatches(t *testing.T) {
 	f := newFixture(t)
 	c := &writeCounter{Client: f.c}
@@ -122,7 +138,8 @@ func TestWorkerWorkloadRepairsDriftAndAvoidsUnchangedPatches(t *testing.T) {
 	if e = f.c.Get(context.Background(), client.ObjectKeyFromObject(deployment), current); e != nil {
 		t.Fatal(e)
 	}
-	if current.Spec.Template.Spec.Containers[0].Image != r.Image || current.Spec.Strategy.Type != appsv1.RecreateDeploymentStrategyType {
+	if current.Spec.Template.Spec.Containers[0].Image != r.Image ||
+		current.Spec.Strategy.Type != appsv1.RecreateDeploymentStrategyType {
 		t.Fatal("worker drift not repaired")
 	}
 	if e = f.c.Delete(context.Background(), current); e != nil {

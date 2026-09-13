@@ -22,11 +22,19 @@ func verifyWalletProfileSchema(t *testing.T, ctx context.Context, c client.Clien
 	if err := c.Create(ctx, namespace); err != nil {
 		t.Fatal(err)
 	}
-	for name, watchOnly := range map[string]*bool{"omitted": nil, "public": ptr.To(true), "private": ptr.To(false)} {
-		wallet := &bitcoin.BitcoinWallet{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace.Name}, Spec: bitcoin.BitcoinWalletSpec{WatchOnly: watchOnly}}
+	for name, watchOnly := range map[string]*bool{
+		"omitted": nil,
+		"public":  ptr.To(true),
+		"private": ptr.To(false),
+	} {
+		wallet := &bitcoin.BitcoinWallet{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace.Name},
+			Spec:       bitcoin.BitcoinWalletSpec{WatchOnly: watchOnly},
+		}
 		err := c.Create(ctx, wallet)
 		if name == "private" {
-			if !apierrors.IsInvalid(err) || !strings.Contains(err.Error(), "only watch-only Core wallets are supported") {
+			if !apierrors.IsInvalid(err) ||
+				!strings.Contains(err.Error(), "only watch-only Core wallets are supported") {
 				t.Fatalf("private wallet admitted or unclear rejection: %v", err)
 			}
 			continue
@@ -35,7 +43,11 @@ func verifyWalletProfileSchema(t *testing.T, ctx context.Context, c client.Clien
 			t.Fatalf("supported %s rejected: %v", name, err)
 		}
 		wallet.Spec.WatchOnly = ptr.To(false)
-		if err := c.Update(ctx, wallet); !apierrors.IsInvalid(err) || !strings.Contains(err.Error(), "only watch-only Core wallets are supported") {
+		if err := c.Update(
+			ctx,
+			wallet,
+		); !apierrors.IsInvalid(err) ||
+			!strings.Contains(err.Error(), "only watch-only Core wallets are supported") {
 			t.Fatalf("private update admitted: %v", err)
 		}
 	}

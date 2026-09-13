@@ -48,17 +48,22 @@ func (r *Reconciler) Reconcile(ctx context.Context, key ctrl.Request) (ctrl.Resu
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 	admission := request.Status.Admission.DeepCopy()
-	if admission == nil || admission.Decision == "Pending" {
+	if admission == nil || admission.Decision == stacks.FaucetDecisionPending {
 		var err error
 		admission, err = r.admit(ctx, request)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
 		// A lengthy identity/capacity read cannot extend the original dispatch window.
-		if admission.Decision == "Admitted" {
+		if admission.Decision == stacks.FaucetDecisionAdmitted {
 			deadline, _ := Deadline(request)
 			if !r.now().Before(deadline) {
-				admission = baseAdmission(request, deadline, "Expired", "DeadlineBeforeAdmission")
+				admission = baseAdmission(
+					request,
+					deadline,
+					stacks.FaucetDecisionExpired,
+					reasonDeadlineBeforeAdmission,
+				)
 			}
 		}
 	}
@@ -67,16 +72,27 @@ func (r *Reconciler) Reconcile(ctx context.Context, key ctrl.Request) (ctrl.Resu
 	phase, reason := ProjectPhase(projected, r.now())
 	conditions := append([]metav1.Condition(nil), request.Status.Conditions...)
 	status := metav1.ConditionFalse
-	if phase == "Completed" {
+	if phase == stacks.FaucetCompleted {
 		status = metav1.ConditionTrue
 	}
-	if phase == "Pending" || phase == "Submitted" || phase == "Inconclusive" {
+	if phase == stacks.FaucetPending || phase == stacks.FaucetSubmitted || phase == stacks.FaucetInconclusive {
 		status = metav1.ConditionUnknown
 	}
-	meta.SetStatusCondition(&conditions, metav1.Condition{Type: "Completed", Status: status, ObservedGeneration: request.Generation, Reason: reason, Message: reason, LastTransitionTime: metav1.NewTime(r.now())})
+	meta.SetStatusCondition(
+		&conditions,
+		metav1.Condition{
+			Type:               stacks.ConditionCompleted,
+			Status:             status,
+			ObservedGeneration: request.Generation,
+			Reason:             reason,
+			Message:            reason,
+			LastTransitionTime: metav1.NewTime(r.now()),
+		},
+	)
 	owned := stacks.FaucetRequestStatus{Admission: admission, Phase: phase, Conditions: conditions}
-	if !equality.Semantic.DeepEqual(request.Status.Admission, owned.Admission) || request.Status.Phase != phase || !equality.Semantic.DeepEqual(request.Status.Conditions, conditions) {
-		if admission != nil && admission.Decision == "Admitted" && admission.Worker != nil {
+	if !equality.Semantic.DeepEqual(request.Status.Admission, owned.Admission) || request.Status.Phase != phase ||
+		!equality.Semantic.DeepEqual(request.Status.Conditions, conditions) {
+		if admission != nil && admission.Decision == stacks.FaucetDecisionAdmitted && admission.Worker != nil {
 			if r.uncertain == nil {
 				r.uncertain = map[types.UID]types.UID{}
 			}
@@ -87,7 +103,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, key ctrl.Request) (ctrl.Resu
 		}
 		delete(r.uncertain, request.UID)
 	}
-	if phase == "Completed" || phase == "Rejected" || phase == "Expired" {
+	if phase == stacks.FaucetCompleted || phase == stacks.FaucetRejected || phase == stacks.FaucetExpired {
 		return ctrl.Result{}, nil
 	}
 	delay := 5 * time.Second
@@ -98,8 +114,18 @@ func (r *Reconciler) Reconcile(ctx context.Context, key ctrl.Request) (ctrl.Resu
 }
 
 // baseAdmission retains the creation-derived deadline in every controller decision.
-func baseAdmission(request *stacks.StacksFaucetRequest, deadline time.Time, decision, reason string) *stacks.FaucetAdmission {
-	return &stacks.FaucetAdmission{Decision: decision, Reason: reason, ExpiresAt: deadline.UTC().Format(time.RFC3339Nano), NetworkUID: request.Spec.NetworkUID}
+func baseAdmission(
+	request *stacks.StacksFaucetRequest,
+	deadline time.Time,
+	decision stacks.FaucetDecision,
+	reason string,
+) *stacks.FaucetAdmission {
+	return &stacks.FaucetAdmission{
+		Decision:   decision,
+		Reason:     reason,
+		ExpiresAt:  deadline.UTC().Format(time.RFC3339Nano),
+		NetworkUID: request.Spec.NetworkUID,
+	}
 }
 
 // admit grants only a current participant/Pod/account/ingress identity with available capacity.
@@ -108,100 +134,118 @@ func (r *Reconciler) admit(ctx context.Context, request *stacks.StacksFaucetRequ
 	if err != nil {
 		return nil, err
 	}
-	decision := func(state, reason string) (*stacks.FaucetAdmission, error) {
+	decision := func(state stacks.FaucetDecision, reason string) (*stacks.FaucetAdmission, error) {
 		return baseAdmission(request, deadline, state, reason), nil
 	}
 	if !r.now().Before(deadline) {
-		return decision("Expired", "DeadlineBeforeAdmission")
+		return decision(stacks.FaucetDecisionExpired, reasonDeadlineBeforeAdmission)
 	}
 	if request.DeletionTimestamp != nil {
-		return decision("Expired", "DeletedBeforeAdmission")
+		return decision(stacks.FaucetDecisionExpired, reasonDeletedBeforeAdmission)
 	}
 	amount, err := strconv.ParseUint(string(request.Spec.AmountMicroSTX), 10, 64)
 	if err != nil || amount == 0 {
-		return decision("Rejected", "InvalidAmount")
+		return decision(stacks.FaucetDecisionRejected, api.ReasonInvalidAmount)
 	}
 	root := &api.StacksNetwork{}
 	if err = r.Reader.Get(ctx, client.ObjectKey{Namespace: request.Namespace, Name: "network"}, root); err != nil {
 		if apierrors.IsNotFound(err) {
-			return decision("Pending", "NetworkUnavailable")
+			return decision(stacks.FaucetDecisionPending, reasonNetworkUnavailable)
 		}
 		return nil, err
 	}
 	if root.UID != request.Spec.NetworkUID {
-		return decision("Rejected", "NetworkIdentityChanged")
+		return decision(stacks.FaucetDecisionRejected, reasonNetworkIdentityChanged)
 	}
-	if root.DeletionTimestamp != nil || root.Spec.Operation == "Stopped" || root.Status.Phase == "Failed" || meta.IsStatusConditionTrue(root.Status.Conditions, "Failed") {
-		return decision("Rejected", "NetworkStopped")
+	if root.DeletionTimestamp != nil || root.Spec.Operation == api.NetworkOperationStopped ||
+		root.Status.Phase == api.NetworkPhaseFailed ||
+		meta.IsStatusConditionTrue(root.Status.Conditions, api.ConditionFailed) {
+		return decision(stacks.FaucetDecisionRejected, api.ReasonNetworkStopped)
 	}
 	selected := false
 	for _, entry := range root.Spec.Participants {
-		selected = selected || entry.Name == request.Spec.FaucetRef.Name && entry.Kind == "StacksFaucet"
+		selected = selected || entry.Name == request.Spec.FaucetRef.Name && entry.Kind == api.ParticipantStacksFaucet
 	}
 	if !selected {
 		for _, id := range root.Status.Identities {
 			if id.Name == request.Spec.FaucetRef.Name {
-				return decision("Rejected", "FaucetRemoved")
+				return decision(stacks.FaucetDecisionRejected, reasonFaucetRemoved)
 			}
 		}
-		return decision("Pending", "FaucetUnavailable")
+		return decision(stacks.FaucetDecisionPending, reasonFaucetUnavailable)
 	}
 	p := &api.StacksNetworkParticipant{}
 	name := foundation.ParticipantName(string(root.UID), request.Spec.FaucetRef.Name)
 	if err = r.Reader.Get(ctx, client.ObjectKey{Namespace: request.Namespace, Name: name}, p); err != nil {
 		if apierrors.IsNotFound(err) {
-			return decision("Pending", "FaucetUnavailable")
+			return decision(stacks.FaucetDecisionPending, reasonFaucetUnavailable)
 		}
 		return nil, err
 	}
-	if p.Spec.Kind != "StacksFaucet" || p.Spec.ParticipantName != request.Spec.FaucetRef.Name || p.DeletionTimestamp != nil {
-		return decision("Rejected", "FaucetIdentityChanged")
+	if p.Spec.Kind != api.ParticipantStacksFaucet || p.Spec.ParticipantName != request.Spec.FaucetRef.Name ||
+		p.DeletionTimestamp != nil {
+		return decision(stacks.FaucetDecisionRejected, reasonFaucetIdentityChanged)
 	}
 	session, err := stacksworker.Session(root, p)
 	if err != nil || session.Removing {
-		return decision("Rejected", "FaucetIdentityChanged")
+		return decision(stacks.FaucetDecisionRejected, reasonFaucetIdentityChanged)
 	}
 	if p.Status.Admission == nil || p.Status.Admission.Configuration.StacksFaucet == nil {
-		return decision("Pending", "FaucetAdmissionUnavailable")
+		return decision(stacks.FaucetDecisionPending, reasonFaucetAdmissionUnavailable)
 	}
 	if err = foundation.ValidateParticipantAdmission(ctx, r.Reader, root, p); err != nil {
-		return decision("Pending", "FaucetDependenciesUnavailable")
+		return decision(stacks.FaucetDecisionPending, reasonFaucetDependenciesUnavailable)
 	}
 	policy := p.Status.Admission.Configuration.StacksFaucet
 	if policy.AccountRef == nil || policy.TargetNodeRef == nil || policy.MaxRequestMicroSTX == nil {
-		return decision("Pending", "FaucetPolicyUnavailable")
+		return decision(stacks.FaucetDecisionPending, reasonFaucetPolicyUnavailable)
 	}
 	limit, err := strconv.ParseUint(string(*policy.MaxRequestMicroSTX), 10, 64)
 	if err != nil {
-		return decision("Rejected", "InvalidFaucetLimit")
+		return decision(stacks.FaucetDecisionRejected, reasonInvalidFaucetLimit)
 	}
 	if amount > limit {
-		return decision("Rejected", "RequestLimitExceeded")
+		return decision(stacks.FaucetDecisionRejected, reasonRequestLimitExceeded)
 	}
 	if session.Worker == nil || session.Worker.Shutdown != nil || session.Worker.Disposal != nil {
-		return decision("Pending", "WorkerUnavailable")
+		return decision(stacks.FaucetDecisionPending, reasonWorkerUnavailable)
 	}
 	execution := p.Status.Execution
-	if execution == nil || execution.PodUID != session.Worker.Pod.UID || execution.ProfileDigest != session.Worker.ProfileDigest || execution.ProcessNonce == "" || execution.Phase == "Inactive" || execution.Phase == "Failed" || execution.Phase == "Settled" || execution.Phase == "Unsettled" {
-		return decision("Pending", "WorkerUnavailable")
+	if execution == nil || execution.PodUID != session.Worker.Pod.UID ||
+		execution.ProfileDigest != session.Worker.ProfileDigest ||
+		execution.ProcessNonce == "" ||
+		execution.Phase == api.WorkerPhaseInactive ||
+		execution.Phase == api.WorkerPhaseFailed ||
+		execution.Phase == api.WorkerPhaseSettled ||
+		execution.Phase == api.WorkerPhaseUnsettled {
+		return decision(stacks.FaucetDecisionPending, reasonWorkerUnavailable)
 	}
 	pod := &corev1.Pod{}
-	if err = r.Reader.Get(ctx, client.ObjectKey{Namespace: p.Namespace, Name: session.Worker.Pod.Name}, pod); err != nil {
+	if err = r.Reader.Get(
+		ctx,
+		client.ObjectKey{Namespace: p.Namespace, Name: session.Worker.Pod.Name},
+		pod,
+	); err != nil {
 		if apierrors.IsNotFound(err) {
-			return decision("Pending", "WorkerUnavailable")
+			return decision(stacks.FaucetDecisionPending, reasonWorkerUnavailable)
 		}
 		return nil, err
 	}
-	if pod.UID != session.Worker.Pod.UID || !metav1.IsControlledBy(pod, p) || pod.DeletionTimestamp != nil || pod.Status.Phase != corev1.PodRunning {
-		return decision("Pending", "WorkerUnavailable")
+	if pod.UID != session.Worker.Pod.UID || !metav1.IsControlledBy(pod, p) || pod.DeletionTimestamp != nil ||
+		pod.Status.Phase != corev1.PodRunning {
+		return decision(stacks.FaucetDecisionPending, reasonWorkerUnavailable)
 	}
-	source, err := admittedBinding(p, "StacksAccount", policy.AccountRef.Name)
+	source, err := admittedBinding(p, stacks.KindStacksAccount, policy.AccountRef.Name)
 	if err != nil {
-		return decision("Pending", "SourceAccountUnavailable")
+		return decision(stacks.FaucetDecisionPending, reasonSourceAccountUnavailable)
 	}
-	target, err := admittedBinding(p, "StacksNetworkParticipant", foundation.ParticipantName(string(root.UID), policy.TargetNodeRef.Name))
+	target, err := admittedBinding(
+		p,
+		api.KindStacksNetworkParticipant,
+		foundation.ParticipantName(string(root.UID), policy.TargetNodeRef.Name),
+	)
 	if err != nil {
-		return decision("Pending", "TargetUnavailable")
+		return decision(stacks.FaucetDecisionPending, reasonTargetUnavailable)
 	}
 	destination := ""
 	var destinationBinding *stacks.FaucetBinding
@@ -210,23 +254,34 @@ func (r *Reconciler) admit(ctx context.Context, request *stacks.StacksFaucetRequ
 	}
 	if request.Spec.Destination.AccountRef != nil {
 		if destination != "" {
-			return decision("Rejected", "InvalidDestination")
+			return decision(stacks.FaucetDecisionRejected, reasonInvalidDestination)
 		}
 		account := &stacks.StacksAccount{}
-		if err = r.Reader.Get(ctx, client.ObjectKey{Namespace: p.Namespace, Name: request.Spec.Destination.AccountRef.Name}, account); err != nil {
+		if err = r.Reader.Get(
+			ctx,
+			client.ObjectKey{Namespace: p.Namespace, Name: request.Spec.Destination.AccountRef.Name},
+			account,
+		); err != nil {
 			if apierrors.IsNotFound(err) {
-				return decision("Pending", "DestinationUnavailable")
+				return decision(stacks.FaucetDecisionPending, reasonDestinationUnavailable)
 			}
 			return nil, err
 		}
-		if account.DeletionTimestamp != nil || account.Status.Identity == nil || account.Status.ObservedGeneration != account.Generation || !meta.IsStatusConditionTrue(account.Status.Conditions, "Resolved") {
-			return decision("Pending", "DestinationUnavailable")
+		if account.DeletionTimestamp != nil || account.Status.Identity == nil ||
+			account.Status.ObservedGeneration != account.Generation ||
+			!meta.IsStatusConditionTrue(account.Status.Conditions, common.ConditionResolved) {
+			return decision(stacks.FaucetDecisionPending, reasonDestinationUnavailable)
 		}
 		destination = account.Status.Identity.Address
-		destinationBinding = &stacks.FaucetBinding{Kind: "StacksAccount", Name: account.Name, UID: account.UID, Fingerprint: account.Status.Digest}
+		destinationBinding = &stacks.FaucetBinding{
+			Kind:        stacks.KindStacksAccount,
+			Name:        account.Name,
+			UID:         account.UID,
+			Fingerprint: account.Status.Digest,
+		}
 	}
 	if !ValidAddress(destination) {
-		return decision("Rejected", "InvalidDestination")
+		return decision(stacks.FaucetDecisionRejected, reasonInvalidDestination)
 	}
 	count, err := r.activeCount(ctx, p.Namespace, session.Worker.Pod.UID)
 	if err != nil {
@@ -239,11 +294,11 @@ func (r *Reconciler) admit(ctx context.Context, request *stacks.StacksFaucetRequ
 		}
 	}
 	if count >= Capacity {
-		return decision("Rejected", "CapacityExceeded")
+		return decision(stacks.FaucetDecisionRejected, reasonCapacityExceeded)
 	}
-	admitted := baseAdmission(request, deadline, "Admitted", "WorkerBound")
-	admitted.Faucet = &stacks.FaucetBinding{Kind: "StacksNetworkParticipant", Name: p.Name, UID: p.UID}
-	admitted.Worker = &stacks.FaucetBinding{Kind: "Pod", Name: pod.Name, UID: pod.UID}
+	admitted := baseAdmission(request, deadline, stacks.FaucetDecisionAdmitted, api.ReasonWorkerBound)
+	admitted.Faucet = &stacks.FaucetBinding{Kind: api.KindStacksNetworkParticipant, Name: p.Name, UID: p.UID}
+	admitted.Worker = &stacks.FaucetBinding{Kind: common.KindPod, Name: pod.Name, UID: pod.UID}
 	admitted.ProfileDigest = session.Worker.ProfileDigest
 	admitted.SourceAccount, admitted.Target, admitted.DestinationAccount = source, target, destinationBinding
 	admitted.Destination = destination

@@ -22,7 +22,12 @@ type projectionReads struct {
 	gets int
 }
 
-func (r *projectionReads) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+func (r *projectionReads) Get(
+	ctx context.Context,
+	key client.ObjectKey,
+	obj client.Object,
+	opts ...client.GetOption,
+) error {
 	r.gets++
 	return r.Reader.Get(ctx, key, obj, opts...)
 }
@@ -45,14 +50,37 @@ func TestWorkerProjectionUsesCacheUntilLifecycleEvidenceChanges(t *testing.T) {
 				p.UID = types.UID(p.Name)
 				p.Spec.ParticipantName = p.Name
 				p.Spec.Kind = "StacksStacker"
-				profile := stacksworker.Profile{Image: "worker:test", Configuration: common.Binding{Kind: "ConfigMap", Name: "bootstrap", UID: "config"}, Keys: []stacksworker.KeyMount{{Role: "sender", Secret: common.Binding{Kind: "Secret", Name: "key", UID: "key"}, Key: "privateKey"}}}
+				profile := stacksworker.Profile{
+					Image:         "worker:test",
+					Configuration: common.Binding{Kind: "ConfigMap", Name: "bootstrap", UID: "config"},
+					Keys: []stacksworker.KeyMount{
+						{
+							Role:   "sender",
+							Secret: common.Binding{Kind: "Secret", Name: "key", UID: "key"},
+							Key:    "privateKey",
+						},
+					},
+				}
 				pod, err := stacksworker.Pod(p, profile)
 				if err != nil {
 					t.Fatal(err)
 				}
 				pod.UID = types.UID("pod-" + p.Name)
-				root.Spec.Participants = append(root.Spec.Participants, api.Participant{Name: p.Name, Kind: p.Spec.Kind})
-				root.Status.Identities = append(root.Status.Identities, api.InstanceIdentity{Name: p.Name, UID: p.UID, Worker: &api.WorkerSession{Pod: api.WorkerPodBinding{Kind: "Pod", Name: pod.Name, UID: pod.UID}, ProfileDigest: pod.Annotations["network.stacks.org/worker-profile"]}})
+				root.Spec.Participants = append(
+					root.Spec.Participants,
+					api.Participant{Name: p.Name, Kind: p.Spec.Kind},
+				)
+				root.Status.Identities = append(
+					root.Status.Identities,
+					api.InstanceIdentity{
+						Name: p.Name,
+						UID:  p.UID,
+						Worker: &api.WorkerSession{
+							Pod:           api.WorkerPodBinding{Kind: "Pod", Name: pod.Name, UID: pod.UID},
+							ProfileDigest: pod.Annotations["network.stacks.org/worker-profile"],
+						},
+					},
+				)
 				participants = append(participants, *p)
 				cached = append(cached, p.DeepCopy())
 				live = append(live, p.DeepCopy())
@@ -74,7 +102,10 @@ func TestWorkerProjectionUsesCacheUntilLifecycleEvidenceChanges(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			if got := meta.IsStatusConditionTrue(root.Status.Conditions, "Failed"); got != (mode == "actually-missing") {
+			if got := meta.IsStatusConditionTrue(
+				root.Status.Conditions,
+				"Failed",
+			); got != (mode == "actually-missing") {
 				t.Fatalf("failure=%v mode=%s", got, mode)
 			}
 			want := 0

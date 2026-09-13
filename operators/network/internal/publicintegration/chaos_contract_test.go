@@ -19,21 +19,29 @@ import (
 )
 
 func TestChaosQualificationPinsBothNativeSelectorIdentities(t *testing.T) {
-	pair := [2]chaosActor{{LogicalName: "source", Participant: identity{UID: "source-uid"}}, {LogicalName: "target", Participant: identity{UID: "target-uid"}}}
+	pair := [2]chaosActor{
+		{LogicalName: "source", Participant: identity{UID: "source-uid"}},
+		{LogicalName: "target", Participant: identity{UID: "target-uid"}},
+	}
 	for _, action := range []string{"delay", "partition"} {
 		t.Run(action, func(t *testing.T) {
 			object := chaosRequest("fixture", "root-uid", pair, action)
 			for i, path := range [][]string{{"spec", "selector"}, {"spec", "target", "selector"}} {
 				selector, found, err := unstructured.NestedMap(object.Object, path...)
-				if err != nil || !found || !reflect.DeepEqual(selector, chaosSelectors("fixture", "root-uid", pair[i])) {
+				if err != nil || !found ||
+					!reflect.DeepEqual(selector, chaosSelectors("fixture", "root-uid", pair[i])) {
 					t.Fatalf("selector=%v error=%v", selector, err)
 				}
 				labels := selector["labelSelectors"].(map[string]any)
-				if len(labels) != 5 || labels["network.stacks.org/network-uid"] != "root-uid" || labels["network.stacks.org/participant-uid"] != string(pair[i].Participant.UID) || labels["network.stacks.org/role"] != "actor" {
+				if len(labels) != 5 || labels["network.stacks.org/network-uid"] != "root-uid" ||
+					labels["network.stacks.org/participant-uid"] != string(pair[i].Participant.UID) ||
+					labels["network.stacks.org/role"] != "actor" {
 					t.Fatalf("unbounded selector %v", selector)
 				}
 			}
-			if object.GetLabels()["network.stacks.org/network-uid"] != "root-uid" || len(object.GetOwnerReferences()) != 0 || len(object.GetFinalizers()) != 0 {
+			if object.GetLabels()["network.stacks.org/network-uid"] != "root-uid" ||
+				len(object.GetOwnerReferences()) != 0 ||
+				len(object.GetFinalizers()) != 0 {
 				t.Fatal("unexpected request lifecycle fields")
 			}
 			if _, found := object.Object["status"]; found {
@@ -88,17 +96,68 @@ func chaosControlFixture() snapshot {
 	genesis := common.Binding{Kind: "StacksGenesis", Name: "genesis", UID: "genesis"}
 	s.Status.GenesisRef = &genesis
 	for _, name := range []string{"one", "two"} {
-		runtime := &api.ParticipantRuntimeStatus{PodRef: &common.Binding{Kind: "Pod", Name: name, UID: "pod-" + genesis.UID}, ContainerID: "actor", ConfigurationDigest: "config", Protocol: &api.StacksProtocolObservation{Available: true, ObservedAt: metav1.NewTime(s.At), PodUID: "pod-" + genesis.UID, ContainerID: "actor", ConfigurationDigest: "config", GenesisUID: genesis.UID}}
-		s.Participants = append(s.Participants, participantEvidence{Identity: identity{Name: name}, Name: name, Kind: "StacksNode", Status: api.ParticipantStatus{Runtime: runtime}})
+		runtime := &api.ParticipantRuntimeStatus{
+			PodRef:              &common.Binding{Kind: "Pod", Name: name, UID: "pod-" + genesis.UID},
+			ContainerID:         "actor",
+			ConfigurationDigest: "config",
+			Protocol: &api.StacksProtocolObservation{
+				Available:           true,
+				ObservedAt:          metav1.NewTime(s.At),
+				PodUID:              "pod-" + genesis.UID,
+				ContainerID:         "actor",
+				ConfigurationDigest: "config",
+				GenesisUID:          genesis.UID,
+			},
+		}
+		s.Participants = append(
+			s.Participants,
+			participantEvidence{
+				Identity: identity{Name: name},
+				Name:     name,
+				Kind:     "StacksNode",
+				Status:   api.ParticipantStatus{Runtime: runtime},
+			},
+		)
 	}
-	worker := &api.WorkerExecutionStatus{PodUID: "worker-pod", ProcessNonce: "process", ProfileDigest: "profile", ObservedAt: metav1.NewTime(s.At), Traffic: &api.TrafficObservation{Available: true, ObservedAt: metav1.NewTime(s.At)}}
-	s.Participants = append(s.Participants, participantEvidence{Identity: identity{UID: "traffic"}, Name: "traffic", Kind: "StacksTransactionProduction", Status: api.ParticipantStatus{Execution: worker}})
-	s.Status.Identities = []api.InstanceIdentity{{Name: "traffic", UID: "traffic", Worker: &api.WorkerSession{Pod: api.WorkerPodBinding{Kind: "Pod", Name: "worker", UID: "worker-pod"}, ProfileDigest: "profile"}}}
+	worker := &api.WorkerExecutionStatus{
+		PodUID:        "worker-pod",
+		ProcessNonce:  "process",
+		ProfileDigest: "profile",
+		ObservedAt:    metav1.NewTime(s.At),
+		Traffic:       &api.TrafficObservation{Available: true, ObservedAt: metav1.NewTime(s.At)},
+	}
+	s.Participants = append(
+		s.Participants,
+		participantEvidence{
+			Identity: identity{UID: "traffic"},
+			Name:     "traffic",
+			Kind:     "StacksTransactionProduction",
+			Status:   api.ParticipantStatus{Execution: worker},
+		},
+	)
+	s.Status.Identities = []api.InstanceIdentity{
+		{
+			Name: "traffic",
+			UID:  "traffic",
+			Worker: &api.WorkerSession{
+				Pod:           api.WorkerPodBinding{Kind: "Pod", Name: "worker", UID: "worker-pod"},
+				ProfileDigest: "profile",
+			},
+		},
+	}
 	return s
 }
 
 func TestChaosQualificationRequiresFreshIndependentControlReads(t *testing.T) {
-	for _, mode := range []string{"valid", "worker-heartbeat", "worker-rpc", "actor-rpc", "bitcoin-rpc", "worker-replacement", "worker-unbound"} {
+	for _, mode := range []string{
+		"valid",
+		"worker-heartbeat",
+		"worker-rpc",
+		"actor-rpc",
+		"bitcoin-rpc",
+		"worker-replacement",
+		"worker-unbound",
+	} {
 		t.Run(mode, func(t *testing.T) {
 			before := chaosControlFixture()
 			raw, _ := json.Marshal(before)
@@ -130,7 +189,16 @@ func TestChaosQualificationRequiresFreshIndependentControlReads(t *testing.T) {
 }
 
 func TestChaosQualificationRequiresNativeInjectionAndRecoveryConditions(t *testing.T) {
-	object := &unstructured.Unstructured{Object: map[string]any{"status": map[string]any{"conditions": []any{map[string]any{"type": "AllInjected", "status": "True"}, map[string]any{"type": "AllRecovered", "status": "False"}}}}}
+	object := &unstructured.Unstructured{
+		Object: map[string]any{
+			"status": map[string]any{
+				"conditions": []any{
+					map[string]any{"type": "AllInjected", "status": "True"},
+					map[string]any{"type": "AllRecovered", "status": "False"},
+				},
+			},
+		},
+	}
 	if !chaosCondition(object, "AllInjected") || chaosCondition(object, "AllRecovered") {
 		t.Fatal("native condition interpretation differs")
 	}

@@ -24,31 +24,54 @@ const (
 	PodFinalizer = "network.stacks.org/actor-termination"
 	// BitcoinImage is the release's default Core image; qualification records its imageID.
 	BitcoinImage = "bitcoin/bitcoin:31.1"
-	managedBy    = "stacks-network-operator"
+	managedBy    = api.ManagedByNetworkOperator
 )
 
 // Name produces the public runtime naming contract for one participant purpose.
 func Name(p *api.StacksNetworkParticipant, purpose string) string {
-	return foundation.RuntimeName(string(p.Spec.NetworkUID), string(p.UID), string(p.Spec.Kind), p.Spec.ParticipantName, purpose)
+	return foundation.RuntimeName(
+		string(p.Spec.NetworkUID),
+		string(p.UID),
+		string(p.Spec.Kind),
+		p.Spec.ParticipantName,
+		purpose,
+	)
 }
 
 // Labels identifies exact network/participant identity and isolates support from fault actors.
 func Labels(p *api.StacksNetworkParticipant, role string) map[string]string {
-	labels := map[string]string{"app.kubernetes.io/managed-by": managedBy, "network.stacks.org/network": "network", "network.stacks.org/network-uid": string(p.Spec.NetworkUID), "network.stacks.org/participant": p.Spec.ParticipantName, "network.stacks.org/participant-uid": string(p.UID), "network.stacks.org/participant-kind": string(p.Spec.Kind), "network.stacks.org/role": role}
-	if role == "actor" {
-		labels["network.stacks.org/actor"] = p.Spec.ParticipantName
+	labels := map[string]string{
+		api.LabelManagedBy:       managedBy,
+		api.LabelNetwork:         api.NetworkLabelValue,
+		api.LabelNetworkUID:      string(p.Spec.NetworkUID),
+		api.LabelParticipant:     p.Spec.ParticipantName,
+		api.LabelParticipantUID:  string(p.UID),
+		api.LabelParticipantKind: string(p.Spec.Kind),
+		api.LabelRole:            role,
+	}
+	if role == api.RoleActor {
+		labels[api.LabelActor] = p.Spec.ParticipantName
 	}
 	return labels
 }
 
 // objectMeta scopes generated resources to the exact participant owner.
 func objectMeta(p *api.StacksNetworkParticipant, purpose, role string) metav1.ObjectMeta {
-	return metav1.ObjectMeta{Name: Name(p, purpose), Namespace: p.Namespace, Labels: Labels(p, role), OwnerReferences: []metav1.OwnerReference{{APIVersion: api.GroupVersion.String(), Kind: "StacksNetworkParticipant", Name: p.Name, UID: p.UID, Controller: ptr.To(true), BlockOwnerDeletion: ptr.To(false)}}}
-}
-
-// binding records a public object identity without its contents.
-func binding(kind string, obj metav1.Object) *common.Binding {
-	return &common.Binding{Kind: kind, Name: obj.GetName(), UID: obj.GetUID()}
+	return metav1.ObjectMeta{
+		Name:      Name(p, purpose),
+		Namespace: p.Namespace,
+		Labels:    Labels(p, role),
+		OwnerReferences: []metav1.OwnerReference{
+			{
+				APIVersion:         api.GroupVersion.String(),
+				Kind:               api.KindStacksNetworkParticipant,
+				Name:               p.Name,
+				UID:                p.UID,
+				Controller:         ptr.To(true),
+				BlockOwnerDeletion: ptr.To(false),
+			},
+		},
+	}
 }
 
 // digest uses the foundation canonical public-policy encoding.
@@ -59,15 +82,24 @@ func digest(value any) string {
 // owned requires the exact controller owner identity.
 func owned(obj metav1.Object, p *api.StacksNetworkParticipant) bool {
 	owner := metav1.GetControllerOf(obj)
-	return owner != nil && owner.APIVersion == api.GroupVersion.String() && owner.Kind == "StacksNetworkParticipant" && owner.Name == p.Name && owner.UID == p.UID
+	return owner != nil && owner.APIVersion == api.GroupVersion.String() &&
+		owner.Kind == api.KindStacksNetworkParticipant &&
+		owner.Name == p.Name &&
+		owner.UID == p.UID
 }
 
 // Services renders stable per-participant P2P and RPC addresses.
 func Services(p *api.StacksNetworkParticipant) []*corev1.Service {
 	result := make([]*corev1.Service, 0, 2)
 	for _, endpoint := range runtimeEndpoints(p) {
-		service := &corev1.Service{ObjectMeta: objectMeta(p, endpoint.Name, "actor"), Spec: corev1.ServiceSpec{Selector: Labels(p, "actor"), Ports: []corev1.ServicePort{{Name: endpoint.Name, Port: endpoint.Port}}}}
-		if endpoint.Name == "p2p" && p.Spec.Kind == "BitcoinNode" {
+		service := &corev1.Service{
+			ObjectMeta: objectMeta(p, endpoint.Name, api.RoleActor),
+			Spec: corev1.ServiceSpec{
+				Selector: Labels(p, api.RoleActor),
+				Ports:    []corev1.ServicePort{{Name: endpoint.Name, Port: endpoint.Port}},
+			},
+		}
+		if endpoint.Name == common.EndpointP2P && p.Spec.Kind == api.ParticipantBitcoinNode {
 			service.Spec.ClusterIP = corev1.ClusterIPNone
 			service.Spec.PublishNotReadyAddresses = true
 		}
@@ -78,16 +110,21 @@ func Services(p *api.StacksNetworkParticipant) []*corev1.Service {
 
 // runtimeEndpoints contains the fixed native Services for one actor kind.
 func runtimeEndpoints(p *api.StacksNetworkParticipant) []api.RuntimeEndpoint {
-	ports := map[string]int32{"p2p": 18444, "rpc": 18443}
-	if p.Spec.Kind == "StacksNode" {
-		ports = map[string]int32{"p2p": 20444, "rpc": 20443}
-	} else if p.Spec.Kind == "StacksSigner" {
-		ports = map[string]int32{"events": 30000}
+	ports := map[string]int32{common.EndpointP2P: 18444, common.EndpointRPC: 18443}
+	//nolint:exhaustive // Only actor kinds have this workload property; capabilities use separate workloads.
+	switch p.Spec.Kind {
+	case api.ParticipantStacksNode:
+		ports = map[string]int32{common.EndpointP2P: 20444, common.EndpointRPC: 20443}
+	case api.ParticipantStacksSigner:
+		ports = map[string]int32{common.EndpointEvents: 30000}
 	}
 	var endpoints []api.RuntimeEndpoint
-	for _, name := range []string{"p2p", "rpc", "events"} {
+	for _, name := range []string{common.EndpointP2P, common.EndpointRPC, common.EndpointEvents} {
 		if port, ok := ports[name]; ok {
-			endpoints = append(endpoints, api.RuntimeEndpoint{Name: name, Host: Name(p, name) + "." + p.Namespace + ".svc", Port: port})
+			endpoints = append(
+				endpoints,
+				api.RuntimeEndpoint{Name: name, Host: Name(p, name) + "." + p.Namespace + ".svc", Port: port},
+			)
 		}
 	}
 	return endpoints
@@ -99,16 +136,17 @@ func actorFields(p *api.StacksNetworkParticipant) (*common.ActorFields, error) {
 		return nil, fmt.Errorf("actor admission is required")
 	}
 	c := p.Status.Admission.Configuration
+	//nolint:exhaustive // Only actor kinds have this workload property; capabilities use separate workloads.
 	switch p.Spec.Kind {
-	case "BitcoinNode":
+	case api.ParticipantBitcoinNode:
 		if c.BitcoinNode != nil {
 			return &c.BitcoinNode.ActorFields, nil
 		}
-	case "StacksNode":
+	case api.ParticipantStacksNode:
 		if c.StacksNode != nil {
 			return &c.StacksNode.ActorFields, nil
 		}
-	case "StacksSigner":
+	case api.ParticipantStacksSigner:
 		if c.StacksSigner != nil {
 			return &c.StacksSigner.ActorFields, nil
 		}
@@ -117,26 +155,99 @@ func actorFields(p *api.StacksNetworkParticipant) (*common.ActorFields, error) {
 }
 
 // StatefulSet renders one admitted native process with shared explicit storage retention.
-func StatefulSet(p *api.StacksNetworkParticipant, configName, actorCredentials string, replicas int32) (*appsv1.StatefulSet, error) {
+func StatefulSet(
+	p *api.StacksNetworkParticipant,
+	configName, actorCredentials string,
+	replicas int32,
+) (*appsv1.StatefulSet, error) {
 	node, err := actorFields(p)
 	if err != nil {
 		return nil, err
 	}
-	labels := Labels(p, "actor")
-	workload := &appsv1.StatefulSet{ObjectMeta: objectMeta(p, "actor", "actor"), Spec: appsv1.StatefulSetSpec{Replicas: ptr.To(replicas), ServiceName: Name(p, "p2p"), Selector: &metav1.LabelSelector{MatchLabels: labels}, Template: corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: labels, Finalizers: []string{PodFinalizer}, Annotations: map[string]string{"network.stacks.org/policy-digest": p.Status.Admission.PolicyDigest}}, Spec: corev1.PodSpec{
-		AutomountServiceAccountToken: ptr.To(false), TerminationGracePeriodSeconds: ptr.To[int64](60),
-		SecurityContext: &corev1.PodSecurityContext{RunAsUser: ptr.To[int64](1000), RunAsGroup: ptr.To[int64](1000), RunAsNonRoot: ptr.To(true), FSGroup: ptr.To[int64](1000), SeccompProfile: &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault}},
-		Containers: []corev1.Container{{Name: "bitcoin", Image: ptr.Deref(node.Image, BitcoinImage), ImagePullPolicy: ptr.Deref(node.ImagePullPolicy, corev1.PullIfNotPresent), Command: []string{"bitcoind"}, Args: []string{"-conf=/config/bitcoin.conf", "-datadir=/data"},
-			Ports:           []corev1.ContainerPort{{Name: "rpc", ContainerPort: 18443}, {Name: "p2p", ContainerPort: 18444}},
-			Env:             []corev1.EnvVar{secretEnv("RPC_USERNAME", actorCredentials, "username"), secretEnv("RPC_PASSWORD", actorCredentials, "password")},
-			ReadinessProbe:  &corev1.Probe{ProbeHandler: corev1.ProbeHandler{Exec: &corev1.ExecAction{Command: []string{"sh", "-ec", "bitcoin-cli -regtest -rpcconnect=127.0.0.1 -rpcport=18443 -rpcuser=\"$RPC_USERNAME\" -rpcpassword=\"$RPC_PASSWORD\" getblockchaininfo >/dev/null"}}}, PeriodSeconds: 5, TimeoutSeconds: 3},
-			SecurityContext: &corev1.SecurityContext{AllowPrivilegeEscalation: ptr.To(false), ReadOnlyRootFilesystem: ptr.To(true), Capabilities: &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}}},
-			VolumeMounts:    []corev1.VolumeMount{{Name: "config", MountPath: "/config", ReadOnly: true}, {Name: "data", MountPath: "/data"}, {Name: "tmp", MountPath: "/tmp"}},
-		}}, Volumes: []corev1.Volume{{Name: "config", VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: configName, DefaultMode: ptr.To[int32](0440)}}}, {Name: "tmp", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}}},
-	}}}}
-	if p.Spec.Kind != "BitcoinNode" {
+	labels := Labels(p, api.RoleActor)
+	workload := &appsv1.StatefulSet{
+		ObjectMeta: objectMeta(p, actorPurpose, api.RoleActor),
+		Spec: appsv1.StatefulSetSpec{
+			Replicas:    ptr.To(replicas),
+			ServiceName: Name(p, common.EndpointP2P),
+			Selector:    &metav1.LabelSelector{MatchLabels: labels},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels:      labels,
+					Finalizers:  []string{PodFinalizer},
+					Annotations: map[string]string{api.AnnotationPolicyDigest: p.Status.Admission.PolicyDigest},
+				},
+				Spec: corev1.PodSpec{
+					AutomountServiceAccountToken:  ptr.To(false),
+					TerminationGracePeriodSeconds: ptr.To[int64](60),
+					SecurityContext: &corev1.PodSecurityContext{
+						RunAsUser:      ptr.To[int64](1000),
+						RunAsGroup:     ptr.To[int64](1000),
+						RunAsNonRoot:   ptr.To(true),
+						FSGroup:        ptr.To[int64](1000),
+						SeccompProfile: &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
+					},
+					Containers: []corev1.Container{
+						{
+							Name:            api.ContainerBitcoin,
+							Image:           ptr.Deref(node.Image, BitcoinImage),
+							ImagePullPolicy: ptr.Deref(node.ImagePullPolicy, corev1.PullIfNotPresent),
+							Command:         []string{"bitcoind"},
+							Args:            []string{"-conf=/config/bitcoin.conf", "-datadir=/data"},
+							Ports: []corev1.ContainerPort{
+								{Name: common.EndpointRPC, ContainerPort: 18443},
+								{Name: common.EndpointP2P, ContainerPort: 18444},
+							},
+							Env: []corev1.EnvVar{
+								secretEnv("RPC_USERNAME", actorCredentials, "username"),
+								secretEnv("RPC_PASSWORD", actorCredentials, "password"),
+							},
+							ReadinessProbe: &corev1.Probe{
+								ProbeHandler: corev1.ProbeHandler{
+									Exec: &corev1.ExecAction{
+										Command: []string{
+											"sh",
+											"-ec",
+											"bitcoin-cli -regtest -rpcconnect=127.0.0.1 -rpcport=18443 " +
+												"-rpcuser=\"$RPC_USERNAME\" -rpcpassword=\"$RPC_PASSWORD\" getblockchaininfo >/dev/" +
+												"null",
+										},
+									},
+								},
+								PeriodSeconds:  5,
+								TimeoutSeconds: 3,
+							},
+							SecurityContext: &corev1.SecurityContext{
+								AllowPrivilegeEscalation: ptr.To(false),
+								ReadOnlyRootFilesystem:   ptr.To(true),
+								Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
+							},
+							VolumeMounts: []corev1.VolumeMount{
+								{Name: "config", MountPath: "/config", ReadOnly: true},
+								{Name: "data", MountPath: "/data"},
+								{Name: "tmp", MountPath: "/tmp"},
+							},
+						},
+					},
+					Volumes: []corev1.Volume{
+						{
+							Name: "config",
+							VolumeSource: corev1.VolumeSource{
+								Secret: &corev1.SecretVolumeSource{
+									SecretName:  configName,
+									DefaultMode: ptr.To[int32](0o440),
+								},
+							},
+						},
+						{Name: "tmp", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
+					},
+				},
+			},
+		},
+	}
+	if p.Spec.Kind != api.ParticipantBitcoinNode {
 		if ptr.Deref(node.Image, "") == "" {
-			return nil, fmt.Errorf("Stacks actor image is required")
+			return nil, fmt.Errorf("missing required Stacks actor image")
 		}
 		container := &workload.Spec.Template.Spec.Containers[0]
 		container.Image = *node.Image
@@ -144,13 +255,26 @@ func StatefulSet(p *api.StacksNetworkParticipant, configName, actorCredentials s
 		container.Command = []string{container.Name}
 		container.Args = []string{"start", "--config", "/config/config.toml"}
 		container.Env = nil
-		container.Ports = []corev1.ContainerPort{{Name: "rpc", ContainerPort: 20443}, {Name: "p2p", ContainerPort: 20444}}
-		container.ReadinessProbe = &corev1.Probe{ProbeHandler: corev1.ProbeHandler{HTTPGet: &corev1.HTTPGetAction{Path: "/v2/info", Port: intstr.FromInt32(20443)}}, PeriodSeconds: 5, TimeoutSeconds: 3}
-		if p.Spec.Kind == "StacksSigner" {
-			workload.Spec.ServiceName = Name(p, "events")
+		container.Ports = []corev1.ContainerPort{
+			{Name: common.EndpointRPC, ContainerPort: 20443},
+			{Name: common.EndpointP2P, ContainerPort: 20444},
+		}
+		container.ReadinessProbe = &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				HTTPGet: &corev1.HTTPGetAction{Path: "/v2/info", Port: intstr.FromInt32(20443)},
+			},
+			PeriodSeconds:  5,
+			TimeoutSeconds: 3,
+		}
+		if p.Spec.Kind == api.ParticipantStacksSigner {
+			workload.Spec.ServiceName = Name(p, common.EndpointEvents)
 			container.Args = []string{"run", "--config", "/config/config.toml"}
-			container.Ports = []corev1.ContainerPort{{Name: "events", ContainerPort: 30000}}
-			container.ReadinessProbe = &corev1.Probe{ProbeHandler: corev1.ProbeHandler{TCPSocket: &corev1.TCPSocketAction{Port: intstr.FromInt32(30000)}}, PeriodSeconds: 5, TimeoutSeconds: 3}
+			container.Ports = []corev1.ContainerPort{{Name: common.EndpointEvents, ContainerPort: 30000}}
+			container.ReadinessProbe = &corev1.Probe{
+				ProbeHandler:   corev1.ProbeHandler{TCPSocket: &corev1.TCPSocketAction{Port: intstr.FromInt32(30000)}},
+				PeriodSeconds:  5,
+				TimeoutSeconds: 3,
+			}
 		}
 	}
 	if node.Resources != nil {
@@ -159,7 +283,10 @@ func StatefulSet(p *api.StacksNetworkParticipant, configName, actorCredentials s
 	applyPlacement(&workload.Spec.Template.Spec, node.Placement, labels)
 	storage := node.Storage
 	if storage != nil && ptr.Deref(storage.Ephemeral, false) {
-		workload.Spec.Template.Spec.Volumes = append(workload.Spec.Template.Spec.Volumes, corev1.Volume{Name: "data", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}})
+		workload.Spec.Template.Spec.Volumes = append(
+			workload.Spec.Template.Spec.Volumes,
+			corev1.Volume{Name: "data", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
+		)
 		return workload, nil
 	}
 	size, class, retain := "2Gi", (*string)(nil), false
@@ -176,20 +303,35 @@ func StatefulSet(p *api.StacksNetworkParticipant, configName, actorCredentials s
 	if retain {
 		policy = appsv1.RetainPersistentVolumeClaimRetentionPolicyType
 	}
-	workload.Spec.PersistentVolumeClaimRetentionPolicy = &appsv1.StatefulSetPersistentVolumeClaimRetentionPolicy{WhenScaled: appsv1.RetainPersistentVolumeClaimRetentionPolicyType, WhenDeleted: policy}
-	workload.Spec.VolumeClaimTemplates = []corev1.PersistentVolumeClaim{{ObjectMeta: metav1.ObjectMeta{Name: "data", Labels: labels}, Spec: corev1.PersistentVolumeClaimSpec{AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce}, StorageClassName: class, Resources: corev1.VolumeResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceStorage: quantity}}}}}
+	workload.Spec.PersistentVolumeClaimRetentionPolicy = &appsv1.StatefulSetPersistentVolumeClaimRetentionPolicy{
+		WhenScaled:  appsv1.RetainPersistentVolumeClaimRetentionPolicyType,
+		WhenDeleted: policy,
+	}
+	workload.Spec.VolumeClaimTemplates = []corev1.PersistentVolumeClaim{
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "data", Labels: labels},
+			Spec: corev1.PersistentVolumeClaimSpec{
+				AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+				StorageClassName: class,
+				Resources: corev1.VolumeResourceRequirements{
+					Requests: corev1.ResourceList{corev1.ResourceStorage: quantity},
+				},
+			},
+		},
+	}
 	return workload, nil
 }
 
 // actorContainer selects the native process name recorded in runtime identity.
 func actorContainer(kind api.ParticipantKind) string {
+	//nolint:exhaustive // Only actor kinds have this workload property; capabilities use separate workloads.
 	switch kind {
-	case "StacksNode":
-		return "stacks-node"
-	case "StacksSigner":
-		return "stacks-signer"
+	case api.ParticipantStacksNode:
+		return api.ContainerStacksNode
+	case api.ParticipantStacksSigner:
+		return api.ContainerStacksSigner
 	default:
-		return "bitcoin"
+		return api.ContainerBitcoin
 	}
 }
 
@@ -203,20 +345,41 @@ func actorWorkload(p *api.StacksNetworkParticipant, state *api.ParticipantRuntim
 	if err != nil {
 		return nil, err
 	}
-	if p.Spec.Kind != "BitcoinNode" {
+	if p.Spec.Kind != api.ParticipantBitcoinNode {
 		if state.EventAuthSecretRef == nil || state.EventAuthSecretRef.UID == "" {
 			return nil, fmt.Errorf("event authentication identity missing")
 		}
 		pod := &workload.Spec.Template.Spec
-		pod.Volumes = append(pod.Volumes, corev1.Volume{Name: "event-auth", VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: state.EventAuthSecretRef.Name, DefaultMode: ptr.To[int32](0440)}}})
-		pod.Containers[0].VolumeMounts = append(pod.Containers[0].VolumeMounts, corev1.VolumeMount{Name: "event-auth", MountPath: "/event-auth", ReadOnly: true})
-		workload.Spec.Template.Annotations["network.stacks.org/configuration-digest"] = state.ConfigurationDigest
-		if node := p.Status.Admission.Configuration.StacksNode; node != nil && node.Mining != nil && ptr.Deref(node.Mining.Enabled, false) {
-			workload.Spec.Template.Annotations["network.stacks.org/mining-enabled"] = "true"
+		pod.Volumes = append(
+			pod.Volumes,
+			corev1.Volume{
+				Name: "event-auth",
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						SecretName:  state.EventAuthSecretRef.Name,
+						DefaultMode: ptr.To[int32](0o440),
+					},
+				},
+			},
+		)
+		pod.Containers[0].VolumeMounts = append(
+			pod.Containers[0].VolumeMounts,
+			corev1.VolumeMount{Name: "event-auth", MountPath: "/event-auth", ReadOnly: true},
+		)
+		workload.Spec.Template.Annotations[api.AnnotationConfigurationDigest] = state.ConfigurationDigest
+		if node := p.Status.Admission.Configuration.StacksNode; node != nil && node.Mining != nil &&
+			ptr.Deref(node.Mining.Enabled, false) {
+			workload.Spec.Template.Annotations[miningEnabledAnnotation] = "true"
 		}
 		check := *pod.Containers[0].DeepCopy()
 		check.Name = "config-check"
-		check.Command = []string{"sh", "-ec", `exec "$1" check-config --config /config/config.toml >/dev/null 2>&1`, "--", pod.Containers[0].Name}
+		check.Command = []string{
+			"sh",
+			"-ec",
+			`exec "$1" check-config --config /config/config.toml >/dev/null 2>&1`,
+			"--",
+			pod.Containers[0].Name,
+		}
 		check.Args = nil
 		check.Ports = nil
 		check.ReadinessProbe = nil
@@ -227,7 +390,15 @@ func actorWorkload(p *api.StacksNetworkParticipant, state *api.ParticipantRuntim
 
 // secretEnv references a role-specific credential without reading its value.
 func secretEnv(name, secret, key string) corev1.EnvVar {
-	return corev1.EnvVar{Name: name, ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: secret}, Key: key}}}
+	return corev1.EnvVar{
+		Name: name,
+		ValueFrom: &corev1.EnvVarSource{
+			SecretKeyRef: &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{Name: secret},
+				Key:                  key,
+			},
+		},
+	}
 }
 
 // applyPlacement keeps actor and support scheduling independent.
@@ -240,6 +411,24 @@ func applyPlacement(pod *corev1.PodSpec, placement *common.Placement, labels map
 		pod.Tolerations = *placement.Tolerations
 	}
 	if ptr.Deref(placement.SpreadAcrossNodes, false) {
-		pod.Affinity = &corev1.Affinity{PodAntiAffinity: &corev1.PodAntiAffinity{PreferredDuringSchedulingIgnoredDuringExecution: []corev1.WeightedPodAffinityTerm{{Weight: 100, PodAffinityTerm: corev1.PodAffinityTerm{TopologyKey: "kubernetes.io/hostname", LabelSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"network.stacks.org/network-uid": labels["network.stacks.org/network-uid"], "network.stacks.org/participant-kind": labels["network.stacks.org/participant-kind"], "network.stacks.org/role": labels["network.stacks.org/role"]}}}}}}}
+		pod.Affinity = &corev1.Affinity{
+			PodAntiAffinity: &corev1.PodAntiAffinity{
+				PreferredDuringSchedulingIgnoredDuringExecution: []corev1.WeightedPodAffinityTerm{
+					{
+						Weight: 100,
+						PodAffinityTerm: corev1.PodAffinityTerm{
+							TopologyKey: corev1.LabelHostname,
+							LabelSelector: &metav1.LabelSelector{
+								MatchLabels: map[string]string{
+									api.LabelNetworkUID:      labels[api.LabelNetworkUID],
+									api.LabelParticipantKind: labels[api.LabelParticipantKind],
+									api.LabelRole:            labels[api.LabelRole],
+								},
+							},
+						},
+					},
+				},
+			},
+		}
 	}
 }

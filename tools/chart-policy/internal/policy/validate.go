@@ -3,6 +3,7 @@ package policy
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 
@@ -19,7 +20,7 @@ func Validate(reader io.Reader) error {
 	for {
 		object := &unstructured.Unstructured{}
 		if err := decoder.Decode(object); err != nil {
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				break
 			}
 			return fmt.Errorf("decode rendered chart: %w", err)
@@ -42,7 +43,7 @@ func Validate(reader io.Reader) error {
 	}
 	for _, deployment := range deployments {
 		if err := validatePodSpec(deployment.Spec.Template.Spec); err != nil {
-			return fmt.Errorf("Deployment %s: %w", deployment.Name, err)
+			return fmt.Errorf("deployment %s: %w", deployment.Name, err)
 		}
 	}
 	return nil
@@ -52,7 +53,8 @@ func validatePodSpec(pod corev1.PodSpec) error {
 	if pod.HostNetwork || pod.HostPID || pod.HostIPC || enabled(pod.ShareProcessNamespace) {
 		return fmt.Errorf("operator Deployment enables host or shared process namespaces")
 	}
-	if len(pod.InitContainers) != 0 || len(pod.EphemeralContainers) != 0 || len(pod.Containers) != 1 || pod.Containers[0].Name != "manager" {
+	if len(pod.InitContainers) != 0 || len(pod.EphemeralContainers) != 0 || len(pod.Containers) != 1 ||
+		pod.Containers[0].Name != "manager" {
 		return fmt.Errorf("operator Deployment must contain only the manager container")
 	}
 	for _, volume := range pod.Volumes {
@@ -67,10 +69,16 @@ func validatePodSpec(pod corev1.PodSpec) error {
 		}
 	}
 	security := container.SecurityContext
-	if security == nil || enabled(security.Privileged) || security.AllowPrivilegeEscalation == nil || *security.AllowPrivilegeEscalation ||
+	if security == nil ||
+		enabled(security.Privileged) ||
+		security.AllowPrivilegeEscalation == nil ||
+		*security.AllowPrivilegeEscalation ||
 		security.ReadOnlyRootFilesystem == nil || !*security.ReadOnlyRootFilesystem || security.Capabilities == nil ||
-		len(security.Capabilities.Add) != 0 || len(security.Capabilities.Drop) != 1 || security.Capabilities.Drop[0] != corev1.Capability("ALL") ||
-		security.RunAsNonRoot != nil && !*security.RunAsNonRoot || security.RunAsUser != nil && *security.RunAsUser == 0 ||
+		len(security.Capabilities.Add) != 0 ||
+		len(security.Capabilities.Drop) != 1 ||
+		security.Capabilities.Drop[0] != corev1.Capability("ALL") ||
+		security.RunAsNonRoot != nil && !*security.RunAsNonRoot ||
+		security.RunAsUser != nil && *security.RunAsUser == 0 ||
 		security.SeccompProfile != nil && security.SeccompProfile.Type != corev1.SeccompProfileTypeRuntimeDefault ||
 		security.AppArmorProfile != nil && security.AppArmorProfile.Type == corev1.AppArmorProfileTypeUnconfined ||
 		security.ProcMount != nil && *security.ProcMount != corev1.DefaultProcMount {

@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	bitcoin "github.com/cylewitruk-stacks/stacks-k8s/apis/network/bitcoin/v1alpha2"
+	api "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha2"
 	"k8s.io/apimachinery/pkg/api/equality"
 )
 
@@ -14,7 +15,7 @@ func (w *Worker) observePaused(ctx context.Context, record *bitcoin.BitcoinExecu
 	if err != nil {
 		return err
 	}
-	if admitted.root.Spec.Operation != "Paused" {
+	if admitted.root.Spec.Operation != api.NetworkOperationPaused {
 		return nil
 	}
 	observation, _, err := w.observe(ctx, admitted, record.DeepCopy())
@@ -25,7 +26,7 @@ func (w *Worker) observePaused(ctx context.Context, record *bitcoin.BitcoinExecu
 	if err != nil {
 		return err
 	}
-	if current.root.Spec.Operation != "Paused" {
+	if current.root.Spec.Operation != api.NetworkOperationPaused {
 		return nil
 	}
 	if !equality.Semantic.DeepEqual(admitted.target, current.target) {

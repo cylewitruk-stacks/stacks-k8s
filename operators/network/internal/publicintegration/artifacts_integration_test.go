@@ -31,12 +31,42 @@ func verifyArtifactDeletionRetention(t *testing.T, ctx context.Context, c client
 	ns := "shared-artifact-retention"
 	must(c.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: ns}}))
 	policy := api.Configuration{BitcoinNode: &bitcoin.BitcoinNodeSpec{}}
-	root := &api.StacksNetwork{ObjectMeta: metav1.ObjectMeta{Name: "network", Namespace: ns}, Spec: api.StacksNetworkSpec{Operation: "Running", Participants: []api.Participant{{Name: "btc", Kind: "BitcoinNode", Definition: api.Definition{Inline: &policy}}}}}
+	root := &api.StacksNetwork{
+		ObjectMeta: metav1.ObjectMeta{Name: "network", Namespace: ns},
+		Spec: api.StacksNetworkSpec{
+			Operation: "Running",
+			Participants: []api.Participant{
+				{Name: "btc", Kind: "BitcoinNode", Definition: api.Definition{Inline: &policy}},
+			},
+		},
+	}
 	must(c.Create(ctx, root))
-	p := &api.StacksNetworkParticipant{ObjectMeta: metav1.ObjectMeta{Name: "btc-participant", Namespace: ns, Finalizers: []string{"test.example/consumer"}}, Spec: api.StacksNetworkParticipantSpec{NetworkUID: root.UID, ParticipantName: "btc", Kind: "BitcoinNode", Configuration: policy}}
+	p := &api.StacksNetworkParticipant{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "btc-participant",
+			Namespace:  ns,
+			Finalizers: []string{"test.example/consumer"},
+		},
+		Spec: api.StacksNetworkParticipantSpec{
+			NetworkUID:      root.UID,
+			ParticipantName: "btc",
+			Kind:            "BitcoinNode",
+			Configuration:   policy,
+		},
+	}
 	must(controllerutil.SetControllerReference(root, p, scheme))
 	must(c.Create(ctx, p))
-	record := &bitcoin.BitcoinExecution{ObjectMeta: metav1.ObjectMeta{Name: "btc-execution", Namespace: ns, Finalizers: []string{foundation.ArtifactFinalizer, "test.example/evidence"}}, Spec: bitcoin.BitcoinExecutionSpec{NetworkUID: root.UID, Participant: common.Binding{Kind: "StacksNetworkParticipant", Name: p.Name, UID: p.UID}}}
+	record := &bitcoin.BitcoinExecution{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "btc-execution",
+			Namespace:  ns,
+			Finalizers: []string{foundation.ArtifactFinalizer, "test.example/evidence"},
+		},
+		Spec: bitcoin.BitcoinExecutionSpec{
+			NetworkUID:  root.UID,
+			Participant: common.Binding{Kind: "StacksNetworkParticipant", Name: p.Name, UID: p.UID},
+		},
+	}
 	must(controllerutil.SetControllerReference(root, record, scheme))
 	must(c.Create(ctx, record))
 	uid := record.UID
@@ -47,7 +77,8 @@ func verifyArtifactDeletionRetention(t *testing.T, ctx context.Context, c client
 	result, err := r.Reconcile(ctx, request)
 	must(err)
 	must(c.Get(ctx, request.NamespacedName, record))
-	if result.RequeueAfter == 0 || record.UID != uid || record.DeletionTimestamp == nil || !controllerutil.ContainsFinalizer(record, foundation.ArtifactFinalizer) {
+	if result.RequeueAfter == 0 || record.UID != uid || record.DeletionTimestamp == nil ||
+		!controllerutil.ContainsFinalizer(record, foundation.ArtifactFinalizer) {
 		t.Fatal("pending consumer did not retain exact deleting record")
 	}
 	must(c.Get(ctx, client.ObjectKeyFromObject(p), p))
@@ -59,7 +90,8 @@ func verifyArtifactDeletionRetention(t *testing.T, ctx context.Context, c client
 	_, err = r.Reconcile(ctx, request)
 	must(err)
 	must(c.Get(ctx, request.NamespacedName, record))
-	if record.UID != uid || controllerutil.ContainsFinalizer(record, foundation.ArtifactFinalizer) || !controllerutil.ContainsFinalizer(record, "test.example/evidence") {
+	if record.UID != uid || controllerutil.ContainsFinalizer(record, foundation.ArtifactFinalizer) ||
+		!controllerutil.ContainsFinalizer(record, "test.example/evidence") {
 		t.Fatal("artifact identity or independent finalizer changed")
 	}
 	record.Finalizers = nil

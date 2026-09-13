@@ -8,8 +8,11 @@ import (
 
 	action "github.com/cylewitruk-stacks/stacks-k8s/apis/network/actions/v1alpha2"
 	bitcoin "github.com/cylewitruk-stacks/stacks-k8s/apis/network/bitcoin/v1alpha2"
+	common "github.com/cylewitruk-stacks/stacks-k8s/apis/network/common/v1alpha2"
 	api "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha2"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/foundation"
+	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/objectref"
+	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -20,47 +23,63 @@ import (
 // actionView keeps the two finite request kinds behind one reservation protocol.
 type actionView struct {
 	object         client.Object
+	kind           action.Kind
 	status         *action.BitcoinBlockGenerationStatus
 	generation     *action.BitcoinBlockGenerationSpec
 	reorganization *action.BitcoinReorganizationSpec
 }
 
 // actionObject returns the closed finite kind catalog.
-func actionObject(kind string) client.Object {
+func actionObject(kind action.Kind) (client.Object, error) {
 	switch kind {
-	case "BitcoinBlockGeneration":
-		return &action.BitcoinBlockGeneration{}
-	case "BitcoinReorganization":
-		return &action.BitcoinReorganization{}
+	case action.KindBitcoinBlockGeneration:
+		return &action.BitcoinBlockGeneration{}, nil
+	case action.KindBitcoinReorganization:
+		return &action.BitcoinReorganization{}, nil
 	}
-	return nil
+	return nil, fmt.Errorf("unsupported finite action kind %q", kind)
 }
 
 // actionFields decodes the closed request union without losing its immutable kind.
-func actionFields(object client.Object) actionView {
+func actionFields(object client.Object) (actionView, error) {
 	switch a := object.(type) {
 	case *action.BitcoinBlockGeneration:
-		return actionView{object: a, status: &a.Status, generation: &a.Spec}
+		if a != nil {
+			return actionView{
+				object:     a,
+				kind:       action.KindBitcoinBlockGeneration,
+				status:     &a.Status,
+				generation: &a.Spec,
+			}, nil
+		}
 	case *action.BitcoinReorganization:
-		return actionView{object: a, status: &a.Status.BitcoinBlockGenerationStatus, reorganization: &a.Spec}
+		if a != nil {
+			return actionView{
+				object:         a,
+				kind:           action.KindBitcoinReorganization,
+				status:         &a.Status.BitcoinBlockGenerationStatus,
+				reorganization: &a.Spec,
+			}, nil
+		}
 	}
-	return actionView{}
+	return actionView{}, fmt.Errorf("unsupported or nil finite action object %T", object)
 }
 
-// kind identifies the precise public action resource.
-func (v actionView) kind() string {
-	if v.generation != nil {
-		return "BitcoinBlockGeneration"
-	}
-	return "BitcoinReorganization"
+// reference captures the kind selected by actionFields together with current request metadata.
+func (v actionView) reference() common.Binding {
+	return common.Binding{Kind: string(v.kind), Name: v.object.GetName(), UID: v.object.GetUID()}
 }
 
 // desired exposes common public eligibility without creating generic mutation inputs.
 func (v actionView) desired() (string, string, string, time.Duration) {
 	if v.generation != nil {
-		return string(v.generation.NetworkUID), v.generation.BitcoinNodeRef.Name, v.generation.Address, v.generation.Timeout.Duration
+		return string(
+			v.generation.NetworkUID,
+		), v.generation.BitcoinNodeRef.Name, v.generation.Address, v.generation.Timeout.Duration
 	}
-	return string(v.reorganization.NetworkUID), v.reorganization.BitcoinNodeRef.Name, v.reorganization.Address, v.reorganization.Timeout.Duration
+	return string(
+		v.reorganization.NetworkUID,
+	), v.reorganization.BitcoinNodeRef.Name, v.reorganization.Address, v.reorganization.Timeout.Duration
 }
 
 // selectAction chooses oldest eligible finite work without allowing unavailable requests to reserve a target.
@@ -68,7 +87,8 @@ func (w *Worker) selectAction(ctx context.Context, a admitted, record *bitcoin.B
 	if !w.Input.ActionsEnabled && !w.Input.ReorganizationEnabled {
 		return false, nil
 	}
-	if record.Status.Reservation != nil && *record.Status.Reservation != binding("BitcoinInitialization", a.initialization) {
+	if record.Status.Reservation != nil &&
+		*record.Status.Reservation != objectref.BitcoinInitialization(a.initialization) {
 		return true, nil
 	}
 	if record.Status.Action != nil || record.Status.Armed != nil {
@@ -90,7 +110,11 @@ func (w *Worker) selectAction(ctx context.Context, a admitted, record *bitcoin.B
 			return false, fmt.Errorf("finite generation inventory incomplete")
 		}
 		for i := range list.Items {
-			queue = append(queue, actionFields(&list.Items[i]))
+			view, err := actionFields(&list.Items[i])
+			if err != nil {
+				return false, err
+			}
+			queue = append(queue, view)
 		}
 	}
 	if w.Input.ReorganizationEnabled {
@@ -102,7 +126,11 @@ func (w *Worker) selectAction(ctx context.Context, a admitted, record *bitcoin.B
 			return false, fmt.Errorf("reorganization inventory incomplete")
 		}
 		for i := range list.Items {
-			queue = append(queue, actionFields(&list.Items[i]))
+			view, err := actionFields(&list.Items[i])
+			if err != nil {
+				return false, err
+			}
+			queue = append(queue, view)
 		}
 	}
 	sort.Slice(queue, func(i, j int) bool {
@@ -114,10 +142,18 @@ func (w *Worker) selectAction(ctx context.Context, a admitted, record *bitcoin.B
 	})
 	for _, candidate := range queue {
 		network, target, address, timeout := candidate.desired()
-		if network != string(a.root.UID) || target != a.participant.Spec.ParticipantName || candidate.object.GetDeletionTimestamp() != nil || action.IsTerminalPhase(candidate.status.Phase) || candidate.status.AdmittedAt != nil || !controllerutil.ContainsFinalizer(candidate.object, action.CleanupFinalizer) || timeout <= 0 || timeout > 10*time.Minute || !w.Now().Before(candidate.object.GetCreationTimestamp().Add(timeout)) {
+		if network != string(a.root.UID) || target != a.participant.Spec.ParticipantName ||
+			candidate.object.GetDeletionTimestamp() != nil ||
+			action.IsTerminalPhase(candidate.status.Phase) ||
+			candidate.status.AdmittedAt != nil ||
+			!controllerutil.ContainsFinalizer(candidate.object, action.CleanupFinalizer) ||
+			timeout <= 0 ||
+			timeout > 10*time.Minute ||
+			!w.Now().Before(candidate.object.GetCreationTimestamp().Add(timeout)) {
 			continue
 		}
-		if candidate.generation != nil && validateActionCadence(candidate.generation.Cadence, candidate.generation.Count) != nil {
+		if candidate.generation != nil &&
+			validateActionCadence(candidate.generation.Cadence, candidate.generation.Count) != nil {
 			continue
 		}
 		if err := w.RPC.Check(ctx, a.target.Endpoint, address); err != nil {
@@ -131,7 +167,21 @@ func (w *Worker) selectAction(ctx context.Context, a admitted, record *bitcoin.B
 			continue
 		}
 		now := metav1.NewTime(w.Now().UTC())
-		reservation := &bitcoin.BitcoinActionReservation{Request: binding(candidate.kind(), candidate.object), Generation: candidate.generation.DeepCopy(), Reorganization: candidate.reorganization.DeepCopy(), Network: action.NetworkIdentity{Name: a.root.Name, UID: string(a.root.UID), ObservedGeneration: a.root.Generation}, Target: actionTarget(a), Runtime: a.target, AdmittedAt: now, ExpiresAt: metav1.NewTime(candidate.object.GetCreationTimestamp().Add(timeout)), CorrelationID: candidate.object.GetLabels()["actions.stacks.org/correlation-id"]}
+		reservation := &bitcoin.BitcoinActionReservation{
+			Request:        candidate.reference(),
+			Generation:     candidate.generation.DeepCopy(),
+			Reorganization: candidate.reorganization.DeepCopy(),
+			Network: action.NetworkIdentity{
+				Name:               a.root.Name,
+				UID:                string(a.root.UID),
+				ObservedGeneration: a.root.Generation,
+			},
+			Target:        actionTarget(a),
+			Runtime:       a.target,
+			AdmittedAt:    now,
+			ExpiresAt:     metav1.NewTime(candidate.object.GetCreationTimestamp().Add(timeout)),
+			CorrelationID: candidate.object.GetLabels()[action.CorrelationIDLabel],
+		}
 		if candidate.reorganization != nil {
 			if err := w.captureReorganization(ctx, a, reservation); err != nil {
 				continue
@@ -141,15 +191,28 @@ func (w *Worker) selectAction(ctx context.Context, a admitted, record *bitcoin.B
 		if err != nil || !equality.Semantic.DeepEqual(a.target, fresh.target) {
 			return false, fmt.Errorf("finite target changed before reservation")
 		}
-		currentRequest := actionObject(candidate.kind())
+		currentRequest, err := objectref.Fresh(candidate.object, w.Client.Scheme())
+		if err != nil {
+			return false, err
+		}
 		if err := w.Reader.Get(ctx, client.ObjectKeyFromObject(candidate.object), currentRequest); err != nil {
 			if apierrors.IsNotFound(err) {
 				continue
 			}
 			return false, err
 		}
-		currentView := actionFields(currentRequest)
-		if currentRequest.GetUID() != candidate.object.GetUID() || !equality.Semantic.DeepEqual(currentView.generation, candidate.generation) || !equality.Semantic.DeepEqual(currentView.reorganization, candidate.reorganization) || currentRequest.GetDeletionTimestamp() != nil || action.IsTerminalPhase(currentView.status.Phase) || currentView.status.AdmittedAt != nil || !controllerutil.ContainsFinalizer(currentRequest, action.CleanupFinalizer) || !w.Now().Before(reservation.ExpiresAt.Time) {
+		currentView, err := actionFields(currentRequest)
+		if err != nil {
+			return false, err
+		}
+		if currentRequest.GetUID() != candidate.object.GetUID() ||
+			!equality.Semantic.DeepEqual(currentView.generation, candidate.generation) ||
+			!equality.Semantic.DeepEqual(currentView.reorganization, candidate.reorganization) ||
+			currentRequest.GetDeletionTimestamp() != nil ||
+			action.IsTerminalPhase(currentView.status.Phase) ||
+			currentView.status.AdmittedAt != nil ||
+			!controllerutil.ContainsFinalizer(currentRequest, action.CleanupFinalizer) ||
+			!w.Now().Before(reservation.ExpiresAt.Time) {
 			continue
 		}
 		record.Status.Action = reservation
@@ -161,17 +224,28 @@ func (w *Worker) selectAction(ctx context.Context, a admitted, record *bitcoin.B
 
 // actionTarget publishes the exact immutable configuration, credentials and actor process binding.
 func actionTarget(a admitted) action.TargetIdentity {
-	out := action.TargetIdentity{APIVersion: api.GroupVersion.String(), Kind: "StacksNetworkParticipant", Name: a.participant.Name, UID: string(a.participant.UID), SpecDigest: a.target.PolicyDigest, ConfigDigest: a.participant.Status.Runtime.ConfigurationDigest, PodUID: string(a.target.Pod.UID), ContainerID: a.target.ContainerID, Configuration: a.target.Configuration, Credentials: a.target.Credentials}
+	out := action.TargetIdentity{
+		APIVersion:    api.GroupVersion.String(),
+		Kind:          api.KindStacksNetworkParticipant,
+		Name:          a.participant.Name,
+		UID:           string(a.participant.UID),
+		SpecDigest:    a.target.PolicyDigest,
+		ConfigDigest:  a.participant.Status.Runtime.ConfigurationDigest,
+		PodUID:        string(a.target.Pod.UID),
+		ContainerID:   a.target.ContainerID,
+		Configuration: a.target.Configuration,
+		Credentials:   a.target.Credentials,
+	}
 	if a.pod != nil {
-		out.Revision = a.pod.Labels["controller-revision-hash"]
+		out.Revision = a.pod.Labels[appsv1.ControllerRevisionHashLabelKey]
 		for _, process := range a.pod.Status.ContainerStatuses {
-			if process.Name == "bitcoin" && process.ContainerID == a.target.ContainerID {
+			if process.Name == api.ContainerBitcoin && process.ContainerID == a.target.ContainerID {
 				out.RuntimeImageID = process.ImageID
 			}
 		}
 	}
 	for _, ref := range a.participant.Status.Runtime.WorkloadRefs {
-		if ref.Kind == "StatefulSet" {
+		if ref.Kind == common.KindStatefulSet {
 			out.StatefulSetUID = string(ref.UID)
 		}
 	}
@@ -203,19 +277,23 @@ func (w *Worker) actionCeiling(ctx context.Context, a admitted, height int64) er
 // readAction returns only the exact original request incarnation and immutable spec.
 func (w *Worker) readAction(ctx context.Context, record *bitcoin.BitcoinExecution) (actionView, bool, error) {
 	state := record.Status.Action
-	object := actionObject(state.Request.Kind)
-	if object == nil {
-		return actionView{}, false, fmt.Errorf("unsupported finite action")
+	object, err := actionObject(action.Kind(state.Request.Kind))
+	if err != nil {
+		return actionView{}, false, err
 	}
-	err := w.Reader.Get(ctx, client.ObjectKey{Namespace: record.Namespace, Name: state.Request.Name}, object)
+	err = w.Reader.Get(ctx, client.ObjectKey{Namespace: record.Namespace, Name: state.Request.Name}, object)
 	if apierrors.IsNotFound(err) {
 		return actionView{}, false, nil
 	}
 	if err != nil {
 		return actionView{}, false, err
 	}
-	view := actionFields(object)
-	same := object.GetUID() == state.Request.UID && equality.Semantic.DeepEqual(view.generation, state.Generation) && equality.Semantic.DeepEqual(view.reorganization, state.Reorganization)
+	view, err := actionFields(object)
+	if err != nil {
+		return actionView{}, false, err
+	}
+	same := object.GetUID() == state.Request.UID && equality.Semantic.DeepEqual(view.generation, state.Generation) &&
+		equality.Semantic.DeepEqual(view.reorganization, state.Reorganization)
 	return view, same, nil
 }
 
@@ -227,14 +305,18 @@ func (w *Worker) stepAction(ctx context.Context, record *bitcoin.BitcoinExecutio
 		return err
 	}
 	root := &api.StacksNetwork{}
-	if err := w.Reader.Get(ctx, client.ObjectKey{Namespace: record.Namespace, Name: "network"}, root); err != nil {
+	if err := w.Reader.Get(ctx, client.ObjectKey{
+		Namespace: record.Namespace,
+		Name:      "network",
+	}, root); err != nil {
 		return err
 	}
 	if root.UID != record.Spec.NetworkUID || root.DeletionTimestamp != nil {
 		_, err := w.stop(ctx, record)
 		return err
 	}
-	if !failed(root) && root.Spec.Operation != "Stopped" && (record.Status.Observation == nil || w.Now().Sub(record.Status.Observation.ObservedAt.Time) >= 5*time.Second) {
+	if !failed(root) && root.Spec.Operation != api.NetworkOperationStopped &&
+		(record.Status.Observation == nil || w.Now().Sub(record.Status.Observation.ObservedAt.Time) >= 5*time.Second) {
 		a, err := w.authorizeObservation(ctx, record)
 		if err == nil {
 			observation, _, observeErr := w.observe(ctx, a, record.DeepCopy())
@@ -255,16 +337,19 @@ func (w *Worker) stepAction(ctx context.Context, record *bitcoin.BitcoinExecutio
 			state.EffectUncertain = true
 			return w.Client.Status().Update(ctx, record)
 		}
-		if failed(root) || root.Spec.Operation == "Stopped" {
+		if failed(root) || root.Spec.Operation == api.NetworkOperationStopped {
 			_, err := w.stop(ctx, record)
 			return err
 		}
 		return nil
 	}
 	clean := state.Reorganization == nil || !state.InvalidationAcknowledged || state.CleanupAcknowledged
-	acknowledged := same && action.IsTerminalPhase(view.status.Phase) && view.status.LastDispatchID == state.LastDispatchID && view.status.BlocksGenerated == state.BlocksGenerated
+	acknowledged := same && action.IsTerminalPhase(view.status.Phase) &&
+		view.status.LastDispatchID == state.LastDispatchID &&
+		view.status.BlocksGenerated == state.BlocksGenerated
 	if same && state.Reorganization != nil {
-		acknowledged = acknowledged && view.object.(*action.BitcoinReorganization).Status.CleanupAcknowledged == state.CleanupAcknowledged
+		acknowledged = acknowledged &&
+			view.object.(*action.BitcoinReorganization).Status.CleanupAcknowledged == state.CleanupAcknowledged
 	}
 	if clean && (!same || acknowledged) {
 		record.Status.Action = nil
@@ -273,31 +358,38 @@ func (w *Worker) stepAction(ctx context.Context, record *bitcoin.BitcoinExecutio
 	}
 	stop := ""
 	switch {
-	case state.Generation != nil && !w.Input.ActionsEnabled || state.Reorganization != nil && !w.Input.ReorganizationEnabled:
-		stop = "CapabilityDisabled"
+	case state.Generation != nil &&
+		!w.Input.ActionsEnabled ||
+		state.Reorganization != nil &&
+			!w.Input.ReorganizationEnabled:
+		stop = reasonCapabilityDisabled
 	case !same || view.object.GetDeletionTimestamp() != nil:
-		stop = "ActionCancelled"
-	case root.Spec.Operation == "Paused" && state.Reorganization != nil && state.InvalidationAcknowledged && !state.CleanupAcknowledged:
-		stop = "NetworkPaused"
-	case failed(root) || root.Spec.Operation == "Stopped":
-		stop = "NetworkStopped"
+		stop = action.ReasonActionCancelled
+	case root.Spec.Operation == api.NetworkOperationPaused &&
+		state.Reorganization != nil &&
+		state.InvalidationAcknowledged &&
+		!state.CleanupAcknowledged:
+		stop = reasonNetworkPaused
+	case failed(root) || root.Spec.Operation == api.NetworkOperationStopped:
+		stop = api.ReasonNetworkStopped
 	case same && action.IsTerminalPhase(view.status.Phase):
-		stop = "EffectUncertain"
+		stop = action.ReasonEffectUncertain
 	case !w.Now().Before(state.ExpiresAt.Time) && !actionFinished(state):
-		stop = "DeadlineExceeded"
+		stop = reasonDeadlineExceeded
 	}
 	if stop != "" && state.StopReason == "" {
 		state.StopReason = stop
 		return w.Client.Status().Update(ctx, record)
 	}
 	if state.CleanupUnsafe {
-		if failed(root) || root.Spec.Operation == "Stopped" {
+		if failed(root) || root.Spec.Operation == api.NetworkOperationStopped {
 			_, err := w.stop(ctx, record)
 			return err
 		}
 		return nil
 	}
-	if root.Spec.Operation == "Paused" && (state.Reorganization == nil || !state.InvalidationAcknowledged || state.CleanupAcknowledged) {
+	if root.Spec.Operation == api.NetworkOperationPaused &&
+		(state.Reorganization == nil || !state.InvalidationAcknowledged || state.CleanupAcknowledged) {
 		if _, err := w.acknowledgePause(ctx, record); err != nil {
 			return err
 		}
@@ -314,15 +406,20 @@ func (w *Worker) stepAction(ctx context.Context, record *bitcoin.BitcoinExecutio
 	}
 	admitted, err := w.authorize(ctx, record)
 	if err != nil {
+		//nolint:nilerr // Hold this action until current authorization can be established.
 		return nil
 	}
 	if !equality.Semantic.DeepEqual(admitted.target, state.Runtime) {
-		return w.stopAction(ctx, record, "IdentityDiverged", false)
+		return w.stopAction(ctx, record, action.ReasonIdentityDiverged, false)
 	}
 	if state.NextDispatchAt != nil && w.Now().Before(state.NextDispatchAt.Time) {
 		return nil
 	}
-	operation := bitcoin.BitcoinArmedRPC{Method: "Generate", Action: state.Request.DeepCopy(), Address: state.Generation.Address}
+	operation := bitcoin.BitcoinArmedRPC{
+		Method:  bitcoin.RPCGenerate,
+		Action:  state.Request.DeepCopy(),
+		Address: state.Generation.Address,
+	}
 	return w.arm(ctx, record, admitted, operation)
 }
 
@@ -338,7 +435,14 @@ func actionFinished(state *bitcoin.BitcoinActionReservation) bool {
 func actionAdmissionAcknowledged(view actionView, record *bitcoin.BitcoinExecution) bool {
 	state := record.Status.Action
 	status := view.status
-	return controllerutil.ContainsFinalizer(view.object, action.CleanupFinalizer) && status.AdmittedAt != nil && status.AdmittedAt.Equal(&state.AdmittedAt) && status.AdmittedExecution != nil && *status.AdmittedExecution == binding("BitcoinExecution", record) && status.AdmittedTarget != nil && *status.AdmittedTarget == state.Target && status.AdmittedNetwork != nil && *status.AdmittedNetwork == state.Network
+	return controllerutil.ContainsFinalizer(view.object, action.CleanupFinalizer) && status.AdmittedAt != nil &&
+		status.AdmittedAt.Equal(&state.AdmittedAt) &&
+		status.AdmittedExecution != nil &&
+		*status.AdmittedExecution == objectref.BitcoinExecution(record) &&
+		status.AdmittedTarget != nil &&
+		*status.AdmittedTarget == state.Target &&
+		status.AdmittedNetwork != nil &&
+		*status.AdmittedNetwork == state.Network
 }
 
 // stopAction withdraws further action work without changing any previous outcome or RPC evidence.

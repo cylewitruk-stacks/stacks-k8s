@@ -36,7 +36,11 @@ func TestLongPauseRefreshesNativeFactsAndOwnAcknowledgementWithoutSending(t *tes
 					t.Fatal(err)
 				}
 				record := f.readRecord(t)
-				if record.Status.Observation == nil || record.Status.Observation.Height != f.rpc.height || f.now.Sub(record.Status.Observation.ObservedAt.Time) > foundation.ObservationFreshness() || record.Status.Control == nil || record.Status.Control.ProcessNonce != f.worker.ProcessNonce || !record.Status.Control.HeartbeatAt.Time.Equal(f.now) {
+				if record.Status.Observation == nil || record.Status.Observation.Height != f.rpc.height ||
+					f.now.Sub(record.Status.Observation.ObservedAt.Time) > foundation.ObservationFreshness() ||
+					record.Status.Control == nil ||
+					record.Status.Control.ProcessNonce != f.worker.ProcessNonce ||
+					!record.Status.Control.HeartbeatAt.Time.Equal(f.now) {
 					t.Fatalf("paused observations or heartbeat went stale: %+v", record.Status)
 				}
 				if original.IsZero() {
@@ -76,7 +80,10 @@ func TestPausedObservationPreservesUnknownArmAndCannotAcknowledgeQuiescence(t *t
 		t.Fatal(err)
 	}
 	record = f.readRecord(t)
-	if record.Status.Armed == nil || record.Status.Armed.ID != "unknown-prior-process" || record.Status.Control != nil || record.Status.Observation == nil || f.rpc.count() != 0 {
+	if record.Status.Armed == nil || record.Status.Armed.ID != "unknown-prior-process" ||
+		record.Status.Control != nil ||
+		record.Status.Observation == nil ||
+		f.rpc.count() != 0 {
 		t.Fatal("native reads cleared unknown authority or claimed pause quiescence", record.Status)
 	}
 }
@@ -103,7 +110,9 @@ func TestPauseSameRootRevisionRebindsRestartedProcess(t *testing.T) {
 		t.Fatal(err)
 	}
 	ack := f.readRecord(t).Status.Control
-	if ack.NetworkGeneration != old.NetworkGeneration || ack.ProcessNonce == old.ProcessNonce || !ack.ObservedAt.Time.Equal(f.now) || !ack.HeartbeatAt.Time.Equal(f.now) {
+	if ack.NetworkGeneration != old.NetworkGeneration || ack.ProcessNonce == old.ProcessNonce ||
+		!ack.ObservedAt.Time.Equal(f.now) ||
+		!ack.HeartbeatAt.Time.Equal(f.now) {
 		t.Fatal("same-generation restart inherited prior process acknowledgement", ack)
 	}
 }

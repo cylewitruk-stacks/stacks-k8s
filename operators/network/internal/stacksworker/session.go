@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	common "github.com/cylewitruk-stacks/stacks-k8s/apis/network/common/v1alpha2"
 	api "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha2"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/foundation"
 	corev1 "k8s.io/api/core/v1"
@@ -62,128 +63,196 @@ func Session(root *api.StacksNetwork, p *api.StacksNetworkParticipant) (*api.Ins
 
 // ProjectSession updates only the supplied root ledger; its caller persists root status.
 // Pod and participant inputs must be fresh direct reads. API errors remain Unknown.
-func ProjectSession(root *api.StacksNetwork, p *api.StacksNetworkParticipant, pod *corev1.Pod, readErr error, now time.Time) SessionFact {
+func ProjectSession(
+	root *api.StacksNetwork,
+	p *api.StacksNetworkParticipant,
+	pod *corev1.Pod,
+	readErr error,
+	now time.Time,
+) SessionFact {
 	id, err := Session(root, p)
 	if errors.Is(err, errParticipantAllocating) {
-		return SessionFact{Unknown: true, Reason: "AllocationPending"}
+		return SessionFact{Unknown: true, Reason: reasonAllocationPending}
 	}
 	if err != nil {
-		return SessionFact{Failed: true, Reason: "WorkerIdentityLost"}
+		return SessionFact{Failed: true, Reason: api.ReasonWorkerIdentityLost}
 	}
 	if readErr != nil && !apierrors.IsNotFound(readErr) {
-		return SessionFact{Unknown: true, Reason: "WorkerObservationUnavailable"}
+		return SessionFact{Unknown: true, Reason: reasonWorkerObservationUnavailable}
 	}
 	if id.Worker == nil {
-		if p.Status.Execution != nil && p.Status.Execution.Phase != "Inactive" {
-			return SessionFact{Failed: true, Reason: "WorkerBindingLost"}
+		if p.Status.Execution != nil && p.Status.Execution.Phase != api.WorkerPhaseInactive {
+			return SessionFact{Failed: true, Reason: reasonWorkerBindingLost}
 		}
-		if stoppedReason(root, p, id) != "" || root.Spec.Operation != "Running" || failed(root) {
-			return SessionFact{Reason: "ActivationHeld"}
+		if stoppedReason(root, p, id) != "" || root.Spec.Operation != api.NetworkOperationRunning || failed(root) {
+			return SessionFact{Reason: reasonActivationHeld}
 		}
 		if p.Status.Runtime == nil || p.Status.Runtime.WorkerCandidate == nil {
-			return SessionFact{Reason: "CandidatePending"}
+			return SessionFact{Reason: reasonCandidatePending}
 		}
 		candidate := p.Status.Runtime.WorkerCandidate
 		if readErr != nil || pod == nil {
-			return SessionFact{Unknown: true, Reason: "CandidateUnavailable"}
+			return SessionFact{Unknown: true, Reason: reasonCandidateUnavailable}
 		}
-		if pod.Name != Name(p) || candidate.Pod.Kind != "Pod" || candidate.Pod.Name != pod.Name || candidate.Pod.UID == "" || candidate.Pod.UID != pod.UID || !ownedPod(pod, p) || pod.Spec.RestartPolicy != corev1.RestartPolicyNever || candidate.ProfileDigest == "" || pod.Annotations[profileLabel] != candidate.ProfileDigest {
-			return SessionFact{Failed: true, Reason: "CandidateConflict"}
+		if pod.Name != Name(p) || candidate.Pod.Kind != common.KindPod || candidate.Pod.Name != pod.Name ||
+			candidate.Pod.UID == "" ||
+			candidate.Pod.UID != pod.UID ||
+			!ownedPod(pod, p) ||
+			pod.Spec.RestartPolicy != corev1.RestartPolicyNever ||
+			candidate.ProfileDigest == "" ||
+			pod.Annotations[profileLabel] != candidate.ProfileDigest {
+			return SessionFact{Failed: true, Reason: reasonCandidateConflict}
 		}
 		if pod.DeletionTimestamp != nil || terminal(pod) {
-			return SessionFact{Reason: "InactiveCandidateExited"}
+			return SessionFact{Reason: reasonInactiveCandidateExited}
 		}
 		if _, err := profileFromPod(pod); err != nil {
-			return SessionFact{Failed: true, Reason: "CandidateProfileChanged"}
+			return SessionFact{Failed: true, Reason: reasonCandidateProfileChanged}
 		}
 		id.Worker = &api.WorkerSession{Pod: candidate.Pod, ProfileDigest: candidate.ProfileDigest}
-		return SessionFact{Changed: true, Reason: "WorkerBound"}
+		return SessionFact{Changed: true, Reason: api.ReasonWorkerBound}
 	}
 	session := id.Worker
 	if session.Pod.UID == "" || session.Pod.Name != Name(p) || session.ProfileDigest == "" {
-		return SessionFact{Failed: true, Reason: "WorkerBindingCorrupt"}
+		return SessionFact{Failed: true, Reason: reasonWorkerBindingCorrupt}
 	}
 	if readErr != nil || pod == nil {
 		if session.Disposal != nil && session.Disposal.Terminated {
-			return SessionFact{Reason: "WorkerDisposed"}
+			return SessionFact{Reason: reasonWorkerDisposed}
 		}
-		return SessionFact{Failed: true, Unknown: true, Reason: "BoundWorkerLost"}
+		return SessionFact{Failed: true, Unknown: true, Reason: reasonBoundWorkerLost}
 	}
 	if pod.UID != session.Pod.UID || !ownedPod(pod, p) || pod.Annotations[profileLabel] != session.ProfileDigest {
-		return SessionFact{Failed: true, Unknown: true, Reason: "BoundWorkerReplaced"}
+		return SessionFact{Failed: true, Unknown: true, Reason: reasonBoundWorkerReplaced}
 	}
 	if session.Disposal != nil {
 		if Terminated(pod) && !session.Disposal.Terminated {
 			session.Disposal.Terminated = true
-			return SessionFact{Changed: true, Failed: session.Disposal.Outcome == "Unsettled", Reason: "WorkerTerminationConfirmed"}
+			return SessionFact{
+				Changed: true,
+				Failed:  session.Disposal.Outcome == api.WorkerDisposalUnsettled,
+				Reason:  reasonWorkerTerminationConfirmed,
+			}
 		}
-		return SessionFact{Failed: session.Disposal.Outcome == "Unsettled", Unknown: !session.Disposal.Terminated, Reason: "WorkerDisposing"}
+		return SessionFact{
+			Failed:  session.Disposal.Outcome == api.WorkerDisposalUnsettled,
+			Unknown: !session.Disposal.Terminated,
+			Reason:  reasonWorkerDisposing,
+		}
 	}
 	if session.Shutdown == nil {
 		if pod.DeletionTimestamp != nil || terminal(pod) {
 			if reason := stoppedReason(root, p, id); reason != "" {
-				session.Shutdown = &api.WorkerShutdown{NetworkGeneration: root.Generation, Reason: reason, RequestedAt: metav1.NewTime(now)}
-				session.Disposal = &api.WorkerDisposal{Outcome: "Unsettled", ObservedAt: metav1.NewTime(now), Terminated: Terminated(pod)}
-				return SessionFact{Changed: true, Failed: true, Unknown: !session.Disposal.Terminated, Reason: "PriorWorkerExitUnsettled"}
+				session.Shutdown = &api.WorkerShutdown{
+					NetworkGeneration: root.Generation,
+					Reason:            reason,
+					RequestedAt:       metav1.NewTime(now),
+				}
+				session.Disposal = &api.WorkerDisposal{
+					Outcome:    api.WorkerDisposalUnsettled,
+					ObservedAt: metav1.NewTime(now),
+					Terminated: Terminated(pod),
+				}
+				return SessionFact{
+					Changed: true,
+					Failed:  true,
+					Unknown: !session.Disposal.Terminated,
+					Reason:  reasonPriorWorkerExitUnsettled,
+				}
 			}
-			return SessionFact{Failed: true, Unknown: !Terminated(pod), Reason: "BoundWorkerExited"}
+			return SessionFact{Failed: true, Unknown: !Terminated(pod), Reason: reasonBoundWorkerExited}
 		}
 		if reason := stoppedReason(root, p, id); reason != "" {
-			session.Shutdown = &api.WorkerShutdown{NetworkGeneration: root.Generation, Reason: reason, RequestedAt: metav1.NewTime(now)}
-			return SessionFact{Changed: true, Reason: "WorkerShutdownRequested"}
+			session.Shutdown = &api.WorkerShutdown{
+				NetworkGeneration: root.Generation,
+				Reason:            reason,
+				RequestedAt:       metav1.NewTime(now),
+			}
+			return SessionFact{Changed: true, Reason: reasonWorkerShutdownRequested}
 		}
 	}
-	if execution := p.Status.Execution; session.Shutdown == nil && execution != nil && execution.PodUID == session.Pod.UID && execution.ProfileDigest == session.ProfileDigest && execution.Phase == "Failed" {
-		return SessionFact{Failed: true, Reason: "WorkerProtocolFailed"}
+	if execution := p.Status.Execution; session.Shutdown == nil && execution != nil &&
+		execution.PodUID == session.Pod.UID &&
+		execution.ProfileDigest == session.ProfileDigest &&
+		execution.Phase == api.WorkerPhaseFailed {
+		return SessionFact{Failed: true, Reason: reasonWorkerProtocolFailed}
 	}
 	if session.Shutdown == nil {
 		if _, err := profileFromPod(pod); err != nil {
-			return SessionFact{Failed: true, Reason: "WorkerProfileChanged"}
+			return SessionFact{Failed: true, Reason: reasonWorkerProfileChanged}
 		}
-		return SessionFact{Reason: "WorkerBound"}
+		return SessionFact{Reason: api.ReasonWorkerBound}
 	}
-	if execution := p.Status.Execution; execution != nil && execution.PodUID == session.Pod.UID && execution.ProcessNonce != "" && execution.ProfileDigest == session.ProfileDigest && execution.NetworkGeneration == session.Shutdown.NetworkGeneration && execution.Reason == session.Shutdown.Reason && (execution.Phase == "Settled" || execution.Phase == "Unsettled") {
-		outcome := execution.Phase
+	if execution := p.Status.Execution; execution != nil && execution.PodUID == session.Pod.UID &&
+		execution.ProcessNonce != "" &&
+		execution.ProfileDigest == session.ProfileDigest &&
+		execution.NetworkGeneration == session.Shutdown.NetworkGeneration &&
+		execution.Reason == string(session.Shutdown.Reason) &&
+		(execution.Phase == api.WorkerPhaseSettled || execution.Phase == api.WorkerPhaseUnsettled) {
+		outcome := api.WorkerDisposalOutcome(execution.Phase)
 		if execution.Pending > 0 {
-			outcome = "Unsettled"
+			outcome = api.WorkerDisposalUnsettled
 		}
-		session.Disposal = &api.WorkerDisposal{Outcome: outcome, ProcessNonce: execution.ProcessNonce, ObservedAt: execution.ObservedAt, Terminated: Terminated(pod)}
-		return SessionFact{Changed: true, Failed: outcome == "Unsettled", Reason: "WorkerDisposalAcknowledged"}
+		session.Disposal = &api.WorkerDisposal{
+			Outcome:      outcome,
+			ProcessNonce: execution.ProcessNonce,
+			ObservedAt:   execution.ObservedAt,
+			Terminated:   Terminated(pod),
+		}
+		return SessionFact{
+			Changed: true,
+			Failed:  outcome == api.WorkerDisposalUnsettled,
+			Reason:  reasonWorkerDisposalAcknowledged,
+		}
 	}
 	if terminal(pod) || pod.DeletionTimestamp != nil || now.Sub(session.Shutdown.RequestedAt.Time) >= ShutdownBound {
-		session.Disposal = &api.WorkerDisposal{Outcome: "Unsettled", ObservedAt: metav1.NewTime(now), Terminated: Terminated(pod)}
-		return SessionFact{Changed: true, Failed: true, Unknown: !session.Disposal.Terminated, Reason: "WorkerSettlementUnconfirmed"}
+		session.Disposal = &api.WorkerDisposal{
+			Outcome:    api.WorkerDisposalUnsettled,
+			ObservedAt: metav1.NewTime(now),
+			Terminated: Terminated(pod),
+		}
+		return SessionFact{
+			Changed: true,
+			Failed:  true,
+			Unknown: !session.Disposal.Terminated,
+			Reason:  reasonWorkerSettlementUnconfirmed,
+		}
 	}
-	return SessionFact{Reason: "WorkerDraining"}
+	return SessionFact{Reason: reasonWorkerDraining}
 }
 
 // failed preserves the aggregate's durable experiment failure latch.
 func failed(root *api.StacksNetwork) bool {
-	return root.Status.Phase == "Failed" || meta.IsStatusConditionTrue(root.Status.Conditions, "Failed")
+	return root.Status.Phase == api.NetworkPhaseFailed ||
+		meta.IsStatusConditionTrue(root.Status.Conditions, api.ConditionFailed)
 }
 
 // stoppedReason evaluates current desired controls independently of admitted policy.
-func stoppedReason(root *api.StacksNetwork, p *api.StacksNetworkParticipant, id *api.InstanceIdentity) string {
+func stoppedReason(
+	root *api.StacksNetwork,
+	p *api.StacksNetworkParticipant,
+	id *api.InstanceIdentity,
+) api.WorkerShutdownReason {
 	if root.DeletionTimestamp != nil {
-		return "NetworkDeleting"
+		return api.WorkerShutdownNetworkDeleting
 	}
-	if root.Spec.Operation == "Stopped" {
-		return "NetworkStopped"
+	if root.Spec.Operation == api.NetworkOperationStopped {
+		return api.WorkerShutdownNetworkStopped
 	}
 	if p.DeletionTimestamp != nil || id.Removing {
-		return "ParticipantRemoved"
+		return api.WorkerShutdownParticipantRemoved
 	}
 	for _, entry := range root.Spec.Participants {
 		if entry.Name == p.Spec.ParticipantName && entry.Kind == p.Spec.Kind {
 			return ""
 		}
 	}
-	return "ParticipantRemoved"
+	return api.WorkerShutdownParticipantRemoved
 }
 
 // paused includes root failure and current per-entry controls without adopting rejected policy.
 func paused(root *api.StacksNetwork, p *api.StacksNetworkParticipant) bool {
-	if root.Spec.Operation != "Running" || failed(root) {
+	if root.Spec.Operation != api.NetworkOperationRunning || failed(root) {
 		return true
 	}
 	for _, entry := range root.Spec.Participants {
@@ -201,14 +270,17 @@ func terminal(pod *corev1.Pod) bool {
 
 // Terminated requires exact kubelet exit evidence or proof no process was scheduled.
 func Terminated(pod *corev1.Pod) bool {
-	if pod.DeletionTimestamp != nil && pod.Spec.NodeName == "" && len(pod.Status.ContainerStatuses) == 0 && len(pod.Status.InitContainerStatuses) == 0 {
+	if pod.DeletionTimestamp != nil && pod.Spec.NodeName == "" && len(pod.Status.ContainerStatuses) == 0 &&
+		len(pod.Status.InitContainerStatuses) == 0 {
 		return true
 	}
-	if !terminal(pod) || len(pod.Spec.Containers) != 1 || len(pod.Spec.InitContainers) != 0 || len(pod.Spec.EphemeralContainers) != 0 {
+	if !terminal(pod) || len(pod.Spec.Containers) != 1 || len(pod.Spec.InitContainers) != 0 ||
+		len(pod.Spec.EphemeralContainers) != 0 {
 		return false
 	}
 	for _, status := range pod.Status.ContainerStatuses {
-		if status.Name == "worker" && status.State.Terminated != nil && status.State.Terminated.Reason != "ContainerStatusUnknown" {
+		if status.Name == "worker" && status.State.Terminated != nil &&
+			status.State.Terminated.Reason != common.ReasonContainerStatusUnknown {
 			return true
 		}
 	}

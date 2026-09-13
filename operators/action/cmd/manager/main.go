@@ -13,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
@@ -24,16 +25,36 @@ func main() {
 	flag.Parse()
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&logs)))
 	scheme := runtime.NewScheme()
-	for _, add := range []func(*runtime.Scheme) error{clientgoscheme.AddToScheme, actionv2.AddToScheme, bitcoinv2.AddToScheme, networkv2.AddToScheme} {
+	for _, add := range []func(*runtime.Scheme) error{
+		clientgoscheme.AddToScheme,
+		actionv2.AddToScheme,
+		bitcoinv2.AddToScheme,
+		networkv2.AddToScheme,
+	} {
 		must(add(scheme))
 	}
 	configuration, err := ctrl.GetConfig()
 	must(err)
 	m, err := options.New(configuration, scheme)
 	must(err)
-	for kind, enabled := range map[string]bool{"BitcoinBlockGeneration": options.GenerationEnabled, "BitcoinReorganization": options.ReorganizationEnabled} {
-		if enabled {
-			must((&foundation.Reconciler{Client: m.GetClient(), Reader: m.GetAPIReader(), Kind: kind, Concurrency: options.Concurrency}).SetupWithManager(m))
+	for _, registration := range []struct {
+		prototype client.Object
+		enabled   bool
+	}{
+		{&actionv2.BitcoinBlockGeneration{}, options.GenerationEnabled},
+		{&actionv2.BitcoinReorganization{}, options.ReorganizationEnabled},
+	} {
+		if registration.enabled {
+			must(
+				(&foundation.Reconciler{
+					Client:      m.GetClient(),
+					Reader:      m.GetAPIReader(),
+					Prototype:   registration.prototype,
+					Concurrency: options.Concurrency,
+				}).SetupWithManager(
+					m,
+				),
+			)
 		}
 	}
 	must(m.Start(ctrl.SetupSignalHandler()))

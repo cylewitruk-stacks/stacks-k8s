@@ -37,28 +37,54 @@ func (n *nativeObservationFixture) ChainView(context.Context) (rpc.ChainView, er
 	}
 	return n.view, nil
 }
+
 func (n *nativeObservationFixture) PoXAt(_ context.Context, tip string) (rpc.PoX, error) {
 	if tip != n.view.IndexBlockID {
 		return rpc.PoX{}, fmt.Errorf("wrong tip")
 	}
-	return rpc.PoX{Contract: "ST000000000000000000002AMW42H.pox-4", BurnHeight: n.view.BurnHeight, RewardCycle: 12, CycleLength: 20}, nil
+	return rpc.PoX{
+		Contract:    "ST000000000000000000002AMW42H.pox-4",
+		BurnHeight:  n.view.BurnHeight,
+		RewardCycle: 12,
+		CycleLength: 20,
+	}, nil
 }
+
 func (n *nativeObservationFixture) StackerSet(_ context.Context, cycle uint64, tip string) (rpc.StackerSet, error) {
 	n.cycle = cycle
 	if tip != n.view.IndexBlockID {
 		return rpc.StackerSet{}, fmt.Errorf("wrong tip")
 	}
-	return rpc.StackerSet{Available: !n.unavailable, Threshold: clarity.Uint(10), Signers: []rpc.PreparedSigner{{PublicKey: "02" + strings.Repeat("1", 64), Weight: 7, StackedAmount: clarity.Uint(100)}}}, nil
+	return rpc.StackerSet{
+		Available: !n.unavailable,
+		Threshold: clarity.Uint(10),
+		Signers: []rpc.PreparedSigner{
+			{PublicKey: "02" + strings.Repeat("1", 64), Weight: 7, StackedAmount: clarity.Uint(100)},
+		},
+	}, nil
 }
 
 func TestCoherentProtocolObservationPreservesHeightProgressAcrossReorgs(t *testing.T) {
 	now := time.Now()
-	node := &nativeObservationFixture{view: rpc.ChainView{Info: rpc.Info{NetworkID: 0x80000000, BurnHeight: 240, StacksHeight: 30, Tip: strings.Repeat("1", 64)}, ConsensusHash: strings.Repeat("2", 40), BurnConsensusHash: strings.Repeat("3", 40), IndexBlockID: strings.Repeat("4", 64)}}
+	node := &nativeObservationFixture{
+		view: rpc.ChainView{
+			Info: rpc.Info{
+				NetworkID:    0x80000000,
+				BurnHeight:   240,
+				StacksHeight: 30,
+				Tip:          strings.Repeat("1", 64),
+			},
+			ConsensusHash:     strings.Repeat("2", 40),
+			BurnConsensusHash: strings.Repeat("3", 40),
+			IndexBlockID:      strings.Repeat("4", 64),
+		},
+	}
 	first, err := collectStacksProtocol(context.Background(), node, nil, ptr.To(uint64(12)), now)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !first.Available || !first.PreparedSet.Available || node.cycle != 12 || first.PreparedSet.Signers[0].Weight != 7 {
+	if !first.Available || !first.PreparedSet.Available || node.cycle != 12 ||
+		first.PreparedSet.Signers[0].Weight != 7 {
 		t.Fatal("prepared native set missing before Nakamoto")
 	}
 	node.view.Tip = strings.Repeat("5", 64)
@@ -89,29 +115,49 @@ func TestCoherentProtocolObservationPreservesHeightProgressAcrossReorgs(t *testi
 }
 
 func TestProtocolErrorsAndMidReadForkChangeDoNotRefreshPriorEvidence(t *testing.T) {
-	node := &nativeObservationFixture{view: rpc.ChainView{Info: rpc.Info{NetworkID: 0x80000000, BurnHeight: 240, StacksHeight: 30}}}
+	node := &nativeObservationFixture{
+		view: rpc.ChainView{Info: rpc.Info{NetworkID: 0x80000000, BurnHeight: 240, StacksHeight: 30}},
+	}
 	prior, err := collectStacksProtocol(context.Background(), node, nil, ptr.To(uint64(12)), time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}
-	copy := prior.DeepCopy()
+	snapshot := prior.DeepCopy()
 	changed := node.view
 	changed.ConsensusHash = "different-consensus-same-header"
 	node.after = &changed
-	if _, err := collectStacksProtocol(context.Background(), node, prior, ptr.To(uint64(12)), time.Now().Add(time.Minute)); err == nil {
+	if _, err := collectStacksProtocol(
+		context.Background(),
+		node,
+		prior,
+		ptr.To(uint64(12)),
+		time.Now().Add(time.Minute),
+	); err == nil {
 		t.Fatal("mixed fork read authorized")
 	}
 	node.after = nil
 	node.fail = true
-	if _, err := collectStacksProtocol(context.Background(), node, prior, nil, time.Now().Add(time.Minute)); err == nil {
+	if _, err := collectStacksProtocol(
+		context.Background(),
+		node,
+		prior,
+		nil,
+		time.Now().Add(time.Minute),
+	); err == nil {
 		t.Fatal("RPC error accepted")
 	}
-	if !reflect.DeepEqual(prior, copy) {
+	if !reflect.DeepEqual(prior, snapshot) {
 		t.Fatal("failed observation freshened retained evidence")
 	}
 	node.fail = false
 	node.unavailable = true
-	waiting, err := collectStacksProtocol(context.Background(), node, prior, ptr.To(uint64(12)), time.Now().Add(time.Minute))
+	waiting, err := collectStacksProtocol(
+		context.Background(),
+		node,
+		prior,
+		ptr.To(uint64(12)),
+		time.Now().Add(time.Minute),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,7 +167,10 @@ func TestProtocolErrorsAndMidReadForkChangeDoNotRefreshPriorEvidence(t *testing.
 }
 
 func TestProtocolHeartbeatDoesNotTriggerActorConfigurationDependencies(t *testing.T) {
-	before := &api.ParticipantRuntimeStatus{ConfigurationDigest: "config", Protocol: &api.StacksProtocolObservation{StacksHeight: 1}}
+	before := &api.ParticipantRuntimeStatus{
+		ConfigurationDigest: "config",
+		Protocol:            &api.StacksProtocolObservation{StacksHeight: 1},
+	}
 	after := before.DeepCopy()
 	after.Protocol.StacksHeight = 2
 	if actorRuntimeDependencyChanged(before, after) {
@@ -135,16 +184,56 @@ func TestProtocolHeartbeatDoesNotTriggerActorConfigurationDependencies(t *testin
 
 func TestProtocolObservationRejectsSameNamePodReplacementWithoutFreshening(t *testing.T) {
 	p := stacksParticipantFixture("StacksNode")
-	root := &api.StacksNetwork{ObjectMeta: metav1.ObjectMeta{Name: "network", Namespace: p.Namespace, UID: p.Spec.NetworkUID}}
-	genesis := &api.StacksGenesis{ObjectMeta: metav1.ObjectMeta{Name: "genesis", Namespace: p.Namespace, UID: "genesis-uid", OwnerReferences: p.OwnerReferences}, Spec: api.StacksGenesisSpec{Source: api.GenesisSource{NetworkUID: root.UID}, Bootstrap: api.Bootstrap{Gates: []api.Gate{{Name: "PrepareNakamoto", TargetCycle: ptr.To(int64(12))}}}}}
+	root := &api.StacksNetwork{
+		ObjectMeta: metav1.ObjectMeta{Name: "network", Namespace: p.Namespace, UID: p.Spec.NetworkUID},
+	}
+	genesis := &api.StacksGenesis{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "genesis",
+			Namespace:       p.Namespace,
+			UID:             "genesis-uid",
+			OwnerReferences: p.OwnerReferences,
+		},
+		Spec: api.StacksGenesisSpec{
+			Source:    api.GenesisSource{NetworkUID: root.UID},
+			Bootstrap: api.Bootstrap{Gates: []api.Gate{{Name: "PrepareNakamoto", TargetCycle: ptr.To(int64(12))}}},
+		},
+	}
 	root.Status.GenesisRef = &common.Binding{Kind: "StacksGenesis", Name: genesis.Name, UID: genesis.UID}
 	root.Status.GenesisDigest = digest(genesis.Spec.Chain)
-	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "actor-0", Namespace: p.Namespace, UID: "original-pod", Labels: Labels(p, "actor"), Annotations: map[string]string{"network.stacks.org/configuration-digest": "config"}}, Status: corev1.PodStatus{PodIP: "10.10.0.2", Conditions: []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionTrue}}, ContainerStatuses: []corev1.ContainerStatus{{Name: actorContainer(p.Spec.Kind), ContainerID: "containerd://native"}}}}
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        "actor-0",
+			Namespace:   p.Namespace,
+			UID:         "original-pod",
+			Labels:      Labels(p, "actor"),
+			Annotations: map[string]string{"network.stacks.org/configuration-digest": "config"},
+		},
+		Status: corev1.PodStatus{
+			PodIP:      "10.10.0.2",
+			Conditions: []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionTrue}},
+			ContainerStatuses: []corev1.ContainerStatus{
+				{Name: actorContainer(p.Spec.Kind), ContainerID: "containerd://native"},
+			},
+		},
+	}
 	current := pod.DeepCopy()
 	current.UID = "replacement-pod"
 	oldAt := metav1.NewTime(time.Now().Add(-time.Minute))
-	state := &api.ParticipantRuntimeStatus{PodRef: binding("Pod", pod), ContainerID: "containerd://native", ConfigurationDigest: "config", Protocol: &api.StacksProtocolObservation{Available: true, ObservedAt: oldAt, LastHeightAdvancedAt: oldAt, HighestStacksHeight: 20}}
-	node := &nativeObservationFixture{view: rpc.ChainView{Info: rpc.Info{NetworkID: 0x80000000, BurnHeight: 240, StacksHeight: 30}}}
+	state := &api.ParticipantRuntimeStatus{
+		PodRef:              binding("Pod", pod),
+		ContainerID:         "containerd://native",
+		ConfigurationDigest: "config",
+		Protocol: &api.StacksProtocolObservation{
+			Available:            true,
+			ObservedAt:           oldAt,
+			LastHeightAdvancedAt: oldAt,
+			HighestStacksHeight:  20,
+		},
+	}
+	node := &nativeObservationFixture{
+		view: rpc.ChainView{Info: rpc.Info{NetworkID: 0x80000000, BurnHeight: 240, StacksHeight: 30}},
+	}
 	c := testClient(t, genesis, current)
 	r := Reconciler{Reader: c, ProtocolClient: func(endpoint string) (StacksProtocolRPC, error) {
 		if endpoint != "http://10.10.0.2:20443" {
@@ -155,16 +244,28 @@ func TestProtocolObservationRejectsSameNamePodReplacementWithoutFreshening(t *te
 	if err := r.observeStacksProtocol(context.Background(), root, p, pod, state); err == nil {
 		t.Fatal("same-name Pod replacement retained protocol authority")
 	}
-	if state.Protocol.Available || !state.Protocol.ObservedAt.Equal(&oldAt) || !state.Protocol.LastHeightAdvancedAt.Equal(&oldAt) {
+	if state.Protocol.Available || !state.Protocol.ObservedAt.Equal(&oldAt) ||
+		!state.Protocol.LastHeightAdvancedAt.Equal(&oldAt) {
 		t.Fatal("failed identity observation retained authority or freshened evidence")
 	}
 }
 
 func TestProtocolHeartbeatCoalescesOnlyUnchangedSuccessfulFacts(t *testing.T) {
-	if protocolPollInterval != 2*time.Second || protocolRPCAllowance != 10*time.Second || protocolHeartbeatInterval != 5*time.Second {
+	if protocolPollInterval != 2*time.Second || protocolRPCAllowance != 10*time.Second ||
+		protocolHeartbeatInterval != 5*time.Second {
 		t.Fatal("native observation timing diverges from release profile")
 	}
-	before := &api.StacksProtocolObservation{Available: true, ObservedAt: metav1.Now(), HighestStacksHeight: 30, LastHeightAdvancedAt: metav1.Now(), PreparedSet: &api.PreparedSignerSetObservation{Cycle: 12, Available: true, ObservedAt: metav1.Now()}}
+	before := &api.StacksProtocolObservation{
+		Available:            true,
+		ObservedAt:           metav1.Now(),
+		HighestStacksHeight:  30,
+		LastHeightAdvancedAt: metav1.Now(),
+		PreparedSet: &api.PreparedSignerSetObservation{
+			Cycle:      12,
+			Available:  true,
+			ObservedAt: metav1.Now(),
+		},
+	}
 	after := before.DeepCopy()
 	after.ObservedAt = metav1.NewTime(before.ObservedAt.Add(time.Second))
 	after.PreparedSet.ObservedAt = after.ObservedAt
@@ -186,17 +287,31 @@ func TestProtocolHeartbeatCoalescesOnlyUnchangedSuccessfulFacts(t *testing.T) {
 // TestFirstAnchorObservationDoesNotClaimPoXOrProtocolReadiness covers native pre-anchor startup.
 func TestFirstAnchorObservationDoesNotClaimPoXOrProtocolReadiness(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
-	node := &nativeObservationFixture{view: rpc.ChainView{Info: rpc.Info{NetworkID: 0x80000000, BurnHeight: 210, Tip: strings.Repeat("0", 64)}, ConsensusHash: strings.Repeat("0", 40), BurnConsensusHash: strings.Repeat("2", 40), IndexBlockID: strings.Repeat("3", 64), FullySynced: true}}
+	node := &nativeObservationFixture{
+		view: rpc.ChainView{
+			Info:              rpc.Info{NetworkID: 0x80000000, BurnHeight: 210, Tip: strings.Repeat("0", 64)},
+			ConsensusHash:     strings.Repeat("0", 40),
+			BurnConsensusHash: strings.Repeat("2", 40),
+			IndexBlockID:      strings.Repeat("3", 64),
+			FullySynced:       true,
+		},
+	}
 	observed, err := collectStacksProtocol(context.Background(), node, nil, ptr.To(uint64(12)), now)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if observed.Available || observed.Reason != "AwaitingFirstAnchor" || observed.PoXContract != "" || observed.PreparedSet != nil || node.reads != 2 || node.cycle != 0 || observed.BurnHeight != 210 || !observed.FullySynced {
+	if observed.Available || observed.Reason != "AwaitingFirstAnchor" || observed.PoXContract != "" ||
+		observed.PreparedSet != nil ||
+		node.reads != 2 ||
+		node.cycle != 0 ||
+		observed.BurnHeight != 210 ||
+		!observed.FullySynced {
 		t.Fatalf("startup observation misclassified: %+v", observed)
 	}
 	previous := observed.DeepCopy()
 	waiting, err := collectStacksProtocol(context.Background(), node, previous, nil, now.Add(time.Second))
-	if err != nil || !waiting.LastHeightAdvancedAt.Equal(&previous.LastHeightAdvancedAt) || waiting.ObservedAt.Equal(&previous.ObservedAt) {
+	if err != nil || !waiting.LastHeightAdvancedAt.Equal(&previous.LastHeightAdvancedAt) ||
+		waiting.ObservedAt.Equal(&previous.ObservedAt) {
 		t.Fatalf("unchanged empty chain refreshed height progress: %+v %v", waiting, err)
 	}
 	previous.HighestStacksHeight = 1

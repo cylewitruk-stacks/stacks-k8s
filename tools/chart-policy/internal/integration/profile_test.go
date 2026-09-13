@@ -45,7 +45,13 @@ func testNativeFaultAdmission(t *testing.T, delay, partition bool) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	environment := &envtest.Environment{CRDDirectoryPaths: []string{schema}, ErrorIfCRDPathMissing: true, DownloadBinaryAssets: true, DownloadBinaryAssetsVersion: "1.37.0", BinaryAssetsDirectory: filepath.Join(os.TempDir(), "stacks-network-operator-envtest")}
+	environment := &envtest.Environment{
+		CRDDirectoryPaths:           []string{schema},
+		ErrorIfCRDPathMissing:       true,
+		DownloadBinaryAssets:        true,
+		DownloadBinaryAssetsVersion: "1.37.0",
+		BinaryAssetsDirectory:       filepath.Join(os.TempDir(), "stacks-network-operator-envtest"),
+	}
 	config, err := environment.Start()
 	if err != nil {
 		t.Fatal(err)
@@ -63,11 +69,32 @@ func testNativeFaultAdmission(t *testing.T, delay, partition bool) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "profile-test", Labels: map[string]string{"network.stacks.org/chaos-profile": "network-faults-v1"}, Annotations: map[string]string{"chaos-mesh.org/inject": "enabled"}}}
+	ns := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        "profile-test",
+			Labels:      map[string]string{"network.stacks.org/chaos-profile": "network-faults-v1"},
+			Annotations: map[string]string{"chaos-mesh.org/inject": "enabled"},
+		},
+	}
 	if err := admin.Create(ctx, ns); err != nil {
 		t.Fatal(err)
 	}
-	data, err := exec.Command("helm", "template", "test", "../../../../charts/stacks-chaos-profile", "--namespace", ns.Name, "--set", "networkDelay.enabled="+strconv.FormatBool(delay), "--set", "networkPartition.enabled="+strconv.FormatBool(partition), "--set", "chaosMesh.externalVersion="+chaosprofile.Version).CombinedOutput()
+	// #nosec G204 -- Fixed executable and separate arguments from the test harness; no shell evaluation.
+	data, err := exec.CommandContext(t.Context(),
+		"helm",
+		"template",
+		"test",
+		"../../../../charts/stacks-chaos-profile",
+		"--namespace",
+		ns.Name,
+		"--set",
+		"networkDelay.enabled="+strconv.FormatBool(delay),
+		"--set",
+		"networkPartition.enabled="+strconv.FormatBool(partition),
+		"--set",
+		"chaosMesh.externalVersion="+chaosprofile.Version,
+	).
+		CombinedOutput()
 	if err != nil {
 		t.Fatalf("render: %s: %v", data, err)
 	}
@@ -96,7 +123,10 @@ func testNativeFaultAdmission(t *testing.T, delay, partition bool) {
 	sourceUID := "22222222-2222-2222-2222-222222222222"
 	targetUID := "33333333-3333-3333-3333-333333333333"
 	_ = unstructured.SetNestedField(valid.Object, networkUID, "metadata", "labels", "network.stacks.org/network-uid")
-	for _, side := range [][]string{{"spec", "selector", "labelSelectors"}, {"spec", "target", "selector", "labelSelectors"}} {
+	for _, side := range [][]string{
+		{"spec", "selector", "labelSelectors"},
+		{"spec", "target", "selector", "labelSelectors"},
+	} {
 		_ = unstructured.SetNestedField(valid.Object, networkUID, append(side, "network.stacks.org/network-uid")...)
 		uid := sourceUID
 		if len(side) == 4 {
@@ -105,7 +135,10 @@ func testNativeFaultAdmission(t *testing.T, delay, partition bool) {
 		_ = unstructured.SetNestedField(valid.Object, uid, append(side, "network.stacks.org/participant-uid")...)
 	}
 	valid.SetNamespace(ns.Name)
-	for _, path := range [][]string{{"spec", "selector", "namespaces"}, {"spec", "target", "selector", "namespaces"}} {
+	for _, path := range [][]string{
+		{"spec", "selector", "namespaces"},
+		{"spec", "target", "selector", "namespaces"},
+	} {
 		if err := unstructured.SetNestedStringSlice(valid.Object, []string{ns.Name}, path...); err != nil {
 			t.Fatal(err)
 		}
@@ -122,8 +155,10 @@ func testNativeFaultAdmission(t *testing.T, delay, partition bool) {
 	_ = unstructured.SetNestedField(legacyDelay.Object, "10ms", "spec", "delay", "jitter")
 	legacyPartition := &unstructured.Unstructured{Object: map[string]any{
 		"apiVersion": "chaos-mesh.org/v1alpha1", "kind": "NetworkChaos",
-		"spec": map[string]any{"action": "partition", "mode": "all", "direction": "both", "duration": "5m",
-			"selector": map[string]any{"namespaces": []any{ns.Name}}, "externalTargets": []any{"192.0.2.1"}},
+		"spec": map[string]any{
+			"action": "partition", "mode": "all", "direction": "both", "duration": "5m",
+			"selector": map[string]any{"namespaces": []any{ns.Name}}, "externalTargets": []any{"192.0.2.1"},
+		},
 	}}
 	legacyPartition.SetName("legacy-partition")
 	legacyPartition.SetNamespace(ns.Name)
@@ -165,7 +200,9 @@ func testNativeFaultAdmission(t *testing.T, delay, partition bool) {
 			}
 			// New objects with these same unsupported specs still cannot be admitted.
 			fresh := &unstructured.Unstructured{Object: map[string]any{
-				"apiVersion": o.GetAPIVersion(), "kind": o.GetKind(), "spec": runtime.DeepCopyJSONValue(o.Object["spec"]),
+				"apiVersion": o.GetAPIVersion(),
+				"kind":       o.GetKind(),
+				"spec":       runtime.DeepCopyJSONValue(o.Object["spec"]),
 			}}
 			fresh.SetName(o.GetName() + "-new")
 			fresh.SetNamespace(ns.Name)
@@ -173,7 +210,10 @@ func testNativeFaultAdmission(t *testing.T, delay, partition bool) {
 			if err := admin.Create(ctx, fresh, client.DryRunAll); !policyDenied(err) {
 				t.Fatalf("unsupported creation accepted: %v", err)
 			}
-			o.Object["status"] = map[string]any{"experiment": map[string]any{"desiredPhase": "Stop"}, "conditions": []any{map[string]any{"type": "AllRecovered", "status": "True"}}}
+			o.Object["status"] = map[string]any{
+				"experiment": map[string]any{"desiredPhase": "Stop"},
+				"conditions": []any{map[string]any{"type": "AllRecovered", "status": "True"}},
+			}
 			if err := admin.Update(ctx, o); err != nil {
 				t.Fatalf("legacy cleanup status rejected: %v", err)
 			}
@@ -200,7 +240,10 @@ func testNativeFaultAdmission(t *testing.T, delay, partition bool) {
 		t.Fatalf("valid fault rejected: %v", err)
 	}
 
-	for _, side := range [][]string{{"spec", "selector", "labelSelectors"}, {"spec", "target", "selector", "labelSelectors"}} {
+	for _, side := range [][]string{
+		{"spec", "selector", "labelSelectors"},
+		{"spec", "target", "selector", "labelSelectors"},
+	} {
 		for _, kind := range []string{"BitcoinNode", "StacksNode", "StacksSigner", "StacksStacker", "bogus"} {
 			o := valid.DeepCopy()
 			_ = unstructured.SetNestedField(o.Object, kind, append(side, "network.stacks.org/participant-kind")...)
@@ -236,30 +279,72 @@ func testNativeFaultAdmission(t *testing.T, delay, partition bool) {
 		path  []string
 		value any
 	}{
-		{"cross-network-uid", []string{"spec", "target", "selector", "labelSelectors", "network.stacks.org/network-uid"}, "44444444-4444-4444-4444-444444444444"},
-		{"same-participant-uid", []string{"spec", "target", "selector", "labelSelectors", "network.stacks.org/participant-uid"}, sourceUID},
-		{"metadata-network-uid", []string{"metadata", "labels", "network.stacks.org/network-uid"}, "44444444-4444-4444-4444-444444444444"},
-		{"owner", []string{"metadata", "ownerReferences"}, []any{map[string]any{"apiVersion": "v1", "kind": "ConfigMap", "name": "fixture", "uid": "fixture-uid"}}},
+		{
+			"cross-network-uid",
+			[]string{"spec", "target", "selector", "labelSelectors", "network.stacks.org/network-uid"},
+			"44444444-4444-4444-4444-444444444444",
+		},
+		{
+			"same-participant-uid",
+			[]string{"spec", "target", "selector", "labelSelectors", "network.stacks.org/participant-uid"},
+			sourceUID,
+		},
+		{
+			"metadata-network-uid",
+			[]string{"metadata", "labels", "network.stacks.org/network-uid"},
+			"44444444-4444-4444-4444-444444444444",
+		},
+		{
+			"owner",
+			[]string{"metadata", "ownerReferences"},
+			[]any{map[string]any{"apiVersion": "v1", "kind": "ConfigMap", "name": "fixture", "uid": "fixture-uid"}},
+		},
 		{"invalid-actor", []string{"spec", "selector", "labelSelectors", "network.stacks.org/actor"}, "Actor_1"},
 		{"target-value", []string{"spec", "target", "value"}, "1"},
-		{"reorder", []string{"spec", "delay", "reorder"}, map[string]any{"reorder": "1", "gap": int64(1), "correlation": "0"}},
+		{
+			"reorder",
+			[]string{"spec", "delay", "reorder"},
+			map[string]any{"reorder": "1", "gap": int64(1), "correlation": "0"},
+		},
 		{"status", []string{"status"}, map[string]any{"experiment": map[string]any{"desiredPhase": "Stop"}}},
 		{"finalizer", []string{"metadata", "finalizers"}, []any{"test.example/hold"}},
 		{"managed", []string{"metadata", "labels", "managed-by"}, "workflow"},
 		{"paused", []string{"metadata", "annotations", "experiment.chaos-mesh.org/pause"}, "true"},
-		{"all", []string{"spec", "mode"}, "all"}, {"reverse", []string{"spec", "direction"}, "from"},
-		{"target-all", []string{"spec", "target", "mode"}, "all"}, {"other-network", []string{"spec", "target", "selector", "labelSelectors", "network.stacks.org/network"}, "other"},
-		{"same-actor", []string{"spec", "target", "selector", "labelSelectors", "network.stacks.org/actor"}, "bitcoin"},
+		{"all", []string{"spec", "mode"}, "all"},
+		{"reverse", []string{"spec", "direction"}, "from"},
+		{"target-all", []string{"spec", "target", "mode"}, "all"},
+		{
+			"other-network",
+			[]string{"spec", "target", "selector", "labelSelectors", "network.stacks.org/network"},
+			"other",
+		},
+		{
+			"same-actor",
+			[]string{"spec", "target", "selector", "labelSelectors", "network.stacks.org/actor"},
+			"bitcoin",
+		},
 		{"cross-namespace", []string{"spec", "target", "selector", "namespaces"}, []any{"other"}},
-		{"external", []string{"spec", "externalTargets"}, []any{"192.0.2.1"}}, {"remote", []string{"spec", "remoteCluster"}, "other"},
-		{"device", []string{"spec", "device"}, "eth0"}, {"target-device", []string{"spec", "targetDevice"}, "eth0"}, {"value", []string{"spec", "value"}, "1"},
+		{"external", []string{"spec", "externalTargets"}, []any{"192.0.2.1"}},
+		{"remote", []string{"spec", "remoteCluster"}, "other"},
+		{"device", []string{"spec", "device"}, "eth0"},
+		{"target-device", []string{"spec", "targetDevice"}, "eth0"},
+		{"value", []string{"spec", "value"}, "1"},
 		{"extra-label", []string{"spec", "selector", "labelSelectors", "extra"}, "value"},
-		{"zero-duration", []string{"spec", "duration"}, "0s"}, {"long-duration", []string{"spec", "duration"}, "121s"}, {"fractional-duration", []string{"spec", "duration"}, "1.5s"},
-		{"zero-delay", []string{"spec", "delay", "latency"}, "0ms"}, {"long-delay", []string{"spec", "delay", "latency"}, "1001ms"}, {"jitter", []string{"spec", "delay", "jitter"}, "1ms"},
-		{"correlation", []string{"spec", "delay", "correlation"}, "1"}, {"loss", []string{"spec", "loss"}, map[string]any{"loss": "1"}},
+		{"zero-duration", []string{"spec", "duration"}, "0s"},
+		{"long-duration", []string{"spec", "duration"}, "121s"},
+		{"fractional-duration", []string{"spec", "duration"}, "1.5s"},
+		{"zero-delay", []string{"spec", "delay", "latency"}, "0ms"},
+		{"long-delay", []string{"spec", "delay", "latency"}, "1001ms"},
+		{"jitter", []string{"spec", "delay", "jitter"}, "1ms"},
+		{"correlation", []string{"spec", "delay", "correlation"}, "1"},
+		{"loss", []string{"spec", "loss"}, map[string]any{"loss": "1"}},
 	}
 	for _, selector := range [][]string{{"spec", "selector"}, {"spec", "target", "selector"}} {
-		for key, value := range map[string]string{"network.stacks.org/role": "control", "network.stacks.org/network-uid": "invalid", "network.stacks.org/participant-uid": "invalid"} {
+		for key, value := range map[string]string{
+			"network.stacks.org/role":            "control",
+			"network.stacks.org/network-uid":     "invalid",
+			"network.stacks.org/participant-uid": "invalid",
+		} {
 			path := append(append([]string{}, selector...), "labelSelectors", key)
 			changed := valid.DeepCopy()
 			_ = unstructured.SetNestedField(changed.Object, value, path...)
@@ -272,12 +357,24 @@ func testNativeFaultAdmission(t *testing.T, delay, partition bool) {
 				t.Fatalf("missing identity/role accepted at %v: %v", path, err)
 			}
 		}
-		for key, value := range map[string]any{"pods": map[string]any{ns.Name: []any{"pod"}}, "nodes": []any{"node"}, "nodeSelectors": map[string]any{"node": "x"}, "annotationSelectors": map[string]any{"a": "b"}, "fieldSelectors": map[string]any{"metadata.name": "pod"}, "podPhaseSelectors": []any{"Running"}, "expressionSelectors": []any{map[string]any{"key": "x", "operator": "Exists"}}} {
+		for key, value := range map[string]any{
+			"pods":                map[string]any{ns.Name: []any{"pod"}},
+			"nodes":               []any{"node"},
+			"nodeSelectors":       map[string]any{"node": "x"},
+			"annotationSelectors": map[string]any{"a": "b"},
+			"fieldSelectors":      map[string]any{"metadata.name": "pod"},
+			"podPhaseSelectors":   []any{"Running"},
+			"expressionSelectors": []any{map[string]any{"key": "x", "operator": "Exists"}},
+		} {
 			cases = append(cases, struct {
 				name  string
 				path  []string
 				value any
-			}{"selector-" + key + "-" + selector[len(selector)-2], append(append([]string{}, selector...), key), value})
+			}{
+				"selector-" + key + "-" + selector[len(selector)-2],
+				append(append([]string{}, selector...), key),
+				value,
+			})
 		}
 	}
 	for _, c := range cases {
@@ -331,22 +428,39 @@ func testNativeFaultAdmission(t *testing.T, delay, partition bool) {
 			}
 		}
 	}
-	for _, path := range [][]string{{"spec", "selector", "labelSelectors"}, {"spec", "target", "selector", "labelSelectors"}} {
+	for _, path := range [][]string{
+		{"spec", "selector", "labelSelectors"},
+		{"spec", "target", "selector", "labelSelectors"},
+	} {
 		o := valid.DeepCopy()
-		_ = unstructured.SetNestedStringMap(o.Object, map[string]string{"app.kubernetes.io/name": "bitcoin-production"}, path...)
+		_ = unstructured.SetNestedStringMap(
+			o.Object,
+			map[string]string{"app.kubernetes.io/name": "bitcoin-production"},
+			path...)
 		if err := admin.Create(ctx, o, client.DryRunAll); !policyDenied(err) {
 			t.Fatalf("producer selector accepted: %v", err)
 		}
 	}
 
-	for _, path := range [][]string{{"spec", "duration"}, {"spec", "target"}, {"metadata", "labels", "actions.stacks.org/correlation-id"}, {"spec", "selector", "labelSelectors", "network.stacks.org/network"}} {
+	for _, path := range [][]string{
+		{"spec", "duration"},
+		{"spec", "target"},
+		{"metadata", "labels", "actions.stacks.org/correlation-id"},
+		{"spec", "selector", "labelSelectors", "network.stacks.org/network"},
+	} {
 		o := valid.DeepCopy()
 		unstructured.RemoveNestedField(o.Object, path...)
 		if err := admin.Create(ctx, o, client.DryRunAll); !policyDenied(err) {
 			t.Fatalf("missing %v accepted: %v", path, err)
 		}
 	}
-	user, err := environment.AddUser(envtest.User{Name: "system:serviceaccount:" + ns.Name + ":stacks-chaos-agent", Groups: []string{"system:serviceaccounts", "system:serviceaccounts:" + ns.Name}}, config)
+	user, err := environment.AddUser(
+		envtest.User{
+			Name:   "system:serviceaccount:" + ns.Name + ":stacks-chaos-agent",
+			Groups: []string{"system:serviceaccounts", "system:serviceaccounts:" + ns.Name},
+		},
+		config,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -357,8 +471,29 @@ func testNativeFaultAdmission(t *testing.T, delay, partition bool) {
 	for _, c := range []struct {
 		group, resource, subresource, verb string
 		allowed                            bool
-	}{{"chaos-mesh.org", "networkchaos", "", "create", true}, {"chaos-mesh.org", "networkchaos", "", "delete", true}, {"chaos-mesh.org", "networkchaos", "", "watch", true}, {"chaos-mesh.org", "networkchaos", "", "patch", false}, {"chaos-mesh.org", "networkchaos", "status", "update", false}, {"chaos-mesh.org", "workflows", "", "create", false}, {"chaos-mesh.org", "schedules", "", "create", false}, {"chaos-mesh.org", "podchaos", "", "create", false}, {"", "pods", "", "patch", false}, {"", "secrets", "", "get", false}} {
-		review := &authv1.SelfSubjectAccessReview{Spec: authv1.SelfSubjectAccessReviewSpec{ResourceAttributes: &authv1.ResourceAttributes{Namespace: ns.Name, Group: c.group, Resource: c.resource, Subresource: c.subresource, Verb: c.verb}}}
+	}{
+		{"chaos-mesh.org", "networkchaos", "", "create", true},
+		{"chaos-mesh.org", "networkchaos", "", "delete", true},
+		{"chaos-mesh.org", "networkchaos", "", "watch", true},
+		{"chaos-mesh.org", "networkchaos", "", "patch", false},
+		{"chaos-mesh.org", "networkchaos", "status", "update", false},
+		{"chaos-mesh.org", "workflows", "", "create", false},
+		{"chaos-mesh.org", "schedules", "", "create", false},
+		{"chaos-mesh.org", "podchaos", "", "create", false},
+		{"", "pods", "", "patch", false},
+		{"", "secrets", "", "get", false},
+	} {
+		review := &authv1.SelfSubjectAccessReview{
+			Spec: authv1.SelfSubjectAccessReviewSpec{
+				ResourceAttributes: &authv1.ResourceAttributes{
+					Namespace:   ns.Name,
+					Group:       c.group,
+					Resource:    c.resource,
+					Subresource: c.subresource,
+					Verb:        c.verb,
+				},
+			},
+		}
 		if err := agent.Create(ctx, review); err != nil {
 			t.Fatal(err)
 		}
@@ -366,7 +501,16 @@ func testNativeFaultAdmission(t *testing.T, delay, partition bool) {
 			t.Fatalf("unexpected permission %+v: %+v", c, review.Status)
 		}
 	}
-	crossNamespace := &authv1.SelfSubjectAccessReview{Spec: authv1.SelfSubjectAccessReviewSpec{ResourceAttributes: &authv1.ResourceAttributes{Namespace: "other", Group: "chaos-mesh.org", Resource: "networkchaos", Verb: "create"}}}
+	crossNamespace := &authv1.SelfSubjectAccessReview{
+		Spec: authv1.SelfSubjectAccessReviewSpec{
+			ResourceAttributes: &authv1.ResourceAttributes{
+				Namespace: "other",
+				Group:     "chaos-mesh.org",
+				Resource:  "networkchaos",
+				Verb:      "create",
+			},
+		},
+	}
 	if err := agent.Create(ctx, crossNamespace); err != nil {
 		t.Fatal(err)
 	}
@@ -420,5 +564,6 @@ func testNativeFaultAdmission(t *testing.T, delay, partition bool) {
 
 // policyDenied distinguishes CEL admission from schema validation and RBAC failures.
 func policyDenied(err error) bool {
-	return apierrors.IsInvalid(err) && strings.Contains(err.Error(), "ValidatingAdmissionPolicy") && strings.Contains(err.Error(), "denied request")
+	return apierrors.IsInvalid(err) && strings.Contains(err.Error(), "ValidatingAdmissionPolicy") &&
+		strings.Contains(err.Error(), "denied request")
 }

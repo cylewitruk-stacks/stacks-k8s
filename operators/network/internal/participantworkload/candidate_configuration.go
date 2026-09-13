@@ -36,7 +36,11 @@ func candidateConfigurationDigest(in foundation.CandidateConfiguration) string {
 }
 
 // ValidateConfiguration prepares only support artifacts and validates the selected actor image.
-func (r *Reconciler) ValidateConfiguration(ctx context.Context, in foundation.CandidateConfiguration, name string) (bool, error) {
+func (r *Reconciler) ValidateConfiguration(
+	ctx context.Context,
+	in foundation.CandidateConfiguration,
+	name string,
+) (bool, error) {
 	local := *r
 	snapshot := in
 	snapshot.Participants = map[string]*api.StacksNetworkParticipant{}
@@ -45,7 +49,10 @@ func (r *Reconciler) ValidateConfiguration(ctx context.Context, in foundation.Ca
 	}
 	local.candidateConfiguration = &snapshot
 	wanted := snapshot.Participants[name]
-	if wanted == nil || (wanted.Spec.Kind != "StacksNode" && wanted.Spec.Kind != "StacksSigner" && wanted.Spec.Kind != "BitcoinNode") {
+	if wanted == nil ||
+		(wanted.Spec.Kind != api.ParticipantStacksNode &&
+			wanted.Spec.Kind != api.ParticipantStacksSigner &&
+			wanted.Spec.Kind != api.ParticipantBitcoinNode) {
 		return false, fmt.Errorf("unsupported candidate configuration kind")
 	}
 	needed := map[string]bool{}
@@ -60,19 +67,19 @@ func (r *Reconciler) ValidateConfiguration(ctx context.Context, in foundation.Ca
 		}
 		needed[name] = true
 		configuration := p.Status.Admission.Configuration
-		if p.Spec.Kind == "StacksNode" {
+		if p.Spec.Kind == api.ParticipantStacksNode {
 			if configuration.StacksNode == nil || configuration.StacksNode.BitcoinNodeRef == nil {
 				return fmt.Errorf("candidate Bitcoin dependency unavailable")
 			}
 			return require(configuration.StacksNode.BitcoinNodeRef.Name)
 		}
-		if p.Spec.Kind == "StacksSigner" {
+		if p.Spec.Kind == api.ParticipantStacksSigner {
 			if configuration.StacksSigner == nil || configuration.StacksSigner.NodeRef == nil {
 				return fmt.Errorf("candidate signer node unavailable")
 			}
 			return require(configuration.StacksSigner.NodeRef.Name)
 		}
-		if p.Spec.Kind != "BitcoinNode" {
+		if p.Spec.Kind != api.ParticipantBitcoinNode {
 			return fmt.Errorf("unsupported candidate actor dependency")
 		}
 		return nil
@@ -97,7 +104,11 @@ func (r *Reconciler) ValidateConfiguration(ctx context.Context, in foundation.Ca
 			}
 		}
 	}
-	for _, kind := range []api.ParticipantKind{"BitcoinNode", "StacksNode", "StacksSigner"} {
+	for _, kind := range []api.ParticipantKind{
+		api.ParticipantBitcoinNode,
+		api.ParticipantStacksNode,
+		api.ParticipantStacksSigner,
+	} {
 		for _, name := range names {
 			p := snapshot.Participants[name]
 			if p.Spec.Kind != kind {
@@ -109,7 +120,7 @@ func (r *Reconciler) ValidateConfiguration(ctx context.Context, in foundation.Ca
 			}
 			var ready bool
 			var err error
-			if kind == "BitcoinNode" {
+			if kind == api.ParticipantBitcoinNode {
 				ready, err = local.configuration(ctx, in.Root, p, &state)
 			} else {
 				ready, _, err = local.stacksConfiguration(ctx, in.Root, p, &state)
@@ -128,7 +139,7 @@ func (r *Reconciler) ValidateConfiguration(ctx context.Context, in foundation.Ca
 	}
 	// Bitcoin validation is syntax and managed-setting agreement inside its resolver.
 	// Core semantic compatibility remains an actor startup/readiness check.
-	if wanted.Spec.Kind == "BitcoinNode" {
+	if wanted.Spec.Kind == api.ParticipantBitcoinNode {
 		return true, nil
 	}
 	return local.validateCandidateImage(ctx, snapshot.Participants[name], candidateConfigurationDigest(snapshot))
@@ -141,14 +152,20 @@ func (r *Reconciler) checkCandidateParticipant(ctx context.Context, p *api.Stack
 		return err
 	}
 	root := r.candidateConfiguration.Root
-	if actual.UID != p.UID || actual.DeletionTimestamp != nil || !metav1.IsControlledBy(&actual, root) || !selected(root, &actual) || actual.Spec.Kind != p.Spec.Kind {
+	if actual.UID != p.UID || actual.DeletionTimestamp != nil || !metav1.IsControlledBy(&actual, root) ||
+		!selected(root, &actual) ||
+		actual.Spec.Kind != p.Spec.Kind {
 		return fmt.Errorf("candidate participant identity changed")
 	}
 	return nil
 }
 
 // readConfigurationParticipant selects explicit candidate inputs only within support preparation.
-func (r *Reconciler) readConfigurationParticipant(ctx context.Context, key client.ObjectKey, out *api.StacksNetworkParticipant) error {
+func (r *Reconciler) readConfigurationParticipant(
+	ctx context.Context,
+	key client.ObjectKey,
+	out *api.StacksNetworkParticipant,
+) error {
 	if err := r.Reader.Get(ctx, key, out); err != nil {
 		return err
 	}
@@ -156,7 +173,8 @@ func (r *Reconciler) readConfigurationParticipant(ctx context.Context, key clien
 		return nil
 	}
 	expected := r.candidateConfiguration.Participants[out.Spec.ParticipantName]
-	if expected == nil || expected.UID != out.UID || out.DeletionTimestamp != nil || !metav1.IsControlledBy(out, r.candidateConfiguration.Root) {
+	if expected == nil || expected.UID != out.UID || out.DeletionTimestamp != nil ||
+		!metav1.IsControlledBy(out, r.candidateConfiguration.Root) {
 		return fmt.Errorf("candidate render participant changed")
 	}
 	*out = *expected.DeepCopy()
@@ -164,7 +182,11 @@ func (r *Reconciler) readConfigurationParticipant(ctx context.Context, key clien
 }
 
 // publishCandidateBindings pins stable private artifacts without replacing active runtime configuration.
-func (r *Reconciler) publishCandidateBindings(ctx context.Context, p *api.StacksNetworkParticipant, prepared *api.ParticipantRuntimeStatus) error {
+func (r *Reconciler) publishCandidateBindings(
+	ctx context.Context,
+	p *api.StacksNetworkParticipant,
+	prepared *api.ParticipantRuntimeStatus,
+) error {
 	var actual api.StacksNetworkParticipant
 	if err := r.Reader.Get(ctx, client.ObjectKeyFromObject(p), &actual); err != nil {
 		return err
@@ -179,24 +201,38 @@ func (r *Reconciler) publishCandidateBindings(ctx context.Context, p *api.Stacks
 	for _, pair := range []struct {
 		target **common.Binding
 		source *common.Binding
-	}{{&state.RPCSecretRef, prepared.RPCSecretRef}, {&state.ActorRPCSecretRef, prepared.ActorRPCSecretRef}, {&state.EventAuthSecretRef, prepared.EventAuthSecretRef}} {
+	}{
+		{&state.RPCSecretRef, prepared.RPCSecretRef},
+		{&state.ActorRPCSecretRef, prepared.ActorRPCSecretRef},
+		{&state.EventAuthSecretRef, prepared.EventAuthSecretRef},
+	} {
 		if pair.source == nil {
 			continue
 		}
 		if *pair.target != nil && ((*pair.target).Name != pair.source.Name || (*pair.target).UID != pair.source.UID) {
 			return fmt.Errorf("candidate changed a protected credential identity")
 		}
-		copy := *pair.source
-		*pair.target = &copy
+		snapshot := *pair.source
+		*pair.target = &snapshot
 	}
 	if equality.Semantic.DeepEqual(actual.Status.Runtime, &state) {
 		return nil
 	}
-	return participantstatus.Apply(ctx, r.Client, &actual, api.ParticipantStatus{Runtime: &state, Conditions: ownConditions(actual.Status.Conditions)}, "stacks-network-domain-"+strings.ToLower(string(p.Spec.Kind)))
+	return participantstatus.Apply(
+		ctx,
+		r.Client,
+		&actual,
+		api.ParticipantStatus{Runtime: &state, Conditions: ownConditions(actual.Status.Conditions)},
+		"stacks-network-domain-"+strings.ToLower(string(p.Spec.Kind)),
+	)
 }
 
 // validateCandidateImage runs only native validation with a single immutable configuration mount.
-func (r *Reconciler) validateCandidateImage(ctx context.Context, p *api.StacksNetworkParticipant, candidate string) (bool, error) {
+func (r *Reconciler) validateCandidateImage(
+	ctx context.Context,
+	p *api.StacksNetworkParticipant,
+	candidate string,
+) (bool, error) {
 	state := p.Status.Runtime
 	if state == nil || state.ConfigRef == nil || state.ConfigRef.Fingerprint == "" {
 		return false, nil
@@ -214,28 +250,62 @@ func (r *Reconciler) validateCandidateImage(ctx context.Context, p *api.StacksNe
 		Image     string
 	}{candidate, *state.ConfigRef, ptr.Deref(fields.Image, "")})
 	job := &batchv1.Job{
-		ObjectMeta: objectMeta(p, "validate-"+strings.TrimPrefix(revision, "sha256:"), "support"),
+		ObjectMeta: objectMeta(p, "validate-"+strings.TrimPrefix(revision, "sha256:"), api.RoleSupport),
 		Spec: batchv1.JobSpec{
 			BackoffLimit: ptr.To[int32](0), ActiveDeadlineSeconds: ptr.To[int64](120),
 			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{Labels: Labels(p, "support")},
+				ObjectMeta: metav1.ObjectMeta{Labels: Labels(p, api.RoleSupport)},
 				Spec: corev1.PodSpec{
-					AutomountServiceAccountToken: ptr.To(false), RestartPolicy: corev1.RestartPolicyNever,
-					SecurityContext: &corev1.PodSecurityContext{RunAsNonRoot: ptr.To(true), RunAsUser: ptr.To[int64](1000), RunAsGroup: ptr.To[int64](1000), FSGroup: ptr.To[int64](1000)},
-					Containers: []corev1.Container{{
-						Name: "validate", Image: *fields.Image, ImagePullPolicy: ptr.Deref(fields.ImagePullPolicy, corev1.PullIfNotPresent),
-						Command:         []string{"sh", "-ec", `exec "$1" check-config --config /config/config.toml >/dev/null 2>&1`, "--", actorContainer(p.Spec.Kind)},
-						SecurityContext: &corev1.SecurityContext{AllowPrivilegeEscalation: ptr.To(false), ReadOnlyRootFilesystem: ptr.To(true), Capabilities: &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}}},
-						VolumeMounts:    []corev1.VolumeMount{{Name: "config", MountPath: "/config", ReadOnly: true}},
-					}},
-					Volumes: []corev1.Volume{{Name: "config", VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: state.ConfigRef.Name, DefaultMode: ptr.To[int32](0440)}}}},
+					AutomountServiceAccountToken: ptr.To(false),
+					RestartPolicy:                corev1.RestartPolicyNever,
+					SecurityContext: &corev1.PodSecurityContext{
+						RunAsNonRoot: ptr.To(true),
+						RunAsUser:    ptr.To[int64](1000),
+						RunAsGroup:   ptr.To[int64](1000),
+						FSGroup:      ptr.To[int64](1000),
+					},
+					Containers: []corev1.Container{
+						{
+							Name:            "validate",
+							Image:           *fields.Image,
+							ImagePullPolicy: ptr.Deref(fields.ImagePullPolicy, corev1.PullIfNotPresent),
+							Command: []string{
+								"sh",
+								"-ec",
+								`exec "$1" check-config --config /config/config.toml >/dev/null 2>&1`,
+								"--",
+								actorContainer(p.Spec.Kind),
+							},
+							SecurityContext: &corev1.SecurityContext{
+								AllowPrivilegeEscalation: ptr.To(false),
+								ReadOnlyRootFilesystem:   ptr.To(true),
+								Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
+							},
+							VolumeMounts: []corev1.VolumeMount{{Name: "config", MountPath: "/config", ReadOnly: true}},
+						},
+					},
+					Volumes: []corev1.Volume{
+						{
+							Name: "config",
+							VolumeSource: corev1.VolumeSource{
+								Secret: &corev1.SecretVolumeSource{
+									SecretName:  state.ConfigRef.Name,
+									DefaultMode: ptr.To[int32](0o440),
+								},
+							},
+						},
+					},
 				},
 			},
 		},
 	}
-	job.Annotations = map[string]string{"network.stacks.org/candidate-config": revision}
+	job.Annotations = map[string]string{candidateConfigurationAnnotation: revision}
 	if r.candidateConfiguration != nil && r.candidateConfiguration.Root.Spec.Defaults != nil {
-		applyPlacement(&job.Spec.Template.Spec, r.candidateConfiguration.Root.Spec.Defaults.WorkerPlacement, Labels(p, "support"))
+		applyPlacement(
+			&job.Spec.Template.Spec,
+			r.candidateConfiguration.Root.Spec.Defaults.WorkerPlacement,
+			Labels(p, api.RoleSupport),
+		)
 	}
 	if err := r.createOwned(ctx, p, job); err != nil {
 		return false, err
@@ -244,7 +314,14 @@ func (r *Reconciler) validateCandidateImage(ctx context.Context, p *api.StacksNe
 	if err := r.Reader.Get(ctx, client.ObjectKeyFromObject(job), &actual); err != nil {
 		return false, err
 	}
-	if actual.Annotations["network.stacks.org/candidate-config"] != revision || len(actual.Spec.Template.Spec.Containers) != 1 || actual.Spec.Template.Spec.Containers[0].Image != *fields.Image || !equality.Semantic.DeepEqual(actual.Spec.Template.Spec.Containers[0].Command, job.Spec.Template.Spec.Containers[0].Command) || !equality.Semantic.DeepEqual(actual.Spec.Template.Spec.Volumes, job.Spec.Template.Spec.Volumes) {
+	if actual.Annotations[candidateConfigurationAnnotation] != revision ||
+		len(actual.Spec.Template.Spec.Containers) != 1 ||
+		actual.Spec.Template.Spec.Containers[0].Image != *fields.Image ||
+		!equality.Semantic.DeepEqual(
+			actual.Spec.Template.Spec.Containers[0].Command,
+			job.Spec.Template.Spec.Containers[0].Command,
+		) ||
+		!equality.Semantic.DeepEqual(actual.Spec.Template.Spec.Volumes, job.Spec.Template.Spec.Volumes) {
 		return false, fmt.Errorf("candidate image validation identity changed")
 	}
 	if err := r.privateMetadata(ctx, p.Namespace, *state.ConfigRef, p.UID); err != nil {

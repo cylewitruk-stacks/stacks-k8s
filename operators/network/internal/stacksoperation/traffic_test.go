@@ -50,10 +50,19 @@ func TestTrafficGatesPauseCadenceAndPendingPolicyBoundary(t *testing.T) {
 	now := time.Unix(500, 0)
 	role.Now = func() time.Time { return now }
 	node := &trafficNode{memoryNode: nodeFixture(), info: rpc.Info{NetworkID: 0x80000000, BurnHeight: 230}}
-	p := &api.StacksNetworkParticipant{Status: api.ParticipantStatus{Admission: &api.Admission{PolicyDigest: "policy-one"}}}
+	p := &api.StacksNetworkParticipant{
+		Status: api.ParticipantStatus{Admission: &api.Admission{PolicyDigest: "policy-one"}},
+	}
 	snapshot := stacksworker.Snapshot{Participant: p, Authorize: permit}
 	role.Resolve = func(context.Context, stacksworker.Snapshot) (TransferInputs, error) {
-		return TransferInputs{Node: node, Recipient: public.Address, Amount: 1, Fee: 1, Interval: 10 * time.Second, StartHeight: 231}, nil
+		return TransferInputs{
+			Node:        node,
+			Recipient:   public.Address,
+			Amount:      1,
+			Fee:         1,
+			Interval:    10 * time.Second,
+			StartHeight: 231,
+		}, nil
 	}
 	result, err := role.Step(context.Background(), snapshot)
 	if err != nil || result.Reason != "AwaitingEpoch3" || node.sends != 0 {
@@ -68,7 +77,8 @@ func TestTrafficGatesPauseCadenceAndPendingPolicyBoundary(t *testing.T) {
 	p.Status.Admission.PolicyDigest = "policy-two"
 	node.inclusion = rpc.Inclusion{Found: true, Success: true, BlockID: strings.Repeat("b", 64)}
 	result, err = role.Step(context.Background(), snapshot)
-	if err != nil || result.Transactions.Included != 1 || result.AppliedPolicyDigest != "policy-one" || node.sends != 1 {
+	if err != nil || result.Transactions.Included != 1 || result.AppliedPolicyDigest != "policy-one" ||
+		node.sends != 1 {
 		t.Fatal("pending policy or paused receipt lost")
 	}
 	now = now.Add(time.Hour)
@@ -116,15 +126,43 @@ func TestRejectedTrafficWaitsCadenceAndDrainsWithoutInclusion(t *testing.T) {
 	now := time.Unix(500, 0)
 	role.Now = func() time.Time { return now }
 	node := &trafficNode{memoryNode: nodeFixture(), info: rpc.Info{NetworkID: 0x80000000, BurnHeight: 231}}
-	tx, err := transaction.Transfer(transaction.Options{Version: transaction.Testnet, ChainID: 0x80000000, Nonce: node.account.Nonce, Fee: 1, PostConditionMode: transaction.Deny, PrivateKey: role.key}, public.Address, 1, "")
+	tx, err := transaction.Transfer(
+		transaction.Options{
+			Version:           transaction.Testnet,
+			ChainID:           0x80000000,
+			Nonce:             node.account.Nonce,
+			Fee:               1,
+			PostConditionMode: transaction.Deny,
+			PrivateKey:        role.key,
+		},
+		public.Address,
+		1,
+		"",
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	node.submitErr = rpc.ClassifySubmissionRejection(400, []byte(fmt.Sprintf(`{"txid":%q,"error":"transaction rejected","reason":"FeeTooLow"}`, tx.TxID)), tx.TxID)
+	node.submitErr = rpc.ClassifySubmissionRejection(
+		400,
+		[]byte(fmt.Sprintf(`{"txid":%q,"error":"transaction rejected","reason":"FeeTooLow"}`, tx.TxID)),
+		tx.TxID,
+	)
 	role.Resolve = func(context.Context, stacksworker.Snapshot) (TransferInputs, error) {
-		return TransferInputs{Node: node, Recipient: public.Address, Amount: 1, Fee: 1, Interval: 10 * time.Second, StartHeight: 231}, nil
+		return TransferInputs{
+			Node:        node,
+			Recipient:   public.Address,
+			Amount:      1,
+			Fee:         1,
+			Interval:    10 * time.Second,
+			StartHeight: 231,
+		}, nil
 	}
-	snapshot := stacksworker.Snapshot{Participant: &api.StacksNetworkParticipant{Status: api.ParticipantStatus{Admission: &api.Admission{PolicyDigest: "policy"}}}, Authorize: permit}
+	snapshot := stacksworker.Snapshot{
+		Participant: &api.StacksNetworkParticipant{
+			Status: api.ParticipantStatus{Admission: &api.Admission{PolicyDigest: "policy"}},
+		},
+		Authorize: permit,
+	}
 	for range 10 {
 		result, err := role.Step(context.Background(), snapshot)
 		if err != nil || !result.Blocked || result.Reason != "RejectedFeeTooLow" || result.Pending != 0 {
@@ -152,7 +190,9 @@ func TestRejectedTrafficWaitsCadenceAndDrainsWithoutInclusion(t *testing.T) {
 		t.Fatalf("inclusion=%+v error=%v", result, err)
 	}
 	result, err = role.Step(context.Background(), snapshot)
-	if err != nil || result.Reason != "WaitingCadence" || result.Transactions.Rejected != 1 || result.Transactions.Uncertain != 1 || node.sends != 2 {
+	if err != nil || result.Reason != "WaitingCadence" || result.Transactions.Rejected != 1 ||
+		result.Transactions.Uncertain != 1 ||
+		node.sends != 2 {
 		t.Fatalf("stale refusal describes included attempt: %+v error=%v", result, err)
 	}
 }

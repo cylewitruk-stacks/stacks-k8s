@@ -43,10 +43,27 @@ type Client struct {
 // New validates explicit bounds and disables proxy discovery and connection reuse.
 func New(c Config) (*Client, error) {
 	u, e := url.Parse(c.Endpoint)
-	if e != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Path != "" && u.Path != "/" || c.Timeout <= 0 || c.MaxResponseBytes < 1 || c.MaxResponseBytes > 64<<20 {
+	if e != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil || u.RawQuery != "" ||
+		u.Fragment != "" ||
+		u.Path != "" && u.Path != "/" ||
+		c.Timeout <= 0 ||
+		c.MaxResponseBytes < 1 ||
+		c.MaxResponseBytes > 64<<20 {
 		return nil, errors.New("invalid native RPC configuration")
 	}
-	return &Client{endpoint: strings.TrimSuffix(c.Endpoint, "/"), maxBytes: c.MaxResponseBytes, http: &http.Client{Timeout: c.Timeout, Transport: &http.Transport{Proxy: nil, DialContext: (&net.Dialer{Timeout: c.Timeout}).DialContext, DisableKeepAlives: true}, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}, nil
+	return &Client{
+		endpoint: strings.TrimSuffix(c.Endpoint, "/"),
+		maxBytes: c.MaxResponseBytes,
+		http: &http.Client{
+			Timeout: c.Timeout,
+			Transport: &http.Transport{
+				Proxy:             nil,
+				DialContext:       (&net.Dialer{Timeout: c.Timeout}).DialContext,
+				DisableKeepAlives: true,
+			},
+			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+		},
+	}, nil
 }
 
 // request sends exactly once and does not expose raw response bodies in errors.
@@ -67,7 +84,7 @@ func (c *Client) request(ctx context.Context, method, path, contentType string, 
 	if e != nil {
 		return 0, nil, errors.New("native RPC transport unavailable")
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }() // Read/cleanup completion cannot change the operation's result.
 	data, e := io.ReadAll(io.LimitReader(response.Body, c.maxBytes+1))
 	if e != nil || int64(len(data)) > c.maxBytes {
 		return response.StatusCode, nil, errors.New("native RPC response unreadable or oversized")
@@ -207,7 +224,10 @@ func (c *Client) pox(ctx context.Context, tipQuery string) (PoX, error) {
 	}
 	contract, e := clarity.Principal(wire.Contract)
 	threshold, te := clarity.Uint128(wire.Next.Threshold.String())
-	if e != nil || contract.Type != clarity.ContractPrincipal || te != nil || wire.Burn == nil || wire.Cycle == nil || wire.Length == nil || *wire.Length == 0 || wire.Next.Prepare == nil {
+	if e != nil || contract.Type != clarity.ContractPrincipal || te != nil || wire.Burn == nil || wire.Cycle == nil ||
+		wire.Length == nil ||
+		*wire.Length == 0 ||
+		wire.Next.Prepare == nil {
 		return PoX{}, errors.New("incomplete PoX observation")
 	}
 	return PoX{wire.Contract, *wire.Burn, *wire.Cycle, *wire.Length, threshold, *wire.Next.Prepare}, nil
@@ -245,12 +265,18 @@ func (c *Client) source(ctx context.Context, address, contract, tipQuery string)
 	if e := validateContract(address, contract, "source"); e != nil {
 		return "", false, e
 	}
-	code, data, e := c.request(ctx, http.MethodGet, "/v2/contracts/source/"+address+"/"+contract+"?proof=0"+tipQuery, "application/json", nil)
+	code, data, e := c.request(
+		ctx,
+		http.MethodGet,
+		"/v2/contracts/source/"+address+"/"+contract+"?proof=0"+tipQuery,
+		"application/json",
+		nil,
+	)
 	if e != nil {
 		return "", false, e
 	}
 	if code == http.StatusNotFound {
-		if tipQuery != "" && strings.TrimSpace(string(data)) != "No contract source data found" {
+		if tipQuery != "" && strings.TrimSpace(string(data)) != nativeSourceAbsent {
 			return "", false, errors.New("pinned contract source observation unavailable")
 		}
 		return "", false, nil
@@ -265,12 +291,20 @@ func (c *Client) source(ctx context.Context, address, contract, tipQuery string)
 }
 
 // ReadOnly sends explicitly encoded arguments once and decodes the returned value.
-func (c *Client) ReadOnly(ctx context.Context, sender, address, contract, method string, args []clarity.Value) (clarity.Value, error) {
+func (c *Client) ReadOnly(
+	ctx context.Context,
+	sender, address, contract, method string,
+	args []clarity.Value,
+) (clarity.Value, error) {
 	return c.readOnly(ctx, sender, address, contract, method, args, "")
 }
 
 // ReadOnlyAt pins a native read-only contract call to one canonical index block ID.
-func (c *Client) ReadOnlyAt(ctx context.Context, indexBlockID, sender, address, contract, method string, args []clarity.Value) (clarity.Value, error) {
+func (c *Client) ReadOnlyAt(
+	ctx context.Context,
+	indexBlockID, sender, address, contract, method string,
+	args []clarity.Value,
+) (clarity.Value, error) {
 	if !validHash(indexBlockID) {
 		return clarity.Value{}, errors.New("invalid canonical tip")
 	}
@@ -278,7 +312,12 @@ func (c *Client) ReadOnlyAt(ctx context.Context, indexBlockID, sender, address, 
 }
 
 // readOnly sends one bounded encoded call at the selected tip.
-func (c *Client) readOnly(ctx context.Context, sender, address, contract, method string, args []clarity.Value, tipQuery string) (clarity.Value, error) {
+func (c *Client) readOnly(
+	ctx context.Context,
+	sender, address, contract, method string,
+	args []clarity.Value,
+	tipQuery string,
+) (clarity.Value, error) {
 	if _, e := clarity.Principal(sender); e != nil {
 		return clarity.Value{}, e
 	}
@@ -302,7 +341,13 @@ func (c *Client) readOnly(ctx context.Context, sender, address, contract, method
 		encoded[i] = "0x" + hex.EncodeToString(raw)
 	}
 	body, _ := json.Marshal(map[string]any{"sender": sender, "arguments": encoded})
-	code, data, e := c.request(ctx, http.MethodPost, "/v2/contracts/call-read/"+address+"/"+contract+"/"+url.PathEscape(method)+tipQuery, "application/json", body)
+	code, data, e := c.request(
+		ctx,
+		http.MethodPost,
+		"/v2/contracts/call-read/"+address+"/"+contract+"/"+url.PathEscape(method)+tipQuery,
+		"application/json",
+		body,
+	)
 	if e != nil {
 		return clarity.Value{}, e
 	}
@@ -330,7 +375,8 @@ func (c *Client) Submit(ctx context.Context, tx transaction.Transaction) error {
 		}
 	}
 	var id string
-	if e != nil || code != http.StatusOK || json.Unmarshal(data, &id) != nil || strings.TrimPrefix(id, "0x") != tx.TxID {
+	if e != nil || code != http.StatusOK || json.Unmarshal(data, &id) != nil ||
+		strings.TrimPrefix(id, "0x") != tx.TxID {
 		return errors.New("submission did not acknowledge the exact transaction")
 	}
 	return nil
@@ -368,7 +414,10 @@ func (c *Client) Inclusion(ctx context.Context, id string) (Inclusion, error) {
 		return Inclusion{}, errors.New("execution unavailable")
 	}
 	raw, e := hex.DecodeString(strings.TrimPrefix(wire.Bytes, "0x"))
-	if e != nil || !transaction.Valid(transaction.Transaction{Bytes: raw, TxID: id}) || !validHash(wire.Block) || wire.Canonical == nil || (!strings.HasPrefix(wire.Result, "(ok ") && !strings.HasPrefix(wire.Result, "(err ")) || !strings.HasSuffix(wire.Result, ")") {
+	if e != nil || !transaction.Valid(transaction.Transaction{Bytes: raw, TxID: id}) || !validHash(wire.Block) ||
+		wire.Canonical == nil ||
+		(!strings.HasPrefix(wire.Result, "(ok ") && !strings.HasPrefix(wire.Result, "(err ")) ||
+		!strings.HasSuffix(wire.Result, ")") {
 		return Inclusion{}, errors.New("exact execution identity unavailable")
 	}
 	if !*wire.Canonical {
@@ -412,7 +461,7 @@ func hexUint128(s string) (clarity.Value, error) {
 		return clarity.Value{}, errors.New("invalid uint128 balance")
 	}
 	for _, c := range s[2:] {
-		if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F') {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') && (c < 'A' || c > 'F') {
 			return clarity.Value{}, errors.New("invalid balance digit")
 		}
 	}
@@ -426,3 +475,6 @@ func hexUint128(s string) (clarity.Value, error) {
 	copy(bytes[17-len(decoded):], decoded)
 	return clarity.Decode(bytes)
 }
+
+// nativeSourceAbsent is the native tip-bound contract-source absence response.
+const nativeSourceAbsent = "No contract source data found"

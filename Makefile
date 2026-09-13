@@ -1,5 +1,6 @@
 GO ?= go
 GOVULNCHECK_VERSION ?= v1.7.0
+GOLANGCI_LINT ?= golangci-lint
 
 MODULE_DIRS := \
 	libs/stacks \
@@ -13,11 +14,16 @@ MODULE_DIRS := \
 	tools/module-policy \
 	tools/local-cluster
 
+# Generator-only modules contain tools-tagged imports of command packages, not
+# lintable Go packages. Their source is still covered by fmt-check.
+LINT_MODULE_DIRS := $(filter-out apis/network/tools operators/observability/tools,$(MODULE_DIRS))
+LINT_CONFIG := $(CURDIR)/.golangci.yml
+
 .PHONY: api-verify docker-build docker-check fmt generate helm-verify module-policy-verify modules-verify rbac-verify test \
 	test-integration test-race verify verify-chart-policy verify-network \
 	verify-observability verify-action vuln
 
-verify: api-verify verify-library verify-local-cluster modules-verify module-policy-verify verify-chart-policy verify-network verify-observability verify-action
+verify: lint fmt-check api-verify verify-library verify-local-cluster modules-verify module-policy-verify verify-chart-policy verify-network verify-observability verify-action
 	$(MAKE) -C charts/stacks-chaos-profile verify
 
 api-verify:
@@ -45,11 +51,35 @@ verify-action:
 verify-observability:
 	$(MAKE) -C charts/stacks-observability-operator verify
 
-fmt:
-	$(MAKE) -C apis/network fmt
-	$(MAKE) -C operators/network fmt
-	$(MAKE) -C operators/observability fmt
-	$(MAKE) -C operators/action fmt
+# Verification never rewrites source; formatting is an explicit opt-in command.
+.PHONY: lint lint-tool-verify fmt-check fmt-fix
+lint-tool-verify:
+	@command -v "$(GOLANGCI_LINT)" >/dev/null || { echo "Install golangci-lint $$(cat .golangci-lint-version) before running lint/format targets" >&2; exit 1; }
+	@test "$$("$(GOLANGCI_LINT)" version --short)" = "$$(cat .golangci-lint-version)" || { echo "golangci-lint version must match .golangci-lint-version" >&2; exit 1; }
+	"$(GOLANGCI_LINT)" config verify --config "$(LINT_CONFIG)"
+
+lint: lint-tool-verify
+	@set -eu; lint_bin="$$(command -v "$(GOLANGCI_LINT)")"; result=0; \
+	for module in $(LINT_MODULE_DIRS); do \
+		echo "Linting $$module"; \
+		(cd "$$module" && GOWORK=off "$$lint_bin" run --config "$(LINT_CONFIG)" ./...) || result=1; \
+	done; exit $$result
+
+fmt: fmt-check
+
+fmt-check: lint-tool-verify
+	@set -eu; lint_bin="$$(command -v "$(GOLANGCI_LINT)")"; result=0; \
+	for module in $(MODULE_DIRS); do \
+		echo "Checking formatting $$module"; \
+		(cd "$$module" && GOWORK=off "$$lint_bin" fmt --config "$(LINT_CONFIG)" --diff ./...) || result=1; \
+	done; exit $$result
+
+fmt-fix: lint-tool-verify
+	@set -eu; lint_bin="$$(command -v "$(GOLANGCI_LINT)")"; \
+	for module in $(MODULE_DIRS); do \
+		echo "Formatting $$module"; \
+		(cd "$$module" && GOWORK=off "$$lint_bin" fmt --config "$(LINT_CONFIG)" ./...); \
+	done
 
 generate:
 	$(MAKE) -C apis/network generate

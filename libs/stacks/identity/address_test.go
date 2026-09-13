@@ -16,7 +16,13 @@ func TestAddressCodecAndCompressedKeys(t *testing.T) {
 			t.Fatal("address round trip differs")
 		}
 	}
-	for _, s := range []string{"", "ST000000000000000000002AMW42X", "st000000000000000000002amw42h", "ST0000000000000000000002AMW42H", strings.Repeat("S", 100)} {
+	for _, s := range []string{
+		"",
+		"ST000000000000000000002AMW42X",
+		"st000000000000000000002amw42h",
+		"ST0000000000000000000002AMW42H",
+		strings.Repeat("S", 100),
+	} {
 		if _, _, e := DecodeAddress(s); e == nil {
 			t.Fatalf("accepted malformed address %s", s)
 		}

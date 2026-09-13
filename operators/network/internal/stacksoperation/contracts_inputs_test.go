@@ -20,41 +20,147 @@ import (
 )
 
 func TestContractPublicInputsRequireCapturedRegistryAndCurrentIdentities(t *testing.T) {
-	for _, change := range []string{"valid", "deployer-replaced", "registry-key-replaced", "registry-key-not-captured", "registry-policy-changed", "genesis-replaced", "unverified-target", "target-removed", "genesis-content-changed", "late", "late-aliases", "late-key-changed", "late-deployer-changed", "late-removed"} {
+	for _, change := range []string{
+		"valid",
+		"deployer-replaced",
+		"registry-key-replaced",
+		"registry-key-not-captured",
+		"registry-policy-changed",
+		"genesis-replaced",
+		"unverified-target",
+		"target-removed",
+		"genesis-content-changed",
+		"late",
+		"late-aliases",
+		"late-key-changed",
+		"late-deployer-changed",
+		"late-removed",
+	} {
 		t.Run(change, func(t *testing.T) {
 			scheme := runtime.NewScheme()
 			_ = api.AddToScheme(scheme)
 			_ = stacks.AddToScheme(scheme)
-			owner := metav1.OwnerReference{APIVersion: api.GroupVersion.String(), Kind: "StacksNetwork", Name: "network", UID: "root", Controller: ptr.To(true)}
-			root := &api.StacksNetwork{ObjectMeta: metav1.ObjectMeta{Name: "network", Namespace: "test", UID: "root"}, Spec: api.StacksNetworkSpec{Participants: []api.Participant{{Name: "contracts", Kind: "StacksContractSet"}, {Name: "node", Kind: "StacksNode"}}}}
+			owner := metav1.OwnerReference{
+				APIVersion: api.GroupVersion.String(),
+				Kind:       "StacksNetwork",
+				Name:       "network",
+				UID:        "root",
+				Controller: ptr.To(true),
+			}
+			root := &api.StacksNetwork{
+				ObjectMeta: metav1.ObjectMeta{Name: "network", Namespace: "test", UID: "root"},
+				Spec: api.StacksNetworkSpec{
+					Participants: []api.Participant{
+						{Name: "contracts", Kind: "StacksContractSet"},
+						{Name: "node", Kind: "StacksNode"},
+					},
+				},
+			}
 			bind := func(kind string, o client.Object, hash string) common.Binding {
 				return common.Binding{Kind: kind, Name: o.GetName(), UID: o.GetUID(), Fingerprint: hash}
 			}
 			accounts := []*stacks.StacksAccount{}
 			for i, name := range []string{"deployer", "registry-1", "registry-2", "aggregate"} {
 				public, _ := identity.FromPrivate(strings.Repeat("0", 63) + string(rune('1'+i)))
-				accounts = append(accounts, &stacks.StacksAccount{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "test", UID: types.UID(name), Generation: 1}, Status: common.ResolutionStatus{ObservedGeneration: 1, Digest: name + "-digest", Identity: &common.PublicIdentity{Address: public.Address, PublicKey: public.PublicKey}, Conditions: []metav1.Condition{{Type: "Resolved", Status: metav1.ConditionTrue}}}})
+				accounts = append(
+					accounts,
+					&stacks.StacksAccount{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:       name,
+							Namespace:  "test",
+							UID:        types.UID(name),
+							Generation: 1,
+						},
+						Status: common.ResolutionStatus{
+							ObservedGeneration: 1,
+							Digest:             name + "-digest",
+							Identity: &common.PublicIdentity{
+								Address:   public.Address,
+								PublicKey: public.PublicKey,
+							},
+							Conditions: []metav1.Condition{{Type: "Resolved", Status: metav1.ConditionTrue}},
+						},
+					},
+				)
 			}
 			participant := func(name string, kind api.ParticipantKind) *api.StacksNetworkParticipant {
-				return &api.StacksNetworkParticipant{ObjectMeta: metav1.ObjectMeta{Name: foundation.ParticipantName("root", name), Namespace: "test", UID: types.UID(name), Generation: 1, OwnerReferences: []metav1.OwnerReference{owner}}, Spec: api.StacksNetworkParticipantSpec{NetworkUID: "root", ParticipantName: name, Kind: kind}, Status: api.ParticipantStatus{Admission: &api.Admission{}}}
+				return &api.StacksNetworkParticipant{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:            foundation.ParticipantName("root", name),
+						Namespace:       "test",
+						UID:             types.UID(name),
+						Generation:      1,
+						OwnerReferences: []metav1.OwnerReference{owner},
+					},
+					Spec:   api.StacksNetworkParticipantSpec{NetworkUID: "root", ParticipantName: name, Kind: kind},
+					Status: api.ParticipantStatus{Admission: &api.Admission{}},
+				}
 			}
 			p := participant("contracts", "StacksContractSet")
 			node := participant("node", "StacksNode")
-			initialization := &stacks.RegistryInitialization{Mode: "ExplicitTestRegistry", SignerAccountRefs: []common.NameRef{{Name: "registry-1"}, {Name: "registry-2"}}, AggregateKeyAccountRef: common.NameRef{Name: "aggregate"}, Threshold: 2}
-			p.Status.Admission.Configuration.StacksContractSet = &stacks.StacksContractSetSpec{DeployerAccountRef: &common.NameRef{Name: "deployer"}, TargetNodeRef: &common.NameRef{Name: "node"}, Bundle: ptr.To("sbtc-regtest-v1"), Initialization: initialization}
+			initialization := &stacks.RegistryInitialization{
+				Mode:                   "ExplicitTestRegistry",
+				SignerAccountRefs:      []common.NameRef{{Name: "registry-1"}, {Name: "registry-2"}},
+				AggregateKeyAccountRef: common.NameRef{Name: "aggregate"},
+				Threshold:              2,
+			}
+			p.Status.Admission.Configuration.StacksContractSet = &stacks.StacksContractSetSpec{
+				DeployerAccountRef: &common.NameRef{Name: "deployer"},
+				TargetNodeRef:      &common.NameRef{Name: "node"},
+				Bundle:             ptr.To("sbtc-regtest-v1"),
+				Initialization:     initialization,
+			}
 			p.Status.Admission.Dependencies = []common.Binding{bind("StacksNetworkParticipant", node, "")}
-			captured := api.BootstrapRequirement{Kind: "StacksContractSet", Participant: bind("StacksNetworkParticipant", p, ""), RegistryInitialization: initialization.DeepCopy()}
+			captured := api.BootstrapRequirement{
+				Kind:                   "StacksContractSet",
+				Participant:            bind("StacksNetworkParticipant", p, ""),
+				RegistryInitialization: initialization.DeepCopy(),
+			}
 			for _, account := range accounts {
 				b := bind("StacksAccount", account, account.Status.Digest)
 				p.Status.Admission.Dependencies = append(p.Status.Admission.Dependencies, b)
-				captured.Accounts = append(captured.Accounts, api.PublicAccount{Binding: b, Identity: *account.Status.Identity})
+				captured.Accounts = append(
+					captured.Accounts,
+					api.PublicAccount{Binding: b, Identity: *account.Status.Identity},
+				)
 			}
 			node.Status.Admission.Configuration.StacksNode = &stacks.StacksNodeSpec{}
 			node.Status.Admission.PolicyDigest = foundation.Digest(node.Status.Admission.Configuration)
-			node.Status.Runtime = &api.ParticipantRuntimeStatus{ObservedGeneration: 1, PolicyDigest: node.Status.Admission.PolicyDigest, PodRef: &common.Binding{Kind: "Pod", Name: "node-0", UID: "pod"}, ContainerID: "containerd://node", Endpoints: []api.RuntimeEndpoint{{Name: "rpc", Host: "node.test.svc", Port: 20443}}}
-			node.Status.Conditions = []metav1.Condition{{Type: "WorkloadReady", Status: metav1.ConditionTrue, ObservedGeneration: 1}, {Type: "ConfigVerified", Status: metav1.ConditionTrue, ObservedGeneration: 1}}
-			root.Status.Identities = []api.InstanceIdentity{{Name: "contracts", UID: p.UID}, {Name: "node", UID: node.UID}}
-			genesis := &api.StacksGenesis{ObjectMeta: metav1.ObjectMeta{Name: "genesis", Namespace: "test", UID: "genesis", OwnerReferences: []metav1.OwnerReference{owner}}, Spec: api.StacksGenesisSpec{Source: api.GenesisSource{NetworkUID: "root"}, Chain: api.Chain{Epochs: []api.Epoch{{Name: "3.0", StartHeight: 252}}, Contracts: api.ContractBindings{Deployer: accounts[0].Status.Identity.Address, Bundle: "sbtc-regtest-v1", SourceHashes: map[string]string{"sbtc-registry": "source-pin"}}}, Bootstrap: api.Bootstrap{Requirements: []api.BootstrapRequirement{captured}}}}
+			node.Status.Runtime = &api.ParticipantRuntimeStatus{
+				ObservedGeneration: 1,
+				PolicyDigest:       node.Status.Admission.PolicyDigest,
+				PodRef:             &common.Binding{Kind: "Pod", Name: "node-0", UID: "pod"},
+				ContainerID:        "containerd://node",
+				Endpoints:          []api.RuntimeEndpoint{{Name: "rpc", Host: "node.test.svc", Port: 20443}},
+			}
+			node.Status.Conditions = []metav1.Condition{
+				{Type: "WorkloadReady", Status: metav1.ConditionTrue, ObservedGeneration: 1},
+				{Type: "ConfigVerified", Status: metav1.ConditionTrue, ObservedGeneration: 1},
+			}
+			root.Status.Identities = []api.InstanceIdentity{
+				{Name: "contracts", UID: p.UID},
+				{Name: "node", UID: node.UID},
+			}
+			genesis := &api.StacksGenesis{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:            "genesis",
+					Namespace:       "test",
+					UID:             "genesis",
+					OwnerReferences: []metav1.OwnerReference{owner},
+				},
+				Spec: api.StacksGenesisSpec{
+					Source: api.GenesisSource{NetworkUID: "root"},
+					Chain: api.Chain{
+						Epochs: []api.Epoch{{Name: "3.0", StartHeight: 252}},
+						Contracts: api.ContractBindings{
+							Deployer:     accounts[0].Status.Identity.Address,
+							Bundle:       "sbtc-regtest-v1",
+							SourceHashes: map[string]string{"sbtc-registry": "source-pin"},
+						},
+					},
+					Bootstrap: api.Bootstrap{Requirements: []api.BootstrapRequirement{captured}},
+				},
+			}
 			root.Status.GenesisRef = ptr.To(bind("StacksGenesis", genesis, foundation.Digest(genesis.Spec)))
 			root.Status.GenesisDigest = foundation.Digest(genesis.Spec.Chain)
 			late := strings.HasPrefix(change, "late")
@@ -103,9 +209,15 @@ func TestContractPublicInputsRequireCapturedRegistryAndCurrentIdentities(t *test
 				objects = append(objects, account)
 			}
 			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
-			in, err := (PublicInputs{Reader: c, Sender: accounts[0].Status.Identity.Address}).Contracts(context.Background(), stacksworker.Snapshot{Network: root, Participant: p})
+			in, err := (PublicInputs{Reader: c, Sender: accounts[0].Status.Identity.Address}).Contracts(
+				context.Background(),
+				stacksworker.Snapshot{Network: root, Participant: p},
+			)
 			if change == "valid" || change == "late" || change == "late-aliases" {
-				if err != nil || in.Node == nil || len(in.SignerPublicKeys) != 2 || in.SignerPublicKeys[0] != accounts[1].Status.Identity.PublicKey || in.AggregatePublicKey != accounts[3].Status.Identity.PublicKey || in.Epoch3Height != 252 {
+				if err != nil || in.Node == nil || len(in.SignerPublicKeys) != 2 ||
+					in.SignerPublicKeys[0] != accounts[1].Status.Identity.PublicKey ||
+					in.AggregatePublicKey != accounts[3].Status.Identity.PublicKey ||
+					in.Epoch3Height != 252 {
 					t.Fatalf("valid contract inputs: %+v %v", in, err)
 				}
 			} else if err == nil {

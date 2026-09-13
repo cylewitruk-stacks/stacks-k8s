@@ -45,8 +45,13 @@ func TestSignatureRecoveryAndDomainSeparation(t *testing.T) {
 		t.Fatal("accepted zero scalar")
 	}
 }
+
 func TestPoXInvalidInputs(t *testing.T) {
-	for _, a := range []PoXAddress{{Version: 7, HashBytes: make([]byte, 32)}, {Version: 0, HashBytes: make([]byte, 32)}, {Version: 5, HashBytes: make([]byte, 20)}} {
+	for _, a := range []PoXAddress{
+		{Version: 7, HashBytes: make([]byte, 32)},
+		{Version: 0, HashBytes: make([]byte, 32)},
+		{Version: 5, HashBytes: make([]byte, 20)},
+	} {
 		if _, e := a.Value(); e == nil {
 			t.Fatal("accepted invalid PoX address")
 		}

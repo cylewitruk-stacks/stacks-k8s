@@ -18,30 +18,30 @@ import (
 // stopReason distinguishes terminal disposal from reversible pause/suspension.
 func stopReason(root *api.StacksNetwork, p *api.StacksNetworkParticipant) string {
 	if failed(root) {
-		return "NetworkFailed"
+		return api.ReasonNetworkFailed
 	}
 	if root.DeletionTimestamp != nil {
-		return "NetworkDeleting"
+		return api.ReasonNetworkDeleting
 	}
-	if root.Spec.Operation == "Stopped" {
-		return "NetworkStopped"
+	if root.Spec.Operation == api.NetworkOperationStopped {
+		return api.ReasonNetworkStopped
 	}
 	if p != nil {
 		for _, id := range root.Status.Identities {
 			if id.Name == p.Spec.ParticipantName && (id.UID != p.UID || id.Removing) {
-				return "ParticipantRemoved"
+				return api.ReasonParticipantRemoved
 			}
 		}
 	}
 	if p == nil || p.DeletionTimestamp != nil {
-		return "ParticipantRemoved"
+		return api.ReasonParticipantRemoved
 	}
 	for _, entry := range root.Spec.Participants {
 		if entry.Name == p.Spec.ParticipantName && entry.Kind == p.Spec.Kind {
 			return ""
 		}
 	}
-	return "ParticipantRemoved"
+	return api.ReasonParticipantRemoved
 }
 
 // stop closes local mutation admission before bounded receipt draining and acknowledgement.
@@ -72,7 +72,7 @@ func (w *Worker) stop(ctx context.Context, record *bitcoin.BitcoinExecution) (bo
 	}
 	started := metav1.NewTime(w.Now().UTC())
 	w.drain()
-	attempt, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	attempt, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()
 	current := &bitcoin.BitcoinExecution{}
 	if e = w.Reader.Get(attempt, client.ObjectKeyFromObject(record), current); e != nil {
@@ -81,12 +81,12 @@ func (w *Worker) stop(ctx context.Context, record *bitcoin.BitcoinExecution) (bo
 	if current.UID != record.UID {
 		return true, fmt.Errorf("execution record replaced during drain")
 	}
-	outcome := "Drained"
+	outcome := bitcoin.DrainDrained
 	w.mu.Lock()
 	active := w.active
 	w.mu.Unlock()
 	if action := current.Status.Action; action != nil {
-		outcome = "Uncertain"
+		outcome = bitcoin.DrainUncertain
 		if action.StopReason == "" {
 			action.StopReason = reason
 		}
@@ -98,10 +98,17 @@ func (w *Worker) stop(ctx context.Context, record *bitcoin.BitcoinExecution) (bo
 		}
 	}
 	if current.Status.Armed != nil || active {
-		outcome = "Uncertain"
-		current.Status.Phase = "Blocked"
+		outcome = bitcoin.DrainUncertain
+		current.Status.Phase = bitcoin.ExecutionBlocked
 	}
-	current.Status.Drain = &bitcoin.BitcoinDrainStatus{ProcessNonce: w.ProcessNonce, NetworkGeneration: root.Generation, Reason: reason, RequestedAt: started, CompletedAt: metav1.NewTime(w.Now().UTC()), Outcome: outcome}
+	current.Status.Drain = &bitcoin.BitcoinDrainStatus{
+		ProcessNonce:      w.ProcessNonce,
+		NetworkGeneration: root.Generation,
+		Reason:            reason,
+		RequestedAt:       started,
+		CompletedAt:       metav1.NewTime(w.Now().UTC()),
+		Outcome:           outcome,
+	}
 	return true, w.Client.Status().Update(attempt, current)
 }
 
@@ -128,7 +135,11 @@ func CheckDrained(ctx context.Context, reader client.Reader, p *api.StacksNetwor
 			return false, err
 		}
 		control := current.Status.BitcoinControl
-		if current.UID == p.UID && current.Spec.NetworkUID == root.UID && metav1.IsControlledBy(&current, root) && control != nil && control.Terminated && control.ObservedGeneration == current.Generation && control.NetworkGeneration == root.Generation {
+		if current.UID == p.UID && current.Spec.NetworkUID == root.UID && metav1.IsControlledBy(&current, root) &&
+			control != nil &&
+			control.Terminated &&
+			control.ObservedGeneration == current.Generation &&
+			control.NetworkGeneration == root.Generation {
 			return true, nil
 		}
 	}
@@ -153,7 +164,8 @@ func CheckDrained(ctx context.Context, reader client.Reader, p *api.StacksNetwor
 		if !terminalDrainAcknowledged(record, root) {
 			return false, nil
 		}
-		return drain.Outcome == "Uncertain" || drain.Outcome == "Drained" && record.Status.Armed == nil, nil
+		return drain.Outcome == bitcoin.DrainUncertain ||
+			drain.Outcome == bitcoin.DrainDrained && record.Status.Armed == nil, nil
 	}
 	return neverActivated(ctx, reader, p)
 }
@@ -167,7 +179,7 @@ func (w *Worker) acknowledgePause(ctx context.Context, record *bitcoin.BitcoinEx
 	if root.UID != record.Spec.NetworkUID {
 		return false, fmt.Errorf("owning network replaced")
 	}
-	if root.Spec.Operation != "Paused" {
+	if root.Spec.Operation != api.NetworkOperationPaused {
 		return false, nil
 	}
 	w.mu.Lock()
@@ -176,11 +188,26 @@ func (w *Worker) acknowledgePause(ctx context.Context, record *bitcoin.BitcoinEx
 	if active || record.Status.Armed != nil {
 		return true, nil
 	}
-	if ack := record.Status.Control; ack != nil && ack.NetworkGeneration == root.Generation && ack.Operation == "Paused" && ack.ProcessNonce == w.ProcessNonce && !ack.HeartbeatAt.After(w.Now()) && w.Now().Sub(ack.HeartbeatAt.Time) < time.Duration(foundation.ObservationPolicy().HeartbeatIntervalSeconds)*time.Second {
+	if ack := record.Status.Control; ack != nil && ack.NetworkGeneration == root.Generation &&
+		ack.Operation == bitcoin.ControlPaused &&
+		ack.ProcessNonce == w.ProcessNonce &&
+		!ack.HeartbeatAt.After(w.Now()) &&
+		w.Now().
+			Sub(ack.HeartbeatAt.Time) <
+			time.Duration(
+				foundation.ObservationPolicy().HeartbeatIntervalSeconds,
+			)*time.Second {
 		return true, nil
 	}
-	if ack := record.Status.Control; ack == nil || ack.NetworkGeneration != root.Generation || ack.Operation != "Paused" || ack.ProcessNonce != w.ProcessNonce {
-		record.Status.Control = &bitcoin.BitcoinControlAcknowledgement{NetworkGeneration: root.Generation, ProcessNonce: w.ProcessNonce, Operation: "Paused", ObservedAt: metav1.NewTime(w.Now().UTC())}
+	if ack := record.Status.Control; ack == nil || ack.NetworkGeneration != root.Generation ||
+		ack.Operation != bitcoin.ControlPaused ||
+		ack.ProcessNonce != w.ProcessNonce {
+		record.Status.Control = &bitcoin.BitcoinControlAcknowledgement{
+			NetworkGeneration: root.Generation,
+			ProcessNonce:      w.ProcessNonce,
+			Operation:         bitcoin.ControlPaused,
+			ObservedAt:        metav1.NewTime(w.Now().UTC()),
+		}
 	}
 	record.Status.Control.HeartbeatAt = metav1.NewTime(w.Now().UTC())
 	return true, w.Client.Status().Update(ctx, record)
@@ -192,7 +219,13 @@ func neverActivated(ctx context.Context, reader client.Reader, p *api.StacksNetw
 	if control := p.Status.BitcoinControl; control != nil && (control.DeploymentRef != nil || len(control.Pods) > 0) {
 		return false, nil
 	}
-	name := naming.RuntimeName(string(p.Spec.NetworkUID), string(p.UID), "BitcoinNode", p.Spec.ParticipantName, "control")
+	name := naming.RuntimeName(
+		string(p.Spec.NetworkUID),
+		string(p.UID),
+		string(api.ParticipantBitcoinNode),
+		p.Spec.ParticipantName,
+		"control",
+	)
 	deployment := &appsv1.Deployment{}
 	e := reader.Get(ctx, client.ObjectKey{Namespace: p.Namespace, Name: name}, deployment)
 	if apierrors.IsNotFound(e) {
@@ -211,8 +244,8 @@ func terminalDrainAcknowledged(record *bitcoin.BitcoinExecution, root *api.Stack
 		return false
 	}
 	switch d.Reason {
-	case "ParticipantRemoved", "NetworkStopped", "NetworkDeleting", "NetworkFailed":
-		return d.Outcome == "Drained" || d.Outcome == "Uncertain"
+	case api.ReasonParticipantRemoved, api.ReasonNetworkStopped, api.ReasonNetworkDeleting, api.ReasonNetworkFailed:
+		return d.Outcome == bitcoin.DrainDrained || d.Outcome == bitcoin.DrainUncertain
 	}
 	return false
 }

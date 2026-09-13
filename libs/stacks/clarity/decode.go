@@ -15,7 +15,7 @@ func Decode(raw []byte) (Value, error) { return DecodeWithLimits(raw, DefaultLim
 // DecodeWithLimits rejects truncation, trailing bytes and noncanonical tuples.
 func DecodeWithLimits(raw []byte, l Limits) (Value, error) {
 	if l.MaxBytes < 1 || l.MaxDepth < 1 || l.MaxDepth > 256 || len(raw) > l.MaxBytes {
-		return Value{}, errors.New("Clarity resource limit")
+		return Value{}, errors.New("exceeded Clarity resource limit")
 	}
 	d := decoder{raw: raw, limits: l}
 	v, err := d.value(1)
@@ -56,6 +56,7 @@ func (d *decoder) count() (int, error) {
 	if n > uint64(len(d.raw)) {
 		return 0, errors.New("invalid Clarity count")
 	}
+	// #nosec G115 -- count rejects values larger than len(d.raw), which is representable as int.
 	return int(n), nil
 }
 
@@ -78,7 +79,7 @@ func (d *decoder) name() (string, error) {
 // value decodes one nested value within the depth limit.
 func (d *decoder) value(depth int) (Value, error) {
 	if depth > d.limits.MaxDepth {
-		return Value{}, errors.New("Clarity depth limit")
+		return Value{}, errors.New("exceeded Clarity depth limit")
 	}
 	tag, e := d.take(1)
 	if e != nil {

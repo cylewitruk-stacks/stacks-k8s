@@ -29,7 +29,12 @@ func newBranchRPC(base *fakeRPC) *branchRPC {
 	r := &branchRPC{fakeRPC: base, headers: map[string]action.BitcoinChainPoint{}, canonical: map[int64]string{}}
 	previous := ""
 	for height := int64(0); height <= 234; height++ {
-		h := action.BitcoinChainPoint{Hash: fmt.Sprintf("%064x", height+1), Height: height, PreviousBlockHash: previous, Chainwork: fmt.Sprintf("%064x", height+1)}
+		h := action.BitcoinChainPoint{
+			Hash:              fmt.Sprintf("%064x", height+1),
+			Height:            height,
+			PreviousBlockHash: previous,
+			Chainwork:         fmt.Sprintf("%064x", height+1),
+		}
 		r.headers[h.Hash] = h
 		r.canonical[height] = h.Hash
 		r.tip = h
@@ -51,7 +56,12 @@ func (r *branchRPC) Call(ctx context.Context, endpoint, id, method string, args 
 		if !ok {
 			return fmt.Errorf("header missing")
 		}
-		value = map[string]any{"hash": h.Hash, "height": h.Height, "previousblockhash": h.PreviousBlockHash, "chainwork": h.Chainwork}
+		value = map[string]any{
+			"hash":              h.Hash,
+			"height":            h.Height,
+			"previousblockhash": h.PreviousBlockHash,
+			"chainwork":         h.Chainwork,
+		}
 	case "getblockhash":
 		value = r.canonical[args[0].(int64)]
 	case "getchaintips":
@@ -81,7 +91,12 @@ func (r *branchRPC) Call(ctx context.Context, endpoint, id, method string, args 
 func (r *branchRPC) Generate(context.Context, string, string, string) (string, error) {
 	r.sequence = append(r.sequence, "Generate")
 	height := r.tip.Height + 1
-	h := action.BitcoinChainPoint{Hash: fmt.Sprintf("%064x", 10000+height), Height: height, PreviousBlockHash: r.tip.Hash, Chainwork: fmt.Sprintf("%064x", height+1)}
+	h := action.BitcoinChainPoint{
+		Hash:              fmt.Sprintf("%064x", 10000+height),
+		Height:            height,
+		PreviousBlockHash: r.tip.Hash,
+		Chainwork:         fmt.Sprintf("%064x", height+1),
+	}
 	r.headers[h.Hash] = h
 	r.canonical[height] = h.Hash
 	r.tip = h
@@ -98,7 +113,27 @@ func reorganizationFixture(t *testing.T) (*testFixture, *action.BitcoinReorganiz
 	r := newBranchRPC(f.rpc)
 	f.worker.RPC = r
 	f.worker.Input.ReorganizationEnabled = true
-	request := &action.BitcoinReorganization{ObjectMeta: metav1.ObjectMeta{Name: "suffix", Namespace: "test", UID: "suffix-uid", CreationTimestamp: metav1.NewTime(f.now), Finalizers: []string{action.CleanupFinalizer}}, Spec: action.BitcoinReorganizationSpec{NetworkUID: f.root.UID, BitcoinNodeRef: action.LocalReference{Name: "bitcoin"}, Depth: 2, Address: testAddress, Timeout: metav1.Duration{Duration: time.Minute}, BoundaryPolicy: action.ReorganizationBoundaryPolicy{AllowEpochBoundaryCrossing: true, AllowPreparePhaseBoundaryCrossing: true, AllowRewardCycleBoundaryCrossing: true}}}
+	request := &action.BitcoinReorganization{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "suffix",
+			Namespace:         "test",
+			UID:               "suffix-uid",
+			CreationTimestamp: metav1.NewTime(f.now),
+			Finalizers:        []string{action.CleanupFinalizer},
+		},
+		Spec: action.BitcoinReorganizationSpec{
+			NetworkUID:     f.root.UID,
+			BitcoinNodeRef: action.LocalReference{Name: "bitcoin"},
+			Depth:          2,
+			Address:        testAddress,
+			Timeout:        metav1.Duration{Duration: time.Minute},
+			BoundaryPolicy: action.ReorganizationBoundaryPolicy{
+				AllowEpochBoundaryCrossing:        true,
+				AllowPreparePhaseBoundaryCrossing: true,
+				AllowRewardCycleBoundaryCrossing:  true,
+			},
+		},
+	}
 	if err := f.c.Create(ctx, request); err != nil {
 		t.Fatal(err)
 	}
@@ -138,14 +173,18 @@ func TestFiniteReorganizationUsesBoundedReplacementAndCapturedCleanup(t *testing
 		}
 	}
 	state := f.readRecord(t).Status.Action
-	if state.FinalChain == nil || !state.CleanupAcknowledged || !state.InvalidationAcknowledged || len(state.ReplacementBlockHashes) != 3 || rpc.marker != "" || state.FinalChain.Height != 235 {
+	if state.FinalChain == nil || !state.CleanupAcknowledged || !state.InvalidationAcknowledged ||
+		len(state.ReplacementBlockHashes) != 3 ||
+		rpc.marker != "" ||
+		state.FinalChain.Height != 235 {
 		t.Fatalf("suffix incomplete %+v sequence %v", state, rpc.sequence)
 	}
 	expected := []string{"invalidateblock", "Generate", "Generate", "Generate", "reconsiderblock"}
 	if fmt.Sprint(rpc.sequence) != fmt.Sprint(expected) {
 		t.Fatalf("unexpected mechanism %v", rpc.sequence)
 	}
-	if state.FinalChain.Hash == state.OriginalChain.Hash || state.FinalChain.Chainwork <= state.OriginalChain.Chainwork {
+	if state.FinalChain.Hash == state.OriginalChain.Hash ||
+		state.FinalChain.Chainwork <= state.OriginalChain.Chainwork {
 		t.Fatal("old best chain restored")
 	}
 }
@@ -174,7 +213,8 @@ func TestFiniteReorganizationPauseCompensatesWithoutGeneration(t *testing.T) {
 		f.worker.workers.Wait()
 	}
 	state := f.readRecord(t).Status.Action
-	if !state.CleanupAcknowledged || state.BlocksGenerated != 0 || state.StopReason != "NetworkPaused" || fmt.Sprint(rpc.sequence) != "[invalidateblock reconsiderblock]" {
+	if !state.CleanupAcknowledged || state.BlocksGenerated != 0 || state.StopReason != "NetworkPaused" ||
+		fmt.Sprint(rpc.sequence) != "[invalidateblock reconsiderblock]" {
 		t.Fatalf("pause compensation %+v %v", state, rpc.sequence)
 	}
 }
@@ -184,7 +224,13 @@ func TestFiniteReceiptRejectsDifferentReservation(t *testing.T) {
 	record := f.readRecord(t)
 	request := record.Status.Action.Request.DeepCopy()
 	request.UID = "foreign"
-	err := accountActionReceipt(record, &bitcoin.BitcoinRPCReceipt{Request: bitcoin.BitcoinArmedRPC{Action: request, Method: "Generate"}, BlockHash: fmt.Sprintf("%064x", 1)})
+	err := accountActionReceipt(
+		record,
+		&bitcoin.BitcoinRPCReceipt{
+			Request:   bitcoin.BitcoinArmedRPC{Action: request, Method: "Generate"},
+			BlockHash: fmt.Sprintf("%064x", 1),
+		},
+	)
 	if err == nil || record.Status.Action.BlocksGenerated != 0 {
 		t.Fatal("foreign receipt accepted")
 	}
@@ -209,7 +255,9 @@ func TestReorganizationExternalMovementStopsWithoutSend(t *testing.T) {
 			f.worker.workers.Wait()
 			record := f.readRecord(t)
 			state := record.Status.Action
-			if state.StopReason != "ExternalChainMovement" || state.EffectUncertain || record.Status.Armed != nil || record.Status.Reservation == nil || state.BlocksGenerated != 0 {
+			if state.StopReason != "ExternalChainMovement" || state.EffectUncertain || record.Status.Armed != nil ||
+				record.Status.Reservation == nil ||
+				state.BlocksGenerated != 0 {
 				t.Fatalf("incorrect divergence outcome: %+v", record.Status)
 			}
 			if err := f.worker.Step(ctx); err != nil {
@@ -263,7 +311,13 @@ func TestPostArmDivergenceRemainsStopped(t *testing.T) {
 			original := rpc.tip
 			changed := false
 			f.worker.Client = interceptor.NewClient(f.c.(client.WithWatch), interceptor.Funcs{
-				SubResourceUpdate: func(ctx context.Context, c client.Client, sub string, obj client.Object, opts ...client.SubResourceUpdateOption) error {
+				SubResourceUpdate: func(
+					ctx context.Context,
+					c client.Client,
+					sub string,
+					obj client.Object,
+					opts ...client.SubResourceUpdateOption,
+				) error {
 					if err := c.SubResource(sub).Update(ctx, obj, opts...); err != nil {
 						return err
 					}
@@ -280,7 +334,9 @@ func TestPostArmDivergenceRemainsStopped(t *testing.T) {
 			}
 			f.worker.workers.Wait()
 			record := f.readRecord(t)
-			if !changed || record.Status.Armed != nil || record.Status.Action.StopReason != "ExternalChainMovement" || record.Status.Reservation == nil || record.Status.Action.EffectUncertain {
+			if !changed || record.Status.Armed != nil || record.Status.Action.StopReason != "ExternalChainMovement" ||
+				record.Status.Reservation == nil ||
+				record.Status.Action.EffectUncertain {
 				t.Fatalf("post-CAS movement lost: %+v", record.Status)
 			}
 			rpc.tip = original
@@ -295,7 +351,9 @@ func TestPostArmDivergenceRemainsStopped(t *testing.T) {
 				want = "[invalidateblock reconsiderblock]"
 			}
 			record = f.readRecord(t)
-			if fmt.Sprint(rpc.sequence) != want || record.Status.Reservation == nil || record.Status.Action.BlocksGenerated != 0 || record.Status.Action.StopReason != "ExternalChainMovement" {
+			if fmt.Sprint(rpc.sequence) != want || record.Status.Reservation == nil ||
+				record.Status.Action.BlocksGenerated != 0 ||
+				record.Status.Action.StopReason != "ExternalChainMovement" {
 				t.Fatalf("returned tip resumed stopped action: %+v, calls %v", record.Status, rpc.sequence)
 			}
 		})

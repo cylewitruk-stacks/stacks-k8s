@@ -16,16 +16,24 @@ func TestFiniteLifecycleKeepsUnknownAndWaitsForWithdrawal(t *testing.T) {
 		armed  bool
 		reason string
 		want   string
-	}{{"pending withdrawal", false, "", "Admitted"}, {"unknown after deadline", true, "", "Inconclusive"}, {"known withdrawal", false, "DeadlineExceeded", "Failed"}} {
+	}{
+		{"pending withdrawal", false, "", "Admitted"},
+		{"unknown after deadline", true, "", "Inconclusive"},
+		{"known withdrawal", false, "DeadlineExceeded", "Failed"},
+	} {
 		t.Run(tc.name, func(t *testing.T) {
-			state := &bitcoin.BitcoinActionReservation{Generation: &action.BitcoinBlockGenerationSpec{Count: 1}, ExpiresAt: metav1.NewTime(now.Add(-time.Second)), StopReason: tc.reason}
+			state := &bitcoin.BitcoinActionReservation{
+				Generation: &action.BitcoinBlockGenerationSpec{Count: 1},
+				ExpiresAt:  metav1.NewTime(now.Add(-time.Second)),
+				StopReason: tc.reason,
+			}
 			record := &bitcoin.BitcoinExecution{}
 			if tc.armed {
 				record.Status.Armed = &bitcoin.BitcoinArmedRPC{Method: "Generate"}
 			}
 			status := &action.BitcoinBlockGenerationStatus{}
 			project(status, state, record, now, nil)
-			if status.Phase != tc.want {
+			if string(status.Phase) != tc.want {
 				t.Fatalf("phase %s want%s", status.Phase, tc.want)
 			}
 			if tc.armed {
@@ -43,7 +51,11 @@ func TestFiniteLifecycleKeepsUnknownAndWaitsForWithdrawal(t *testing.T) {
 
 func TestReorganizationLifecycleBoundsCompensationCollection(t *testing.T) {
 	now := time.Date(2026, 9, 11, 12, 0, 0, 0, time.UTC)
-	state := &bitcoin.BitcoinActionReservation{Reorganization: &action.BitcoinReorganizationSpec{Depth: 1}, ExpiresAt: metav1.NewTime(now.Add(-time.Second)), InvalidationAcknowledged: true}
+	state := &bitcoin.BitcoinActionReservation{
+		Reorganization:           &action.BitcoinReorganizationSpec{Depth: 1},
+		ExpiresAt:                metav1.NewTime(now.Add(-time.Second)),
+		InvalidationAcknowledged: true,
+	}
 	record := &bitcoin.BitcoinExecution{}
 	record.Status.Armed = &bitcoin.BitcoinArmedRPC{Method: "ReconsiderBlock"}
 	status := &action.BitcoinBlockGenerationStatus{}

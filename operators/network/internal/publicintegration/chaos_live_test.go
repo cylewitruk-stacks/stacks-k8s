@@ -52,7 +52,16 @@ type chaosProbe struct {
 
 // chaosSelectors scopes both native selectors to one immutable participant identity.
 func chaosSelectors(namespace string, rootUID types.UID, actor chaosActor) map[string]any {
-	return map[string]any{"namespaces": []any{namespace}, "labelSelectors": map[string]any{"network.stacks.org/network": "network", "network.stacks.org/actor": actor.LogicalName, "network.stacks.org/network-uid": string(rootUID), "network.stacks.org/participant-uid": string(actor.Participant.UID), "network.stacks.org/role": "actor"}}
+	return map[string]any{
+		"namespaces": []any{namespace},
+		"labelSelectors": map[string]any{
+			"network.stacks.org/network":         "network",
+			"network.stacks.org/actor":           actor.LogicalName,
+			"network.stacks.org/network-uid":     string(rootUID),
+			"network.stacks.org/participant-uid": string(actor.Participant.UID),
+			"network.stacks.org/role":            "actor",
+		},
+	}
 }
 
 // chaosRequest creates one bounded native fault without supplying controller lifecycle fields.
@@ -61,12 +70,36 @@ func chaosRequest(namespace string, rootUID types.UID, pair [2]chaosActor, actio
 	if action == "partition" {
 		direction = "both"
 	}
-	object := &unstructured.Unstructured{Object: map[string]any{"apiVersion": chaosGVK.GroupVersion().String(), "kind": chaosGVK.Kind, "spec": map[string]any{"action": action, "mode": "one", "direction": direction, "duration": "90s", "selector": chaosSelectors(namespace, rootUID, pair[0]), "target": map[string]any{"mode": "one", "selector": chaosSelectors(namespace, rootUID, pair[1])}}}}
+	object := &unstructured.Unstructured{
+		Object: map[string]any{
+			"apiVersion": chaosGVK.GroupVersion().String(),
+			"kind":       chaosGVK.Kind,
+			"spec": map[string]any{
+				"action":    action,
+				"mode":      "one",
+				"direction": direction,
+				"duration":  "90s",
+				"selector":  chaosSelectors(namespace, rootUID, pair[0]),
+				"target":    map[string]any{"mode": "one", "selector": chaosSelectors(namespace, rootUID, pair[1])},
+			},
+		},
+	}
 	object.SetNamespace(namespace)
 	object.SetName("qualify-" + action)
-	object.SetLabels(map[string]string{"network.stacks.org/network": "network", "network.stacks.org/network-uid": string(rootUID), "actions.stacks.org/correlation-id": object.GetName()})
+	object.SetLabels(
+		map[string]string{
+			"network.stacks.org/network":        "network",
+			"network.stacks.org/network-uid":    string(rootUID),
+			"actions.stacks.org/correlation-id": object.GetName(),
+		},
+	)
 	if action == "delay" {
-		_ = unstructured.SetNestedMap(object.Object, map[string]any{"latency": "500ms", "jitter": "0ms", "correlation": "0"}, "spec", "delay")
+		_ = unstructured.SetNestedMap(
+			object.Object,
+			map[string]any{"latency": "500ms", "jitter": "0ms", "correlation": "0"},
+			"spec",
+			"delay",
+		)
 	}
 	return object
 }
@@ -92,14 +125,23 @@ func (h *harness) selectChaosActors(ctx context.Context, s snapshot) ([2]chaosAc
 	n := 0
 	for _, p := range s.Participants {
 		r := p.Status.Runtime
-		if p.Kind != "StacksNode" || p.Status.Admission == nil || p.Status.Admission.Configuration.StacksNode == nil || r == nil || r.PodRef == nil {
+		if p.Kind != "StacksNode" || p.Status.Admission == nil || p.Status.Admission.Configuration.StacksNode == nil ||
+			r == nil ||
+			r.PodRef == nil {
 			continue
 		}
 		mining := p.Status.Admission.Configuration.StacksNode.Mining
 		if mining != nil && ptr.Deref(mining.Enabled, false) {
 			continue
 		}
-		actor := chaosActor{Participant: p.Identity, LogicalName: p.Name, Pod: identity{Name: r.PodRef.Name, UID: r.PodRef.UID}, IP: r.PodIP, Container: "stacks-node", ContainerID: r.ContainerID}
+		actor := chaosActor{
+			Participant: p.Identity,
+			LogicalName: p.Name,
+			Pod:         identity{Name: r.PodRef.Name, UID: r.PodRef.UID},
+			IP:          r.PodIP,
+			Container:   "stacks-node",
+			ContainerID: r.ContainerID,
+		}
 		for _, endpoint := range r.Endpoints {
 			if endpoint.Name == "rpc" {
 				actor.Port = endpoint.Port
@@ -123,18 +165,30 @@ func (h *harness) selectChaosActors(ctx context.Context, s snapshot) ([2]chaosAc
 // validateChaosActor verifies immutable leaf/Pod/process identities before and after each remote read.
 func (h *harness) validateChaosActor(ctx context.Context, a chaosActor) error {
 	var p api.StacksNetworkParticipant
-	if err := h.c.Get(ctx, client.ObjectKey{Namespace: h.config.namespace, Name: a.Participant.Name}, &p); err != nil {
+	if err := h.c.Get(ctx, client.ObjectKey{
+		Namespace: h.config.namespace,
+		Name:      a.Participant.Name,
+	}, &p); err != nil {
 		return err
 	}
 	r := p.Status.Runtime
-	if p.UID != a.Participant.UID || p.Spec.NetworkUID != h.rootUID || p.Spec.ParticipantName != a.LogicalName || p.DeletionTimestamp != nil || p.Status.Admission == nil || r == nil || r.PodRef == nil || r.PodRef.UID != a.Pod.UID || r.PodRef.Name != a.Pod.Name || r.ContainerID != a.ContainerID || r.PolicyDigest != p.Status.Admission.PolicyDigest {
+	if p.UID != a.Participant.UID || p.Spec.NetworkUID != h.rootUID || p.Spec.ParticipantName != a.LogicalName ||
+		p.DeletionTimestamp != nil ||
+		p.Status.Admission == nil ||
+		r == nil ||
+		r.PodRef == nil ||
+		r.PodRef.UID != a.Pod.UID ||
+		r.PodRef.Name != a.Pod.Name ||
+		r.ContainerID != a.ContainerID ||
+		r.PolicyDigest != p.Status.Admission.PolicyDigest {
 		return fmt.Errorf("selected Chaos participant identity changed")
 	}
 	var pod corev1.Pod
 	if err := h.c.Get(ctx, client.ObjectKey{Namespace: h.config.namespace, Name: a.Pod.Name}, &pod); err != nil {
 		return err
 	}
-	if pod.UID != a.Pod.UID || pod.Status.PodIP != a.IP || pod.DeletionTimestamp != nil || pod.Status.Phase != corev1.PodRunning {
+	if pod.UID != a.Pod.UID || pod.Status.PodIP != a.IP || pod.DeletionTimestamp != nil ||
+		pod.Status.Phase != corev1.PodRunning {
 		return fmt.Errorf("selected Chaos actor Pod changed")
 	}
 	expected := chaosSelectors(h.config.namespace, h.rootUID, a)["labelSelectors"].(map[string]any)
@@ -159,7 +213,10 @@ func parseChaosProbe(stdout, stderr []byte, err error) (chaosProbe, error) {
 				return chaosProbe{Failure: code}, nil
 			}
 		}
-		return chaosProbe{}, fmt.Errorf("actor curl probe could not execute: %w; selected diagnostic actor image must provide curl", err)
+		return chaosProbe{}, fmt.Errorf(
+			"actor curl probe could not execute: %w; selected diagnostic actor image must provide curl",
+			err,
+		)
 	}
 	parts := bytes.Split(bytes.TrimSpace(stdout), []byte("\n"))
 	if len(parts) < 2 {
@@ -190,7 +247,33 @@ func (h *harness) probeChaosPeer(ctx context.Context, source, target chaosActor)
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	address := "http://" + net.JoinHostPort(target.IP, strconv.Itoa(int(target.Port))) + "/v2/info"
-	args := []string{"--kubeconfig", h.config.kubeconfig, "--context", h.config.kubecontext, "-n", h.config.namespace, "exec", source.Pod.Name, "-c", source.Container, "--", "curl", "--silent", "--show-error", "--fail", "--noproxy", "*", "--connect-timeout", "2", "--max-time", "4", "--write-out", "\n%{time_total}", address}
+	args := []string{
+		"--kubeconfig",
+		h.config.kubeconfig,
+		"--context",
+		h.config.kubecontext,
+		"-n",
+		h.config.namespace,
+		"exec",
+		source.Pod.Name,
+		"-c",
+		source.Container,
+		"--",
+		"curl",
+		"--silent",
+		"--show-error",
+		"--fail",
+		"--noproxy",
+		"*",
+		"--connect-timeout",
+		"2",
+		"--max-time",
+		"4",
+		"--write-out",
+		"\n%{time_total}",
+		address,
+	}
+	// #nosec G204 -- Fixed executable and separate arguments from the test harness; no shell evaluation.
 	command := exec.CommandContext(ctx, "kubectl", args...)
 	var stdout, stderr bytes.Buffer
 	command.Stdout = &stdout
@@ -231,14 +314,19 @@ func (h *harness) requireChaosProfile(ctx context.Context, pair [2]chaosActor) e
 	if err := h.c.Get(ctx, client.ObjectKey{Name: h.config.namespace}, &ns); err != nil {
 		return err
 	}
-	if ns.UID != h.namespaceUID || ns.Labels["network.stacks.org/chaos-profile"] != "network-faults-v1" || ns.Annotations["chaos-mesh.org/inject"] != "enabled" {
-		return fmt.Errorf("install compatible Chaos Mesh 2.8.4 and the delay+partition profile, then enroll the exact fixture namespace externally")
+	if ns.UID != h.namespaceUID || ns.Labels["network.stacks.org/chaos-profile"] != "network-faults-v1" ||
+		ns.Annotations["chaos-mesh.org/inject"] != "enabled" {
+		return fmt.Errorf(
+			"install compatible Chaos Mesh 2.8.4 and the delay+partition profile, then " +
+				"enroll the exact fixture namespace externally",
+		)
 	}
 	var policy admissionv1.ValidatingAdmissionPolicy
 	if err := h.c.Get(ctx, client.ObjectKey{Name: "stacks-network-faults-" + h.config.namespace}, &policy); err != nil {
 		return err
 	}
-	if policy.Status.ObservedGeneration != policy.Generation || policy.Status.TypeChecking == nil || len(policy.Status.TypeChecking.ExpressionWarnings) != 0 {
+	if policy.Status.ObservedGeneration != policy.Generation || policy.Status.TypeChecking == nil ||
+		len(policy.Status.TypeChecking.ExpressionWarnings) != 0 {
 		return fmt.Errorf("native Chaos admission policy is not currently compiled")
 	}
 	faults := &unstructured.UnstructuredList{}
@@ -255,7 +343,14 @@ func (h *harness) requireChaosProfile(ctx context.Context, pair [2]chaosActor) e
 			return fmt.Errorf("native %s profile unavailable: %w", kind, err)
 		}
 		invalid := chaosRequest(h.config.namespace, h.rootUID, pair, kind)
-		unstructured.RemoveNestedField(invalid.Object, "spec", "target", "selector", "labelSelectors", "network.stacks.org/participant-uid")
+		unstructured.RemoveNestedField(
+			invalid.Object,
+			"spec",
+			"target",
+			"selector",
+			"labelSelectors",
+			"network.stacks.org/participant-uid",
+		)
 		err := h.c.Create(ctx, invalid, client.DryRunAll)
 		if err == nil {
 			return fmt.Errorf("native Chaos admission did not reject a missing target participant UID")
@@ -272,11 +367,17 @@ var errChaosObservationPending = errors.New("canonical control observation pendi
 
 // chaosControl checks successful reads on the worker-to-API/RPC paths independently of global Operational.
 func chaosControl(s snapshot, before snapshot) (int64, error) {
-	if s.Status.ObservationPolicy == nil || s.Status.GenesisRef == nil || !reflect.DeepEqual(workerIdentities(s), workerIdentities(before)) {
+	if s.Status.ObservationPolicy == nil || s.Status.GenesisRef == nil ||
+		!reflect.DeepEqual(workerIdentities(s), workerIdentities(before)) {
 		return 0, fmt.Errorf("worker identities or observation policy unavailable during fault")
 	}
 	fresh := func(at metav1.Time) bool {
-		return !at.IsZero() && !at.After(s.At) && s.At.Sub(at.Time) <= time.Duration(3*s.Status.ObservationPolicy.PollIntervalSeconds+s.Status.ObservationPolicy.RPCAllowanceSeconds)*time.Second
+		return !at.IsZero() && !at.After(s.At) &&
+			s.At.Sub(
+				at.Time,
+			) <= time.Duration(
+				3*s.Status.ObservationPolicy.PollIntervalSeconds+s.Status.ObservationPolicy.RPCAllowanceSeconds,
+			)*time.Second
 	}
 	receipts := int64(0)
 	var pending error
@@ -300,23 +401,38 @@ func chaosControl(s snapshot, before snapshot) (int64, error) {
 			}
 		}
 		if p.Kind == "StacksNode" {
-			if r == nil || r.PodRef == nil || r.Protocol == nil || r.Protocol.PodUID != r.PodRef.UID || r.Protocol.ContainerID != r.ContainerID || r.Protocol.ConfigurationDigest != r.ConfigurationDigest || r.Protocol.GenesisUID != s.Status.GenesisRef.UID {
-				return 0, fmt.Errorf("Stacks actor observation identity unavailable during protocol-pair fault: %s", p.Name)
+			if r == nil || r.PodRef == nil || r.Protocol == nil || r.Protocol.PodUID != r.PodRef.UID ||
+				r.Protocol.ContainerID != r.ContainerID ||
+				r.Protocol.ConfigurationDigest != r.ConfigurationDigest ||
+				r.Protocol.GenesisUID != s.Status.GenesisRef.UID {
+				return 0, fmt.Errorf(
+					"Stacks actor observation identity unavailable during protocol-pair fault: %s",
+					p.Name,
+				)
 			}
 			if !r.Protocol.Available || !fresh(r.Protocol.ObservedAt) {
-				pending = fmt.Errorf("%w: Stacks actor %s reason=%s observedAt=%s", errChaosObservationPending, p.Name, r.Protocol.Reason, r.Protocol.ObservedAt.UTC().Format(time.RFC3339))
+				pending = fmt.Errorf(
+					"%w: Stacks actor %s reason=%s observedAt=%s",
+					errChaosObservationPending,
+					p.Name,
+					r.Protocol.Reason,
+					r.Protocol.ObservedAt.UTC().Format(time.RFC3339),
+				)
 			}
 			nodes++
 		}
 		if e := p.Status.Execution; e != nil {
 			bound := false
 			for _, id := range s.Status.Identities {
-				bound = bound || id.UID == p.Identity.UID && id.Worker != nil && id.Worker.Pod.UID == e.PodUID && id.Worker.ProfileDigest == e.ProfileDigest
+				bound = bound ||
+					id.UID == p.Identity.UID && id.Worker != nil && id.Worker.Pod.UID == e.PodUID &&
+						id.Worker.ProfileDigest == e.ProfileDigest
 			}
 			if !bound || e.ProcessNonce == "" || !fresh(e.ObservedAt) {
 				return 0, fmt.Errorf("management worker API heartbeat stale during protocol-pair fault")
 			}
-			if p.Kind == "StacksTransactionProduction" && (e.Traffic == nil || !e.Traffic.Available || !fresh(e.Traffic.ObservedAt)) {
+			if p.Kind == "StacksTransactionProduction" &&
+				(e.Traffic == nil || !e.Traffic.Available || !fresh(e.Traffic.ObservedAt)) {
 				pending = fmt.Errorf("%w: transaction worker %s", errChaosObservationPending, p.Name)
 			}
 			workers++
@@ -373,7 +489,10 @@ func (h *harness) qualifyChaos(ctx context.Context, before snapshot) (snapshot, 
 }
 
 // readChaosFault refuses replacement and writes a bounded latest native mechanism snapshot.
-func (h *harness) readChaosFault(ctx context.Context, expected *unstructured.Unstructured) (*unstructured.Unstructured, error) {
+func (h *harness) readChaosFault(
+	ctx context.Context,
+	expected *unstructured.Unstructured,
+) (*unstructured.Unstructured, error) {
 	current := &unstructured.Unstructured{}
 	current.SetGroupVersionKind(chaosGVK)
 	if err := h.c.Get(ctx, client.ObjectKeyFromObject(expected), current); err != nil {
@@ -386,7 +505,7 @@ func (h *harness) readChaosFault(ctx context.Context, expected *unstructured.Uns
 	if err != nil {
 		return nil, err
 	}
-	if err := os.WriteFile(filepath.Join(h.evidence, expected.GetName()+"-latest.json"), data, 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(h.evidence, expected.GetName()+"-latest.json"), data, 0o600); err != nil {
 		return nil, err
 	}
 	return current, nil
@@ -417,14 +536,20 @@ func (h *harness) deleteChaosFault(ctx context.Context, fault *unstructured.Unst
 }
 
 // qualifyChaosFault separates native injection/finalization from packet observations and protocol recovery.
-func (h *harness) qualifyChaosFault(ctx context.Context, pair [2]chaosActor, kind string, baseline float64, before snapshot) (result snapshot, resultErr error) {
+func (h *harness) qualifyChaosFault(
+	ctx context.Context,
+	pair [2]chaosActor,
+	kind string,
+	baseline float64,
+	before snapshot,
+) (result snapshot, resultErr error) {
 	result = before
 	fault := chaosRequest(h.config.namespace, h.rootUID, pair, kind)
 	if err := h.c.Create(ctx, fault); err != nil {
 		return result, err
 	}
 	defer func() {
-		cleanup, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 45*time.Second)
 		defer cancel()
 		if err := h.deleteChaosFault(cleanup, fault); err != nil {
 			resultErr = errors.Join(resultErr, err)
@@ -453,7 +578,11 @@ func (h *harness) qualifyChaosFault(ctx context.Context, pair [2]chaosActor, kin
 			return injected, err
 		}
 		if delayed < baseline+0.35 {
-			return injected, fmt.Errorf("native delay did not increase median HTTP round-trip by at least350ms: before=%fs after=%fs", baseline, delayed)
+			return injected, fmt.Errorf(
+				"native delay did not increase median HTTP round-trip by at least350ms: before=%fs after=%fs",
+				baseline,
+				delayed,
+			)
 		}
 	} else {
 		for _, direction := range [][2]chaosActor{{pair[0], pair[1]}, {pair[1], pair[0]}} {
@@ -502,7 +631,10 @@ func (h *harness) qualifyChaosFault(ctx context.Context, pair [2]chaosActor, kin
 	if err != nil {
 		return held, err
 	}
-	if err := h.event(fault.GetName()+"-native-cleaned", map[string]any{"uid": fault.GetUID(), "expiry": kind == "delay"}); err != nil {
+	if err := h.event(
+		fault.GetName()+"-native-cleaned",
+		map[string]any{"uid": fault.GetUID(), "expiry": kind == "delay"},
+	); err != nil {
 		return held, err
 	}
 	recovered, err := h.chaosMedian(ctx, pair[0], pair[1])
@@ -516,7 +648,13 @@ func (h *harness) qualifyChaosFault(ctx context.Context, pair [2]chaosActor, kin
 		return held, err
 	}
 	// Capture the recovery baseline only after native cleanup; later progress must be newly observed.
-	ready, err := h.wait(ctx, fault.GetName()+"-recovery-baseline", h.config.progressTimeout, true, func(s snapshot) (bool, error) { _, ready := progress(s); return ready, nil })
+	ready, err := h.wait(
+		ctx,
+		fault.GetName()+"-recovery-baseline",
+		h.config.progressTimeout,
+		true,
+		func(s snapshot) (bool, error) { _, ready := progress(s); return ready, nil },
+	)
 	if err != nil {
 		return ready, err
 	}

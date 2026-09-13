@@ -17,8 +17,41 @@ import (
 
 // unrecordedWorker supplies the exact observable gap after CREATE and before UID publication.
 func unrecordedWorker() (*api.StacksNetwork, *api.StacksNetworkParticipant) {
-	root := &api.StacksNetwork{ObjectMeta: metav1.ObjectMeta{Name: "network", Namespace: "test", UID: "root", Generation: 1, Finalizers: []string{foundationFinalizer}}, Spec: api.StacksNetworkSpec{Operation: "Running", Participants: []api.Participant{{Name: "worker", Kind: "StacksFaucet"}}}}
-	p := &api.StacksNetworkParticipant{ObjectMeta: metav1.ObjectMeta{Name: ParticipantName(string(root.UID), "worker"), Namespace: root.Namespace, UID: "participant", Generation: 1, OwnerReferences: []metav1.OwnerReference{{APIVersion: api.GroupVersion.String(), Kind: "StacksNetwork", Name: root.Name, UID: root.UID, Controller: ptr.To(true)}}}, Spec: api.StacksNetworkParticipantSpec{NetworkUID: root.UID, ParticipantName: "worker", Kind: "StacksFaucet"}}
+	root := &api.StacksNetwork{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "network",
+			Namespace:  "test",
+			UID:        "root",
+			Generation: 1,
+			Finalizers: []string{foundationFinalizer},
+		},
+		Spec: api.StacksNetworkSpec{
+			Operation:    "Running",
+			Participants: []api.Participant{{Name: "worker", Kind: "StacksFaucet"}},
+		},
+	}
+	p := &api.StacksNetworkParticipant{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       ParticipantName(string(root.UID), "worker"),
+			Namespace:  root.Namespace,
+			UID:        "participant",
+			Generation: 1,
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion: api.GroupVersion.String(),
+					Kind:       "StacksNetwork",
+					Name:       root.Name,
+					UID:        root.UID,
+					Controller: ptr.To(true),
+				},
+			},
+		},
+		Spec: api.StacksNetworkParticipantSpec{
+			NetworkUID:      root.UID,
+			ParticipantName: "worker",
+			Kind:            "StacksFaucet",
+		},
+	}
 	return root, p
 }
 
@@ -32,7 +65,11 @@ func TestPendingWorkerAllocationExcludesHistoryAndForeignIdentity(t *testing.T) 
 		{"allocation observation", func(_ *api.StacksNetwork, p *api.StacksNetworkParticipant) {
 			p.Status.Runtime = &api.ParticipantRuntimeStatus{ObservedGeneration: 1}
 		}, true},
-		{"stopped", func(root *api.StacksNetwork, _ *api.StacksNetworkParticipant) { root.Spec.Operation = "Stopped" }, true},
+		{
+			"stopped",
+			func(root *api.StacksNetwork, _ *api.StacksNetworkParticipant) { root.Spec.Operation = "Stopped" },
+			true,
+		},
 		{"deleting", func(root *api.StacksNetwork, p *api.StacksNetworkParticipant) {
 			now := metav1.Now()
 			root.DeletionTimestamp = &now
@@ -41,7 +78,11 @@ func TestPendingWorkerAllocationExcludesHistoryAndForeignIdentity(t *testing.T) 
 		{"finalizer", func(_ *api.StacksNetwork, p *api.StacksNetworkParticipant) {
 			p.Finalizers = []string{"network.stacks.org/stacks-worker"}
 		}, false},
-		{"admission", func(_ *api.StacksNetwork, p *api.StacksNetworkParticipant) { p.Status.Admission = &api.Admission{} }, false},
+		{
+			"admission",
+			func(_ *api.StacksNetwork, p *api.StacksNetworkParticipant) { p.Status.Admission = &api.Admission{} },
+			false,
+		},
 		{"execution", func(_ *api.StacksNetwork, p *api.StacksNetworkParticipant) {
 			p.Status.Execution = &api.WorkerExecutionStatus{Phase: "Inactive"}
 		}, false},
@@ -49,13 +90,19 @@ func TestPendingWorkerAllocationExcludesHistoryAndForeignIdentity(t *testing.T) 
 			p.Status.Runtime = &api.ParticipantRuntimeStatus{WorkerCandidate: &api.WorkerCandidate{}}
 		}, false},
 		{"pod", func(_ *api.StacksNetwork, p *api.StacksNetworkParticipant) {
-			p.Status.Runtime = &api.ParticipantRuntimeStatus{PodRef: &common.Binding{Kind: "Pod", Name: "worker", UID: "pod"}}
+			p.Status.Runtime = &api.ParticipantRuntimeStatus{
+				PodRef: &common.Binding{Kind: "Pod", Name: "worker", UID: "pod"},
+			}
 		}, false},
 		{"workload", func(_ *api.StacksNetwork, p *api.StacksNetworkParticipant) {
-			p.Status.Runtime = &api.ParticipantRuntimeStatus{WorkloadRefs: []common.Binding{{Kind: "Pod", Name: "worker", UID: "pod"}}}
+			p.Status.Runtime = &api.ParticipantRuntimeStatus{
+				WorkloadRefs: []common.Binding{{Kind: "Pod", Name: "worker", UID: "pod"}},
+			}
 		}, false},
 		{"config", func(_ *api.StacksNetwork, p *api.StacksNetworkParticipant) {
-			p.Status.Runtime = &api.ParticipantRuntimeStatus{ConfigRef: &common.Binding{Kind: "ConfigMap", Name: "profile", UID: "config"}}
+			p.Status.Runtime = &api.ParticipantRuntimeStatus{
+				ConfigRef: &common.Binding{Kind: "ConfigMap", Name: "profile", UID: "config"},
+			}
 		}, false},
 		{"process", func(_ *api.StacksNetwork, p *api.StacksNetworkParticipant) {
 			p.Status.Runtime = &api.ParticipantRuntimeStatus{ContainerID: "process"}
@@ -72,10 +119,26 @@ func TestPendingWorkerAllocationExcludesHistoryAndForeignIdentity(t *testing.T) 
 		{"foreign owner version", func(_ *api.StacksNetwork, p *api.StacksNetworkParticipant) {
 			p.OwnerReferences[0].APIVersion = "network.stacks.org/v1alpha1"
 		}, false},
-		{"foreign owner kind", func(_ *api.StacksNetwork, p *api.StacksNetworkParticipant) { p.OwnerReferences[0].Kind = "Other" }, false},
-		{"foreign owner name", func(_ *api.StacksNetwork, p *api.StacksNetworkParticipant) { p.OwnerReferences[0].Name = "other" }, false},
-		{"foreign owner UID", func(_ *api.StacksNetwork, p *api.StacksNetworkParticipant) { p.OwnerReferences[0].UID = "other" }, false},
-		{"not selected", func(root *api.StacksNetwork, _ *api.StacksNetworkParticipant) { root.Spec.Participants = nil }, false},
+		{
+			"foreign owner kind",
+			func(_ *api.StacksNetwork, p *api.StacksNetworkParticipant) { p.OwnerReferences[0].Kind = "Other" },
+			false,
+		},
+		{
+			"foreign owner name",
+			func(_ *api.StacksNetwork, p *api.StacksNetworkParticipant) { p.OwnerReferences[0].Name = "other" },
+			false,
+		},
+		{
+			"foreign owner UID",
+			func(_ *api.StacksNetwork, p *api.StacksNetworkParticipant) { p.OwnerReferences[0].UID = "other" },
+			false,
+		},
+		{
+			"not selected",
+			func(root *api.StacksNetwork, _ *api.StacksNetworkParticipant) { root.Spec.Participants = nil },
+			false,
+		},
 		{"nonworker", func(root *api.StacksNetwork, p *api.StacksNetworkParticipant) {
 			p.Spec.Kind = "BitcoinNode"
 			root.Spec.Participants[0].Kind = p.Spec.Kind
@@ -93,7 +156,17 @@ func TestPendingWorkerAllocationExcludesHistoryAndForeignIdentity(t *testing.T) 
 }
 
 func TestFirstWorkerLedgerPublicationCannotReconstructHistory(t *testing.T) {
-	for _, mode := range []string{"new", "observed", "admitted", "candidate", "execution", "pod", "workload", "finalizer", "actor-finalizer"} {
+	for _, mode := range []string{
+		"new",
+		"observed",
+		"admitted",
+		"candidate",
+		"execution",
+		"pod",
+		"workload",
+		"finalizer",
+		"actor-finalizer",
+	} {
 		t.Run(mode, func(t *testing.T) {
 			root, p := unrecordedWorker()
 			switch mode {
@@ -106,9 +179,13 @@ func TestFirstWorkerLedgerPublicationCannotReconstructHistory(t *testing.T) {
 			case "execution":
 				p.Status.Execution = &api.WorkerExecutionStatus{}
 			case "pod":
-				p.Status.Runtime = &api.ParticipantRuntimeStatus{PodRef: &common.Binding{Kind: "Pod", Name: "worker", UID: "old"}}
+				p.Status.Runtime = &api.ParticipantRuntimeStatus{
+					PodRef: &common.Binding{Kind: "Pod", Name: "worker", UID: "old"},
+				}
 			case "workload":
-				p.Status.Runtime = &api.ParticipantRuntimeStatus{WorkloadRefs: []common.Binding{{Kind: "Pod", Name: "worker", UID: "old"}}}
+				p.Status.Runtime = &api.ParticipantRuntimeStatus{
+					WorkloadRefs: []common.Binding{{Kind: "Pod", Name: "worker", UID: "old"}},
+				}
 			case "finalizer":
 				p.Finalizers = []string{"network.stacks.org/stacks-worker"}
 			case "actor-finalizer":
@@ -118,9 +195,16 @@ func TestFirstWorkerLedgerPublicationCannotReconstructHistory(t *testing.T) {
 			}
 			scheme := runtime.NewScheme()
 			_ = api.AddToScheme(scheme)
-			c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(&api.StacksNetwork{}, &api.StacksNetworkParticipant{}).WithObjects(root, p).Build()
+			c := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithStatusSubresource(&api.StacksNetwork{}, &api.StacksNetworkParticipant{}).
+				WithObjects(root, p).
+				Build()
 			r := Reconciler{Client: c, Reader: c, Scheme: scheme}
-			if _, err := r.reconcileTopology(t.Context(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(root)}); err != nil {
+			if _, err := r.reconcileTopology(
+				t.Context(),
+				ctrl.Request{NamespacedName: client.ObjectKeyFromObject(root)},
+			); err != nil {
 				t.Fatal(err)
 			}
 			actual := &api.StacksNetwork{}
@@ -129,10 +213,16 @@ func TestFirstWorkerLedgerPublicationCannotReconstructHistory(t *testing.T) {
 			}
 			admitted := mode == "new" || mode == "observed" || mode == "actor-finalizer"
 			if admitted {
-				if len(actual.Status.Identities) != 1 || actual.Status.Identities[0].UID != p.UID || actual.Status.Identities[0].Worker != nil || meta.IsStatusConditionTrue(actual.Status.Conditions, "Failed") {
+				if len(actual.Status.Identities) != 1 || actual.Status.Identities[0].UID != p.UID ||
+					actual.Status.Identities[0].Worker != nil ||
+					meta.IsStatusConditionTrue(actual.Status.Conditions, "Failed") {
 					t.Fatalf("first publication: %+v", actual.Status)
 				}
-			} else if len(actual.Status.Identities) != 0 || !meta.IsStatusConditionTrue(actual.Status.Conditions, "Failed") {
+			} else if len(actual.Status.Identities) != 0 ||
+				!meta.IsStatusConditionTrue(
+					actual.Status.Conditions,
+					"Failed",
+				) {
 				t.Fatalf("lost history reconstructed: %+v", actual.Status)
 			}
 			current := &api.StacksNetworkParticipant{}

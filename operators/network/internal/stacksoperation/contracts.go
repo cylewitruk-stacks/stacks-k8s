@@ -17,8 +17,9 @@ import (
 
 // contractGoal retains one exact public postcondition and original ingress until settlement.
 type contractGoal struct {
-	input      ContractInputs
-	kind, name string
+	input ContractInputs
+	kind  api.PostconditionKind
+	name  string
 }
 
 // ContractRole deploys pinned real sBTC and converges the explicit registry with one nonce stream.
@@ -65,7 +66,9 @@ func (r *ContractRole) now() time.Time {
 
 // validInputs requires the complete release bundle, captured public keys and frozen activation.
 func (r *ContractRole) validInputs(in ContractInputs) bool {
-	if in.Node == nil || in.Deployer != r.stream.Address || in.Bundle != "sbtc-regtest-v1" || in.Epoch3Height == 0 || len(in.SourceHashes) != len(r.sources) || len(r.sources) != 5 {
+	if in.Node == nil || in.Deployer != r.stream.Address || in.Bundle != "sbtc-regtest-v1" || in.Epoch3Height == 0 ||
+		len(in.SourceHashes) != len(r.sources) ||
+		len(r.sources) != 5 {
 		return false
 	}
 	for _, source := range r.sources {
@@ -81,70 +84,94 @@ func (r *ContractRole) validInputs(in ContractInputs) bool {
 func (r *ContractRole) Step(ctx context.Context, snapshot stacksworker.Snapshot) (stacksworker.RoleResult, error) {
 	r.current = nil
 	if r.failed {
-		return r.result("ContractOperationFailed"), nil
+		return r.result(reasonContractOperationFailed), nil
 	}
 	if r.goal != nil {
 		return r.result(r.observeGoal(ctx)), nil
 	}
 	if r.Resolve == nil || snapshot.Participant == nil || snapshot.Participant.Status.Admission == nil {
-		return r.result("PolicyUnavailable"), nil
+		return r.result(reasonPolicyUnavailable), nil
 	}
 	in, resolved, err := r.inputs.resolve(ctx, snapshot, r.applied, r.Resolve, cloneContractInputs)
 	if err != nil {
-		return r.result("DependenciesUnavailable"), nil
+		//nolint:nilerr // Publish the reason and retry without failing the worker session.
+		return r.result(reasonDependenciesUnavailable), nil
 	}
 	snapshot = resolved
 	if !r.validInputs(in) {
 		r.inputs.invalidate(snapshot, r.applied)
-		return r.result("InvalidContractPolicy"), nil
+		return r.result(reasonInvalidContractPolicy), nil
 	}
 	r.inputs.remember(snapshot, in, cloneContractInputs)
 	r.applied = snapshot.Participant.Status.Admission.PolicyDigest
 	state, err := observeContracts(ctx, in, r.sources, r.now())
 	if err != nil {
-		if errors.Is(err, contractConflict) {
+		if errors.Is(err, errContractConflict) {
 			r.failed = true
 		}
-		return r.result("ContractObservationUnavailable"), nil
+		return r.result(api.ReasonContractObservationUnavailable), nil
 	}
 	r.current = state.observation
 	if !state.nakamoto {
-		return r.result("AwaitingClarity3"), nil
+		return r.result(reasonAwaitingClarity3), nil
 	}
 	if snapshot.Paused {
-		return r.result("Paused"), nil
+		return r.result(reasonPaused), nil
 	}
 	for _, source := range r.sources {
 		if !state.sources[source.Name] {
-			return r.offer(ctx, snapshot, in, "ContractDeployment", source)
+			return r.offer(ctx, snapshot, in, api.PostconditionContractDeployment, source)
 		}
 	}
 	if state.observation != nil {
-		return r.result("ContractSetObserved"), nil
+		return r.result(reasonContractSetObserved), nil
 	}
 	if !state.registryEmpty {
-		return r.result("RegistryObservationUnavailable"), nil
+		return r.result(reasonRegistryObservationUnavailable), nil
 	}
-	return r.offer(ctx, snapshot, in, "RegistryInitialization", protocolcontracts.Source{})
+	return r.offer(ctx, snapshot, in, api.PostconditionRegistryInitialization, protocolcontracts.Source{})
 }
 
 // offer signs once with explicit fee and preserves the original operation across uncertain sends.
-func (r *ContractRole) offer(ctx context.Context, s stacksworker.Snapshot, in ContractInputs, kind string, source protocolcontracts.Source) (stacksworker.RoleResult, error) {
+func (r *ContractRole) offer(
+	ctx context.Context,
+	s stacksworker.Snapshot,
+	in ContractInputs,
+	kind api.PostconditionKind,
+	source protocolcontracts.Source,
+) (stacksworker.RoleResult, error) {
 	fee := uint64(3000)
-	if kind == "ContractDeployment" {
+	if kind == api.PostconditionContractDeployment {
 		fee += uint64(len(source.Source)) * 10
 	}
-	reason, _ := r.stream.Offer(ctx, r.now, in.Node, new(big.Int).SetUint64(fee), s.Authorize, func(nonce uint64) (transaction.Transaction, error) {
-		options := transaction.Options{Version: transaction.Testnet, ChainID: 0x80000000, Nonce: nonce, Fee: fee, PostConditionMode: transaction.Deny, PrivateKey: r.key}
-		if kind == "ContractDeployment" {
-			return transaction.Deploy(options, source.Name, source.Source, byte(source.ClarityVersion))
-		}
-		args, err := registryArguments(in)
-		if err != nil {
-			return transaction.Transaction{}, err
-		}
-		return transaction.Call(options, in.Deployer, "sbtc-bootstrap-signers", "rotate-keys-wrapper", args)
-	})
+	reason, _ := r.stream.Offer(
+		ctx,
+		r.now,
+		in.Node,
+		new(big.Int).SetUint64(fee),
+		s.Authorize,
+		func(nonce uint64) (transaction.Transaction, error) {
+			options := transaction.Options{
+				Version:           transaction.Testnet,
+				ChainID:           0x80000000,
+				Nonce:             nonce,
+				Fee:               fee,
+				PostConditionMode: transaction.Deny,
+				PrivateKey:        r.key,
+			}
+			if kind == api.PostconditionContractDeployment {
+				if source.ClarityVersion < 1 || source.ClarityVersion > 6 {
+					return transaction.Transaction{}, errors.New("unsupported Clarity publication version")
+				}
+				return transaction.Deploy(options, source.Name, source.Source, byte(source.ClarityVersion))
+			}
+			args, err := registryArguments(in)
+			if err != nil {
+				return transaction.Transaction{}, err
+			}
+			return transaction.Call(options, in.Deployer, "sbtc-bootstrap-signers", "rotate-keys-wrapper", args)
+		},
+	)
 	if r.stream.Pending() != 0 {
 		in = cloneContractInputs(in)
 		r.goal = &contractGoal{input: in, kind: kind, name: source.Name}
@@ -156,39 +183,51 @@ func (r *ContractRole) offer(ctx context.Context, s stacksworker.Snapshot, in Co
 func (r *ContractRole) observeGoal(ctx context.Context) string {
 	goal := r.goal
 	reason, _ := r.stream.Observe(ctx, r.now())
-	if reason == "ExecutionRejected" {
+	if reason == reasonExecutionRejected {
 		r.failed = true
 		return reason
 	}
 	state, err := observeContracts(ctx, goal.input, r.sources, r.now())
 	if err != nil {
-		if errors.Is(err, contractConflict) {
+		if errors.Is(err, errContractConflict) {
 			r.failed = true
 		}
-		return "ContractObservationUnavailable"
+		return api.ReasonContractObservationUnavailable
 	}
 	r.current = state.observation
-	if goal.kind == "ContractDeployment" && !state.sources[goal.name] || goal.kind == "RegistryInitialization" && state.observation == nil {
-		return "AwaitingContractPostcondition"
+	if goal.kind == api.PostconditionContractDeployment && !state.sources[goal.name] ||
+		goal.kind == api.PostconditionRegistryInitialization && state.observation == nil {
+		return reasonAwaitingContractPostcondition
 	}
 	if r.stream.Pending() != 0 {
 		proof := struct {
 			Kind, Deployer, Contract, SourceHash string
 			Registry                             *api.ContractSetObservation
-		}{Kind: goal.kind, Deployer: goal.input.Deployer, Contract: goal.name, SourceHash: goal.input.SourceHashes[goal.name]}
-		if goal.kind == "RegistryInitialization" {
+		}{
+			Kind:       string(goal.kind),
+			Deployer:   goal.input.Deployer,
+			Contract:   goal.name,
+			SourceHash: goal.input.SourceHashes[goal.name],
+		}
+		if goal.kind == api.PostconditionRegistryInitialization {
 			proof.Registry = state.observation.DeepCopy()
 			proof.Registry.ObservedAt = metav1.Time{}
 		}
-		evidence := api.TransactionPostcondition{TxID: r.stream.pending.transaction.TxID, Kind: goal.kind, StateDigest: foundation.Digest(proof), StacksTip: state.info.IndexBlockID, ObservedAt: metav1.NewTime(r.now().UTC())}
+		evidence := api.TransactionPostcondition{
+			TxID:        r.stream.pending.transaction.TxID,
+			Kind:        goal.kind,
+			StateDigest: foundation.Digest(proof),
+			StacksTip:   state.info.IndexBlockID,
+			ObservedAt:  metav1.NewTime(r.now().UTC()),
+		}
 		reason, err = r.stream.SettleObserved(evidence.TxID, state.account.Nonce, evidence)
 		if err != nil || r.stream.Pending() != 0 {
 			return reason
 		}
 	}
 	r.goal = nil
-	if reason == "Idle" {
-		return "ContractPostconditionObserved"
+	if reason == reasonIdle {
+		return reasonContractPostconditionObserved
 	}
 	return reason
 }
@@ -200,7 +239,13 @@ func (r *ContractRole) Drain(ctx context.Context, _ stacksworker.Snapshot) (stac
 		r.observeGoal(ctx)
 	}
 	pending := r.pending()
-	return stacksworker.DrainResult{Done: pending == 0, Settled: pending == 0, Pending: pending, Transactions: r.stream.Facts(), Contracts: r.current.DeepCopy()}, nil
+	return stacksworker.DrainResult{
+		Done:         pending == 0,
+		Settled:      pending == 0,
+		Pending:      pending,
+		Transactions: r.stream.Facts(),
+		Contracts:    r.current.DeepCopy(),
+	}, nil
 }
 
 // pending includes included transactions whose public postcondition is still unobserved.
@@ -213,7 +258,15 @@ func (r *ContractRole) pending() int32 {
 
 // result returns independent bounded facts for retry-safe publication.
 func (r *ContractRole) result(reason string) stacksworker.RoleResult {
-	return stacksworker.RoleResult{Contracts: r.current.DeepCopy(), Transactions: r.stream.Facts(), AppliedPolicyDigest: r.applied, Pending: r.pending(), Reason: reason, Failed: r.failed, RequeueAfter: time.Second}
+	return stacksworker.RoleResult{
+		Contracts:           r.current.DeepCopy(),
+		Transactions:        r.stream.Facts(),
+		AppliedPolicyDigest: r.applied,
+		Pending:             r.pending(),
+		Reason:              reason,
+		Failed:              r.failed,
+		RequeueAfter:        time.Second,
+	}
 }
 
 // cloneContractInputs preserves immutable deployment prerequisites across later policy edits.

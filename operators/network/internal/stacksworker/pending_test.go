@@ -28,6 +28,7 @@ func (r *pendingRole) ObservePending(context.Context) error {
 	}
 	return nil
 }
+
 func (r *pendingRole) Step(ctx context.Context, s Snapshot) (RoleResult, error) {
 	r.steps++
 	if r.sends == 0 {
@@ -44,6 +45,7 @@ func (r *pendingRole) Step(ctx context.Context, s Snapshot) (RoleResult, error) 
 	}
 	return RoleResult{Reason: "Pending", Pending: 1, Transactions: facts, RequeueAfter: time.Second}, nil
 }
+
 func (r *pendingRole) Drain(context.Context, Snapshot) (DrainResult, error) {
 	return DrainResult{}, nil
 }
@@ -55,7 +57,18 @@ func TestPendingObservationContinuesDuringReadAndPublicationOutages(t *testing.T
 			ProjectSession(root, p, pod, nil, time.Now())
 			c := &outageClient{Client: &statusClient{Client: fakeClient(t, root, p, pod)}}
 			role := &pendingRole{}
-			r := &Runtime{Client: c, Namespace: p.Namespace, ParticipantName: p.Name, NetworkUID: root.UID, ParticipantUID: p.UID, PodName: pod.Name, PodUID: pod.UID, Profile: profile, Role: role, Prerequisites: func(context.Context, Snapshot) error { return nil }}
+			r := &Runtime{
+				Client:          c,
+				Namespace:       p.Namespace,
+				ParticipantName: p.Name,
+				NetworkUID:      root.UID,
+				ParticipantUID:  p.UID,
+				PodName:         pod.Name,
+				PodUID:          pod.UID,
+				Profile:         profile,
+				Role:            role,
+				Prerequisites:   func(context.Context, Snapshot) error { return nil },
+			}
 			ctx := context.Background()
 			if _, err := r.Reconcile(ctx); err != nil {
 				t.Fatal(err)
@@ -90,7 +103,8 @@ func TestPendingObservationContinuesDuringReadAndPublicationOutages(t *testing.T
 			if err := c.Get(ctx, client.ObjectKeyFromObject(p), &observed); err != nil {
 				t.Fatal(err)
 			}
-			if role.sends != 1 || observed.Status.Execution.Transactions.Included != 1 || !observed.Status.Execution.Transactions.LastInclusion.ObservedAt.Equal(&original) {
+			if role.sends != 1 || observed.Status.Execution.Transactions.Included != 1 ||
+				!observed.Status.Execution.Transactions.LastInclusion.ObservedAt.Equal(&original) {
 				t.Fatal("recovery lost original inclusion or sent again")
 			}
 		})

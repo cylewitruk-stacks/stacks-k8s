@@ -10,6 +10,7 @@ import (
 	common "github.com/cylewitruk-stacks/stacks-k8s/apis/network/common/v1alpha2"
 	api "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha2"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/foundation"
+	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/objectref"
 	"k8s.io/apimachinery/pkg/api/equality"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
@@ -17,24 +18,42 @@ import (
 )
 
 // baselineCompleted requires every captured gate before granting ceiling-free baseline authority.
-func baselineCompleted(ctx context.Context, reader client.Reader, root *api.StacksNetwork, initial *bitcoin.BitcoinInitialization) error {
+func baselineCompleted(
+	ctx context.Context,
+	reader client.Reader,
+	root *api.StacksNetwork,
+	initial *bitcoin.BitcoinInitialization,
+) error {
 	state, ref := root.Status.Initialization, root.Status.GenesisRef
-	if state == nil || !state.Completed || initial.Status.PreparedAt == nil || ref == nil || *ref != initial.Spec.Genesis || state.GenesisUID != ref.UID || state.GenesisDigest != root.Status.GenesisDigest {
+	if state == nil || !state.Completed || initial.Status.PreparedAt == nil || ref == nil ||
+		*ref != initial.Spec.Genesis ||
+		state.GenesisUID != ref.UID ||
+		state.GenesisDigest != root.Status.GenesisDigest {
 		return fmt.Errorf("completed initialization binding unavailable")
 	}
 	var genesis api.StacksGenesis
-	if err := reader.Get(ctx, client.ObjectKey{Namespace: root.Namespace, Name: ref.Name}, &genesis); err != nil {
+	if err := reader.Get(ctx, client.ObjectKey{
+		Namespace: root.Namespace,
+		Name:      ref.Name,
+	}, &genesis); err != nil {
 		return err
 	}
-	if genesis.UID != ref.UID || genesis.DeletionTimestamp != nil || !metav1.IsControlledBy(&genesis, root) || genesis.Spec.Source.NetworkUID != root.UID || foundation.Digest(genesis.Spec) != ref.Fingerprint || foundation.Digest(genesis.Spec.Chain) != root.Status.GenesisDigest {
+	if genesis.UID != ref.UID || genesis.DeletionTimestamp != nil || !metav1.IsControlledBy(&genesis, root) ||
+		genesis.Spec.Source.NetworkUID != root.UID ||
+		foundation.Digest(genesis.Spec) != ref.Fingerprint ||
+		foundation.Digest(genesis.Spec.Chain) != root.Status.GenesisDigest {
 		return fmt.Errorf("completed genesis identity differs")
 	}
 	gates := genesis.Spec.Bootstrap.Gates
-	if len(gates) == 0 || len(gates) != len(state.Gates) || int(state.GateIndex) != len(gates) || gates[0].Name != "PrepareBitcoin" || gates[0].BitcoinCeiling != initial.Spec.MinimumHeight || state.AuthorizedCeiling != gates[len(gates)-1].BitcoinCeiling {
+	if len(gates) == 0 || len(gates) != len(state.Gates) || int(state.GateIndex) != len(gates) ||
+		gates[0].Name != api.GatePrepareBitcoin ||
+		gates[0].BitcoinCeiling != initial.Spec.MinimumHeight ||
+		state.AuthorizedCeiling != gates[len(gates)-1].BitcoinCeiling {
 		return fmt.Errorf("completed gate inventory differs")
 	}
 	for i, gate := range gates {
-		if state.Gates[i].Name != gate.Name || state.Gates[i].CompletedAt == nil || i > 0 && gate.BitcoinCeiling <= gates[i-1].BitcoinCeiling {
+		if state.Gates[i].Name != gate.Name || state.Gates[i].CompletedAt == nil ||
+			i > 0 && gate.BitcoinCeiling <= gates[i-1].BitcoinCeiling {
 			return fmt.Errorf("captured gate completion unavailable")
 		}
 	}
@@ -42,18 +61,34 @@ func baselineCompleted(ctx context.Context, reader client.Reader, root *api.Stac
 }
 
 // baselineInputs validates the admitted policy without following rejected candidate changes.
-func baselineInputs(ctx context.Context, reader client.Reader, root *api.StacksNetwork, initial *bitcoin.BitcoinInitialization, p *api.StacksNetworkParticipant) (bitcoin.BitcoinSchedulingStatus, error) {
+func baselineInputs(
+	ctx context.Context,
+	reader client.Reader,
+	root *api.StacksNetwork,
+	initial *bitcoin.BitcoinInitialization,
+	p *api.StacksNetworkParticipant,
+) (bitcoin.BitcoinSchedulingStatus, error) {
 	return resolveBaselineInputs(ctx, reader, root, initial, p, false)
 }
 
 // resolveBaselineInputs keeps scheduler credential metadata checks separate from public dispatch inputs.
-func resolveBaselineInputs(ctx context.Context, reader client.Reader, root *api.StacksNetwork, initial *bitcoin.BitcoinInitialization, p *api.StacksNetworkParticipant, publicOnly bool) (bitcoin.BitcoinSchedulingStatus, error) {
-	out := bitcoin.BitcoinSchedulingStatus{Initialization: binding("BitcoinInitialization", initial)}
-	if !participantCurrent(root, p) || p.Spec.Kind != "BitcoinBlockProduction" || p.Status.Admission.Configuration.BitcoinBlockProduction == nil {
+func resolveBaselineInputs(
+	ctx context.Context,
+	reader client.Reader,
+	root *api.StacksNetwork,
+	initial *bitcoin.BitcoinInitialization,
+	p *api.StacksNetworkParticipant,
+	publicOnly bool,
+) (bitcoin.BitcoinSchedulingStatus, error) {
+	out := bitcoin.BitcoinSchedulingStatus{Initialization: objectref.BitcoinInitialization(initial)}
+	if !participantCurrent(root, p) || p.Spec.Kind != api.ParticipantBitcoinBlockProduction ||
+		p.Status.Admission.Configuration.BitcoinBlockProduction == nil {
 		return out, fmt.Errorf("admitted production identity unavailable")
 	}
 	policy := p.Status.Admission.Configuration.BitcoinBlockProduction
-	if policy.Schedule == nil || policy.PayoutWalletRef == nil || policy.Initialization == nil || policy.Initialization.MinimumHeight != initial.Spec.MinimumHeight || policy.Initialization.MatureOutputsPerMiner != initial.Spec.MatureOutputsPerMiner {
+	if policy.Schedule == nil || policy.PayoutWalletRef == nil || policy.Initialization == nil ||
+		policy.Initialization.MinimumHeight != initial.Spec.MinimumHeight ||
+		policy.Initialization.MatureOutputsPerMiner != initial.Spec.MatureOutputsPerMiner {
 		return out, fmt.Errorf("baseline policy incomplete")
 	}
 	if err := foundation.ValidateAdmissionEligibility(ctx, reader, p); err != nil {
@@ -62,20 +97,28 @@ func resolveBaselineInputs(ctx context.Context, reader client.Reader, root *api.
 	var payout *common.Binding
 	for i := range p.Status.Admission.Dependencies {
 		dep := p.Status.Admission.Dependencies[i]
-		if dep.Kind == "BitcoinWallet" && dep.Name == policy.PayoutWalletRef.Name {
-			copy := dep
-			payout = &copy
+		if dep.Kind == bitcoin.KindBitcoinWallet && dep.Name == policy.PayoutWalletRef.Name {
+			snapshot := dep
+			payout = &snapshot
 		}
-		if dep.Kind == "BitcoinBlockSchedule" {
+		if dep.Kind == bitcoin.KindBitcoinBlockSchedule {
 			if out.ScheduleRef != nil {
 				return out, fmt.Errorf("ambiguous admitted schedule")
 			}
 			var schedule bitcoin.BitcoinBlockSchedule
-			if err := reader.Get(ctx, client.ObjectKey{Namespace: p.Namespace, Name: dep.Name}, &schedule); err != nil || schedule.UID != dep.UID || schedule.DeletionTimestamp != nil || foundation.Digest(schedule.Spec) != dep.Fingerprint || !equality.Semantic.DeepEqual(policy.Schedule, &schedule.Spec) {
+			if err := reader.Get(
+				ctx,
+				client.ObjectKey{Namespace: p.Namespace, Name: dep.Name},
+				&schedule,
+			); err != nil ||
+				schedule.UID != dep.UID ||
+				schedule.DeletionTimestamp != nil ||
+				foundation.Digest(schedule.Spec) != dep.Fingerprint ||
+				!equality.Semantic.DeepEqual(policy.Schedule, &schedule.Spec) {
 				return out, fmt.Errorf("admitted schedule identity unavailable")
 			}
-			copy := dep
-			out.ScheduleRef = &copy
+			snapshot := dep
+			out.ScheduleRef = &snapshot
 			out.ScheduleGeneration = schedule.Generation
 		}
 	}
@@ -115,9 +158,9 @@ func resolveBaselineInputs(ctx context.Context, reader client.Reader, root *api.
 		}
 		var pin *common.Binding
 		for _, dep := range p.Status.Admission.Dependencies {
-			if dep.Kind == "StacksNetworkParticipant" && string(dep.UID) == uid && uid != "" {
-				copy := dep
-				pin = &copy
+			if dep.Kind == api.KindStacksNetworkParticipant && string(dep.UID) == uid && uid != "" {
+				snapshot := dep
+				pin = &snapshot
 				break
 			}
 		}
@@ -130,7 +173,7 @@ func resolveBaselineInputs(ctx context.Context, reader client.Reader, root *api.
 	out.AdmissionDigest = foundation.Digest(struct {
 		Production common.Binding
 		Admission  *api.Admission
-	}{binding("StacksNetworkParticipant", p), p.Status.Admission})
+	}{objectref.Participant(p), p.Status.Admission})
 	out.Schedule = policy.Schedule.DeepCopy()
 	_, upper, err := cadenceBounds(out.Schedule)
 	if err != nil {

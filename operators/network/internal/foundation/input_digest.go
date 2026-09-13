@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	common "github.com/cylewitruk-stacks/stacks-k8s/apis/network/common/v1alpha2"
+	stacks "github.com/cylewitruk-stacks/stacks-k8s/apis/network/stacks/v1alpha2"
 	api "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha2"
 )
 
@@ -43,9 +44,9 @@ func semanticInputDigest(spec api.StacksGenesisSpec, all map[string]*candidate) 
 	sort.Strings(names)
 	logicalName := func(kind, name string) string {
 		aliases := accountNames
-		if kind == "StacksNetworkParticipant" {
+		if kind == api.KindStacksNetworkParticipant {
 			aliases = participantNames
-		} else if kind != "StacksAccount" {
+		} else if kind != stacks.KindStacksAccount {
 			return name
 		}
 		if logical, ok := aliases[name]; ok {
@@ -56,9 +57,15 @@ func semanticInputDigest(spec api.StacksGenesisSpec, all map[string]*candidate) 
 	bindings := func(inputs []common.Binding) []semanticBinding {
 		result := make([]semanticBinding, 0, len(inputs))
 		for _, b := range inputs {
-			result = append(result, semanticBinding{Kind: b.Kind, Name: logicalName(b.Kind, b.Name), Fingerprint: b.Fingerprint})
+			result = append(
+				result,
+				semanticBinding{Kind: b.Kind, Name: logicalName(b.Kind, b.Name), Fingerprint: b.Fingerprint},
+			)
 		}
-		sort.Slice(result, func(i, j int) bool { return result[i].Kind+"/"+result[i].Name < result[j].Kind+"/"+result[j].Name })
+		sort.Slice(
+			result,
+			func(i, j int) bool { return result[i].Kind+"/"+result[i].Name < result[j].Kind+"/"+result[j].Name },
+		)
 		return result
 	}
 	// Only account references can contain generated names in compiled configuration.
@@ -66,7 +73,7 @@ func semanticInputDigest(spec api.StacksGenesisSpec, all map[string]*candidate) 
 	normalizeRef := func(value any) {
 		if ref, ok := value.(map[string]any); ok {
 			if name, ok := ref["name"].(string); ok {
-				ref["name"] = logicalName("StacksAccount", name)
+				ref["name"] = logicalName(stacks.KindStacksAccount, name)
 			}
 		}
 	}
@@ -76,9 +83,9 @@ func semanticInputDigest(spec api.StacksGenesisSpec, all map[string]*candidate) 
 		case map[string]any:
 			for key, child := range v {
 				switch {
-				case key == "accountRef" || strings.HasSuffix(key, "AccountRef"):
+				case key == "accountRef" || strings.HasSuffix(key, accountRefFieldSuffix):
 					normalizeRef(child)
-				case strings.HasSuffix(key, "AccountRefs"):
+				case strings.HasSuffix(key, accountRefsFieldSuffix):
 					if refs, ok := child.([]any); ok {
 						for _, ref := range refs {
 							normalizeRef(ref)
@@ -99,7 +106,16 @@ func semanticInputDigest(spec api.StacksGenesisSpec, all map[string]*candidate) 
 		c := all[name]
 		configuration, _ := objectMap(c.configuration)
 		normalize(configuration)
-		participants = append(participants, semanticParticipant{Name: name, Kind: c.instance.Spec.Kind, Definition: c.source.Name, Configuration: configuration, Dependencies: bindings(c.dependencies)})
+		participants = append(
+			participants,
+			semanticParticipant{
+				Name:          name,
+				Kind:          c.instance.Spec.Kind,
+				Definition:    c.source.Name,
+				Configuration: configuration,
+				Dependencies:  bindings(c.dependencies),
+			},
+		)
 	}
 	return Digest(struct {
 		Chain        api.Chain             `json:"chain"`
@@ -107,3 +123,9 @@ func semanticInputDigest(spec api.StacksGenesisSpec, all map[string]*candidate) 
 		Dependencies []semanticBinding     `json:"dependencies"`
 	}{spec.Chain, participants, bindings(spec.Source.Dependencies)})
 }
+
+// accountRefFieldSuffix identifies a structural input name at this reflection/metadata boundary.
+const accountRefFieldSuffix = "AccountRef"
+
+// accountRefsFieldSuffix identifies a structural input name at this reflection/metadata boundary.
+const accountRefsFieldSuffix = "AccountRefs"

@@ -41,8 +41,16 @@ func TestActorStopRequiresEveryRetainedDisposition(t *testing.T) {
 					t.Fatalf("undispositioned session bypassed %v %v", ready, err)
 				}
 				now := metav1.Now()
-				root.Status.Identities[0].Worker.Shutdown = &api.WorkerShutdown{NetworkGeneration: root.Generation, Reason: "NetworkStopped", RequestedAt: now}
-				root.Status.Identities[0].Worker.Disposal = &api.WorkerDisposal{Outcome: outcome, ObservedAt: now, Terminated: false}
+				root.Status.Identities[0].Worker.Shutdown = &api.WorkerShutdown{
+					NetworkGeneration: root.Generation,
+					Reason:            "NetworkStopped",
+					RequestedAt:       now,
+				}
+				root.Status.Identities[0].Worker.Disposal = &api.WorkerDisposal{
+					Outcome:    api.WorkerDisposalOutcome(outcome),
+					ObservedAt: now,
+					Terminated: false,
+				}
 				if err := c.Status().Update(ctx, root); err != nil {
 					t.Fatal(err)
 				}
@@ -74,7 +82,7 @@ func TestActorStopNeverBoundAndIndividualControls(t *testing.T) {
 	}
 	for _, operation := range []string{"Running", "Paused"} {
 		root, actor := stopFixture(t)
-		root.Spec.Operation = operation
+		root.Spec.Operation = api.NetworkOperation(operation)
 		root.Status.Identities[1].Removing = true
 		actor.DeletionTimestamp = &metav1.Time{Time: time.Now()}
 		if ready, err := CheckActorStop(context.Background(), fakeClient(t, root), actor); !ready || err != nil {
@@ -88,17 +96,17 @@ func TestActorDeleteAndIdentityUncertaintyStayClosed(t *testing.T) {
 		name  string
 		apply func(*api.StacksNetwork, *api.StacksNetworkParticipant)
 	}{
-		{"root deleting", func(r *api.StacksNetwork, p *api.StacksNetworkParticipant) {
+		{"root deleting", func(r *api.StacksNetwork, _ *api.StacksNetworkParticipant) {
 			r.Spec.Operation = "Running"
 			r.Finalizers = []string{"test"}
 			r.DeletionTimestamp = &metav1.Time{Time: time.Now()}
 		}},
-		{"root replaced", func(r *api.StacksNetwork, p *api.StacksNetworkParticipant) { r.UID = "replacement" }},
-		{"actor replaced", func(r *api.StacksNetwork, p *api.StacksNetworkParticipant) { p.UID = "replacement" }},
-		{"worker identity missing", func(r *api.StacksNetwork, p *api.StacksNetworkParticipant) {
+		{"root replaced", func(r *api.StacksNetwork, _ *api.StacksNetworkParticipant) { r.UID = "replacement" }},
+		{"actor replaced", func(_ *api.StacksNetwork, p *api.StacksNetworkParticipant) { p.UID = "replacement" }},
+		{"worker identity missing", func(r *api.StacksNetwork, _ *api.StacksNetworkParticipant) {
 			r.Status.Identities[0].Worker.Pod.UID = ""
 		}},
-		{"invalid disposition", func(r *api.StacksNetwork, p *api.StacksNetworkParticipant) {
+		{"invalid disposition", func(r *api.StacksNetwork, _ *api.StacksNetworkParticipant) {
 			r.Status.Identities[0].Worker.Disposal = &api.WorkerDisposal{Outcome: "Unknown", ObservedAt: metav1.Now()}
 		}},
 	} {
@@ -111,7 +119,12 @@ func TestActorDeleteAndIdentityUncertaintyStayClosed(t *testing.T) {
 		})
 	}
 	root, actor := stopFixture(t)
-	if ready, err := CheckActorStop(context.Background(), unavailableRoot{Reader: fakeClient(t, root)}, actor); ready || err == nil {
+	if ready, err := CheckActorStop(
+		context.Background(),
+		unavailableRoot{Reader: fakeClient(t, root)},
+		actor,
+	); ready ||
+		err == nil {
 		t.Fatal("API uncertainty skipped")
 	}
 	if ready, err := CheckActorStop(context.Background(), fakeClient(t), actor); ready || err == nil {
@@ -132,7 +145,13 @@ func TestMissingBoundWorkerCannotFabricateActorDrain(t *testing.T) {
 	ProjectSession(root, p, pod, nil, now)
 	root.Spec.Operation = "Stopped"
 	ProjectSession(root, p, pod, nil, now)
-	fact := ProjectSession(root, p, nil, apierrors.NewNotFound(schema.GroupResource{Resource: "pods"}, pod.Name), now.Add(2*ShutdownBound))
+	fact := ProjectSession(
+		root,
+		p,
+		nil,
+		apierrors.NewNotFound(schema.GroupResource{Resource: "pods"}, pod.Name),
+		now.Add(2*ShutdownBound),
+	)
 	if !fact.Unknown || root.Status.Identities[0].Worker.Disposal != nil {
 		t.Fatal("unavailable Pod became bounded disposition evidence")
 	}

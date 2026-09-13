@@ -25,7 +25,9 @@ import (
 )
 
 // admissionFixture represents a complete public faucet admission and a live exact worker Pod.
-func admissionFixture(t *testing.T) (*Reconciler, *stacks.StacksFaucetRequest, *api.StacksNetwork, *api.StacksNetworkParticipant) {
+func admissionFixture(
+	t *testing.T,
+) (*Reconciler, *stacks.StacksFaucetRequest, *api.StacksNetwork, *api.StacksNetworkParticipant) {
 	t.Helper()
 	now := time.Date(2026, 9, 11, 12, 0, 0, 0, time.UTC)
 	public, _ := identity.FromPrivate(strings.Repeat("0", 63) + "1")
@@ -33,17 +35,122 @@ func admissionFixture(t *testing.T) (*Reconciler, *stacks.StacksFaucetRequest, *
 	_ = api.AddToScheme(scheme)
 	_ = stacks.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)
-	root := &api.StacksNetwork{ObjectMeta: metav1.ObjectMeta{Name: "network", Namespace: "test", UID: "root", Generation: 1}, Spec: api.StacksNetworkSpec{Operation: "Running", Participants: []api.Participant{{Name: "faucet", Kind: "StacksFaucet"}, {Name: "node", Kind: "StacksNode"}}}}
-	owner := metav1.OwnerReference{APIVersion: api.GroupVersion.String(), Kind: "StacksNetwork", Name: root.Name, UID: root.UID, Controller: ptr.To(true)}
-	account := &stacks.StacksAccount{ObjectMeta: metav1.ObjectMeta{Name: "account", Namespace: "test", UID: "account", Generation: 1}, Status: common.ResolutionStatus{ObservedGeneration: 1, Digest: "account-digest", Identity: &common.PublicIdentity{Address: public.Address, PublicKey: public.PublicKey}, Conditions: []metav1.Condition{{Type: "Resolved", Status: metav1.ConditionTrue}}}}
-	target := &api.StacksNetworkParticipant{ObjectMeta: metav1.ObjectMeta{Name: foundation.ParticipantName("root", "node"), Namespace: "test", UID: "node", OwnerReferences: []metav1.OwnerReference{owner}}, Spec: api.StacksNetworkParticipantSpec{NetworkUID: "root", Kind: "StacksNode", ParticipantName: "node"}, Status: api.ParticipantStatus{Admission: &api.Admission{}}}
-	p := &api.StacksNetworkParticipant{ObjectMeta: metav1.ObjectMeta{Name: foundation.ParticipantName("root", "faucet"), Namespace: "test", UID: "faucet", Generation: 1, OwnerReferences: []metav1.OwnerReference{owner}}, Spec: api.StacksNetworkParticipantSpec{NetworkUID: "root", Kind: "StacksFaucet", ParticipantName: "faucet"}, Status: api.ParticipantStatus{Admission: &api.Admission{Configuration: api.Configuration{StacksFaucet: &stacks.StacksFaucetSpec{AccountRef: &common.NameRef{Name: account.Name}, TargetNodeRef: &common.NameRef{Name: "node"}, MaxRequestMicroSTX: ptr.To(common.Amount("100000"))}}, Dependencies: []common.Binding{{Kind: "StacksAccount", Name: account.Name, UID: account.UID, Fingerprint: account.Status.Digest}, {Kind: "StacksNetworkParticipant", Name: target.Name, UID: target.UID}}}}}
+	root := &api.StacksNetwork{
+		ObjectMeta: metav1.ObjectMeta{Name: "network", Namespace: "test", UID: "root", Generation: 1},
+		Spec: api.StacksNetworkSpec{
+			Operation: "Running",
+			Participants: []api.Participant{
+				{Name: "faucet", Kind: "StacksFaucet"},
+				{Name: "node", Kind: "StacksNode"},
+			},
+		},
+	}
+	owner := metav1.OwnerReference{
+		APIVersion: api.GroupVersion.String(),
+		Kind:       "StacksNetwork",
+		Name:       root.Name,
+		UID:        root.UID,
+		Controller: ptr.To(true),
+	}
+	account := &stacks.StacksAccount{
+		ObjectMeta: metav1.ObjectMeta{Name: "account", Namespace: "test", UID: "account", Generation: 1},
+		Status: common.ResolutionStatus{
+			ObservedGeneration: 1,
+			Digest:             "account-digest",
+			Identity:           &common.PublicIdentity{Address: public.Address, PublicKey: public.PublicKey},
+			Conditions:         []metav1.Condition{{Type: "Resolved", Status: metav1.ConditionTrue}},
+		},
+	}
+	target := &api.StacksNetworkParticipant{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            foundation.ParticipantName("root", "node"),
+			Namespace:       "test",
+			UID:             "node",
+			OwnerReferences: []metav1.OwnerReference{owner},
+		},
+		Spec:   api.StacksNetworkParticipantSpec{NetworkUID: "root", Kind: "StacksNode", ParticipantName: "node"},
+		Status: api.ParticipantStatus{Admission: &api.Admission{}},
+	}
+	p := &api.StacksNetworkParticipant{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            foundation.ParticipantName("root", "faucet"),
+			Namespace:       "test",
+			UID:             "faucet",
+			Generation:      1,
+			OwnerReferences: []metav1.OwnerReference{owner},
+		},
+		Spec: api.StacksNetworkParticipantSpec{
+			NetworkUID:      "root",
+			Kind:            "StacksFaucet",
+			ParticipantName: "faucet",
+		},
+		Status: api.ParticipantStatus{
+			Admission: &api.Admission{
+				Configuration: api.Configuration{
+					StacksFaucet: &stacks.StacksFaucetSpec{
+						AccountRef:         &common.NameRef{Name: account.Name},
+						TargetNodeRef:      &common.NameRef{Name: "node"},
+						MaxRequestMicroSTX: ptr.To(common.Amount("100000")),
+					},
+				},
+				Dependencies: []common.Binding{
+					{Kind: "StacksAccount", Name: account.Name, UID: account.UID, Fingerprint: account.Status.Digest},
+					{Kind: "StacksNetworkParticipant", Name: target.Name, UID: target.UID},
+				},
+			},
+		},
+	}
 	p.Status.Admission.PolicyDigest = foundation.Digest(p.Status.Admission.Configuration)
 	digest := "sha256:" + strings.Repeat("a", 64)
-	worker := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "worker", Namespace: "test", UID: "pod", OwnerReferences: []metav1.OwnerReference{{APIVersion: api.GroupVersion.String(), Kind: "StacksNetworkParticipant", Name: p.Name, UID: p.UID, Controller: ptr.To(true)}}}, Status: corev1.PodStatus{Phase: corev1.PodRunning}}
-	root.Status.Identities = []api.InstanceIdentity{{Name: "faucet", UID: p.UID, Worker: &api.WorkerSession{Pod: api.WorkerPodBinding{Kind: "Pod", Name: worker.Name, UID: worker.UID}, ProfileDigest: digest}}, {Name: "node", UID: target.UID}}
-	p.Status.Execution = &api.WorkerExecutionStatus{PodUID: worker.UID, ProcessNonce: "process", ProfileDigest: digest, Phase: "Active"}
-	request := &stacks.StacksFaucetRequest{ObjectMeta: metav1.ObjectMeta{Name: "request", Namespace: "test", UID: "request", CreationTimestamp: metav1.NewTime(now)}, Spec: stacks.StacksFaucetRequestSpec{NetworkUID: root.UID, FaucetRef: common.NameRef{Name: "faucet"}, Destination: stacks.Recipient{AccountRef: &common.NameRef{Name: account.Name}}, AmountMicroSTX: "100000", Timeout: "5m"}}
+	worker := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "worker",
+			Namespace: "test",
+			UID:       "pod",
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion: api.GroupVersion.String(),
+					Kind:       "StacksNetworkParticipant",
+					Name:       p.Name,
+					UID:        p.UID,
+					Controller: ptr.To(true),
+				},
+			},
+		},
+		Status: corev1.PodStatus{Phase: corev1.PodRunning},
+	}
+	root.Status.Identities = []api.InstanceIdentity{
+		{
+			Name: "faucet",
+			UID:  p.UID,
+			Worker: &api.WorkerSession{
+				Pod:           api.WorkerPodBinding{Kind: "Pod", Name: worker.Name, UID: worker.UID},
+				ProfileDigest: digest,
+			},
+		},
+		{Name: "node", UID: target.UID},
+	}
+	p.Status.Execution = &api.WorkerExecutionStatus{
+		PodUID:        worker.UID,
+		ProcessNonce:  "process",
+		ProfileDigest: digest,
+		Phase:         "Active",
+	}
+	request := &stacks.StacksFaucetRequest{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "request",
+			Namespace:         "test",
+			UID:               "request",
+			CreationTimestamp: metav1.NewTime(now),
+		},
+		Spec: stacks.StacksFaucetRequestSpec{
+			NetworkUID:     root.UID,
+			FaucetRef:      common.NameRef{Name: "faucet"},
+			Destination:    stacks.Recipient{AccountRef: &common.NameRef{Name: account.Name}},
+			AmountMicroSTX: "100000",
+			Timeout:        "5m",
+		},
+	}
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(root, p, target, account, worker, request).Build()
 	return &Reconciler{Client: c, Reader: c, Now: func() time.Time { return now }}, request, root, p
 }
@@ -51,7 +158,11 @@ func admissionFixture(t *testing.T) (*Reconciler, *stacks.StacksFaucetRequest, *
 func TestAdmissionPinsWorkerDeadlineAndInclusiveLimit(t *testing.T) {
 	r, request, _, _ := admissionFixture(t)
 	admitted, err := r.admit(context.Background(), request)
-	if err != nil || admitted.Decision != "Admitted" || admitted.Worker.UID != "pod" || admitted.Faucet.UID != "faucet" || admitted.DestinationAccount.UID != "account" || admitted.FeeMicroSTX != "3000" || admitted.ExpiresAt != "2026-09-11T12:05:00Z" {
+	if err != nil || admitted.Decision != "Admitted" || admitted.Worker.UID != "pod" ||
+		admitted.Faucet.UID != "faucet" ||
+		admitted.DestinationAccount.UID != "account" ||
+		admitted.FeeMicroSTX != "3000" ||
+		admitted.ExpiresAt != "2026-09-11T12:05:00Z" {
 		t.Fatalf("complete request not admitted: %+v %v", admitted, err)
 	}
 	request.Spec.AmountMicroSTX = "100001"
@@ -97,7 +208,17 @@ func TestAdmittedExpiryAndLateExactEvidenceRemainDistinct(t *testing.T) {
 	if phase != "Inconclusive" {
 		t.Fatal("absence of execution invented no-send expiry")
 	}
-	request.Status.Execution = &stacks.FaucetExecution{Phase: "Completed", NetworkUID: "root", FaucetUID: "faucet", WorkerUID: "pod", ProcessNonce: "process", Destination: admitted.Destination, AmountMicroSTX: admitted.AmountMicroSTX, TxID: strings.Repeat("a", 64), InclusionBlockID: strings.Repeat("b", 64)}
+	request.Status.Execution = &stacks.FaucetExecution{
+		Phase:            "Completed",
+		NetworkUID:       "root",
+		FaucetUID:        "faucet",
+		WorkerUID:        "pod",
+		ProcessNonce:     "process",
+		Destination:      admitted.Destination,
+		AmountMicroSTX:   admitted.AmountMicroSTX,
+		TxID:             strings.Repeat("a", 64),
+		InclusionBlockID: strings.Repeat("b", 64),
+	}
 	phase, _ = ProjectPhase(request, now)
 	if phase != "Completed" {
 		t.Fatal("late exact inclusion did not refine inconclusive projection")
@@ -142,7 +263,17 @@ func TestCapacityExcludesPersistedTerminalRequests(t *testing.T) {
 	if err = r.Client.Get(ctx, client.ObjectKey{Namespace: "test", Name: "active-0000"}, &settled); err != nil {
 		t.Fatal(err)
 	}
-	settled.Status.Execution = &stacks.FaucetExecution{Phase: "Rejected", Reason: "InsufficientFunds", NetworkUID: "root", FaucetUID: "faucet", WorkerUID: "pod", ProcessNonce: "process", Destination: admitted.Destination, AmountMicroSTX: admitted.AmountMicroSTX, NoSend: true}
+	settled.Status.Execution = &stacks.FaucetExecution{
+		Phase:          "Rejected",
+		Reason:         "InsufficientFunds",
+		NetworkUID:     "root",
+		FaucetUID:      "faucet",
+		WorkerUID:      "pod",
+		ProcessNonce:   "process",
+		Destination:    admitted.Destination,
+		AmountMicroSTX: admitted.AmountMicroSTX,
+		NoSend:         true,
+	}
 	if err = r.Client.Update(ctx, &settled); err != nil {
 		t.Fatal(err)
 	}
@@ -168,9 +299,21 @@ func TestUncertainGrantConsumesCapacityBeforeVisibleCommit(t *testing.T) {
 		t.Fatal(err)
 	}
 	base := r.Client
-	r.Client = interceptor.NewClient(base.(client.WithWatch), interceptor.Funcs{SubResourcePatch: func(context.Context, client.Client, string, client.Object, client.Patch, ...client.SubResourcePatchOption) error {
-		return errors.New("grant still in flight")
-	}})
+	r.Client = interceptor.NewClient(
+		base.(client.WithWatch),
+		interceptor.Funcs{
+			SubResourcePatch: func(
+				context.Context,
+				client.Client,
+				string,
+				client.Object,
+				client.Patch,
+				...client.SubResourcePatchOption,
+			) error {
+				return errors.New("grant still in flight")
+			},
+		},
+	)
 	if _, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(request)}); err == nil {
 		t.Fatal("uncertain grant write not exercised")
 	}

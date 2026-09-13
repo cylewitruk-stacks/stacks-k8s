@@ -18,7 +18,12 @@ type changingIdentityReader struct {
 	change    func(client.Object)
 }
 
-func (r *changingIdentityReader) Get(ctx context.Context, key client.ObjectKey, object client.Object, options ...client.GetOption) error {
+func (r *changingIdentityReader) Get(
+	ctx context.Context,
+	key client.ObjectKey,
+	object client.Object,
+	options ...client.GetOption,
+) error {
 	if err := r.Reader.Get(ctx, key, object, options...); err != nil {
 		return err
 	}
@@ -43,13 +48,22 @@ func TestParticipantObservationIgnoresProgressWritesButRejectsIdentityChanges(t 
 			if r, ok := o.(*api.StacksNetwork); ok {
 				r.ResourceVersion = "new-heartbeat"
 				r.Status.Phase = "Initializing"
-				r.Status.Conditions = []metav1.Condition{{Type: "Operational", Status: metav1.ConditionFalse, Reason: "Waiting"}}
+				r.Status.Conditions = []metav1.Condition{
+					{Type: "Operational", Status: metav1.ConditionFalse, Reason: "Waiting"},
+				}
 			}
 		}, false},
 		{"participant protocol heartbeat", func(o client.Object) {
 			if p, ok := o.(*unstructured.Unstructured); ok && p.GetKind() == "StacksNetworkParticipant" {
 				p.SetResourceVersion("new-heartbeat")
-				_ = unstructured.SetNestedField(p.Object, "2026-09-11T21:00:00Z", "status", "runtime", "protocol", "observedAt")
+				_ = unstructured.SetNestedField(
+					p.Object,
+					"2026-09-11T21:00:00Z",
+					"status",
+					"runtime",
+					"protocol",
+					"observedAt",
+				)
 			}
 		}, false},
 		{"root generation", func(o client.Object) {
@@ -64,7 +78,13 @@ func TestParticipantObservationIgnoresProgressWritesButRejectsIdentityChanges(t 
 		}, true},
 		{"participant process", func(o client.Object) {
 			if p, ok := o.(*unstructured.Unstructured); ok && p.GetKind() == "StacksNetworkParticipant" {
-				_ = unstructured.SetNestedField(p.Object, "containerd://replacement", "status", "runtime", "containerID")
+				_ = unstructured.SetNestedField(
+					p.Object,
+					"containerd://replacement",
+					"status",
+					"runtime",
+					"containerID",
+				)
 			}
 		}, true},
 		{"participant admission", func(o client.Object) {
@@ -105,7 +125,14 @@ func TestParticipantObservationIgnoresProgressWritesButRejectsIdentityChanges(t 
 }
 
 func TestIdentityInputsDoesNotMutateObservedResource(t *testing.T) {
-	object := &unstructured.Unstructured{Object: map[string]any{"apiVersion": api.GroupVersion.String(), "kind": "StacksNetworkParticipant", "metadata": map[string]any{"resourceVersion": "original", "uid": "id"}, "status": map[string]any{"execution": map[string]any{"observedAt": "original"}}}}
+	object := &unstructured.Unstructured{
+		Object: map[string]any{
+			"apiVersion": api.GroupVersion.String(),
+			"kind":       "StacksNetworkParticipant",
+			"metadata":   map[string]any{"resourceVersion": "original", "uid": "id"},
+			"status":     map[string]any{"execution": map[string]any{"observedAt": "original"}},
+		},
+	}
 	if _, err := identityInputs(object); err != nil {
 		t.Fatal(err)
 	}

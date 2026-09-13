@@ -39,14 +39,22 @@ func (s SignerArguments) values() ([]clarity.Value, error) {
 		if len(s.Signature) != 65 || s.Signature[64] > 3 {
 			return nil, errors.New("invalid PoX RSV signature")
 		}
-		signature = clarity.Value{Type: clarity.Some, Items: []clarity.Value{{Type: clarity.Buffer, Bytes: append([]byte{}, s.Signature...)}}}
+		signature = clarity.Value{
+			Type:  clarity.Some,
+			Items: []clarity.Value{{Type: clarity.Buffer, Bytes: append([]byte{}, s.Signature...)}},
+		}
 	}
 	public, _ := hex.DecodeString(s.PublicKey)
 	return []clarity.Value{signature, {Type: clarity.Buffer, Bytes: public}, s.MaxAmount, s.AuthID}, nil
 }
 
 // StackSTXArguments constructs the PoX-4 stack-stx argument order.
-func StackSTXArguments(amount clarity.Value, address PoXAddress, burnHeight, cycles uint64, signer SignerArguments) ([]clarity.Value, error) {
+func StackSTXArguments(
+	amount clarity.Value,
+	address PoXAddress,
+	burnHeight, cycles uint64,
+	signer SignerArguments,
+) ([]clarity.Value, error) {
 	if amount.Type != clarity.UInt {
 		return nil, errors.New("stack amount requires uint128")
 	}

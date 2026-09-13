@@ -27,8 +27,12 @@ type PublicInputs struct {
 }
 
 // account validates the exact admitted account fingerprint without reading key material.
-func (r PublicInputs) account(ctx context.Context, p *api.StacksNetworkParticipant, name string) (*stacks.StacksAccount, error) {
-	binding, err := dependency(p, "StacksAccount", name)
+func (r PublicInputs) account(
+	ctx context.Context,
+	p *api.StacksNetworkParticipant,
+	name string,
+) (*stacks.StacksAccount, error) {
+	binding, err := dependency(p, stacks.KindStacksAccount, name)
 	if err != nil {
 		return nil, err
 	}
@@ -36,14 +40,21 @@ func (r PublicInputs) account(ctx context.Context, p *api.StacksNetworkParticipa
 	if err := r.Reader.Get(ctx, client.ObjectKey{Namespace: p.Namespace, Name: name}, &account); err != nil {
 		return nil, err
 	}
-	if account.UID != binding.UID || account.DeletionTimestamp != nil || account.Status.Digest != binding.Fingerprint || account.Status.Identity == nil || account.Status.ObservedGeneration != account.Generation || !meta.IsStatusConditionTrue(account.Status.Conditions, "Resolved") {
+	if account.UID != binding.UID || account.DeletionTimestamp != nil || account.Status.Digest != binding.Fingerprint ||
+		account.Status.Identity == nil ||
+		account.Status.ObservedGeneration != account.Generation ||
+		!meta.IsStatusConditionTrue(account.Status.Conditions, common.ConditionResolved) {
 		return nil, fmt.Errorf("account identity unavailable")
 	}
 	return &account, nil
 }
 
 // target resolves logical participant membership to its exact admitted runtime identity.
-func (r PublicInputs) target(ctx context.Context, s stacksworker.Snapshot, name string) (*api.StacksNetworkParticipant, error) {
+func (r PublicInputs) target(
+	ctx context.Context,
+	s stacksworker.Snapshot,
+	name string,
+) (*api.StacksNetworkParticipant, error) {
 	var identity *api.InstanceIdentity
 	for i := range s.Network.Status.Identities {
 		if s.Network.Status.Identities[i].Name == name {
@@ -56,7 +67,7 @@ func (r PublicInputs) target(ctx context.Context, s stacksworker.Snapshot, name 
 	}
 	selected := false
 	for _, entry := range s.Network.Spec.Participants {
-		if entry.Name == name && entry.Kind == "StacksNode" {
+		if entry.Name == name && entry.Kind == api.ParticipantStacksNode {
 			selected = true
 		}
 	}
@@ -66,7 +77,7 @@ func (r PublicInputs) target(ctx context.Context, s stacksworker.Snapshot, name 
 	var binding *common.Binding
 	for i := range s.Participant.Status.Admission.Dependencies {
 		b := &s.Participant.Status.Admission.Dependencies[i]
-		if b.Kind == "StacksNetworkParticipant" && b.UID == identity.UID {
+		if b.Kind == api.KindStacksNetworkParticipant && b.UID == identity.UID {
 			binding = b
 			break
 		}
@@ -75,17 +86,31 @@ func (r PublicInputs) target(ctx context.Context, s stacksworker.Snapshot, name 
 		return nil, fmt.Errorf("target admission binding missing")
 	}
 	var target api.StacksNetworkParticipant
-	if err := r.Reader.Get(ctx, client.ObjectKey{Namespace: s.Participant.Namespace, Name: binding.Name}, &target); err != nil {
+	if err := r.Reader.Get(
+		ctx,
+		client.ObjectKey{Namespace: s.Participant.Namespace, Name: binding.Name},
+		&target,
+	); err != nil {
 		return nil, err
 	}
-	if target.UID != binding.UID || target.Spec.ParticipantName != name || target.Spec.Kind != "StacksNode" || target.Spec.NetworkUID != s.Network.UID || !metav1.IsControlledBy(&target, s.Network) || target.DeletionTimestamp != nil || target.Status.Admission == nil || target.Status.Runtime == nil {
+	if target.UID != binding.UID || target.Spec.ParticipantName != name ||
+		target.Spec.Kind != api.ParticipantStacksNode ||
+		target.Spec.NetworkUID != s.Network.UID ||
+		!metav1.IsControlledBy(&target, s.Network) ||
+		target.DeletionTimestamp != nil ||
+		target.Status.Admission == nil ||
+		target.Status.Runtime == nil {
 		return nil, fmt.Errorf("target identity unavailable")
 	}
 	runtime := target.Status.Runtime
-	if runtime.ObservedGeneration != target.Generation || runtime.PolicyDigest != target.Status.Admission.PolicyDigest || runtime.PodRef == nil || runtime.ContainerID == "" || runtime.Terminated {
+	if runtime.ObservedGeneration != target.Generation ||
+		runtime.PolicyDigest != target.Status.Admission.PolicyDigest ||
+		runtime.PodRef == nil ||
+		runtime.ContainerID == "" ||
+		runtime.Terminated {
 		return nil, fmt.Errorf("target runtime unavailable")
 	}
-	for _, kind := range []string{"ConfigVerified", "WorkloadReady"} {
+	for _, kind := range []string{api.ConditionConfigVerified, api.ConditionWorkloadReady} {
 		c := meta.FindStatusCondition(target.Status.Conditions, kind)
 		if c == nil || c.Status != metav1.ConditionTrue || c.ObservedGeneration != target.Generation {
 			return nil, fmt.Errorf("target runtime is not verified and ready")
@@ -100,7 +125,10 @@ func (r PublicInputs) Transfer(ctx context.Context, s stacksworker.Snapshot) (Tr
 		return TransferInputs{}, fmt.Errorf("transfer admission unavailable")
 	}
 	policy := s.Participant.Status.Admission.Configuration.StacksTransactionProduction
-	if policy == nil || policy.AccountRef == nil || policy.TargetNodeRef == nil || policy.Recipient == nil || policy.AmountMicroSTX == nil || policy.FeeMicroSTX == nil || policy.Interval == nil {
+	if policy == nil || policy.AccountRef == nil || policy.TargetNodeRef == nil || policy.Recipient == nil ||
+		policy.AmountMicroSTX == nil ||
+		policy.FeeMicroSTX == nil ||
+		policy.Interval == nil {
 		return TransferInputs{}, fmt.Errorf("transfer policy incomplete")
 	}
 	account, err := r.account(ctx, s.Participant, policy.AccountRef.Name)
@@ -149,15 +177,34 @@ func (r PublicInputs) Transfer(ctx context.Context, s stacksworker.Snapshot) (Tr
 	}
 	var genesis api.StacksGenesis
 	ref := s.Network.Status.GenesisRef
-	if err := r.Reader.Get(ctx, client.ObjectKey{Namespace: s.Network.Namespace, Name: ref.Name}, &genesis); err != nil {
+	if err := r.Reader.Get(
+		ctx,
+		client.ObjectKey{Namespace: s.Network.Namespace, Name: ref.Name},
+		&genesis,
+	); err != nil {
 		return TransferInputs{}, err
 	}
-	if genesis.UID != ref.UID || genesis.DeletionTimestamp != nil || !metav1.IsControlledBy(&genesis, s.Network) || foundation.Digest(genesis.Spec.Chain) != s.Network.Status.GenesisDigest {
+	if genesis.UID != ref.UID || genesis.DeletionTimestamp != nil || !metav1.IsControlledBy(&genesis, s.Network) ||
+		foundation.Digest(genesis.Spec.Chain) != s.Network.Status.GenesisDigest {
 		return TransferInputs{}, fmt.Errorf("genesis identity unavailable")
 	}
 	for _, epoch := range genesis.Spec.Chain.Epochs {
 		if epoch.Name == "3.0" && epoch.StartHeight >= 0 {
-			return TransferInputs{Node: node, Target: api.TrafficObservation{TargetParticipantUID: target.UID, TargetPodUID: target.Status.Runtime.PodRef.UID, TargetContainerID: target.Status.Runtime.ContainerID, TargetConfigurationDigest: target.Status.Runtime.ConfigurationDigest, GenesisUID: genesis.UID}, Recipient: recipient, Amount: amount, Fee: fee, Interval: interval, StartHeight: uint64(epoch.StartHeight)}, nil
+			return TransferInputs{
+				Node: node,
+				Target: api.TrafficObservation{
+					TargetParticipantUID:      target.UID,
+					TargetPodUID:              target.Status.Runtime.PodRef.UID,
+					TargetContainerID:         target.Status.Runtime.ContainerID,
+					TargetConfigurationDigest: target.Status.Runtime.ConfigurationDigest,
+					GenesisUID:                genesis.UID,
+				},
+				Recipient:   recipient,
+				Amount:      amount,
+				Fee:         fee,
+				Interval:    interval,
+				StartHeight: uint64(epoch.StartHeight),
+			}, nil
 		}
 	}
 	return TransferInputs{}, fmt.Errorf("epoch-3 activation unavailable")

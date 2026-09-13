@@ -35,10 +35,20 @@ func selectedInstance(root *api.StacksNetwork, p *api.StacksNetworkParticipant) 
 }
 
 // requiredParticipant finds a still-selected instance with its whole captured admission.
-func requiredParticipant(root *api.StacksNetwork, requirement api.BootstrapRequirement, participants []api.StacksNetworkParticipant) *api.StacksNetworkParticipant {
+func requiredParticipant(
+	root *api.StacksNetwork,
+	requirement api.BootstrapRequirement,
+	participants []api.StacksNetworkParticipant,
+) *api.StacksNetworkParticipant {
 	for i := range participants {
 		p := &participants[i]
-		if p.UID != requirement.Participant.UID || p.Name != requirement.Participant.Name || p.DeletionTimestamp != nil || p.Spec.Kind != requirement.Kind || p.Spec.NetworkUID != root.UID || !metav1.IsControlledBy(p, root) || p.Status.Admission == nil || !foundation.BootstrapPolicyCompatible(requirement, p.Status.Admission.Configuration) {
+		if p.UID != requirement.Participant.UID || p.Name != requirement.Participant.Name ||
+			p.DeletionTimestamp != nil ||
+			p.Spec.Kind != requirement.Kind ||
+			p.Spec.NetworkUID != root.UID ||
+			!metav1.IsControlledBy(p, root) ||
+			p.Status.Admission == nil ||
+			!foundation.BootstrapPolicyCompatible(requirement, p.Status.Admission.Configuration) {
 			continue
 		}
 		for _, entry := range root.Spec.Participants {
@@ -51,7 +61,11 @@ func requiredParticipant(root *api.StacksNetwork, requirement api.BootstrapRequi
 }
 
 // requiredWorker verifies the process that produced a frozen prerequisite observation.
-func requiredWorker(root *api.StacksNetwork, requirement api.BootstrapRequirement, participants []api.StacksNetworkParticipant) *api.StacksNetworkParticipant {
+func requiredWorker(
+	root *api.StacksNetwork,
+	requirement api.BootstrapRequirement,
+	participants []api.StacksNetworkParticipant,
+) *api.StacksNetworkParticipant {
 	p := requiredParticipant(root, requirement, participants)
 	if p == nil {
 		return nil
@@ -63,10 +77,17 @@ func requiredWorker(root *api.StacksNetwork, requirement api.BootstrapRequiremen
 		}
 	}
 	execution := p.Status.Execution
-	if session == nil || session.Shutdown != nil || session.Disposal != nil || execution == nil || execution.PodUID != session.Pod.UID || execution.ProfileDigest != session.ProfileDigest || execution.ProcessNonce == "" || execution.AppliedPolicyDigest != p.Status.Admission.PolicyDigest || execution.Phase == "Failed" || execution.Phase == "Unknown" || execution.ObservedGeneration != p.Generation {
+	if session == nil || session.Shutdown != nil || session.Disposal != nil || execution == nil ||
+		execution.PodUID != session.Pod.UID ||
+		execution.ProfileDigest != session.ProfileDigest ||
+		execution.ProcessNonce == "" ||
+		execution.AppliedPolicyDigest != p.Status.Admission.PolicyDigest ||
+		execution.Phase == api.WorkerPhaseFailed ||
+		execution.Phase == api.WorkerPhaseUnknown ||
+		execution.ObservedGeneration != p.Generation {
 		return nil
 	}
-	ready := meta.FindStatusCondition(p.Status.Conditions, "WorkloadReady")
+	ready := meta.FindStatusCondition(p.Status.Conditions, api.ConditionWorkloadReady)
 	if ready == nil || ready.Status != metav1.ConditionTrue || ready.ObservedGeneration != p.Generation {
 		return nil
 	}
@@ -84,22 +105,31 @@ func capturedAccount(requirement api.BootstrapRequirement, name string) (address
 }
 
 // capturedSigner checks the exact required consensus participant and its public signing key.
-func capturedSigner(root *api.StacksNetwork, g *api.StacksGenesis, requirement api.BootstrapRequirement, p *api.StacksNetworkParticipant, participants []api.StacksNetworkParticipant, key string) bool {
+func capturedSigner(
+	root *api.StacksNetwork,
+	g *api.StacksGenesis,
+	requirement api.BootstrapRequirement,
+	p *api.StacksNetworkParticipant,
+	participants []api.StacksNetworkParticipant,
+	key string,
+) bool {
 	policy := p.Status.Admission.Configuration.StacksStacker
 	if policy == nil || policy.SignerRef == nil {
 		return false
 	}
 	for _, required := range g.Spec.Bootstrap.Requirements {
-		if required.Kind != "StacksSigner" {
+		if required.Kind != api.ParticipantStacksSigner {
 			continue
 		}
 		signer := requiredParticipant(root, required, participants)
-		if signer == nil || signer.Spec.ParticipantName != policy.SignerRef.Name || signer.Status.Admission.Configuration.StacksSigner == nil || signer.Status.Admission.Configuration.StacksSigner.AccountRef == nil {
+		if signer == nil || signer.Spec.ParticipantName != policy.SignerRef.Name ||
+			signer.Status.Admission.Configuration.StacksSigner == nil ||
+			signer.Status.Admission.Configuration.StacksSigner.AccountRef == nil {
 			continue
 		}
 		bound := false
 		for _, dep := range requirement.Dependencies {
-			if dep.Kind == "StacksNetworkParticipant" && dep.Name == signer.Name && dep.UID == signer.UID {
+			if dep.Kind == api.KindStacksNetworkParticipant && dep.Name == signer.Name && dep.UID == signer.UID {
 				bound = true
 			}
 		}
@@ -112,13 +142,19 @@ func capturedSigner(root *api.StacksNetwork, g *api.StacksGenesis, requirement a
 }
 
 // pox4CohortSatisfied checks every frozen stacker against its exact bound worker.
-func pox4CohortSatisfied(root *api.StacksNetwork, g *api.StacksGenesis, participants []api.StacksNetworkParticipant, gate api.Gate, now time.Time) bool {
+func pox4CohortSatisfied(
+	root *api.StacksNetwork,
+	g *api.StacksGenesis,
+	participants []api.StacksNetworkParticipant,
+	gate api.Gate,
+	now time.Time,
+) bool {
 	if gate.TargetCycle == nil || *gate.TargetCycle < 0 {
 		return false
 	}
 	found := false
 	for _, requirement := range g.Spec.Bootstrap.Requirements {
-		if requirement.Kind != "StacksStacker" {
+		if requirement.Kind != api.ParticipantStacksStacker {
 			continue
 		}
 		found = true
@@ -127,7 +163,12 @@ func pox4CohortSatisfied(root *api.StacksNetwork, g *api.StacksGenesis, particip
 			return false
 		}
 		o := p.Status.Execution.PoX4
-		if o == nil || !fresh(o.ObservedAt, now) || !o.TargetCycleMatched || o.TargetCycle != uint64(*gate.TargetCycle) || o.FirstCycle > o.TargetCycle || o.EndCycleExclusive <= o.TargetCycle || requirement.AmountMicroSTX == nil || o.AmountMicroSTX != string(*requirement.AmountMicroSTX) {
+		if o == nil || !fresh(o.ObservedAt, now) || !o.TargetCycleMatched ||
+			o.TargetCycle != uint64(*gate.TargetCycle) ||
+			o.FirstCycle > o.TargetCycle ||
+			o.EndCycleExclusive <= o.TargetCycle ||
+			requirement.AmountMicroSTX == nil ||
+			o.AmountMicroSTX != string(*requirement.AmountMicroSTX) {
 			return false
 		}
 		policy := p.Status.Admission.Configuration.StacksStacker
@@ -135,7 +176,8 @@ func pox4CohortSatisfied(root *api.StacksNetwork, g *api.StacksGenesis, particip
 			return false
 		}
 		holder, _ := capturedAccount(requirement, policy.HolderAccountRef.Name)
-		if holder == "" || holder != o.Holder || !capturedSigner(root, g, requirement, p, participants, o.SignerPublicKey) {
+		if holder == "" || holder != o.Holder ||
+			!capturedSigner(root, g, requirement, p, participants, o.SignerPublicKey) {
 			return false
 		}
 	}
@@ -143,13 +185,19 @@ func pox4CohortSatisfied(root *api.StacksNetwork, g *api.StacksGenesis, particip
 }
 
 // pox5CohortSatisfied adds exact manager source, holder membership and delegated stake checks.
-func pox5CohortSatisfied(root *api.StacksNetwork, g *api.StacksGenesis, participants []api.StacksNetworkParticipant, gate api.Gate, now time.Time) bool {
+func pox5CohortSatisfied(
+	root *api.StacksNetwork,
+	g *api.StacksGenesis,
+	participants []api.StacksNetworkParticipant,
+	gate api.Gate,
+	now time.Time,
+) bool {
 	if gate.TargetCycle == nil || *gate.TargetCycle < 0 {
 		return false
 	}
 	found := false
 	for _, requirement := range g.Spec.Bootstrap.Requirements {
-		if requirement.Kind != "StacksStacker" {
+		if requirement.Kind != api.ParticipantStacksStacker {
 			continue
 		}
 		found = true
@@ -158,7 +206,13 @@ func pox5CohortSatisfied(root *api.StacksNetwork, g *api.StacksGenesis, particip
 			return false
 		}
 		o := p.Status.Execution.PoX5
-		if o == nil || !fresh(o.ObservedAt, now) || !o.TargetCycleMatched || o.TargetCycle != uint64(*gate.TargetCycle) || o.FirstCycle > o.TargetCycle || o.EndCycleExclusive <= o.TargetCycle || requirement.AmountMicroSTX == nil || o.AmountMicroSTX != string(*requirement.AmountMicroSTX) || o.DelegatedAmountMicroSTX != o.AmountMicroSTX {
+		if o == nil || !fresh(o.ObservedAt, now) || !o.TargetCycleMatched ||
+			o.TargetCycle != uint64(*gate.TargetCycle) ||
+			o.FirstCycle > o.TargetCycle ||
+			o.EndCycleExclusive <= o.TargetCycle ||
+			requirement.AmountMicroSTX == nil ||
+			o.AmountMicroSTX != string(*requirement.AmountMicroSTX) ||
+			o.DelegatedAmountMicroSTX != o.AmountMicroSTX {
 			return false
 		}
 		policy := p.Status.Admission.Configuration.StacksStacker
@@ -168,7 +222,9 @@ func pox5CohortSatisfied(root *api.StacksNetwork, g *api.StacksGenesis, particip
 		holder, _ := capturedAccount(requirement, policy.HolderAccountRef.Name)
 		administrator, _ := capturedAccount(requirement, policy.AdministratorAccountRef.Name)
 		source, err := protocolcontracts.DirectManager(holder)
-		if err != nil || holder != o.Holder || administrator == "" || o.Manager != administrator+".direct-signer" || o.ManagerSourceDigest != fmt.Sprintf("sha256:%x", sha256.Sum256([]byte(source))) || !capturedSigner(root, g, requirement, p, participants, o.SignerPublicKey) {
+		if err != nil || holder != o.Holder || administrator == "" || o.Manager != administrator+".direct-signer" ||
+			o.ManagerSourceDigest != fmt.Sprintf("sha256:%x", sha256.Sum256([]byte(source))) ||
+			!capturedSigner(root, g, requirement, p, participants, o.SignerPublicKey) {
 			return false
 		}
 	}

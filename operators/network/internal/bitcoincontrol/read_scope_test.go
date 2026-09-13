@@ -21,7 +21,12 @@ type denySigningSecretReader struct {
 	reads int
 }
 
-func (r *denySigningSecretReader) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+func (r *denySigningSecretReader) Get(
+	ctx context.Context,
+	key client.ObjectKey,
+	obj client.Object,
+	opts ...client.GetOption,
+) error {
 	if _, ok := obj.(*metav1.PartialObjectMetadata); ok {
 		r.reads++
 		return fmt.Errorf("signing Secret metadata forbidden")
@@ -39,7 +44,16 @@ func TestBitcoinDispatchPublicScopeNeverReadsOrGrantsSigningSecrets(t *testing.T
 	if err := stacks.AddToScheme(f.c.Scheme()); err != nil {
 		t.Fatal(err)
 	}
-	account := &stacks.StacksAccount{ObjectMeta: metav1.ObjectMeta{Name: "holder", Namespace: "test", UID: "holder-uid"}, Status: common.ResolutionStatus{Digest: "holder-digest", Identity: &common.PublicIdentity{}, CredentialsRef: &common.SecretKeyRef{Name: "holder-key", Key: "privateKey"}, CredentialsUID: "private-secret-uid", Conditions: []metav1.Condition{{Type: "Resolved", Status: metav1.ConditionTrue}}}}
+	account := &stacks.StacksAccount{
+		ObjectMeta: metav1.ObjectMeta{Name: "holder", Namespace: "test", UID: "holder-uid"},
+		Status: common.ResolutionStatus{
+			Digest:         "holder-digest",
+			Identity:       &common.PublicIdentity{},
+			CredentialsRef: &common.SecretKeyRef{Name: "holder-key", Key: "privateKey"},
+			CredentialsUID: "private-secret-uid",
+			Conditions:     []metav1.Condition{{Type: "Resolved", Status: metav1.ConditionTrue}},
+		},
+	}
 	if err := f.c.Create(ctx, account); err != nil {
 		t.Fatal(err)
 	}
@@ -48,7 +62,9 @@ func TestBitcoinDispatchPublicScopeNeverReadsOrGrantsSigningSecrets(t *testing.T
 		t.Fatal(err)
 	}
 	wallet.Spec.KeySource = &bitcoin.WalletKeySource{StacksMinerAccountRef: &common.NameRef{Name: account.Name}}
-	wallet.Status.Dependencies = []common.Binding{{Kind: "StacksAccount", Name: account.Name, UID: account.UID, Fingerprint: account.Status.Digest}}
+	wallet.Status.Dependencies = []common.Binding{
+		{Kind: "StacksAccount", Name: account.Name, UID: account.UID, Fingerprint: account.Status.Digest},
+	}
 	if err := f.c.Update(ctx, &wallet); err != nil {
 		t.Fatal(err)
 	}

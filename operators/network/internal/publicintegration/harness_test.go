@@ -40,12 +40,32 @@ type liveConfig struct {
 
 // readConfig refuses implicit cluster or environment selection.
 func readConfig() (liveConfig, error) {
-	c := liveConfig{fixtureOptions: fixtureOptions{path: envDefault("STACKS_PUBLIC_FIXTURE", defaultFixture), namespace: os.Getenv("STACKS_PUBLIC_NAMESPACE"), variant: envDefault("STACKS_PUBLIC_VARIANT", "minimal14"), bitcoinImage: os.Getenv("STACKS_PUBLIC_BITCOIN_IMAGE"), stacksImage: os.Getenv("STACKS_PUBLIC_STACKS_IMAGE"), signerImage: os.Getenv("STACKS_PUBLIC_SIGNER_IMAGE")}, kubeconfig: os.Getenv("STACKS_PUBLIC_KUBECONFIG"), kubecontext: os.Getenv("STACKS_PUBLIC_CONTEXT"), evidence: os.Getenv("STACKS_PUBLIC_EVIDENCE_DIR"), operatorNamespace: os.Getenv("STACKS_PUBLIC_OPERATOR_NAMESPACE"), operatorName: os.Getenv("STACKS_PUBLIC_OPERATOR_NAME"), operatorUID: types.UID(os.Getenv("STACKS_PUBLIC_OPERATOR_UID"))}
-	if os.Getenv("STACKS_PUBLIC_FRESH_JOIN") == "1" && (os.Getenv("STACKS_PUBLIC_ACTORS") == "1" || os.Getenv("STACKS_PUBLIC_ACTORS_FIRST") == "1" || os.Getenv("STACKS_PUBLIC_UPGRADE_IMAGE") != "") {
+	c := liveConfig{
+		fixtureOptions: fixtureOptions{
+			path:         envDefault("STACKS_PUBLIC_FIXTURE", defaultFixture),
+			namespace:    os.Getenv("STACKS_PUBLIC_NAMESPACE"),
+			variant:      envDefault("STACKS_PUBLIC_VARIANT", "minimal14"),
+			bitcoinImage: os.Getenv("STACKS_PUBLIC_BITCOIN_IMAGE"),
+			stacksImage:  os.Getenv("STACKS_PUBLIC_STACKS_IMAGE"),
+			signerImage:  os.Getenv("STACKS_PUBLIC_SIGNER_IMAGE"),
+		},
+		kubeconfig:        os.Getenv("STACKS_PUBLIC_KUBECONFIG"),
+		kubecontext:       os.Getenv("STACKS_PUBLIC_CONTEXT"),
+		evidence:          os.Getenv("STACKS_PUBLIC_EVIDENCE_DIR"),
+		operatorNamespace: os.Getenv("STACKS_PUBLIC_OPERATOR_NAMESPACE"),
+		operatorName:      os.Getenv("STACKS_PUBLIC_OPERATOR_NAME"),
+		operatorUID:       types.UID(os.Getenv("STACKS_PUBLIC_OPERATOR_UID")),
+	}
+	if os.Getenv("STACKS_PUBLIC_FRESH_JOIN") == "1" &&
+		(os.Getenv("STACKS_PUBLIC_ACTORS") == "1" ||
+			os.Getenv("STACKS_PUBLIC_ACTORS_FIRST") == "1" ||
+			os.Getenv("STACKS_PUBLIC_UPGRADE_IMAGE") != "") {
 		return c, fmt.Errorf("fresh-join qualification is separate from the actor lifecycle/upgrade exercise")
 	}
 	if c.kubeconfig == "" || c.kubecontext == "" || c.namespace == "" || c.bitcoinImage == "" || c.stacksImage == "" {
-		return c, fmt.Errorf("explicit STACKS_PUBLIC_KUBECONFIG, CONTEXT, NAMESPACE, BITCOIN_IMAGE and STACKS_IMAGE required")
+		return c, fmt.Errorf(
+			"explicit STACKS_PUBLIC_KUBECONFIG, CONTEXT, NAMESPACE, BITCOIN_IMAGE and STACKS_IMAGE required",
+		)
 	}
 	if c.signerImage == "" {
 		c.signerImage = c.stacksImage
@@ -55,7 +75,37 @@ func readConfig() (liveConfig, error) {
 		target             *time.Duration
 		minimum, maximum   time.Duration
 	}{
-		{"CADENCE", "5s", &c.cadence, time.Second, time.Hour}, {"TIMEOUT", "45m", &c.timeout, time.Minute, 2 * time.Hour}, {"PROGRESS_TIMEOUT", "5m", &c.progressTimeout, 10 * time.Second, 20 * time.Minute}, {"CLEANUP_TIMEOUT", "5m", &c.cleanupTimeout, 30 * time.Second, 20 * time.Minute}, {"PAUSE_WINDOW", "20s", &c.pauseWindow, 10 * time.Second, 5 * time.Minute},
+		{
+			"CADENCE",
+			"5s",
+			&c.cadence,
+			time.Second,
+			time.Hour,
+		}, {
+			"TIMEOUT",
+			"45m",
+			&c.timeout,
+			time.Minute,
+			2 * time.Hour,
+		}, {
+			"PROGRESS_TIMEOUT",
+			"5m",
+			&c.progressTimeout,
+			10 * time.Second,
+			20 * time.Minute,
+		}, {
+			"CLEANUP_TIMEOUT",
+			"5m",
+			&c.cleanupTimeout,
+			30 * time.Second,
+			20 * time.Minute,
+		}, {
+			"PAUSE_WINDOW",
+			"20s",
+			&c.pauseWindow,
+			10 * time.Second,
+			5 * time.Minute,
+		},
 	} {
 		value, err := time.ParseDuration(envDefault("STACKS_PUBLIC_"+field.name, field.defaultValue))
 		if err != nil || value < field.minimum || value > field.maximum {
@@ -92,7 +142,12 @@ type identity struct {
 }
 
 func objectIdentity(o client.Object) identity {
-	return identity{Name: o.GetName(), UID: o.GetUID(), Generation: o.GetGeneration(), ResourceVersion: o.GetResourceVersion()}
+	return identity{
+		Name:            o.GetName(),
+		UID:             o.GetUID(),
+		Generation:      o.GetGeneration(),
+		ResourceVersion: o.GetResourceVersion(),
+	}
 }
 
 // participantEvidence includes public controller facts, never mounted key material.
@@ -114,7 +169,7 @@ type executionEvidence struct {
 type snapshot struct {
 	At           time.Time               `json:"at"`
 	Root         identity                `json:"root"`
-	Operation    string                  `json:"operation"`
+	Operation    api.NetworkOperation    `json:"operation"`
 	Deleting     bool                    `json:"deleting,omitempty"`
 	Status       api.StacksNetworkStatus `json:"status"`
 	Participants []participantEvidence   `json:"participants,omitempty"`
@@ -135,13 +190,23 @@ type harness struct {
 
 // newHarness prepares access/evidence before any create and never uses a default context.
 func newHarness(t *testing.T, config liveConfig, declared declarations) (*harness, error) {
-	restConfig, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(&clientcmd.ClientConfigLoadingRules{ExplicitPath: config.kubeconfig}, &clientcmd.ConfigOverrides{CurrentContext: config.kubecontext}).ClientConfig()
+	restConfig, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
+		&clientcmd.ClientConfigLoadingRules{ExplicitPath: config.kubeconfig},
+		&clientcmd.ConfigOverrides{CurrentContext: config.kubecontext},
+	).
+		ClientConfig()
 	if err != nil {
 		return nil, err
 	}
 	restConfig.Timeout = 10 * time.Second
 	scheme := runtime.NewScheme()
-	for _, add := range []func(*runtime.Scheme) error{clientgoscheme.AddToScheme, api.AddToScheme, bitcoin.AddToScheme, stacks.AddToScheme, actions.AddToScheme} {
+	for _, add := range []func(*runtime.Scheme) error{
+		clientgoscheme.AddToScheme,
+		api.AddToScheme,
+		bitcoin.AddToScheme,
+		stacks.AddToScheme,
+		actions.AddToScheme,
+	} {
 		if err := add(scheme); err != nil {
 			return nil, err
 		}
@@ -156,7 +221,7 @@ func newHarness(t *testing.T, config liveConfig, declared declarations) (*harnes
 		if err != nil {
 			return nil, err
 		}
-	} else if err = os.MkdirAll(directory, 0700); err != nil {
+	} else if err = os.MkdirAll(directory, 0o700); err != nil {
 		return nil, err
 	}
 	return &harness{t: t, c: c, config: config, declared: declared, evidence: directory}, nil
@@ -167,7 +232,12 @@ func (h *harness) create(ctx context.Context) error {
 	if err := h.recordOperator(ctx); err != nil {
 		return err
 	}
-	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: h.config.namespace, Labels: map[string]string{"network.stacks.org/public-qualification": "true"}}}
+	ns := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   h.config.namespace,
+			Labels: map[string]string{"network.stacks.org/public-qualification": "true"},
+		},
+	}
 	if err := h.c.Create(ctx, ns); err != nil {
 		return fmt.Errorf("fresh namespace create failed; existing namespaces are never adopted: %w", err)
 	}
@@ -191,14 +261,29 @@ func (h *harness) create(ctx context.Context) error {
 	}
 	h.createdRoot = true
 	h.rootUID = h.declared.root.GetUID()
-	if err := h.event("declarations-created", map[string]any{"namespace": h.config.namespace, "namespaceUID": h.namespaceUID, "networkUID": h.rootUID, "variant": h.config.variant, "cadence": h.config.cadence.String(), "bitcoinImage": h.config.bitcoinImage, "stacksImage": h.config.stacksImage, "signerImage": h.config.signerImage}); err != nil {
+	if err := h.event(
+		"declarations-created",
+		map[string]any{
+			"namespace":    h.config.namespace,
+			"namespaceUID": h.namespaceUID,
+			"networkUID":   h.rootUID,
+			"variant":      h.config.variant,
+			"cadence":      h.config.cadence.String(),
+			"bitcoinImage": h.config.bitcoinImage,
+			"stacksImage":  h.config.stacksImage,
+			"signerImage":  h.config.signerImage,
+		},
+	); err != nil {
 		return err
 	}
 	_, err := h.wait(ctx, "genesis-captured", h.config.timeout, true, func(s snapshot) (bool, error) {
 		if s.Status.GenesisRef == nil {
 			return false, nil
 		}
-		root := &api.StacksNetwork{ObjectMeta: metav1.ObjectMeta{Name: s.Root.Name, Namespace: h.config.namespace, UID: s.Root.UID}, Status: s.Status}
+		root := &api.StacksNetwork{
+			ObjectMeta: metav1.ObjectMeta{Name: s.Root.Name, Namespace: h.config.namespace, UID: s.Root.UID},
+			Status:     s.Status,
+		}
 		if err := h.recordGenesis(ctx, root); err != nil {
 			return false, err
 		}
@@ -225,7 +310,13 @@ func (h *harness) readSnapshot(ctx context.Context) (snapshot, error) {
 	if root.UID != h.rootUID {
 		return s, &rootUnavailable{reason: "bound network root was replaced"}
 	}
-	s = snapshot{At: time.Now().UTC(), Root: objectIdentity(root), Operation: root.Spec.Operation, Deleting: root.DeletionTimestamp != nil, Status: *root.Status.DeepCopy()}
+	s = snapshot{
+		At:        time.Now().UTC(),
+		Root:      objectIdentity(root),
+		Operation: root.Spec.Operation,
+		Deleting:  root.DeletionTimestamp != nil,
+		Status:    *root.Status.DeepCopy(),
+	}
 	if failed(s) || stopped(s) {
 		return s, nil
 	}
@@ -235,7 +326,15 @@ func (h *harness) readSnapshot(ctx context.Context) (snapshot, error) {
 	}
 	for _, p := range participants.Items {
 		if p.Spec.NetworkUID == root.UID && metav1.IsControlledBy(&p, root) {
-			s.Participants = append(s.Participants, participantEvidence{Identity: objectIdentity(&p), Name: p.Spec.ParticipantName, Kind: p.Spec.Kind, Status: *p.Status.DeepCopy()})
+			s.Participants = append(
+				s.Participants,
+				participantEvidence{
+					Identity: objectIdentity(&p),
+					Name:     p.Spec.ParticipantName,
+					Kind:     p.Spec.Kind,
+					Status:   *p.Status.DeepCopy(),
+				},
+			)
 		}
 	}
 	var records bitcoin.BitcoinExecutionList
@@ -244,11 +343,21 @@ func (h *harness) readSnapshot(ctx context.Context) (snapshot, error) {
 	}
 	for _, record := range records.Items {
 		if record.Spec.NetworkUID == root.UID && metav1.IsControlledBy(&record, root) {
-			s.Executions = append(s.Executions, executionEvidence{Identity: objectIdentity(&record), ParticipantUID: record.Spec.Participant.UID, Status: *record.Status.DeepCopy()})
+			s.Executions = append(
+				s.Executions,
+				executionEvidence{
+					Identity:       objectIdentity(&record),
+					ParticipantUID: record.Spec.Participant.UID,
+					Status:         *record.Status.DeepCopy(),
+				},
+			)
 		}
 	}
 	sort.Slice(s.Participants, func(i, j int) bool { return s.Participants[i].Name < s.Participants[j].Name })
-	sort.Slice(s.Executions, func(i, j int) bool { return s.Executions[i].Identity.Name < s.Executions[j].Identity.Name })
+	sort.Slice(
+		s.Executions,
+		func(i, j int) bool { return s.Executions[i].Identity.Name < s.Executions[j].Identity.Name },
+	)
 	s.At = time.Now().UTC()
 	return s, nil
 }
@@ -259,20 +368,29 @@ func (h *harness) record(stage string, s snapshot) error {
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(filepath.Join(h.evidence, "latest.json"), data, 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(h.evidence, "latest.json"), data, 0o600); err != nil {
 		return err
 	}
 	if stage != "" {
-		if err := os.WriteFile(filepath.Join(h.evidence, stage+".json"), data, 0600); err != nil {
+		if err := os.WriteFile(filepath.Join(h.evidence, stage+".json"), data, 0o600); err != nil {
 			return err
 		}
-		return h.event(stage, map[string]any{"networkUID": s.Root.UID, "phase": s.Status.Phase, "generation": s.Root.Generation})
+		return h.event(
+			stage,
+			map[string]any{"networkUID": s.Root.UID, "phase": s.Status.Phase, "generation": s.Root.Generation},
+		)
 	}
 	return nil
 }
 
 // wait polls fresh public evidence; failures never refresh native observation times.
-func (h *harness) wait(ctx context.Context, stage string, bound time.Duration, failFast bool, accept func(snapshot) (bool, error)) (snapshot, error) {
+func (h *harness) wait(
+	ctx context.Context,
+	stage string,
+	bound time.Duration,
+	failFast bool,
+	accept func(snapshot) (bool, error),
+) (snapshot, error) {
 	ctx, cancel := context.WithTimeout(ctx, bound)
 	defer cancel()
 	ticker := time.NewTicker(2 * time.Second)
@@ -281,7 +399,7 @@ func (h *harness) wait(ctx context.Context, stage string, bound time.Duration, f
 	var lastErr error
 	ended := func() (snapshot, error) {
 		_ = h.record(stage+"-timeout", last)
-		return last, fmt.Errorf("%s ended: %w (last API error: %v)", stage, ctx.Err(), lastErr)
+		return last, fmt.Errorf("%s ended: %w (last API error: %w)", stage, ctx.Err(), lastErr)
 	}
 	for {
 		if ctx.Err() != nil {
@@ -339,24 +457,29 @@ func stopped(s snapshot) bool { return s.Operation == "Stopped" || s.Deleting }
 
 // failed recognizes either terminal root failure representation.
 func failed(s snapshot) bool {
-	return s.Status.Phase == "Failed" || meta.IsStatusConditionTrue(s.Status.Conditions, "Failed")
+	return string(s.Status.Phase) == "Failed" || meta.IsStatusConditionTrue(s.Status.Conditions, "Failed")
 }
+
 func failureReason(s snapshot) string {
 	if c := meta.FindStatusCondition(s.Status.Conditions, "Failed"); c != nil {
 		return c.Reason
 	}
-	return s.Status.Phase
+	return string(s.Status.Phase)
 }
+
 func condition(s snapshot, kind string, status metav1.ConditionStatus) bool {
 	c := meta.FindStatusCondition(s.Status.Conditions, kind)
 	return c != nil && c.Status == status && c.ObservedGeneration == s.Root.Generation
 }
 
 // setOperation patches only the current root with optimistic concurrency.
-func (h *harness) setOperation(ctx context.Context, operation string) error {
+func (h *harness) setOperation(ctx context.Context, operation api.NetworkOperation) error {
 	for range 5 {
 		var root api.StacksNetwork
-		if err := h.c.Get(ctx, client.ObjectKey{Namespace: h.config.namespace, Name: "network"}, &root); err != nil {
+		if err := h.c.Get(ctx, client.ObjectKey{
+			Namespace: h.config.namespace,
+			Name:      "network",
+		}, &root); err != nil {
 			return err
 		}
 		if root.UID != h.rootUID {
@@ -383,11 +506,11 @@ func (h *harness) event(stage string, detail any) error {
 	if err != nil {
 		return err
 	}
-	file, err := os.OpenFile(filepath.Join(h.evidence, "events.jsonl"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
+	file, err := os.OpenFile(filepath.Join(h.evidence, "events.jsonl"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }() // Read/cleanup completion cannot change the operation's result.
 	_, err = file.Write(append(data, '\n'))
 	return err
 }

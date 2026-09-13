@@ -19,7 +19,14 @@ import (
 )
 
 // verifyRetainedSourceEligibility exercises independent candidate and retained-source status writes.
-func verifyRetainedSourceEligibility(t *testing.T, ctx context.Context, c client.Client, r *foundation.Reconciler, request ctrl.Request, root *api.StacksNetwork) {
+func verifyRetainedSourceEligibility(
+	t *testing.T,
+	ctx context.Context,
+	c client.Client,
+	r *foundation.Reconciler,
+	request ctrl.Request,
+	root *api.StacksNetwork,
+) {
 	t.Helper()
 	var source stacks.StacksTransactionProduction
 	key := client.ObjectKey{Namespace: root.Namespace, Name: "traffic"}
@@ -45,7 +52,9 @@ func verifyRetainedSourceEligibility(t *testing.T, ctx context.Context, c client
 		t.Helper()
 		p := participant(t, ctx, c, root, "traffic")
 		condition := meta.FindStatusCondition(p.Status.Conditions, "AdmissionReady")
-		if !reflect.DeepEqual(prior, p.Status.Admission) || condition == nil || condition.Status != ready || condition.Reason != reason || condition.ObservedGeneration != p.Generation {
+		if !reflect.DeepEqual(prior, p.Status.Admission) || condition == nil || condition.Status != ready ||
+			condition.Reason != reason ||
+			condition.ObservedGeneration != p.Generation {
 			t.Fatalf("retained policy/eligibility mismatch: %+v", p.Status)
 		}
 		if p.Spec.Control == nil || !ptr.Deref(p.Spec.Control.Paused, false) {
@@ -70,7 +79,10 @@ func verifyRetainedSourceEligibility(t *testing.T, ctx context.Context, c client
 	driveRoot(t, ctx, c, r, request, root)
 	assert(metav1.ConditionFalse, "DefinitionUnavailable")
 	// Restore the declaration for fresh-root tests; this root cannot inherit its UID.
-	replacement := &stacks.StacksTransactionProduction{ObjectMeta: metav1.ObjectMeta{Namespace: root.Namespace, Name: key.Name}, Spec: *original}
+	replacement := &stacks.StacksTransactionProduction{
+		ObjectMeta: metav1.ObjectMeta{Namespace: root.Namespace, Name: key.Name},
+		Spec:       *original,
+	}
 	if err := c.Create(ctx, replacement); err != nil {
 		t.Fatal(err)
 	}

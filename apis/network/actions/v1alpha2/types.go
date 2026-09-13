@@ -13,7 +13,13 @@ var GroupVersion = schema.GroupVersion{Group: "actions.stacks.org", Version: "v1
 
 // AddToScheme registers the supported atomic actions.
 func AddToScheme(s *runtime.Scheme) error {
-	s.AddKnownTypes(GroupVersion, &BitcoinBlockGeneration{}, &BitcoinBlockGenerationList{}, &BitcoinReorganization{}, &BitcoinReorganizationList{})
+	s.AddKnownTypes(
+		GroupVersion,
+		&BitcoinBlockGeneration{},
+		&BitcoinBlockGenerationList{},
+		&BitcoinReorganization{},
+		&BitcoinReorganizationList{},
+	)
 	metav1.AddToGroupVersion(s, GroupVersion)
 	return nil
 }
@@ -136,7 +142,7 @@ type BitcoinBlockGenerationStatus struct {
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 	// Phase projects lifecycle conditions and durable mechanism facts.
 	// +kubebuilder:validation:Enum=Pending;Admitted;Active;Recovering;Completed;Recovered;Failed;Inconclusive
-	Phase string `json:"phase,omitempty"`
+	Phase Phase `json:"phase,omitempty"`
 	// AdmittedAt records the first durable reservation.
 	AdmittedAt *metav1.Time `json:"admittedAt,omitempty"`
 	// StartedAt records the first potentially executable authorization.

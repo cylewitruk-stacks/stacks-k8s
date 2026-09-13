@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	common "github.com/cylewitruk-stacks/stacks-k8s/apis/network/common/v1alpha2"
 	api "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha2"
 	"github.com/cylewitruk-stacks/stacks-k8s/libs/stacks/identity"
 	"github.com/pelletier/go-toml/v2"
@@ -218,13 +219,65 @@ func Node(p NodeParameters, secrets NodeSecrets) ([]byte, error) {
 	if len(secrets.PrivateKey) == 64 {
 		key = secrets.PrivateKey
 	}
-	if net.ParseIP(p.P2PAddress) == nil || p.RPCHost == "" || p.BitcoinHost == "" || secrets.RPCUsername != "actor" || secrets.RPCPassword == "" || secrets.EventToken == "" {
+	if net.ParseIP(p.P2PAddress) == nil || p.RPCHost == "" || p.BitcoinHost == "" ||
+		secrets.RPCUsername != common.BitcoinActorRPCUsername ||
+		secrets.RPCPassword == "" ||
+		secrets.EventToken == "" {
 		return nil, fmt.Errorf("incomplete managed node endpoints or credentials")
 	}
-	if len(p.Chain.Epochs) != 14 || p.Chain.PoX.PrepareLength < 1 || p.Chain.PoX.PrepareLength >= p.Chain.PoX.RewardCycleLength || p.Chain.Contracts.Deployer == "" {
+	if len(p.Chain.Epochs) != 14 || p.Chain.PoX.PrepareLength < 1 ||
+		p.Chain.PoX.PrepareLength >= p.Chain.PoX.RewardCycleLength ||
+		p.Chain.Contracts.Deployer == "" {
 		return nil, fmt.Errorf("incomplete frozen genesis")
 	}
-	d := nodeDocument{Node: nodeSection{Name: p.Name, RPCBind: "0.0.0.0:20443", P2PBind: "0.0.0.0:20444", DataURL: "http://" + net.JoinHostPort(p.RPCHost, "20443"), P2PAddress: net.JoinHostPort(p.P2PAddress, "20444"), WorkingDir: "/data/node", Seed: key, PeerSeed: key, Miner: p.Mining, Stacker: p.SignerHost != "", TestGenesis: true, SBTCContract: p.Chain.Contracts.Deployer + ".sbtc-token", RegistryContract: p.Chain.Contracts.Deployer + ".sbtc-registry", BondAdmin: p.Chain.Contracts.Deployer, PauseAdmin: p.Chain.Contracts.Deployer, TxIndex: true, Bootstrap: strings.Join(p.BootstrapPeers, ","), EventBlocking: true, EventQueue: 1000, InitiativeDelay: 500}, Connection: connectionSection{PublicAddress: net.JoinHostPort(p.P2PAddress, "20444"), PrivateNeighbors: true, WalkInterval: 5, InventoryInterval: 5, DownloadInterval: 1, AuthToken: secrets.EventToken}, Burnchain: burnchainSection{Chain: "bitcoin", Mode: "nakamoto-neon", PollTime: 1, MagicBytes: "T3", PrepareLength: p.Chain.PoX.PrepareLength, RewardLength: p.Chain.PoX.RewardCycleLength, FeeCap: 20000, FeeRate: p.FeeRateSatsPerVByte, PeerHost: p.BitcoinHost, PeerPort: 18444, RPCPort: 18443, Username: secrets.RPCUsername, Password: secrets.RPCPassword, Timeout: 30}}
+	d := nodeDocument{
+		Node: nodeSection{
+			Name:             p.Name,
+			RPCBind:          "0.0.0.0:20443",
+			P2PBind:          "0.0.0.0:20444",
+			DataURL:          "http://" + net.JoinHostPort(p.RPCHost, "20443"),
+			P2PAddress:       net.JoinHostPort(p.P2PAddress, "20444"),
+			WorkingDir:       "/data/node",
+			Seed:             key,
+			PeerSeed:         key,
+			Miner:            p.Mining,
+			Stacker:          p.SignerHost != "",
+			TestGenesis:      true,
+			SBTCContract:     p.Chain.Contracts.Deployer + ".sbtc-token",
+			RegistryContract: p.Chain.Contracts.Deployer + ".sbtc-registry",
+			BondAdmin:        p.Chain.Contracts.Deployer,
+			PauseAdmin:       p.Chain.Contracts.Deployer,
+			TxIndex:          true,
+			Bootstrap:        strings.Join(p.BootstrapPeers, ","),
+			EventBlocking:    true,
+			EventQueue:       1000,
+			InitiativeDelay:  500,
+		},
+		Connection: connectionSection{
+			PublicAddress:     net.JoinHostPort(p.P2PAddress, "20444"),
+			PrivateNeighbors:  true,
+			WalkInterval:      5,
+			InventoryInterval: 5,
+			DownloadInterval:  1,
+			AuthToken:         secrets.EventToken,
+		},
+		Burnchain: burnchainSection{
+			Chain:         "bitcoin",
+			Mode:          "nakamoto-neon",
+			PollTime:      1,
+			MagicBytes:    "T3",
+			PrepareLength: p.Chain.PoX.PrepareLength,
+			RewardLength:  p.Chain.PoX.RewardCycleLength,
+			FeeCap:        20000,
+			FeeRate:       p.FeeRateSatsPerVByte,
+			PeerHost:      p.BitcoinHost,
+			PeerPort:      18444,
+			RPCPort:       18443,
+			Username:      secrets.RPCUsername,
+			Password:      secrets.RPCPassword,
+			Timeout:       30,
+		},
+	}
 	if d.Burnchain.FeeRate == 0 {
 		d.Burnchain.FeeRate = 2
 	}
@@ -242,12 +295,22 @@ func Node(p NodeParameters, secrets NodeSecrets) ([]byte, error) {
 		if p.WalletName == "" {
 			return nil, fmt.Errorf("miner wallet name is required")
 		}
-		d.Miner = &minerSection{FirstAttempt: 1000, SubsequentAttempt: 2000, CommitDelay: 1000, VRFPath: "/data/node/activated-vrf-key.json"}
+		d.Miner = &minerSection{
+			FirstAttempt:      1000,
+			SubsequentAttempt: 2000,
+			CommitDelay:       1000,
+			VRFPath:           "/data/node/activated-vrf-key.json",
+		}
 		d.Burnchain.WalletName = p.WalletName
 		d.Burnchain.MiningPublicKey = public.MiningPublicKey
 	}
 	if p.SignerHost != "" {
-		d.Observers = []observerSection{{Endpoint: net.JoinHostPort(p.SignerHost, "30000"), Keys: []string{"stackerdb", "block_proposal", "burn_blocks"}}}
+		d.Observers = []observerSection{
+			{
+				Endpoint: net.JoinHostPort(p.SignerHost, "30000"),
+				Keys:     []string{"stackerdb", "block_proposal", "burn_blocks"},
+			},
+		}
 	}
 	data, err := toml.Marshal(d)
 	if err != nil {
@@ -287,7 +350,19 @@ func Signer(nodeHost, privateKey, eventToken string) ([]byte, error) {
 	if len(privateKey) == 64 {
 		privateKey += "01"
 	}
-	data, err := toml.Marshal(signerDocument{PrivateKey: privateKey, NodeHost: net.JoinHostPort(nodeHost, "20443"), Endpoint: "0.0.0.0:30000", Network: "testnet", AuthPassword: eventToken, DBPath: "/data/signer.sqlite", MetricsEndpoint: "0.0.0.0:31000", EventTimeout: 250})
+	// #nosec G117 -- The scoped signer config must contain its key; callers store it only in the private config Secret.
+	data, err := toml.Marshal(
+		signerDocument{
+			PrivateKey:      privateKey,
+			NodeHost:        net.JoinHostPort(nodeHost, "20443"),
+			Endpoint:        "0.0.0.0:30000",
+			Network:         "testnet",
+			AuthPassword:    eventToken,
+			DBPath:          "/data/signer.sqlite",
+			MetricsEndpoint: "0.0.0.0:31000",
+			EventTimeout:    250,
+		},
+	)
 	if err != nil {
 		return nil, fmt.Errorf("render native signer configuration")
 	}

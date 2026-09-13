@@ -18,7 +18,20 @@ import (
 )
 
 func TestStoppedUnrecordedWorkerRequiresFreshNoActivationProof(t *testing.T) {
-	for _, mode := range []string{"unstarted", "failed-unstarted", "allocation-observed", "pod-present", "pod-read-error", "admitted", "candidate", "execution", "prior-pod", "prior-workload", "finalizer", "newer-current-history"} {
+	for _, mode := range []string{
+		"unstarted",
+		"failed-unstarted",
+		"allocation-observed",
+		"pod-present",
+		"pod-read-error",
+		"admitted",
+		"candidate",
+		"execution",
+		"prior-pod",
+		"prior-workload",
+		"finalizer",
+		"newer-current-history",
+	} {
 		t.Run(mode, func(t *testing.T) {
 			root := rootFixture()
 			root.Spec.Operation = "Stopped"
@@ -40,15 +53,28 @@ func TestStoppedUnrecordedWorkerRequiresFreshNoActivationProof(t *testing.T) {
 			case "execution":
 				p.Status.Execution = &api.WorkerExecutionStatus{Phase: "Inactive"}
 			case "prior-pod":
-				p.Status.Runtime = &api.ParticipantRuntimeStatus{PodRef: &common.Binding{Kind: "Pod", Name: "prior", UID: "prior"}}
+				p.Status.Runtime = &api.ParticipantRuntimeStatus{
+					PodRef: &common.Binding{Kind: "Pod", Name: "prior", UID: "prior"},
+				}
 			case "prior-workload":
-				p.Status.Runtime = &api.ParticipantRuntimeStatus{WorkloadRefs: []common.Binding{{Kind: "Pod", Name: "prior", UID: "prior"}}}
+				p.Status.Runtime = &api.ParticipantRuntimeStatus{
+					WorkloadRefs: []common.Binding{{Kind: "Pod", Name: "prior", UID: "prior"}},
+				}
 			case "finalizer":
 				p.Finalizers = []string{stacksworker.Finalizer}
 			}
 			objects := []client.Object{p}
 			if mode == "pod-present" {
-				objects = append(objects, &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: stacksworker.Name(p), Namespace: p.Namespace, UID: "unexpected"}})
+				objects = append(
+					objects,
+					&corev1.Pod{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      stacksworker.Name(p),
+							Namespace: p.Namespace,
+							UID:       "unexpected",
+						},
+					},
+				)
 			}
 			scheme := runtime.NewScheme()
 			_ = api.AddToScheme(scheme)
@@ -73,7 +99,15 @@ func TestStoppedUnrecordedWorkerRequiresFreshNoActivationProof(t *testing.T) {
 			if mode == "failed-unstarted" && !meta.IsStatusConditionTrue(root.Status.Conditions, "Failed") {
 				t.Fatal("failure latch lost during unstarted stop")
 			}
-			if stopped && (!meta.IsStatusConditionFalse(root.Status.Conditions, "Running") || !meta.IsStatusConditionFalse(root.Status.Conditions, "Operational")) {
+			if stopped &&
+				(!meta.IsStatusConditionFalse(
+					root.Status.Conditions,
+					"Running",
+				) ||
+					!meta.IsStatusConditionFalse(
+						root.Status.Conditions,
+						"Operational",
+					)) {
 				t.Fatal("stop claimed operation")
 			}
 			current := &api.StacksNetworkParticipant{}
@@ -90,7 +124,12 @@ func TestStoppedUnrecordedWorkerRequiresFreshNoActivationProof(t *testing.T) {
 // allocationReadFailure prevents absence from being inferred from an API outage.
 type allocationReadFailure struct{ client.Reader }
 
-func (r allocationReadFailure) Get(ctx context.Context, key client.ObjectKey, object client.Object, opts ...client.GetOption) error {
+func (r allocationReadFailure) Get(
+	ctx context.Context,
+	key client.ObjectKey,
+	object client.Object,
+	opts ...client.GetOption,
+) error {
 	if _, ok := object.(*corev1.Pod); ok {
 		return fmt.Errorf("API unavailable")
 	}

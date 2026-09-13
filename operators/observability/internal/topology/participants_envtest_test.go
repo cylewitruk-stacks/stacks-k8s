@@ -18,7 +18,16 @@ import (
 )
 
 func TestParticipantObservationWithAPIServerAndReadOnlyRBAC(t *testing.T) {
-	environment := &envtest.Environment{CRDDirectoryPaths: []string{filepath.Join("..", "..", "..", "..", "charts", "stacks-network-operator", "crds"), filepath.Join("..", "..", "..", "..", "charts", "stacks-observability-operator", "crds")}, ErrorIfCRDPathMissing: true, DownloadBinaryAssets: true, DownloadBinaryAssetsVersion: "1.37.0", BinaryAssetsDirectory: filepath.Join(os.TempDir(), "stacks-network-operator-envtest")}
+	environment := &envtest.Environment{
+		CRDDirectoryPaths: []string{
+			filepath.Join("..", "..", "..", "..", "charts", "stacks-network-operator", "crds"),
+			filepath.Join("..", "..", "..", "..", "charts", "stacks-observability-operator", "crds"),
+		},
+		ErrorIfCRDPathMissing:       true,
+		DownloadBinaryAssets:        true,
+		DownloadBinaryAssetsVersion: "1.37.0",
+		BinaryAssetsDirectory:       filepath.Join(os.TempDir(), "stacks-network-operator-envtest"),
+	}
 	configuration, err := environment.Start()
 	if err != nil {
 		t.Fatal(err)
@@ -108,9 +117,33 @@ func TestParticipantObservationWithAPIServerAndReadOnlyRBAC(t *testing.T) {
 	must(admin.Status().Update(t.Context(), f.participant))
 	user, err := environment.AddUser(envtest.User{Name: "observation-reader"}, configuration)
 	must(err)
-	role := &rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: "observation-read", Namespace: testNamespace}, Rules: []rbacv1.PolicyRule{{APIGroups: []string{"network.stacks.org"}, Resources: []string{"stacksnetworks", "stacksnetworkparticipants"}, Verbs: []string{"get", "list"}}, {APIGroups: []string{""}, Resources: []string{"pods", "services", "configmaps"}, Verbs: []string{"get", "list"}}, {APIGroups: []string{"apps"}, Resources: []string{"statefulsets"}, Verbs: []string{"get", "list"}}}}
+	role := &rbacv1.Role{
+		ObjectMeta: metav1.ObjectMeta{Name: "observation-read", Namespace: testNamespace},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{"network.stacks.org"},
+				Resources: []string{"stacksnetworks", "stacksnetworkparticipants"},
+				Verbs:     []string{"get", "list"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"pods", "services", "configmaps"},
+				Verbs:     []string{"get", "list"},
+			},
+			{APIGroups: []string{"apps"}, Resources: []string{"statefulsets"}, Verbs: []string{"get", "list"}},
+		},
+	}
 	must(admin.Create(t.Context(), role))
-	must(admin.Create(t.Context(), &rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: role.Name, Namespace: testNamespace}, RoleRef: rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: "Role", Name: role.Name}, Subjects: []rbacv1.Subject{{Kind: "User", APIGroup: rbacv1.GroupName, Name: "observation-reader"}}}))
+	must(
+		admin.Create(
+			t.Context(),
+			&rbacv1.RoleBinding{
+				ObjectMeta: metav1.ObjectMeta{Name: role.Name, Namespace: testNamespace},
+				RoleRef:    rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: "Role", Name: role.Name},
+				Subjects:   []rbacv1.Subject{{Kind: "User", APIGroup: rbacv1.GroupName, Name: "observation-reader"}},
+			},
+		),
+	)
 	bounded, err := client.New(user.Config(), client.Options{Scheme: scheme})
 	must(err)
 	reader := Reader{APIReader: bounded}
@@ -133,19 +166,38 @@ func TestParticipantObservationWithAPIServerAndReadOnlyRBAC(t *testing.T) {
 	if afterHeartbeat.Binding != snapshot.Binding {
 		t.Fatal("protocol status changed the actor snapshot identity")
 	}
-	if err := bounded.Get(t.Context(), client.ObjectKey{Namespace: testNamespace, Name: "configuration"}, &corev1.Secret{}); !apierrors.IsForbidden(err) {
+	if err := bounded.Get(
+		t.Context(),
+		client.ObjectKey{Namespace: testNamespace, Name: "configuration"},
+		&corev1.Secret{},
+	); !apierrors.IsForbidden(
+		err,
+	) {
 		t.Fatalf("Secret access must be forbidden: %v", err)
 	}
 	if err := bounded.Update(t.Context(), f.participant); !apierrors.IsForbidden(err) {
 		t.Fatalf("participant mutation must be forbidden: %v", err)
 	}
-	object := &observation.NetworkObservation{ObjectMeta: metav1.ObjectMeta{Name: "current", Namespace: testNamespace}, Spec: observation.NetworkObservationSpec{NetworkRef: observation.LocalObjectReference{Name: "network"}, ExpectedSnapshotDigest: snapshot.Binding.SnapshotDigest}}
+	object := &observation.NetworkObservation{
+		ObjectMeta: metav1.ObjectMeta{Name: "current", Namespace: testNamespace},
+		Spec: observation.NetworkObservationSpec{
+			NetworkRef:             observation.LocalObjectReference{Name: "network"},
+			ExpectedSnapshotDigest: snapshot.Binding.SnapshotDigest,
+		},
+	}
 	must(admin.Create(t.Context(), object))
-	object.Status = observation.NetworkObservationStatus{ObservedGeneration: object.Generation, Phase: observation.ObservationReady, Binding: &snapshot.Binding, Actors: snapshot.Actors}
+	object.Status = observation.NetworkObservationStatus{
+		ObservedGeneration: object.Generation,
+		Phase:              observation.ObservationReady,
+		Binding:            &snapshot.Binding,
+		Actors:             snapshot.Actors,
+	}
 	must(admin.Status().Update(t.Context(), object))
 	actual := &observation.NetworkObservation{}
 	must(admin.Get(t.Context(), client.ObjectKeyFromObject(object), actual))
-	if actual.Status.Binding.SnapshotDigest != snapshot.Binding.SnapshotDigest || actual.Status.Actors[0].ContainerID != snapshot.Actors[0].ContainerID || actual.Status.Actors[0].ConfigurationUID != "config-uid" {
+	if actual.Status.Binding.SnapshotDigest != snapshot.Binding.SnapshotDigest ||
+		actual.Status.Actors[0].ContainerID != snapshot.Actors[0].ContainerID ||
+		actual.Status.Actors[0].ConfigurationUID != "config-uid" {
 		t.Fatalf("schema lost snapshot identity: %+v", actual.Status)
 	}
 	// Real REST decoding must not retain fields omitted after an API status update.
