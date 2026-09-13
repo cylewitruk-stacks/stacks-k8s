@@ -59,7 +59,7 @@ operator selects its fixed worker image; this test does not change that profile.
 | `STACKS_PUBLIC_FAUCET` | Disabled | Set `1` to qualify two native faucet inclusions and retained no-resubmission observations. |
 | `STACKS_PUBLIC_ACTIONS` | Disabled | Set `1` to qualify bounded native actions after optional faucet checks. |
 | `STACKS_PUBLIC_CHAOS` | Disabled | Set `1` to qualify native delay/partition after optional actor/action checks. |
-| `STACKS_PUBLIC_ACTORS` | Disabled | Set `1` for a late follower lifecycle/storage check in either variant. |
+| `STACKS_PUBLIC_ACTORS` | Disabled | Set `1` for lifecycle/storage checks on two fresh followers in either variant; both joins require PoX-5 and canonical agreement with another ready Stacks node. |
 | `STACKS_PUBLIC_FRESH_JOIN` | Disabled | Set `1` for a new-storage follower joining after PoX-5 initialization, matching the cohort's canonical tip and advancing in the same process. Exclusive with the actor lifecycle/upgrade options. |
 | `STACKS_PUBLIC_VARIANT` | `minimal14` | Select `minimal14` or `full30`. |
 | `STACKS_PUBLIC_FIXTURE` | Documented YAML | Optional YAML or Kubernetes JSON `List`; `/tmp/stacks-iteration2-first-fixture.json` is supported when present. |
@@ -79,6 +79,9 @@ variables and mounted data are excluded. Image IDs are reported observations, no
 proof of source provenance; concurrent rollout may expose multiple image versions.
 `genesis-artifact` records the exact frozen genesis UID/digest and bootstrap gates
 as soon as the root publishes the artifact. Both events are saved in `events.jsonl`.
+Treat this file as an ordered event stream: stage names may repeat. For example,
+each `fresh-follower-storage` event identifies its participant; folding records into
+a map keyed only by stage would discard evidence.
 
 For an operator restart check, additionally set `STACKS_PUBLIC_OPERATOR_RESTART=1`.
 Selecting its identity alone never requests a rollout. The test changes only
@@ -239,8 +242,11 @@ rejects an already selected peer using that account. It adds a non-mining follow
 reusable definition and public account ref, with the selected Stacks image and a
 1 GiB persistent claim. No new genesis allocation or key read is involved.
 
-The follower must publish current native synchronization and advance beyond the
-previous network height. Suspension must acknowledge termination of its exact Pod
+Both newly added followers must use freshly provisioned, uncloned PVC/PV identities,
+publish current PoX-5 observations, match an independently running cohort node's
+canonical tip and advance in the same process. Each follower's progress snapshots
+use its participant name so the replacement check cannot overwrite the first join's
+evidence. Suspension must acknowledge termination of its exact Pod
 process while retaining its PVC. Resume must retain participant/config/PVC identity,
 create a new Pod and show native progress. Removal must leave the single-use
 participant UID in the root ledger while deleting its actual participant, Pod and

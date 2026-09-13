@@ -65,6 +65,10 @@ includes full-cohort initialization, renewal, native faults and fresh-network re
 on their recorded images. The bootstrap correction also passed initialization and
 one fresh-storage late join after PoX-5 activation. Earlier missing-anchor and
 enrollment failures remain without a causal diagnosis or reliable-repeat claim.
+The [full-cohort lifecycle qualification](../network-operator/public-api-qualification.md#full-cohort-lifecycle-and-image-roll--2026-09-13)
+passed bootstrap, two fresh-storage joins, a follower image roll, suspend/resume,
+removal, six-stacker renewal and normal teardown in one current-operator run.
+Other actor-role upgrades and broader image compatibility remain unqualified.
 Iteration 2 implementation is delivered; the [qualification backlog](public-api/qualification-backlog.md)
 tracks remaining acceptance work without treating the delivery as full qualification.
 
