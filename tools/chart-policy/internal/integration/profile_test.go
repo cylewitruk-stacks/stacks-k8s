@@ -91,6 +91,19 @@ func testNativeFaultAdmission(t *testing.T, delay, partition bool) {
 		t.Fatal(err)
 	}
 	valid := faults[0]
+	// Synthetic UUIDs exercise selector shape; envtest has no actor controller.
+	networkUID := "11111111-1111-1111-1111-111111111111"
+	sourceUID := "22222222-2222-2222-2222-222222222222"
+	targetUID := "33333333-3333-3333-3333-333333333333"
+	_ = unstructured.SetNestedField(valid.Object, networkUID, "metadata", "labels", "network.stacks.org/network-uid")
+	for _, side := range [][]string{{"spec", "selector", "labelSelectors"}, {"spec", "target", "selector", "labelSelectors"}} {
+		_ = unstructured.SetNestedField(valid.Object, networkUID, append(side, "network.stacks.org/network-uid")...)
+		uid := sourceUID
+		if len(side) == 4 {
+			uid = targetUID
+		}
+		_ = unstructured.SetNestedField(valid.Object, uid, append(side, "network.stacks.org/participant-uid")...)
+	}
 	valid.SetNamespace(ns.Name)
 	for _, path := range [][]string{{"spec", "selector", "namespaces"}, {"spec", "target", "selector", "namespaces"}} {
 		if err := unstructured.SetNestedStringSlice(valid.Object, []string{ns.Name}, path...); err != nil {
@@ -186,6 +199,21 @@ func testNativeFaultAdmission(t *testing.T, delay, partition bool) {
 	if err := admin.Create(ctx, valid.DeepCopy(), client.DryRunAll); err != nil {
 		t.Fatalf("valid fault rejected: %v", err)
 	}
+
+	for _, side := range [][]string{{"spec", "selector", "labelSelectors"}, {"spec", "target", "selector", "labelSelectors"}} {
+		for _, kind := range []string{"BitcoinNode", "StacksNode", "StacksSigner", "StacksStacker", "bogus"} {
+			o := valid.DeepCopy()
+			_ = unstructured.SetNestedField(o.Object, kind, append(side, "network.stacks.org/participant-kind")...)
+			err := admin.Create(ctx, o, client.DryRunAll)
+			if kind == "StacksStacker" || kind == "bogus" {
+				if err == nil || !apierrors.IsInvalid(err) {
+					t.Fatalf("unsupported kind admitted: %s %v", kind, err)
+				}
+			} else if err != nil {
+				t.Fatalf("optional actor kind rejected: %s %v", kind, err)
+			}
+		}
+	}
 	defaulted := valid.DeepCopy()
 	defaulted.Object["status"] = map[string]any{"experiment": map[string]any{}}
 	if err := admin.Create(ctx, defaulted, client.DryRunAll); err != nil {
@@ -208,6 +236,9 @@ func testNativeFaultAdmission(t *testing.T, delay, partition bool) {
 		path  []string
 		value any
 	}{
+		{"cross-network-uid", []string{"spec", "target", "selector", "labelSelectors", "network.stacks.org/network-uid"}, "44444444-4444-4444-4444-444444444444"},
+		{"same-participant-uid", []string{"spec", "target", "selector", "labelSelectors", "network.stacks.org/participant-uid"}, sourceUID},
+		{"metadata-network-uid", []string{"metadata", "labels", "network.stacks.org/network-uid"}, "44444444-4444-4444-4444-444444444444"},
 		{"owner", []string{"metadata", "ownerReferences"}, []any{map[string]any{"apiVersion": "v1", "kind": "ConfigMap", "name": "fixture", "uid": "fixture-uid"}}},
 		{"invalid-actor", []string{"spec", "selector", "labelSelectors", "network.stacks.org/actor"}, "Actor_1"},
 		{"target-value", []string{"spec", "target", "value"}, "1"},
@@ -228,6 +259,19 @@ func testNativeFaultAdmission(t *testing.T, delay, partition bool) {
 		{"correlation", []string{"spec", "delay", "correlation"}, "1"}, {"loss", []string{"spec", "loss"}, map[string]any{"loss": "1"}},
 	}
 	for _, selector := range [][]string{{"spec", "selector"}, {"spec", "target", "selector"}} {
+		for key, value := range map[string]string{"network.stacks.org/role": "control", "network.stacks.org/network-uid": "invalid", "network.stacks.org/participant-uid": "invalid"} {
+			path := append(append([]string{}, selector...), "labelSelectors", key)
+			changed := valid.DeepCopy()
+			_ = unstructured.SetNestedField(changed.Object, value, path...)
+			if err := admin.Create(ctx, changed, client.DryRunAll); !policyDenied(err) {
+				t.Fatalf("wrong identity/role accepted at %v: %v", path, err)
+			}
+			missing := valid.DeepCopy()
+			unstructured.RemoveNestedField(missing.Object, path...)
+			if err := admin.Create(ctx, missing, client.DryRunAll); !policyDenied(err) {
+				t.Fatalf("missing identity/role accepted at %v: %v", path, err)
+			}
+		}
 		for key, value := range map[string]any{"pods": map[string]any{ns.Name: []any{"pod"}}, "nodes": []any{"node"}, "nodeSelectors": map[string]any{"node": "x"}, "annotationSelectors": map[string]any{"a": "b"}, "fieldSelectors": map[string]any{"metadata.name": "pod"}, "podPhaseSelectors": []any{"Running"}, "expressionSelectors": []any{map[string]any{"key": "x", "operator": "Exists"}}} {
 			cases = append(cases, struct {
 				name  string

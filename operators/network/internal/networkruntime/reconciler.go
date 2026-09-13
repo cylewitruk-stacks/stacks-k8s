@@ -1,0 +1,339 @@
+// Package networkruntime projects runtime observations through the aggregate's sole root writer.
+package networkruntime
+
+import (
+	"context"
+	"time"
+
+	bitcoin "github.com/cylewitruk-stacks/stacks-k8s/apis/network/bitcoin/v1alpha2"
+	api "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha2"
+	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/bitcoincontrol"
+	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/foundation"
+	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/stacksworker"
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+)
+
+// Reconciler allocates shared execution records and projects supported runtime facts.
+// It never publishes root status itself or changes participant admission.
+type Reconciler struct {
+	// Client creates network-owned records and reads cached public observations.
+	Client client.Client
+	// Reader validates current record identities before publication.
+	Reader client.Reader
+	// Scheme establishes controller ownership on shared records.
+	Scheme *runtime.Scheme
+	// ActorKinds identifies installed actor domains; nil selects BitcoinNode only.
+	ActorKinds []api.ParticipantKind
+}
+
+// Reconcile advances runtime allocation independently of unrelated composition errors.
+func (r *Reconciler) Reconcile(ctx context.Context, root *api.StacksNetwork) (result ctrl.Result, reconcileErr error) {
+	// Completion describes immutable bootstrap history and remains valid when
+	// mutable membership or operation changes; it does not re-run the gates.
+	if initialized := meta.FindStatusCondition(root.Status.Conditions, "Initialized"); initialized != nil && initialized.Status == metav1.ConditionTrue {
+		initialized.ObservedGeneration = root.Generation
+	}
+	defer func() {
+		if reconcileErr != nil {
+			observationUnavailable(root, "ObservationUnavailable", "Current runtime observations are unavailable")
+		}
+	}()
+	policy := foundation.ObservationPolicy()
+	root.Status.ObservationPolicy = &policy
+	failed := root.Status.Phase == "Failed" || meta.IsStatusConditionTrue(root.Status.Conditions, "Failed")
+	if failed && !meta.IsStatusConditionTrue(root.Status.Conditions, "Failed") {
+		set(root, "Failed", metav1.ConditionTrue, "ExperimentFailed", "A terminal network failure is latched; stop or recreate the network")
+	}
+	var participants api.StacksNetworkParticipantList
+	if err := r.Client.List(ctx, &participants, client.InNamespace(root.Namespace), client.Limit(1001)); err != nil {
+		set(root, "Running", metav1.ConditionUnknown, "ObservationUnavailable", "Current participant observations are unavailable")
+		projectKnownOperation(root)
+		set(root, "Operational", metav1.ConditionUnknown, "ObservationUnavailable", "Current participant observations are unavailable")
+		return ctrl.Result{}, err
+	}
+	// Cached lists use a non-pagination marker in Continue. The extra item detects
+	// truncation without interpreting that marker as an API-server page token.
+	if len(participants.Items) > 1000 {
+		set(root, "Running", metav1.ConditionUnknown, "ObservationIncomplete", "Participant inventory is incomplete")
+		observationUnavailable(root, "ObservationIncomplete", "Participant inventory is incomplete")
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+	}
+	workerPending, unstartedWorkers, err := r.projectWorkers(ctx, root, participants.Items)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	failed = failed || meta.IsStatusConditionTrue(root.Status.Conditions, "Failed")
+	if root.DeletionTimestamp != nil {
+		root.Status.Phase = "Destroying"
+		set(root, "Running", metav1.ConditionFalse, "Deleting", "Network disposal is in progress")
+		set(root, "Operational", metav1.ConditionFalse, "Deleting", "Network disposal is in progress")
+		return ctrl.Result{RequeueAfter: time.Second}, nil
+	}
+	activated, terminated := false, true
+	observed := map[string]bool{}
+	for i := range participants.Items {
+		p := &participants.Items[i]
+		if p.Spec.NetworkUID != root.UID || !metav1.IsControlledBy(p, root) {
+			continue
+		}
+		observed[string(p.UID)] = true
+		if managementKind(p.Spec.Kind) {
+			id, err := stacksworker.Session(root, p)
+			if (err != nil && !unstartedWorkers[p.UID]) || (err == nil && id.Worker != nil && (id.Worker.Disposal == nil || !id.Worker.Disposal.Terminated)) {
+				terminated = false
+			}
+		}
+		state := p.Status.Runtime
+		if state != nil && len(state.WorkloadRefs) > 0 {
+			activated = true
+		}
+		if r.actorKind(p.Spec.Kind) && (state == nil || !state.Terminated || state.ObservedGeneration != p.Generation) {
+			terminated = false
+		}
+		if p.Spec.Kind == "BitcoinNode" {
+			control := p.Status.BitcoinControl
+			if control == nil || !control.Terminated || control.ObservedGeneration != p.Generation || control.NetworkGeneration != root.Generation {
+				terminated = false
+			}
+		}
+	}
+	for _, identity := range root.Status.Identities {
+		if !identity.Removing && !observed[string(identity.UID)] {
+			// Missing an allocated instance cannot establish that its processes exited.
+			terminated = false
+		}
+	}
+	if root.Spec.Operation == "Stopped" {
+		root.Status.Phase = "Stopping"
+		if terminated {
+			root.Status.Phase = "Stopped"
+		}
+		set(root, "Running", metav1.ConditionFalse, root.Status.Phase, "Terminal shutdown requires acknowledgement from each activated workload")
+		set(root, "Operational", metav1.ConditionFalse, "Stopped", "Terminal shutdown is requested")
+		if !terminated || workerPending {
+			return ctrl.Result{RequeueAfter: time.Second}, nil
+		}
+		return ctrl.Result{}, nil
+	}
+	if failed {
+		root.Status.Phase = "Failed"
+		set(root, "Running", metav1.ConditionFalse, "ExperimentFailed", "A terminal network failure is latched")
+		set(root, "Operational", metav1.ConditionFalse, "ExperimentFailed", "A terminal network failure is latched")
+		return ctrl.Result{}, nil
+	}
+	if !meta.IsStatusConditionTrue(root.Status.Conditions, "Initialized") {
+		set(root, "Initialized", metav1.ConditionFalse, "BootstrapPending", "The complete frozen protocol gates have not completed")
+	}
+	set(root, "Running", metav1.ConditionFalse, "Initializing", "Full protocol initialization has not completed")
+	projectKnownOperation(root)
+	set(root, "Operational", metav1.ConditionFalse, "Initializing", "Full protocol initialization has not completed")
+	if root.Status.GenesisRef == nil {
+		if root.Spec.Operation == "Paused" && meta.IsStatusConditionTrue(root.Status.Conditions, "Resolved") {
+			root.Status.Phase = "Uninitialized"
+		}
+		return ctrl.Result{}, nil
+	}
+	refs, initialization, err := bitcoincontrol.EnsureRecords(ctx, r.Client, r.Reader, r.Scheme, root)
+	// Preserve successful independent allocations if a later allocation needs another pass.
+	root.Status.Bitcoin = &api.BitcoinRuntimeStatus{ExecutionRefs: refs, InitializationRef: initialization}
+	if err != nil {
+		set(root, "BitcoinPrepared", metav1.ConditionUnknown, "RecordsUnavailable", "Bitcoin execution records could not be validated")
+		return ctrl.Result{}, err
+	}
+	root.Status.Phase = "Initializing"
+	projectKnownOperation(root)
+	if root.Spec.Operation == "Paused" {
+		root.Status.Phase = "Uninitialized"
+		if activated {
+			root.Status.Phase = "Pausing"
+		}
+		set(root, "Running", metav1.ConditionFalse, "DesiredPause", "Network pause holds new managed activation and production")
+	}
+	if initialization == nil {
+		return ctrl.Result{}, nil
+	}
+	var record bitcoin.BitcoinInitialization
+	if err := r.observations().Get(ctx, client.ObjectKey{Namespace: root.Namespace, Name: initialization.Name}, &record); err != nil {
+		set(root, "BitcoinPrepared", metav1.ConditionUnknown, "ObservationUnavailable", "Bitcoin preparation observation is unavailable")
+		return ctrl.Result{}, err
+	}
+	if record.UID != initialization.UID || record.Spec.NetworkUID != root.UID || !metav1.IsControlledBy(&record, root) {
+		set(root, "BitcoinPrepared", metav1.ConditionUnknown, "IdentityUnavailable", "Bitcoin preparation identity differs from the captured binding")
+		observationUnavailable(root, "IdentityUnavailable", "Bitcoin preparation identity differs from the captured binding")
+		return ctrl.Result{RequeueAfter: time.Second}, nil
+	}
+	if projectPreparation(root.DeepCopy(), &record) {
+		current, err := r.currentInitialization(ctx, root, &record)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		record = *current
+	}
+	if projectPreparation(root, &record) {
+		return ctrl.Result{}, nil
+	}
+	gateFailed, err := r.reconcileGates(ctx, root, &record, participants.Items)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	if gateFailed {
+		set(root, "Running", metav1.ConditionFalse, "BootstrapFailed", "Frozen initialization requirements failed")
+		set(root, "Operational", metav1.ConditionFalse, "BootstrapFailed", "Frozen initialization requirements failed")
+		return ctrl.Result{}, nil
+	}
+	if root.Spec.Operation == "Paused" && activated {
+		acknowledged, err := r.bitcoinPaused(ctx, root)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		if acknowledged && workersPaused(root, participants.Items, time.Now()) {
+			root.Status.Phase = "Paused"
+		}
+	}
+
+	if err := r.projectOperation(ctx, root, participants.Items, time.Now()); err != nil {
+		set(root, "Operational", metav1.ConditionUnknown, "ObservationUnavailable", "Current protocol observations are unavailable")
+		return ctrl.Result{}, err
+	}
+	if workerPending || root.Status.Initialization != nil && !root.Status.Initialization.Completed {
+		return ctrl.Result{RequeueAfter: time.Second}, nil
+	}
+	return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
+}
+
+// set updates one aggregate-owned condition without changing its transition time on a stable result.
+func set(root *api.StacksNetwork, kind string, status metav1.ConditionStatus, reason, message string) {
+	meta.SetStatusCondition(&root.Status.Conditions, metav1.Condition{Type: kind, Status: status, Reason: reason, Message: message, ObservedGeneration: root.Generation})
+}
+
+// bitcoinPaused requires each retained control process to acknowledge the current pause.
+// The acknowledgement excludes new managed sends, not independent mining or chain activity.
+func (r *Reconciler) bitcoinPaused(ctx context.Context, root *api.StacksNetwork) (bool, error) {
+	if root.Status.Bitcoin == nil || len(root.Status.Bitcoin.ExecutionRefs) == 0 {
+		return false, nil
+	}
+	selected := map[string]bool{}
+	for _, entry := range root.Spec.Participants {
+		selected[entry.Name] = true
+	}
+	active := map[string]bool{}
+	for _, id := range root.Status.Identities {
+		if selected[id.Name] && !id.Removing {
+			active[string(id.UID)] = true
+		}
+	}
+	for _, ref := range root.Status.Bitcoin.ExecutionRefs {
+		var record bitcoin.BitcoinExecution
+		if err := r.observations().Get(ctx, client.ObjectKey{Namespace: root.Namespace, Name: ref.Name}, &record); err != nil {
+			return false, err
+		}
+		if record.UID != ref.UID || record.Spec.NetworkUID != root.UID || !metav1.IsControlledBy(&record, root) {
+			return false, nil
+		}
+		if !active[string(record.Spec.Participant.UID)] && cleanDrain(record.Status) {
+			continue
+		}
+		ack := record.Status.Control
+		if record.Status.Armed != nil || ack == nil || ack.NetworkGeneration != root.Generation || ack.Operation != "Paused" || ack.ProcessNonce == "" || ack.ObservedAt.IsZero() || ack.ObservedAt.After(ack.HeartbeatAt.Time) || ack.HeartbeatAt.After(time.Now()) || time.Since(ack.HeartbeatAt.Time) > foundation.ObservationFreshness() {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+// cleanDrain recognizes terminal acknowledgement without treating abandoned uncertainty as quiescence.
+func cleanDrain(status bitcoin.BitcoinExecutionStatus) bool {
+	d := status.Drain
+	if status.Armed != nil || d == nil || d.ProcessNonce == "" || d.Outcome != "Drained" {
+		return false
+	}
+	switch d.Reason {
+	case "ParticipantRemoved", "NetworkStopped", "NetworkDeleting", "NetworkFailed":
+		return true
+	default:
+		return false
+	}
+}
+
+// actorKind distinguishes installed domains from admitted-but-unsupported participant kinds.
+func (r *Reconciler) actorKind(kind api.ParticipantKind) bool {
+	if len(r.ActorKinds) == 0 {
+		return kind == "BitcoinNode"
+	}
+	for _, supported := range r.ActorKinds {
+		if supported == kind {
+			return true
+		}
+	}
+	return false
+}
+
+// projectPreparation keeps the first Bitcoin gate distinct from full network initialization.
+func projectPreparation(root *api.StacksNetwork, record *bitcoin.BitcoinInitialization) bool {
+	switch record.Status.Reason {
+	case "PrepareBitcoinObservationDeadline", "FrozenCeilingExceeded", "PreparedChainRegressed":
+		root.Status.Phase = "Failed"
+		set(root, "Failed", metav1.ConditionTrue, record.Status.Reason, "Frozen Bitcoin preparation requirements cannot be satisfied; recreate the network")
+		set(root, "Running", metav1.ConditionFalse, record.Status.Reason, "Bitcoin initialization failed")
+		set(root, "Operational", metav1.ConditionFalse, record.Status.Reason, "Bitcoin initialization failed")
+		return true
+	}
+	prepared := metav1.ConditionFalse
+	reason, message := "Preparing", "Bitcoin wallets, maturity and initial cohort convergence are pending"
+	if record.Status.PreparedAt != nil {
+		prepared, reason, message = metav1.ConditionTrue, "PrepareBitcoinComplete", "The first frozen Bitcoin gate completed; later protocol gates remain pending"
+	}
+	set(root, "BitcoinPrepared", prepared, reason, message)
+	return false
+}
+
+// projectKnownOperation preserves historical initialization independently of current protocol reads.
+func projectKnownOperation(root *api.StacksNetwork) {
+	if root.DeletionTimestamp != nil || root.Spec.Operation != "Running" || meta.IsStatusConditionTrue(root.Status.Conditions, "Failed") {
+		return
+	}
+	if meta.IsStatusConditionTrue(root.Status.Conditions, "Initialized") {
+		root.Status.Phase = "Running"
+		set(root, "Running", metav1.ConditionTrue, "Running", "Initialization is complete and running operation is requested")
+	}
+}
+
+// observationUnavailable preserves known lifecycle facts when current protocol reads fail.
+func observationUnavailable(root *api.StacksNetwork, reason, message string) {
+	status := metav1.ConditionFalse
+	switch {
+	case root.DeletionTimestamp != nil:
+		reason, message = "Deleting", "Network disposal is in progress"
+		root.Status.Phase = "Destroying"
+	case root.Spec.Operation == "Stopped":
+		reason, message = "Stopped", "Terminal shutdown is requested"
+	case meta.IsStatusConditionTrue(root.Status.Conditions, "Failed"):
+		reason, message = "ExperimentFailed", "A terminal network failure is latched"
+		root.Status.Phase = "Failed"
+	case root.Spec.Operation == "Paused":
+		reason, message = "DesiredPause", "Network pause holds managed production"
+	case !meta.IsStatusConditionTrue(root.Status.Conditions, "Initialized"):
+		reason, message = "Initializing", "Full protocol initialization has not completed"
+	default:
+		status = metav1.ConditionUnknown
+	}
+	if status == metav1.ConditionFalse {
+		set(root, "Running", metav1.ConditionFalse, reason, message)
+	} else {
+		projectKnownOperation(root)
+	}
+	set(root, "Operational", status, reason, message)
+}
+
+// observations reads projection-only public facts from the informer cache when installed.
+// Callers still verify identity and original observation freshness; this is not dispatch authority.
+func (r *Reconciler) observations() client.Reader {
+	if r.Client != nil {
+		return r.Client
+	}
+	return r.Reader
+}

@@ -70,9 +70,10 @@ func expectedRules() []rbacv1.PolicyRule {
 	return []rbacv1.PolicyRule{
 		{APIGroups: []string{"observation.stacks.org"}, Resources: []string{"networkobservations"}, Verbs: []string{"get", "list", "watch"}},
 		{APIGroups: []string{"observation.stacks.org"}, Resources: []string{"networkobservations/status"}, Verbs: []string{"get", "update", "patch"}},
-		{APIGroups: []string{"network.stacks.org"}, Resources: []string{"stacksnetworks", "bitcoinnodes", "stacksnodes", "stackssigners"}, Verbs: []string{"get", "list", "watch"}},
-		{APIGroups: []string{""}, Resources: []string{"pods", "services"}, Verbs: []string{"list"}},
-		{APIGroups: []string{"apps"}, Resources: []string{"statefulsets"}, Verbs: []string{"list"}},
+		{APIGroups: []string{"network.stacks.org"}, Resources: []string{"stacksnetworks"}, Verbs: []string{"get", "list", "watch"}},
+		{APIGroups: []string{"network.stacks.org"}, Resources: []string{"stacksnetworkparticipants"}, Verbs: []string{"get", "list"}},
+		{APIGroups: []string{""}, Resources: []string{"pods", "services", "configmaps"}, Verbs: []string{"get", "list"}},
+		{APIGroups: []string{"apps"}, Resources: []string{"statefulsets"}, Verbs: []string{"get", "list"}},
 		{APIGroups: []string{"coordination.k8s.io"}, Resources: []string{"leases"}, Verbs: []string{"get", "list", "watch", "create", "update", "patch", "delete"}},
 	}
 }

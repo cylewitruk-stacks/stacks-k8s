@@ -21,7 +21,7 @@ spec:
     - jsonPath: .status.blocksGenerated
       name: Blocks
       type: integer
-    name: v1alpha1
+    name: v1alpha2
     schema:
       openAPIV3Schema:
         description: BitcoinBlockGeneration requests a finite number of acknowledged
@@ -53,8 +53,8 @@ spec:
                 minLength: 14
                 type: string
               bitcoinNodeRef:
-                description: BitcoinNodeRef names the exact compiled BitcoinNode,
-                  not a Pod or Service.
+                description: BitcoinNodeRef names one logical BitcoinNode participant
+                  in the pinned network.
                 properties:
                   name:
                     description: Name is the exact Kubernetes resource name.
@@ -126,17 +126,11 @@ spec:
                 maximum: 100
                 minimum: 1
                 type: integer
-              networkRef:
-                description: NetworkRef names the aggregate owning the execution ledger.
-                properties:
-                  name:
-                    description: Name is the exact Kubernetes resource name.
-                    maxLength: 63
-                    pattern: ^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$
-                    type: string
-                required:
-                - name
-                type: object
+              networkUID:
+                description: NetworkUID pins the canonical network incarnation.
+                maxLength: 128
+                minLength: 1
+                type: string
               timeout:
                 description: Timeout includes all pending time from API-server creation.
                 maxLength: 32
@@ -151,7 +145,7 @@ spec:
             - bitcoinNodeRef
             - cadence
             - count
-            - networkRef
+            - networkUID
             - timeout
             type: object
             x-kubernetes-validations:
@@ -168,6 +162,27 @@ spec:
                 description: AdmittedAt records the first durable reservation.
                 format: date-time
                 type: string
+              admittedExecution:
+                description: AdmittedExecution pins the retained shared executor record.
+                properties:
+                  fingerprint:
+                    description: Fingerprint identifies public content when relevant.
+                    type: string
+                  kind:
+                    description: Kind identifies the API kind or participant kind.
+                    type: string
+                  name:
+                    description: Name is the public resource name.
+                    type: string
+                  uid:
+                    description: UID prevents same-name replacement from inheriting
+                      authority.
+                    type: string
+                required:
+                - kind
+                - name
+                - uid
+                type: object
               admittedNetwork:
                 description: AdmittedNetwork fixes the owning network identity.
                 properties:
@@ -214,9 +229,53 @@ spec:
                   configDigest:
                     description: ConfigDigest binds approved configuration bytes.
                     type: string
+                  configuration:
+                    description: Configuration pins the immutable actor configuration
+                      object.
+                    properties:
+                      fingerprint:
+                        description: Fingerprint identifies public content when relevant.
+                        type: string
+                      kind:
+                        description: Kind identifies the API kind or participant kind.
+                        type: string
+                      name:
+                        description: Name is the public resource name.
+                        type: string
+                      uid:
+                        description: UID prevents same-name replacement from inheriting
+                          authority.
+                        type: string
+                    required:
+                    - kind
+                    - name
+                    - uid
+                    type: object
                   containerID:
                     description: ContainerID records the admitted process container.
                     type: string
+                  credentials:
+                    description: Credentials pins immutable control credentials without
+                      exposing their values.
+                    properties:
+                      fingerprint:
+                        description: Fingerprint identifies public content when relevant.
+                        type: string
+                      kind:
+                        description: Kind identifies the API kind or participant kind.
+                        type: string
+                      name:
+                        description: Name is the public resource name.
+                        type: string
+                      uid:
+                        description: UID prevents same-name replacement from inheriting
+                          authority.
+                        type: string
+                    required:
+                    - kind
+                    - name
+                    - uid
+                    type: object
                   kind:
                     description: Kind fixes the actor type.
                     type: string
@@ -244,7 +303,9 @@ spec:
                 required:
                 - apiVersion
                 - configDigest
+                - configuration
                 - containerID
+                - credentials
                 - kind
                 - name
                 - podUID

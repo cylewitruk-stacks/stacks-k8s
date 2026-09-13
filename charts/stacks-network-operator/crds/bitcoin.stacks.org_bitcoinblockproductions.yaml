@@ -14,18 +14,10 @@ spec:
     singular: bitcoinblockproduction
   scope: Namespaced
   versions:
-  - additionalPrinterColumns:
-    - jsonPath: .status.phase
-      name: Phase
-      type: string
-    - jsonPath: .status.opportunities
-      name: Opportunities
-      type: integer
-    name: v1alpha1
+  - name: v1alpha2
     schema:
       openAPIV3Schema:
-        description: BitcoinBlockProduction maintains one aggregate-owned weighted
-          production policy.
+        description: BitcoinBlockProduction is an independently owned reusable declaration.
         properties:
           apiVersion:
             description: |-
@@ -45,233 +37,312 @@ spec:
           metadata:
             type: object
           spec:
-            description: Spec is compiled from StacksNetwork.
+            description: Spec contains reusable inputs.
             properties:
-              networkName:
-                description: NetworkName identifies the owning StacksNetwork.
-                maxLength: 63
-                minLength: 1
-                type: string
-              networkUID:
-                description: NetworkUID prevents replacement networks from inheriting
-                  authority.
-                maxLength: 64
-                minLength: 1
-                type: string
-              policy:
-                description: Policy declares the total offered cadence and target
-                  weights.
+              initialization:
+                description: Initialization freezes initial funding behavior.
                 properties:
-                  credentialsSecret:
-                    description: |-
-                      CredentialsSecret names the same-namespace immutable worker credential document.
-                      Bitcoin uses credentials.json; transfers use account.json.
-                    maxLength: 253
-                    pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
-                    type: string
-                  initialization:
-                    description: Initialization prepares a watch-only miner wallet
-                      and an initial regtest chain floor.
-                    properties:
-                      initialHeight:
-                        description: InitialHeight is the initial regtest chain floor,
-                          not an ongoing height target.
-                        format: int64
-                        maximum: 201
-                        minimum: 1
-                        type: integer
-                      target:
-                        description: Target names the production target whose wallet
-                          funds the initial miner.
-                        maxLength: 63
-                        pattern: ^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$
-                        type: string
-                      wallet:
-                        description: Wallet names the watch-only descriptor wallet
-                          used by Stacks miners.
-                        maxLength: 63
-                        pattern: ^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$
-                        type: string
-                    required:
-                    - initialHeight
-                    - target
-                    - wallet
-                    type: object
-                  intervalSeconds:
-                    description: IntervalSeconds is the central policy interval, independently
-                      of receipt time.
+                  matureOutputsPerMiner:
+                    description: MatureOutputsPerMiner is required for every bootstrap
+                      miner.
                     format: int32
-                    maximum: 86400
+                    maximum: 100
                     minimum: 1
                     type: integer
-                  jitterSeconds:
-                    description: JitterSeconds samples integer delays uniformly in
-                      intervalSeconds plus or minus this bound.
-                    format: int32
-                    maximum: 43199
-                    minimum: 0
-                    type: integer
-                  paused:
-                    description: Paused stops new opportunities; already authorized
-                      work may still complete.
-                    type: boolean
-                  targets:
-                    description: Targets names declared actors; weights distribute
-                      the policy's total offered rate.
+                  minerWalletRefs:
+                    description: MinerWalletRefs selects wallets receiving mature
+                      coinbase outputs.
                     items:
-                      description: ProductionTarget configures one weighted actor
-                        and its coinbase destination.
+                      description: NameRef selects a resource or participant in the
+                        same namespace.
                       properties:
-                        address:
-                          description: Address receives this target's generated coinbase
-                            outputs.
-                          maxLength: 128
-                          minLength: 14
-                          type: string
                         name:
-                          description: Name identifies a Bitcoin actor declared in
-                            the owning network.
-                          maxLength: 63
-                          pattern: ^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$
+                          description: Name is the referenced name; the containing
+                            field determines its kind.
+                          maxLength: 253
+                          minLength: 1
+                          pattern: ^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$
                           type: string
-                        weight:
-                          description: Weight is a relative share of generation opportunities,
-                            without availability redistribution.
-                          format: int32
-                          maximum: 1000
-                          minimum: 1
-                          type: integer
                       required:
-                      - address
                       - name
-                      - weight
                       type: object
-                    maxItems: 8
-                    minItems: 1
+                    maxItems: 100
                     type: array
                     x-kubernetes-list-map-keys:
                     - name
                     x-kubernetes-list-type: map
+                  minimumHeight:
+                    description: MinimumHeight is the initial Bitcoin height.
+                    format: int64
+                    maximum: 4294967295
+                    minimum: 1
+                    type: integer
+                  targetNodeRef:
+                    description: TargetNodeRef selects the initial generation target.
+                    properties:
+                      name:
+                        description: Name is the referenced name; the containing field
+                          determines its kind.
+                        maxLength: 253
+                        minLength: 1
+                        pattern: ^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$
+                        type: string
+                    required:
+                    - name
+                    type: object
                 required:
-                - intervalSeconds
-                - targets
+                - matureOutputsPerMiner
+                - minimumHeight
+                - targetNodeRef
                 type: object
-                x-kubernetes-validations:
-                - message: jitter must keep intervals within 1 to 86400 seconds
-                  rule: '!has(self.jitterSeconds) || (self.jitterSeconds < self.intervalSeconds
-                    && self.intervalSeconds + self.jitterSeconds <= 86400)'
-                - message: initial wallet preparation requires one matching production
-                    target
-                  rule: '!has(self.initialization) || (size(self.targets) == 1 &&
-                    self.targets[0].name == self.initialization.target)'
-            required:
-            - networkName
-            - networkUID
-            - policy
+              payoutWalletRef:
+                description: PayoutWalletRef supplies baseline payout identity.
+                properties:
+                  name:
+                    description: Name is the referenced name; the containing field
+                      determines its kind.
+                    maxLength: 253
+                    minLength: 1
+                    pattern: ^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$
+                    type: string
+                required:
+                - name
+                type: object
+              schedule:
+                description: Schedule supplies inline timing.
+                properties:
+                  cadence:
+                    description: Cadence controls block opportunities.
+                    properties:
+                      interval:
+                        description: Interval is the fixed duration.
+                        maxLength: 32
+                        minLength: 2
+                        type: string
+                      maximumInterval:
+                        description: MaximumInterval bounds uniform timing.
+                        maxLength: 32
+                        minLength: 2
+                        type: string
+                      minimumInterval:
+                        description: MinimumInterval bounds uniform timing.
+                        maxLength: 32
+                        minLength: 2
+                        type: string
+                      mode:
+                        description: Mode selects fixed or uniform timing.
+                        enum:
+                        - Fixed
+                        - Uniform
+                        type: string
+                    required:
+                    - mode
+                    type: object
+                    x-kubernetes-validations:
+                    - message: interval must be between 1s and 1h
+                      rule: '!has(self.interval) || (duration(self.interval) >= duration(''1s'')
+                        && duration(self.interval) <= duration(''1h''))'
+                    - message: minimumInterval must be between 1s and 1h
+                      rule: '!has(self.minimumInterval) || (duration(self.minimumInterval)
+                        >= duration(''1s'') && duration(self.minimumInterval) <= duration(''1h''))'
+                    - message: maximumInterval must be between 1s and 1h
+                      rule: '!has(self.maximumInterval) || (duration(self.maximumInterval)
+                        >= duration(''1s'') && duration(self.maximumInterval) <= duration(''1h''))'
+                    - message: maximumInterval must not be below minimumInterval
+                      rule: '!has(self.minimumInterval) || !has(self.maximumInterval)
+                        || duration(self.maximumInterval) >= duration(self.minimumInterval)'
+                    - message: cadence fields must match mode
+                      rule: 'self.mode == ''Fixed'' ? (has(self.interval) && !has(self.minimumInterval)
+                        && !has(self.maximumInterval)) : (!has(self.interval) && has(self.minimumInterval)
+                        && has(self.maximumInterval))'
+                required:
+                - cadence
+                type: object
+              scheduleRef:
+                description: ScheduleRef selects immutable reusable timing.
+                properties:
+                  name:
+                    description: Name is the referenced name; the containing field
+                      determines its kind.
+                    maxLength: 253
+                    minLength: 1
+                    pattern: ^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$
+                    type: string
+                required:
+                - name
+                type: object
+              targets:
+                description: Targets selects weighted generation targets.
+                items:
+                  description: ProductionTarget gives one participant a positive selection
+                    weight.
+                  properties:
+                    nodeRef:
+                      description: NodeRef selects a BitcoinNode participant.
+                      properties:
+                        name:
+                          description: Name is the referenced name; the containing
+                            field determines its kind.
+                          maxLength: 253
+                          minLength: 1
+                          pattern: ^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    weight:
+                      description: Weight controls relative selection probability.
+                      format: int32
+                      minimum: 1
+                      type: integer
+                  required:
+                  - nodeRef
+                  - weight
+                  type: object
+                maxItems: 100
+                type: array
             type: object
             x-kubernetes-validations:
-            - message: network identity is immutable
-              rule: self.networkName == oldSelf.networkName && self.networkUID ==
-                oldSelf.networkUID
+            - message: select one schedule source
+              rule: '!(has(self.scheduleRef) && has(self.schedule))'
           status:
-            description: Status pins target ledgers and records bounded scheduling
-              facts.
+            description: Status reports direct-input resolution only.
             properties:
-              lastUnassignedTarget:
-                description: LastUnassignedTarget names the most recent selection
-                  without a pinned ledger.
-                maxLength: 63
-                pattern: ^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$
+              bitcoinAddress:
+                description: BitcoinAddress is the resolved public wallet payout address.
                 type: string
-              message:
-                description: Message reports scheduling/configuration state without
-                  credentials.
-                type: string
-              nextOpportunityAt:
-                description: NextOpportunityAt enforces cadence across reconciles
-                  and restarts without catch-up.
-                format: date-time
-                type: string
-              observedGeneration:
-                description: ObservedGeneration identifies the scheduling configuration.
-                format: int64
-                type: integer
-              opportunities:
-                description: Opportunities counts durably published weighted selections.
-                format: int64
-                minimum: 0
-                type: integer
-              phase:
-                description: Phase summarizes scheduler availability, not network
-                  health or receipts.
-                enum:
-                - Running
-                - Paused
-                - Waiting
-                - Blocked
-                - Abandoned
-                type: string
-              targets:
-                description: Targets retains up to sixteen identities for the policy
-                  lifetime, including removed targets.
+              conditions:
+                description: Conditions report resolution without runtime claims.
                 items:
-                  description: TargetLedger permanently pins one target's execution
-                    resource and latest opportunity.
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
                   properties:
-                    name:
-                      description: Name is the logical actor name.
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
                       type: string
-                    offered:
-                      description: Offered counts selections of this target, including
-                        unavailable or reserved opportunities.
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
                       format: int64
+                      minimum: 0
                       type: integer
-                    opportunity:
-                      description: Opportunity retains the latest selection for this
-                        target; earlier unseen selections are skipped.
-                      properties:
-                        expiresAt:
-                          description: ExpiresAt bounds admission; it does not cancel
-                            an already armed server operation.
-                          format: date-time
-                          type: string
-                        number:
-                          description: Number is the target's monotonically increasing
-                            offered count.
-                          format: int64
-                          type: integer
-                        policyGeneration:
-                          description: PolicyGeneration binds the selected policy
-                            configuration.
-                          format: int64
-                          type: integer
-                      required:
-                      - expiresAt
-                      - number
-                      - policyGeneration
-                      type: object
-                    resourceName:
-                      description: ResourceName identifies the internal BitcoinProductionTarget.
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
                       type: string
-                    uid:
-                      description: UID pins the ledger even after target removal or
-                        resource loss.
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
                       type: string
                   required:
-                  - name
-                  - resourceName
-                  - uid
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
                   type: object
-                maxItems: 16
                 type: array
                 x-kubernetes-list-map-keys:
-                - name
+                - type
                 x-kubernetes-list-type: map
-              unassignedOpportunities:
-                description: UnassignedOpportunities counts selections skipped before
-                  a target ledger could be pinned.
+              credentialsRef:
+                description: CredentialsRef identifies generated or imported private
+                  material.
+                properties:
+                  key:
+                    description: Key selects one entry.
+                    maxLength: 253
+                    minLength: 1
+                    type: string
+                  name:
+                    description: Name selects a same-namespace Secret.
+                    maxLength: 253
+                    minLength: 1
+                    type: string
+                required:
+                - key
+                - name
+                type: object
+              credentialsUID:
+                description: CredentialsUID pins imported or generated key material
+                  after resolution.
+                type: string
+              dependencies:
+                description: Dependencies pins public source identities.
+                items:
+                  description: Binding identifies an exact resolved public dependency.
+                  properties:
+                    fingerprint:
+                      description: Fingerprint identifies public content when relevant.
+                      type: string
+                    kind:
+                      description: Kind identifies the API kind or participant kind.
+                      type: string
+                    name:
+                      description: Name is the public resource name.
+                      type: string
+                    uid:
+                      description: UID prevents same-name replacement from inheriting
+                        authority.
+                      type: string
+                  required:
+                  - kind
+                  - name
+                  - uid
+                  type: object
+                maxItems: 8
+                type: array
+              descriptor:
+                description: Descriptor is the supported public wallet descriptor.
+                type: string
+              digest:
+                description: Digest identifies resolved public inputs.
+                type: string
+              identity:
+                description: Identity contains public account information.
+                properties:
+                  address:
+                    description: Address is a testnet Stacks address.
+                    maxLength: 64
+                    pattern: ^ST[0-9A-HJKMNP-TV-Z]{26,39}$
+                    type: string
+                  publicKey:
+                    description: PublicKey is a compressed secp256k1 public key.
+                    pattern: ^(02|03)[0-9a-fA-F]{64}$
+                    type: string
+                required:
+                - address
+                - publicKey
+                type: object
+              observedGeneration:
+                description: ObservedGeneration identifies the evaluated spec.
                 format: int64
-                minimum: 0
                 type: integer
             type: object
         required:

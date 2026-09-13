@@ -57,7 +57,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 	}
 	readContext, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	snapshot, err := observer.Observe(readContext, object.Namespace, object.Spec.NetworkRef.Name, object.Spec.ExpectedInventoryDigest)
+	if object.Spec.ExpectedInventoryDigest != "" {
+		return ctrl.Result{}, r.writeStatus(ctx, object, patchBase, inconclusiveStatus(object, now, "legacy inventory expectations are unsupported; use expectedSnapshotDigest"))
+	}
+	expected := object.Spec.ExpectedSnapshotDigest
+	snapshot, err := observer.Observe(readContext, object.Namespace, object.Spec.NetworkRef.Name, expected)
 	if err != nil {
 		if topology.IsNotReady(err) {
 			if pendingDeadlineExceeded(object, now) {

@@ -48,29 +48,17 @@ Repository placement does not imply compatibility across arbitrary operator
 versions. Document the network API and inventory-contract versions accepted by
 each observability release.
 
-## Transaction worker artifact
+## Worker artifacts
 
-The optional `stacks-transaction-worker` image is built from
-`operators/network/transactions/Dockerfile` and configured independently through
-`workers.sdkImage`. Qualify it with the network API/chart version and
-selected actor image. Include its locked npm dependencies in release scanning
-and provenance; the local [Stacks qualification](network-operator/stacks-qualification.md)
-is not a published image support matrix.
+The network image contains its operator/resolver entrypoint and scoped Go worker
+binary. Qualify controller and worker images with the same API/chart version and
+selected actor profile. Bitcoin control and Stacks management have different restart
+contracts; do not infer a safe management-worker restart from an operator rollout.
 
-## Unpublished network chart value changes
+`operators/network/transactions` is an offline SDK oracle only. Include its pinned
+test dependencies in repository auditing, but do not package Node.js in runtime
+images. Publish `libs/stacks` before consumers that require its module version.
 
-The local chart remains `0.1.0` before its first publication. The workload refactor
-removes these previously accepted values; the strict schema rejects old values
-files rather than silently ignoring them.
-
-| Removed value | Replacement |
-| --- | --- |
-| `bitcoinProduction.credentialsSecret` | `StacksNetwork.spec.bitcoinBlockProduction.credentialsSecret` |
-| `stacksTransactions.credentialsSecret` | `StacksNetwork.spec.stacksTransactionProduction.credentialsSecret` |
-| `stacksTransactions.image` | `workers.sdkImage` |
-| `stacksOperation.image` | `workers.sdkImage` |
-
-The chart now installs one shared operator, while capabilities own their workers.
-See the [upgrade procedure](../charts/stacks-network-operator/README.md#upgrading-execution-workers)
-before replacing images in an existing installation. Published chart versions
-must describe incompatible value changes in their release notes.
+Unpublished incompatible chart/schema changes require fresh test installations.
+See [installation compatibility](network-operator/migration.md) for explicit CRD
+handling; Helm does not perform API conversion or schema upgrades automatically.

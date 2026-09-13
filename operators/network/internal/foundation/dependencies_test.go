@@ -111,7 +111,7 @@ func TestRetainedParticipantChecksSourceAndTransitiveDependencies(t *testing.T) 
 			p := &api.StacksNetworkParticipant{ObjectMeta: metav1.ObjectMeta{Name: "instance", Namespace: "test", UID: "instance-uid", OwnerReferences: []metav1.OwnerReference{{UID: "root-uid", Controller: ptr.To(true)}}}, Spec: api.StacksNetworkParticipantSpec{NetworkUID: "root-uid", ParticipantName: "node", Kind: "BitcoinNode", Source: api.Source{Name: "definition", UID: "definition-uid"}}}
 			root := &api.StacksNetwork{ObjectMeta: metav1.ObjectMeta{Namespace: "test", UID: "root-uid"}, Spec: api.StacksNetworkSpec{Participants: []api.Participant{{Name: "node", Kind: "BitcoinNode"}}}, Status: api.StacksNetworkStatus{Identities: []api.InstanceIdentity{{Name: "node", UID: p.UID}}}}
 			account := &stacks.StacksAccount{ObjectMeta: metav1.ObjectMeta{Name: "account", Namespace: "test", UID: "account-uid"}, Status: common.ResolutionStatus{Identity: &common.PublicIdentity{Address: "public"}, Digest: "public-fingerprint", Conditions: []metav1.Condition{{Type: "Resolved", Status: metav1.ConditionTrue}}}}
-			p.Status.Admission = &api.Admission{Dependencies: []common.Binding{binding("StacksAccount", account, account.Status.Digest)}}
+			p.Status.Admission = &api.Admission{Source: p.Spec.Source, Dependencies: []common.Binding{binding("StacksAccount", account, account.Status.Digest)}}
 			// Candidate-policy failure is not itself a reason to discard a still-valid admission.
 			p.Status.Conditions = []metav1.Condition{{Type: "Resolved", Status: metav1.ConditionFalse, Reason: "RequiresReplacement"}}
 			if mode == "cycle" {

@@ -1,6 +1,6 @@
 # Participant composition
 
-Status: proposed public API. This document defines selection and compilation;
+This contract defines selection and compilation;
 [lifecycle](lifecycle.md) defines execution and destruction.
 
 ## One list, reference or inline

@@ -1,7 +1,0 @@
-apiVersion: v2
-name: stacks-network-foundation
-description: Composable Stacks API foundation; resolves participants and captures genesis without actor activation
-type: application
-version: 0.1.0
-appVersion: 0.1.0
-kubeVersion: '>=1.37.0-0'

@@ -15,6 +15,9 @@ verify:
 helm-verify:
 	$(HELM) lint . --kube-version 1.37.0
 	$(HELM) template verify . --namespace stacks-observation-system >/dev/null
+	@if $(HELM) template verify . --namespace stacks-observation-system --set controller.networkAPIVersion=v1alpha1 >/dev/null 2>&1; then \
+		echo "retired network API option unexpectedly rendered" >&2; exit 1; \
+	fi
 	@if $(HELM) template verify . --namespace stacks-observation-system --set-json image=null >/dev/null 2>&1; then \
 		echo "null image configuration unexpectedly rendered" >&2; exit 1; \
 	fi

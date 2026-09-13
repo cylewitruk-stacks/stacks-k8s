@@ -11,5 +11,5 @@ test:
 test-race:
 	$(GO_ISOLATED) test -race ./...
 test-integration:
-	$(GO_ISOLATED) test -tags=integration -count=1 ./internal/integration
+	$(GO_ISOLATED) test -tags=integration -count=1 ./controllers/foundation
 verify: fmt vet test test-race test-integration

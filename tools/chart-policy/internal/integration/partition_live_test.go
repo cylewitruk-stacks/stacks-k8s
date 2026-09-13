@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cylewitruk-stacks/stacks-k8s/tools/chart-policy/internal/chaosprofile"
 	admissionv1 "k8s.io/api/admissionregistration/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -31,6 +32,7 @@ type faultFixture struct {
 	kubeconfig, kubecontext, namespace, network string
 	username, password                          string
 	pods                                        map[string]*corev1.Pod
+	profileEnrolled                             bool
 	// onWaitTimeout collects optional best-effort evidence before a failed wait ends the test.
 	onWaitTimeout func(string)
 }
@@ -42,6 +44,7 @@ func newFaultFixture(t *testing.T, namespace, network string, enrolled bool) *fa
 		t.Skip("set STACKS_CHAOS_PARTITION_LIVE=1 for disposable partition fixtures")
 	}
 	f := &faultFixture{t: t, namespace: namespace, network: network, kubeconfig: os.Getenv("STACKS_CHAOS_KUBECONFIG"), kubecontext: os.Getenv("STACKS_CHAOS_CONTEXT"), pods: map[string]*corev1.Pod{}}
+	f.profileEnrolled = enrolled
 	if f.kubeconfig == "" || f.kubecontext == "" {
 		t.Fatal("explicit kubeconfig and context required")
 	}
@@ -259,12 +262,26 @@ func (f *faultFixture) pause(paused bool, actors ...string) {
 // partition constructs one native actor-to-actor fault within the public profile.
 func (f *faultFixture) partition(name, source, target, duration string) *unstructured.Unstructured {
 	selector := func(actor string) map[string]any {
-		return map[string]any{"namespaces": []any{f.namespace}, "labelSelectors": map[string]any{"network.stacks.org/network": f.network, "network.stacks.org/actor": actor}}
+		return map[string]any{"namespaces": []any{f.namespace}}
 	}
 	o := &unstructured.Unstructured{Object: map[string]any{"apiVersion": "chaos-mesh.org/v1alpha1", "kind": "NetworkChaos", "spec": map[string]any{"action": "partition", "mode": "one", "direction": "both", "duration": duration, "selector": selector(source), "target": map[string]any{"mode": "one", "selector": selector(target)}}}}
 	o.SetNamespace(f.namespace)
 	o.SetName(name)
 	o.SetLabels(map[string]string{"network.stacks.org/network": f.network, "actions.stacks.org/correlation-id": name})
+	if f.profileEnrolled {
+		if err := chaosprofile.BindActors(f.ctx, f.admin, o, source, target); err != nil {
+			f.t.Fatal(err)
+		}
+	} else {
+		// Historical administrator-only control faults intentionally bypass the public profile.
+		for i, actor := range []string{source, target} {
+			path := []string{"spec", "selector", "labelSelectors"}
+			if i == 1 {
+				path = []string{"spec", "target", "selector", "labelSelectors"}
+			}
+			_ = unstructured.SetNestedStringMap(o.Object, map[string]string{"network.stacks.org/network": f.network, "network.stacks.org/actor": actor}, path...)
+		}
+	}
 	return o
 }
 

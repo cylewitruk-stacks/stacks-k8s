@@ -151,15 +151,15 @@ when permissions, dependencies, or failure domains materially differ.
 | Generic faults | Implemented | Initial directed-delay and bidirectional-partition profile: native NetworkChaos, static admission and bounded agent access; broader kinds and passive correlation remain planned. |
 | Forced Bitcoin reorganization | Recommended | Bounded action resource, not `StacksNetwork` state. |
 | Natural Bitcoin reorganization | Direction | Emergent behavior to observe; no action resource required. |
-| Baseline Bitcoin production | Direction | Aggregate-owned policy separates timing from selection among neutral Bitcoin nodes; exact schema open. |
-| Baseline transaction demand | Direction | Separate ongoing producer capability; Stacks nodes retain miner configuration. |
+| Baseline Bitcoin production | Implemented | A selected production participant separates timing from weighted neutral Bitcoin-node targets. |
+| Baseline transaction demand | Implemented | Separate Go transfer worker; Stacks nodes retain miner configuration. |
 | Temporary override | Direction | One effective-behavior writer; removal resumes the latest baseline. |
 | Finite Bitcoin generation | Implemented | One bounded `BitcoinBlockGeneration` using immediate, fixed, uniform-random, or explicit-sequence cadence. |
 | Observation storage | Direction | External telemetry/evidence store; never bulk data in CRD status. |
 | Replay and reduction | Direction | Agent responsibility outside operators. |
 | Build from Git revision | Direction | External build tooling produces an OCI image. |
 | Action deployment boundary | Recommended | One modular operator initially; revisit when privileges diverge. |
-| Custom-action API contract | Direction | `actions.stacks.org/v1alpha1`, immutable specs, shared lifecycle fixture, and typed same-namespace references. |
+| Custom-action API contract | Direction | `actions.stacks.org/v1alpha2`, immutable specs, exact network UID and logical participant references. |
 | Action correlation | Direction | `actions.stacks.org/correlation-id` is a search hint; object UID is authoritative. |
 | Observation API names | Open | `NetworkTelemetry` and `EvidenceExport` are working names. |
 | Aggregate action admission | Open | Not claimed initially; preserve direct native CRDs and avoid side-effecting admission. |
@@ -177,3 +177,10 @@ chosen during implementation.
 The [managed network operation contract](managed-network-operation.md) defines
 controller-owned initialization and participation independently of experiment
 orchestration and consensus-signer workload placement.
+
+## Composable runtime
+
+The [public API](public-api/README.md) is the network and action runtime contract.
+It defines reusable declarations, generated participants/genesis and exact-Pod
+management workers. See [current state](current-state.md) for implemented scope;
+profile-specific live outcomes are recorded separately from unit/envtest evidence.

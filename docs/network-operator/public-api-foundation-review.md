@@ -140,7 +140,7 @@ or symbol is imported. Detail: `/tmp/stacks-foundation-vuln-detail.log`.
 Focused regressions also cover explicit empty-list overrides, default-identity exclusion
 for miners, transient read recovery clearing stale conditions, mutable selection versus
 protected bindings, and committed/uncommitted lost key-write acknowledgements. The local
-image is `stacks-network-foundation:review`. The temporary verification snapshot was removed;
+image is `stacks-network-operator:review`. The temporary verification snapshot was removed;
 logs remain available for review. Hosted Actions were not executed.
 
 ## Limits and next slice

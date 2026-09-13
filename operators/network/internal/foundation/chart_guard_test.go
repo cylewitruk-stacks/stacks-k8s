@@ -17,7 +17,7 @@ import (
 )
 
 func TestFoundationChartChecksEveryExistingCRD(t *testing.T) {
-	chart := filepath.Join("..", "..", "..", "..", "charts", "stacks-network-foundation")
+	chart := filepath.Join("..", "..", "..", "..", "charts", "stacks-network-operator")
 	files, err := filepath.Glob(filepath.Join(chart, "crds", "*.yaml"))
 	if err != nil {
 		t.Fatal(err)
@@ -34,7 +34,7 @@ func TestFoundationChartChecksEveryExistingCRD(t *testing.T) {
 		}
 		names = append(names, crd.Metadata.Name)
 	}
-	if len(names) != 15 {
+	if len(names) != 19 {
 		t.Fatalf("CRD inventory: %d", len(names))
 	}
 	for _, incompatible := range append([]string{""}, names...) {

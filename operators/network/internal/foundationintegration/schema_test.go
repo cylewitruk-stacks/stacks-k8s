@@ -38,7 +38,7 @@ import (
 func TestFoundationSchemasAndFreeze(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
-	env := &envtest.Environment{CRDDirectoryPaths: []string{filepath.Join("..", "..", "..", "..", "charts", "stacks-network-foundation", "crds")}, ErrorIfCRDPathMissing: true, DownloadBinaryAssets: true, DownloadBinaryAssetsVersion: "1.37.0", BinaryAssetsDirectory: filepath.Join(os.TempDir(), "stacks-network-operator-envtest"), ControlPlaneStartTimeout: 60 * time.Second, ControlPlaneStopTimeout: 60 * time.Second}
+	env := &envtest.Environment{CRDDirectoryPaths: []string{filepath.Join("..", "..", "..", "..", "charts", "stacks-network-operator", "crds")}, ErrorIfCRDPathMissing: true, DownloadBinaryAssets: true, DownloadBinaryAssetsVersion: "1.37.0", BinaryAssetsDirectory: filepath.Join(os.TempDir(), "stacks-network-operator-envtest"), ControlPlaneStartTimeout: 60 * time.Second, ControlPlaneStopTimeout: 60 * time.Second}
 	cfg, err := env.Start()
 	if err != nil {
 		t.Fatal(err)
@@ -58,6 +58,7 @@ func TestFoundationSchemasAndFreeze(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	verifyWalletProfileSchema(t, ctx, c)
 	verifyManagerAndScopedJob(t, ctx, c, cfg, scheme)
 	// The complete proposed cohort must survive schema admission without silent field pruning.
 	path := filepath.Join("..", "..", "..", "..", "docs", "design", "public-api", "examples", "30-actors.yaml")
@@ -106,13 +107,10 @@ func TestFoundationSchemasAndFreeze(t *testing.T) {
 	account := &foundation.IdentityReconciler{Client: operatorClient, Reader: operatorClient, Scheme: scheme, Image: "foundation:test"}
 	wallet := &foundation.IdentityReconciler{Client: operatorClient, Reader: operatorClient, Scheme: scheme, Image: "foundation:test", Wallet: true}
 	var network api.StacksNetwork
+	completedJobs := map[types.UID]bool{}
 	step := func() {
 		t.Helper()
-		for i := 0; i < 8; i++ {
-			if _, err := root.Reconcile(ctx, request); err != nil {
-				t.Fatal(err)
-			}
-		}
+		driveRoot(t, ctx, c, root, request, &network)
 		var accounts stacks.StacksAccountList
 		if err := c.List(ctx, &accounts, client.InNamespace(ns)); err != nil {
 			t.Fatal(err)
@@ -131,12 +129,15 @@ func TestFoundationSchemasAndFreeze(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		// envtest has no kubelet/Job controller. Execute the exact resolver entry point with its recorded binding.
+		// envtest has no kubelet/Job controller. Execute each Job to completion once.
 		var jobs batchv1.JobList
 		if err := c.List(ctx, &jobs, client.InNamespace(ns)); err != nil {
 			t.Fatal(err)
 		}
 		for _, job := range jobs.Items {
+			if completedJobs[job.UID] {
+				continue
+			}
 			var input foundation.KeyJobInput
 			for _, arg := range job.Spec.Template.Spec.Containers[0].Args {
 				if strings.HasPrefix(arg, "--input=") {
@@ -148,6 +149,7 @@ func TestFoundationSchemasAndFreeze(t *testing.T) {
 			if err := foundation.RunKeyJob(ctx, c, input); err != nil {
 				t.Fatalf("resolver %s: %v", job.Name, err)
 			}
+			completedJobs[job.UID] = true
 		}
 		if err := c.Get(ctx, key, &network); err != nil {
 			t.Fatal(err)
@@ -190,6 +192,8 @@ func TestFoundationSchemasAndFreeze(t *testing.T) {
 	if err := c.Update(ctx, invalid); !apierrors.IsInvalid(err) || !strings.Contains(err.Error(), "kind is immutable") {
 		t.Fatalf("kind transition was not rejected by its admission rule: %v", err)
 	}
+	verifyRegistryAdmissionGate(t, ctx, c, &network)
+	verifyCandidateConfigurationGate(t, ctx, c, root, request, &network)
 	initialSpec := *network.Spec.DeepCopy()
 	network.Spec.Operation = "Running"
 	if err := c.Update(ctx, &network); err != nil {
@@ -296,6 +300,10 @@ func TestFoundationSchemasAndFreeze(t *testing.T) {
 	verifyFrozenPolicyUpdates(t, ctx, c, root, request, &network, &genesis)
 	verifyLateSignerAttachments(t, ctx, c, root, request, &network)
 	verifyRetainedDependencyFailure(t, ctx, c, root, request, &network)
+	verifyRuntimeConditionHandoff(t, ctx, c, root, request, &network)
+	verifyTrafficRecipientReplacement(t, ctx, c, root, request, &network)
+	verifyBootstrapGatePolicyRelease(t, ctx, c, root, request, &network, &genesis, cfg, scheme)
+	verifyRetainedSourceEligibility(t, ctx, c, root, request, &network)
 	// Removing a participant is destructive; its name cannot be used again.
 	removed := network.Spec.Participants[len(network.Spec.Participants)-1]
 	network.Spec.Participants = network.Spec.Participants[:len(network.Spec.Participants)-1]
@@ -318,6 +326,7 @@ func TestFoundationSchemasAndFreeze(t *testing.T) {
 	}
 	verifyStoppedRemovalAndInstanceLoss(t, ctx, c, scheme)
 	verifyResolutionConditions(t, ctx, c, scheme)
+	verifySharedParticipantStatus(t, ctx, c)
 	// Deleting the published artifact is catastrophic, never permission to freeze again.
 	if err := c.Delete(ctx, &genesis); err != nil {
 		t.Fatal(err)

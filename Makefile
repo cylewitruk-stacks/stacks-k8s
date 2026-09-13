@@ -17,7 +17,7 @@ MODULE_DIRS := \
 	test-integration test-race verify verify-chart-policy verify-network \
 	verify-observability verify-action vuln
 
-verify: verify-foundation verify-local-cluster modules-verify module-policy-verify verify-chart-policy verify-network verify-observability verify-action
+verify: api-verify verify-library verify-local-cluster modules-verify module-policy-verify verify-chart-policy verify-network verify-observability verify-action
 	$(MAKE) -C charts/stacks-chaos-profile verify
 
 api-verify:
@@ -101,15 +101,11 @@ vuln:
 	GOWORK=off $(GO) -C operators/action run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
 
 docker-check:
-	docker build --check --file operators/network/Dockerfile.foundation .
-	docker build --check --file operators/network/transactions/Dockerfile .
 	docker build --check --file operators/network/Dockerfile .
 	docker build --check --file operators/observability/Dockerfile .
 	docker build --check --file operators/action/Dockerfile .
 
 docker-build:
-	docker build --file operators/network/Dockerfile.foundation --tag stacks-network-foundation:verify .
-	docker build --file operators/network/transactions/Dockerfile --tag stacks-transaction-worker:verify .
 	docker build --file operators/network/Dockerfile --tag stacks-network-operator:verify .
 	docker build --file operators/observability/Dockerfile --tag stacks-observability-operator:verify .
 	docker build --file operators/action/Dockerfile --tag stacks-action-operator:verify .
@@ -124,8 +120,7 @@ verify-local-cluster:
 	GOWORK=off $(GO) -C tools/local-cluster vet ./...
 	GOWORK=off $(GO) -C tools/local-cluster test ./...
 
-.PHONY: verify-foundation
-verify-foundation:
+.PHONY: verify-library
+verify-library:
 	GOWORK=off $(GO) -C libs/stacks vet ./...
 	GOWORK=off $(GO) -C libs/stacks test -race ./...
-	$(MAKE) -C charts/stacks-network-foundation verify

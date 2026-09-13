@@ -1,40 +1,44 @@
-# Stacks action operator chart
+# Stacks action operator
 
-This independently versioned chart owns the served `actions.stacks.org` CRDs
-and their lifecycle Deployment. `BitcoinBlockGeneration` is enabled by default;
-`BitcoinReorganization` is optional. The network chart provides the sole Bitcoin
-executor. First install this chart and its CRDs, then enable the corresponding
-network action-selection flags. Use one action chart release per namespace;
-replicas of that release share a single leader-election Lease.
+Optional, independently installed `actions.stacks.org/v1alpha2` lifecycle controllers
+for finite Bitcoin generation and bounded local reorganization. The controllers read
+public network/execution records and write action status/finalizers. The existing
+Bitcoin control worker remains the sole RPC sender.
 
-```bash
-helm upgrade --install stacks-action-operator charts/stacks-action-operator \
-  --namespace stacks-regtest
-```
-
-Before images are published, build/load a local image and override
-`image.repository` and `image.tag`. See [operations](../../docs/action-operator/operations.md)
-for the full setup, matching network configuration, outcomes and removal.
-
-| Value | Default | Meaning |
-| --- | --- | --- |
-| `bitcoinGeneration.enabled` | `true` | Run finite-generation lifecycle controller and its quota/RBAC. |
-| `bitcoinReorganization.enabled` | `false` | Run the existing local-reorganization lifecycle controller and its quota/RBAC. |
-| `replicaCount` | `1` | 1–5 manager replicas; more than one requires leader election. |
-| `controller.leaderElection` | `true` | Namespace-local single active lifecycle writer. |
-| `controller.maxConcurrentReconciles` | `2` | 1–32 concurrent reconciles per kind. |
-| `serviceAccount.create` | `true` | Create the namespaced lifecycle identity. |
-
-At least one kind must be enabled. Each enabled kind has a namespace quota of
-64 objects. The chart grants no Secret, workload or production-ledger writes.
-No RPC credential is mounted. Health/readiness and non-root, read-only container
-settings are included; repository checks validate rendered permissions and
-workloads.
+Install in the network namespace after enabling the matching network chart values:
+`bitcoinActions.generationEnabled` and, explicitly, `bitcoinActions.reorganizationEnabled`.
+Both network-side values default to false. This chart enables generation by default;
+set `bitcoinReorganization.enabled=true` to add the reorganization lifecycle controller.
+Installing lifecycle controllers alone grants no Bitcoin mutation authority.
 
 ```bash
-make -C charts/stacks-action-operator verify
+helm upgrade --install actions charts/stacks-action-operator \
+  --namespace lab --set image.tag=dev
 ```
 
-Generation accepts immediate, fixed, uniform, or explicit-delay cadence; see the
-[cadence contract](../../docs/network-operator/bitcoin-generation.md#cadence).
-Timing and RPC execution remain in the network worker.
+The two CRDs replace incompatible legacy action schemas. The chart rejects observed
+non-v1alpha2 CRDs; it never deletes or converts old resources. Helm does not upgrade
+CRDs automatically. Review schema updates before applying them explicitly.
+
+Requests pin `spec.networkUID` and a logical BitcoinNode participant. Specs are
+immutable. Generation sends one block at a time; reorganization admits depth 1–6,
+sends exactly depth+1 replacement blocks, and compensates only its captured invalidity
+marker. Cleanup does not restore an old best chain. Every generation dispatch obeys
+the network's current immutable initialization ceiling.
+
+A namespace quota allows 64 requests per kind. The worker sorts eligible requests by
+creation time and UID, then reserves its existing execution record with a versioned
+write. A lost Armed acknowledgement never causes replay. Known receipts retain the
+reservation until the lifecycle controller publishes their terminal acknowledgement.
+Ambiguous execution retains exclusion; deleting an individual action does not clear it.
+Explicit environment disposal permits removal of the action retention finalizer.
+
+Each Role is namespaced. Lifecycle controllers receive no Secret access and cannot
+write execution records, actor workloads, or network status. Workers receive public
+request reads only for enabled kinds. Exact rendered permissions are tested in the
+independent action module.
+
+Change installation enablement flags only after action reservations settle or the
+environment is disposed. Disabling a kind removes its read permission; it is not
+cancellation and can strand retained uncertainty or cleanup. Use action deletion or
+network pause for runtime cancellation while the controller and worker retain access.

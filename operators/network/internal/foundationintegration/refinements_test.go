@@ -33,7 +33,7 @@ func driveRoot(t *testing.T, ctx context.Context, c client.Client, r *foundation
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !result.Requeue {
+		if !result.Requeue && result.RequeueAfter != time.Millisecond {
 			break
 		}
 	}
@@ -74,7 +74,6 @@ func verifyFrozenPolicyUpdates(t *testing.T, ctx context.Context, c client.Clien
 	}
 	originalTraffic := *traffic.Spec.DeepCopy()
 	traffic.Spec.Interval = ptr.To(common.Duration("20s"))
-	traffic.Spec.Recipient = &stacks.Recipient{AccountRef: &common.NameRef{Name: "admin-01"}}
 	updateObject(t, ctx, c, &traffic)
 	for i := range root.Spec.Participants {
 		if root.Spec.Participants[i].Name == "traffic" {
@@ -84,10 +83,11 @@ func verifyFrozenPolicyUpdates(t *testing.T, ctx context.Context, c client.Clien
 	updateObject(t, ctx, c, root)
 	driveRoot(t, ctx, c, r, request, root)
 	got := participant(t, ctx, c, root, "traffic")
-	requireReason(t, got, "BootstrapPending")
-	if got.UID != old.UID || !reflect.DeepEqual(got.Status.Admission, old.Status.Admission) || !meta.IsStatusConditionTrue(got.Status.Conditions, "PolicyDeferred") {
-		t.Fatal("whole admitted policy/dependencies were not retained")
+	requireReason(t, got, "Admitted")
+	if got.UID != old.UID || *got.Status.Admission.Configuration.StacksTransactionProduction.Interval != "20s" || !meta.IsStatusConditionFalse(got.Status.Conditions, "PolicyDeferred") {
+		t.Fatal("compatible traffic cadence did not admit during bootstrap")
 	}
+	old = got.DeepCopy()
 	if *got.Spec.Configuration.StacksTransactionProduction.Interval != "20s" || got.Spec.Control == nil || !ptr.Deref(got.Spec.Control.Paused, false) {
 		t.Fatal("candidate or independent control was lost")
 	}
@@ -478,7 +478,7 @@ func verifyFreshFreezeReads(t *testing.T, ctx context.Context, c client.Client, 
 			t.Fatal(err)
 		}
 	}
-	if !result.Requeue || cached.reads == 0 || fresh.reads == 0 {
+	if result.Requeue || result.RequeueAfter != time.Millisecond || cached.reads == 0 || fresh.reads == 0 {
 		t.Fatalf("fresh freeze check did not reject stale cache: %+v cached=%d fresh=%d", result, cached.reads, fresh.reads)
 	}
 	var artifacts api.StacksGenesisList

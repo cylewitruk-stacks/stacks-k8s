@@ -1,14 +1,14 @@
-apiVersion: actions.stacks.org/v1alpha1
+# Set networkUID and payout address from the selected running network before applying.
+apiVersion: actions.stacks.org/v1alpha2
 kind: BitcoinBlockGeneration
 metadata:
   name: three-blocks
   labels:
     actions.stacks.org/correlation-id: ordinary-regtest-check
 spec:
-  networkRef:
-    name: bitcoin
+  networkUID: REPLACE-WITH-CURRENT-NETWORK-UID
   bitcoinNodeRef:
-    name: bitcoin-bitcoin
+    name: btc-01
   count: 3
   cadence:
     mode: Fixed

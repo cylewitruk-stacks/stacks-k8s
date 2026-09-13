@@ -2,10 +2,9 @@
 
 ## Purpose
 
-This document consolidates the approved remediation decisions from the first
-review of the architecture design package. It is the authoritative M0 plan.
-Where it conflicts with another document under `docs/design/`, this plan takes
-precedence until that document is revised. This plan adopts the
+This document owns M0 remediation requirements and delivery status. The
+[composable public API](public-api/README.md) governs `v1alpha2` resources,
+ownership and execution; this plan does not override that contract. It adopts the
 [steady-state operation amendment](steady-state-operation.md), including its
 R1–R8 review ledger. M0.3 and M0.4 have reviewed initial contracts; the capability profiles define their
 implemented scope.
@@ -858,3 +857,12 @@ sections above.
       deferrals, with implementation acceptance defined for supported
       capabilities; links, Markdown policy, repository contracts, `make verify`,
       and relevant container checks pass on the complete package.
+
+## Replacement runtime verification
+
+The composable `v1alpha2` runtime supplies aggregate-owned admission, independent
+domain/workload status writers and scoped Go workers. Its
+[public contract](public-api/README.md) and [current-state inventory](current-state.md)
+supersede old runtime-specific resource layouts. Keep the remaining M0 evidence
+and cross-product qualification requirements explicit; old live results do not
+automatically qualify the replacement implementation.

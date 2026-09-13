@@ -7,10 +7,9 @@ import (
 	"strings"
 	"time"
 
-	bitcoin "github.com/cylewitruk-stacks/stacks-k8s/apis/network/bitcoin/v1alpha2"
 	common "github.com/cylewitruk-stacks/stacks-k8s/apis/network/common/v1alpha2"
-	stacks "github.com/cylewitruk-stacks/stacks-k8s/apis/network/stacks/v1alpha2"
 	api "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha2"
+	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/participantstatus"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -19,8 +18,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 // Reconciler owns participant allocation, resolution and one genesis capture.
@@ -30,6 +27,12 @@ type Reconciler struct {
 	Client client.Client
 	// Reader bypasses caches for current identity and freeze checks.
 	Reader client.Reader
+	// Runtime performs aggregate-owned record allocation and lifecycle observation.
+	Runtime NetworkRuntime
+	// Configurations validates candidate native configuration before admission and freeze.
+	Configurations CandidateConfigurationValidator
+	// RuntimeKinds lists kinds whose domain controller owns workload status.
+	RuntimeKinds map[api.ParticipantKind]bool
 	// Scheme supplies ownership metadata.
 	Scheme *runtime.Scheme
 }
@@ -40,10 +43,18 @@ func condition(conditions *[]metav1.Condition, generation int64, kind string, st
 	meta.SetStatusCondition(conditions, metav1.Condition{Type: kind, Status: status, Reason: reason, Message: message, ObservedGeneration: generation})
 }
 func (r *Reconciler) report(ctx context.Context, root *api.StacksNetwork, base *api.StacksNetwork, phase, reason, message string) (ctrl.Result, error) {
-	root.Status.Phase = phase
-	condition(&root.Status.Conditions, root.Generation, "Initialized", metav1.ConditionFalse, "RuntimeNotImplemented", "This delivery resolves and captures genesis; protocol initialization is not implemented")
-	condition(&root.Status.Conditions, root.Generation, "Running", metav1.ConditionFalse, "RuntimeNotImplemented", "No actor or protocol workers are activated by the foundation")
-	condition(&root.Status.Conditions, root.Generation, "Operational", metav1.ConditionFalse, "RuntimeNotImplemented", "Protocol health is not asserted")
+	failed := root.Status.Phase == "Failed" || meta.IsStatusConditionTrue(root.Status.Conditions, "Failed")
+	if phase == "Failed" || (!failed && (r.Runtime == nil || root.Status.GenesisRef == nil)) {
+		root.Status.Phase = phase
+	}
+	if phase == "Failed" {
+		condition(&root.Status.Conditions, root.Generation, "Failed", metav1.ConditionTrue, reason, message)
+	}
+	if r.Runtime == nil {
+		condition(&root.Status.Conditions, root.Generation, "Initialized", metav1.ConditionFalse, "RuntimeNotImplemented", "This delivery resolves and captures genesis; protocol initialization is not implemented")
+		condition(&root.Status.Conditions, root.Generation, "Running", metav1.ConditionFalse, "RuntimeNotImplemented", "No actor or protocol workers are activated by the foundation")
+		condition(&root.Status.Conditions, root.Generation, "Operational", metav1.ConditionFalse, "RuntimeNotImplemented", "Protocol health is not asserted")
+	}
 	resolvedStatus := metav1.ConditionUnknown
 	if phase == "ResolutionError" || phase == "Failed" {
 		resolvedStatus = metav1.ConditionFalse
@@ -56,18 +67,19 @@ func (r *Reconciler) report(ctx context.Context, root *api.StacksNetwork, base *
 			return ctrl.Result{}, err
 		}
 	}
+	// Successful continuation must not accumulate error backoff across participant allocations.
 	// Retry unresolved inputs; settled states advance through watches only.
 	if phase == "ResolutionError" {
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 	if reason == "Allocating" || reason == "Withdrawing" || reason == "GenesisRecovered" {
-		return ctrl.Result{Requeue: true}, nil
+		return ctrl.Result{RequeueAfter: time.Millisecond}, nil
 	}
 	return ctrl.Result{}, nil
 }
 
 // Reconcile advances only after owned identities and complete public inputs are durable.
-func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *Reconciler) reconcileTopology(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	var root api.StacksNetwork
 	if err := r.Reader.Get(ctx, req.NamespacedName, &root); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
@@ -78,10 +90,38 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	if !controllerutil.ContainsFinalizer(&root, foundationFinalizer) {
 		base := root.DeepCopy()
 		controllerutil.AddFinalizer(&root, foundationFinalizer)
-		return ctrl.Result{Requeue: true}, r.Client.Patch(ctx, &root, client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{}))
+		return ctrl.Result{RequeueAfter: time.Millisecond}, r.Client.Patch(ctx, &root, client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{}))
 	}
 	base := root.DeepCopy()
-	if root.Status.Phase == "Failed" {
+	dependencies := newDependencyCheck(r.Reader, &root)
+	selected := map[string]api.Participant{}
+	for _, entry := range root.Spec.Participants {
+		selected[entry.Name] = entry
+	}
+	var resolutionErr error
+	resolutionReason := "InputsUnavailable"
+	issue := func(reason, message string) {
+		if resolutionErr == nil {
+			resolutionReason, resolutionErr = reason, fmt.Errorf("%s", message)
+		}
+	}
+	// Record withdrawal before destruction; re-add cannot erase the removal decision.
+	for i := range root.Status.Identities {
+		id := &root.Status.Identities[i]
+		if _, ok := selected[id.Name]; !ok && !id.Removing {
+			id.Removing = true
+			return r.report(ctx, &root, base, "Resolving", "Withdrawing", "Participant removal recorded before destructive cleanup")
+		}
+		if id.Removing {
+			if err := r.deleteParticipant(ctx, &root, *id); err != nil {
+				return ctrl.Result{}, err
+			}
+			if _, ok := selected[id.Name]; ok {
+				issue("NameAlreadyUsed", "Removed participant names are single-use; choose a new name")
+			}
+		}
+	}
+	if root.Status.Phase == "Failed" || meta.IsStatusConditionTrue(root.Status.Conditions, "Failed") {
 		return ctrl.Result{}, nil
 	}
 	if root.Status.GenesisRef == nil {
@@ -127,33 +167,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 			return r.report(ctx, &root, base, "Failed", "GenesisUnavailable", "Published genesis identity or content changed; recreate the network")
 		}
 	}
-	selected := map[string]api.Participant{}
-	for _, entry := range root.Spec.Participants {
-		selected[entry.Name] = entry
-	}
-	var resolutionErr error
-	resolutionReason := "InputsUnavailable"
-	issue := func(reason, message string) {
-		if resolutionErr == nil {
-			resolutionReason, resolutionErr = reason, fmt.Errorf("%s", message)
-		}
-	}
-	// Record withdrawal before destruction; re-add cannot erase the removal decision.
-	for i := range root.Status.Identities {
-		id := &root.Status.Identities[i]
-		if _, ok := selected[id.Name]; !ok && !id.Removing {
-			id.Removing = true
-			return r.report(ctx, &root, base, "Resolving", "Withdrawing", "Participant removal recorded before destructive cleanup")
-		}
-		if id.Removing {
-			if err := r.deleteParticipant(ctx, &root, *id); err != nil {
-				return ctrl.Result{}, err
-			}
-			if _, ok := selected[id.Name]; ok {
-				issue("NameAlreadyUsed", "Removed participant names are single-use; choose a new name")
-			}
-		}
-	}
 	if root.Spec.Operation == "Stopped" {
 		return r.report(ctx, &root, base, "Stopped", "Stopped", "Terminal stop; participant removals remain destructive")
 	}
@@ -182,7 +195,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 			if err := createOwned(ctx, r.Client, r.Scheme, &root, instance); err != nil {
 				return ctrl.Result{}, err
 			}
-			return ctrl.Result{Requeue: true}, nil
+			return ctrl.Result{RequeueAfter: time.Millisecond}, nil
 		}
 		if err != nil {
 			return ctrl.Result{}, err
@@ -193,12 +206,15 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		if instance.Spec.Kind != entry.Kind {
 			const message = "Participant kind is immutable while its entry exists"
 			issue("KindChanged", message)
-			if err := r.participantStatus(ctx, instance, nil, "KindChanged", message); err != nil {
+			if err := r.participantStatus(ctx, &root, dependencies, instance, nil, "KindChanged", message); err != nil {
 				return ctrl.Result{}, err
 			}
 			continue
 		}
 		if id == nil {
+			if ManagementKind(entry.Kind) && !PendingWorkerAllocation(&root, instance) {
+				return r.report(ctx, &root, base, "Failed", "WorkerIdentityLost", "Participant worker history exists without its identity ledger; recreate the network")
+			}
 			root.Status.Identities = append(root.Status.Identities, api.InstanceIdentity{Name: entry.Name, UID: instance.UID})
 			return r.report(ctx, &root, base, "Resolving", "Allocating", "Participant identity recorded before resolving instance-owned inputs")
 		}
@@ -210,12 +226,12 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 			if err := r.Client.Patch(ctx, instance, client.MergeFromWithOptions(previous, client.MergeFromWithOptimisticLock{})); err != nil {
 				return ctrl.Result{}, err
 			}
-			return ctrl.Result{Requeue: true}, nil
+			return ctrl.Result{RequeueAfter: time.Millisecond}, nil
 		}
 		c, err := r.compose(ctx, r.Client, &root, entry, instance)
 		if err != nil {
 			issue("InputsUnavailable", fmt.Sprintf("%s: %v", entry.Name, err))
-			if err := r.participantStatus(ctx, instance, nil, "ResolutionError", err.Error()); err != nil {
+			if err := r.participantStatus(ctx, &root, dependencies, instance, nil, "ResolutionError", err.Error()); err != nil {
 				return ctrl.Result{}, err
 			}
 			continue
@@ -231,7 +247,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		if err := c.validate(ctx, r.Client, all); err != nil {
 			invalid[entry.Name] = true
 			issue("InputsUnavailable", fmt.Sprintf("%s: %v", entry.Name, err))
-			if err := r.participantStatus(ctx, c.instance, nil, "ResolutionError", err.Error()); err != nil {
+			if err := r.participantStatus(ctx, &root, dependencies, c.instance, nil, "ResolutionError", err.Error()); err != nil {
 				return ctrl.Result{}, err
 			}
 		}
@@ -239,7 +255,14 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	for name, message := range topologyConflicts(all, instances, invalid) {
 		invalid[name] = true
 		issue("TopologyConflict", name+": "+message)
-		if err := r.participantStatus(ctx, all[name].instance, nil, "TopologyConflict", message); err != nil {
+		if err := r.participantStatus(ctx, &root, dependencies, all[name].instance, nil, "TopologyConflict", message); err != nil {
+			return ctrl.Result{}, err
+		}
+	}
+	for name, err := range r.configurationResults(ctx, &root, all, frozen, resolutionErr == nil) {
+		invalid[name] = true
+		issue("ConfigurationValidation", name+": "+err.Error())
+		if err := r.participantStatus(ctx, &root, dependencies, all[name].instance, nil, "InvalidConfiguration", err.Error()); err != nil {
 			return ctrl.Result{}, err
 		}
 	}
@@ -260,7 +283,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 				}
 				if invalid[byUID[dependency.UID]] {
 					invalid[name], changed = true, true
-					if err := r.participantStatus(ctx, c.instance, nil, "ResolutionError", "A required participant is unresolved"); err != nil {
+					if err := r.participantStatus(ctx, &root, dependencies, c.instance, nil, "ResolutionError", "A required participant is unresolved"); err != nil {
 						return ctrl.Result{}, err
 					}
 					break
@@ -268,47 +291,58 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 			}
 		}
 	}
-	dependencies := newDependencyCheck(r.Reader, &root)
+	completedGates := bootstrapCompletedGates(&root, frozen)
 	for _, entry := range entries {
 		c := all[entry.Name]
 		if c == nil || invalid[entry.Name] {
 			continue
 		}
-		admissionReason, admissionMessage := "Admitted", "Complete public policy admitted; runtime not activated"
-		admission := &api.Admission{PolicyDigest: Digest(c.configuration), Configuration: c.configuration, Dependencies: c.dependencies}
+		admissionReason, admissionMessage := "Admitted", "Complete public policy admitted; workload and protocol status are reported separately"
+		admission := &api.Admission{Source: c.source, PolicyDigest: Digest(c.configuration), Configuration: c.configuration, Dependencies: c.dependencies}
 		if frozen != nil && !bitcoinBootstrapCompatible(c, frozen.Spec.Bootstrap) {
 			message := "Bitcoin payout and initialization must match the frozen network, including for a new participant"
 			issue("RequiresReplacement", entry.Name+": "+message)
-			if err := r.participantStatus(ctx, c.instance, nil, "RequiresReplacement", message); err != nil {
+			if err := r.participantStatus(ctx, &root, dependencies, c.instance, nil, "RequiresReplacement", message); err != nil {
 				return ctrl.Result{}, err
 			}
 			continue
 		}
-		if prior := c.instance.Status.Admission; prior != nil && (!sameIdentities(prior.Dependencies, admission.Dependencies) || !sameProtectedConfiguration(c.instance.Spec.Kind, prior.Configuration, admission.Configuration)) {
+		if prior := c.instance.Status.Admission; prior != nil && (!sameIdentities(prior.Dependencies, admission.Dependencies) || !sameProtectedConfiguration(c.instance.Spec.Kind, prior.Configuration, admission.Configuration) || !sameBoundPlacement(&root, c.instance, admission.Configuration)) {
 			message := "A protected binding changed; use a new participant name"
 			if c.instance.Spec.Kind == "BitcoinBlockProduction" {
 				message = "Bitcoin payout or initialization binding changes require a fresh network"
 			}
 			issue("RequiresReplacement", entry.Name+": "+message)
-			if err := r.participantStatus(ctx, c.instance, nil, "RequiresReplacement", message); err != nil {
+			if err := r.participantStatus(ctx, &root, dependencies, c.instance, nil, "RequiresReplacement", message); err != nil {
 				return ctrl.Result{}, err
 			}
 			continue
 		}
 		if frozen != nil {
 			for _, required := range frozen.Spec.Bootstrap.Requirements {
-				if required.Participant.UID == c.instance.UID && required.PolicyDigest != admission.PolicyDigest {
-					if c.instance.Status.Admission == nil || c.instance.Status.Admission.PolicyDigest != required.PolicyDigest {
+				if required.Participant.UID == c.instance.UID && bootstrapPolicyPending(completedGates, required) {
+					if c.instance.Status.Admission == nil || Digest(c.instance.Status.Admission.Configuration) != c.instance.Status.Admission.PolicyDigest || !BootstrapPolicyCompatible(required, c.instance.Status.Admission.Configuration) {
 						return r.report(ctx, &root, base, "Failed", "BootstrapPolicyUnavailable", "Captured initial policy unavailable; recreate the network")
 					}
-					admission = c.instance.Status.Admission
-					admissionReason, admissionMessage = "BootstrapPending", "Candidate policy deferred until initialization gates complete"
+					if !BootstrapPolicyCompatible(required, admission.Configuration) {
+						admission = c.instance.Status.Admission
+						admissionReason, admissionMessage = "BootstrapPending", "Candidate policy deferred until initialization gates complete"
+					}
 				}
 			}
 		}
+		candidate := c.instance.DeepCopy()
+		candidate.Status.Admission = admission
+		if err := dependencies.source(ctx, candidate); err != nil {
+			issue("DefinitionUnavailable", entry.Name+": "+err.Error())
+			if err := r.participantStatus(ctx, &root, dependencies, c.instance, nil, "ResolutionError", err.Error()); err != nil {
+				return ctrl.Result{}, err
+			}
+			continue
+		}
 		if err := dependencies.validate(ctx, admission.Dependencies); err != nil {
 			issue("DependencyUnavailable", entry.Name+": "+err.Error())
-			if err := r.participantStatus(ctx, c.instance, nil, "DependencyUnavailable", err.Error()); err != nil {
+			if err := r.participantStatus(ctx, &root, dependencies, c.instance, nil, "DependencyUnavailable", err.Error()); err != nil {
 				return ctrl.Result{}, err
 			}
 			continue
@@ -320,21 +354,21 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 			if err := r.Client.Patch(ctx, c.instance, client.MergeFromWithOptions(old, client.MergeFromWithOptimisticLock{})); err != nil {
 				return ctrl.Result{}, err
 			}
-			return ctrl.Result{Requeue: true}, nil
+			return ctrl.Result{RequeueAfter: time.Millisecond}, nil
 		}
 		previousStatus := c.instance.DeepCopy().Status
-		if err := r.participantStatus(ctx, c.instance, admission, admissionReason, admissionMessage); err != nil {
+		if err := r.participantStatus(ctx, &root, dependencies, c.instance, admission, admissionReason, admissionMessage); err != nil {
 			return ctrl.Result{}, err
 		}
 		if !equal(previousStatus, c.instance.Status) {
-			return ctrl.Result{Requeue: true}, nil
+			return ctrl.Result{RequeueAfter: time.Millisecond}, nil
 		}
 	}
 	if resolutionErr != nil {
 		return r.report(ctx, &root, base, "ResolutionError", resolutionReason, resolutionErr.Error())
 	}
 	if frozen != nil {
-		return r.report(ctx, &root, base, "Initializing", "GenesisCaptured", "Immutable genesis captured; runtime activation is a later delivery slice")
+		return r.report(ctx, &root, base, "Initializing", "GenesisCaptured", "Immutable genesis captured; admitted participants may converge toward declared operation")
 	}
 	spec, err := compileGenesis(ctx, r.Client, &root, all)
 	if err != nil {
@@ -356,7 +390,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 			return ctrl.Result{}, err
 		}
 		if p.UID != c.instance.UID || p.DeletionTimestamp != nil || p.Status.Admission == nil || p.Status.Admission.PolicyDigest != Digest(c.configuration) {
-			return ctrl.Result{Requeue: true}, nil
+			return ctrl.Result{RequeueAfter: time.Millisecond}, nil
 		}
 		current, err := r.compose(ctx, r.Reader, &root, entry, &p)
 		if err != nil {
@@ -370,7 +404,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		}
 		prior := all[name]
 		if !equal(c.source, prior.source) || !equal(c.configuration, prior.configuration) || !equal(c.dependencies, prior.dependencies) {
-			return ctrl.Result{Requeue: true}, nil
+			return ctrl.Result{RequeueAfter: time.Millisecond}, nil
 		}
 	}
 	currentSpec, err := compileGenesis(ctx, r.Reader, &root, fresh)
@@ -378,7 +412,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return ctrl.Result{}, err
 	}
 	if !equal(currentSpec, spec) {
-		return ctrl.Result{Requeue: true}, nil
+		return ctrl.Result{RequeueAfter: time.Millisecond}, nil
+	}
+	for name, err := range r.configurationResults(ctx, &root, fresh, nil, true) {
+		return r.report(ctx, &root, base, "ResolutionError", "ConfigurationValidation", name+": "+err.Error())
 	}
 	// A fresh boundary check must not reuse the earlier admission observations.
 	captureDependencies := newDependencyCheck(r.Reader, &root)
@@ -396,9 +433,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return ctrl.Result{}, err
 	}
 	if current.UID != root.UID || current.ResourceVersion != root.ResourceVersion || current.DeletionTimestamp != nil {
-		return ctrl.Result{Requeue: true}, nil
+		return ctrl.Result{RequeueAfter: time.Millisecond}, nil
 	}
-	artifact := &api.StacksGenesis{ObjectMeta: metav1.ObjectMeta{Name: RuntimeName(string(root.UID), "", "StacksGenesis", root.Name, "genesis"), Namespace: root.Namespace}, Spec: spec}
+	artifact := &api.StacksGenesis{ObjectMeta: metav1.ObjectMeta{Name: RuntimeName(string(root.UID), "", "StacksGenesis", root.Name, "genesis"), Namespace: root.Namespace, Finalizers: []string{ArtifactFinalizer}}, Spec: spec}
 	if err := controllerutil.SetControllerReference(&root, artifact, r.Scheme, controllerutil.WithBlockOwnerDeletion(false)); err != nil {
 		return ctrl.Result{}, err
 	}
@@ -416,7 +453,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	}
 	root.Status.GenesisRef = ptrBinding(binding("StacksGenesis", artifact, Digest(artifact.Spec)))
 	root.Status.GenesisDigest = Digest(artifact.Spec.Chain)
-	return r.report(ctx, &root, base, "Initializing", "GenesisCaptured", "Immutable genesis captured; runtime activation is a later delivery slice")
+	return r.report(ctx, &root, base, "Initializing", "GenesisCaptured", "Immutable genesis captured; admitted participants may converge toward declared operation")
 }
 
 // bitcoinBootstrapCompatible preserves network-wide initialization identity across instance replacement.
@@ -461,7 +498,7 @@ func sameIdentities(a, b []common.Binding) bool {
 	return true
 }
 
-// sameProtectedConfiguration excludes mutable peer hints, schedules, traffic recipients and target selection.
+// sameProtectedConfiguration excludes mutable peer hints, schedules and target selection.
 func sameProtectedConfiguration(kind api.ParticipantKind, old, current api.Configuration) bool {
 	paths := map[api.ParticipantKind][]string{
 		"BitcoinNode":                 {"storage"},
@@ -471,7 +508,7 @@ func sameProtectedConfiguration(kind api.ParticipantKind, old, current api.Confi
 		"StacksStacker":               {"holderAccountRef", "administratorAccountRef", "signerRef", "targetNodeRef"},
 		"StacksFaucet":                {"accountRef", "targetNodeRef"},
 		"StacksContractSet":           {"deployerAccountRef", "targetNodeRef"},
-		"StacksTransactionProduction": {"accountRef", "targetNodeRef"},
+		"StacksTransactionProduction": {"accountRef", "targetNodeRef", "recipient"},
 	}
 	oldMap, _ := objectMap(old)
 	currentMap, _ := objectMap(current)
@@ -531,7 +568,7 @@ func (r *Reconciler) compose(ctx context.Context, reader client.Reader, root *ap
 	}
 	return &candidate{instance: instance, configuration: config, source: source}, nil
 }
-func (r *Reconciler) participantStatus(ctx context.Context, p *api.StacksNetworkParticipant, admission *api.Admission, reason, message string) error {
+func (r *Reconciler) participantStatus(ctx context.Context, root *api.StacksNetwork, dependencies *dependencyCheck, p *api.StacksNetworkParticipant, admission *api.Admission, reason, message string) error {
 	base := p.DeepCopy()
 	if admission != nil {
 		p.Status.Admission = admission
@@ -541,15 +578,33 @@ func (r *Reconciler) participantStatus(ctx context.Context, p *api.StacksNetwork
 		state = metav1.ConditionFalse
 	}
 	condition(&p.Status.Conditions, p.Generation, "Resolved", state, reason, message)
+	ready, eligibilityReason, eligibilityMessage := r.admissionReadiness(ctx, root, p, dependencies)
+	condition(&p.Status.Conditions, p.Generation, "AdmissionReady", ready, eligibilityReason, eligibilityMessage)
 	deferred := metav1.ConditionFalse
 	if reason == "BootstrapPending" {
 		deferred = metav1.ConditionTrue
 	}
 	condition(&p.Status.Conditions, p.Generation, "PolicyDeferred", deferred, reason, message)
-	if equal(base.Status, p.Status) {
+	if !r.RuntimeKinds[p.Spec.Kind] {
+		condition(&p.Status.Conditions, p.Generation, "WorkloadReady", metav1.ConditionFalse, "RuntimeNotImplemented", "This participant kind has no installed runtime controller")
+	}
+	if equal(base.Status, p.Status) && participantstatus.Managed(p, participantstatus.AggregateManager) && !participantstatus.NeedsMigration(p) && (!r.RuntimeKinds[p.Spec.Kind] || !participantstatus.OwnsCondition(p, participantstatus.AggregateManager, "WorkloadReady")) {
 		return nil
 	}
-	return r.Client.Status().Patch(ctx, p, client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{}))
+	owned := api.ParticipantStatus{Admission: p.Status.Admission}
+	for _, c := range p.Status.Conditions {
+		if c.Type == "Resolved" || c.Type == "PolicyDeferred" || c.Type == "AdmissionReady" {
+			owned.Conditions = append(owned.Conditions, c)
+		}
+	}
+	if !r.RuntimeKinds[p.Spec.Kind] {
+		prior := meta.FindStatusCondition(p.Status.Conditions, "WorkloadReady")
+		if prior != nil {
+			owned.Conditions = append(owned.Conditions, *prior)
+		}
+		condition(&owned.Conditions, p.Generation, "WorkloadReady", metav1.ConditionFalse, "RuntimeNotImplemented", "This participant kind has no installed runtime controller")
+	}
+	return participantstatus.Apply(ctx, r.Client, p, owned, participantstatus.AggregateManager)
 }
 func (r *Reconciler) deleteParticipant(ctx context.Context, root *api.StacksNetwork, id api.InstanceIdentity) error {
 	var p api.StacksNetworkParticipant
@@ -588,14 +643,7 @@ func (r *Reconciler) destroy(ctx context.Context, root *api.StacksNetwork) (ctrl
 	return ctrl.Result{}, r.Client.Patch(ctx, root, client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{}))
 }
 
-// SetupWithManager watches public declarations; Secret notifications use metadata only.
+// SetupWithManager watches selected public inputs without consuming runtime heartbeats.
 func (r *Reconciler) SetupWithManager(m ctrl.Manager) error {
-	enqueue := handler.EnqueueRequestsFromMapFunc(func(_ context.Context, obj client.Object) []reconcile.Request {
-		return []reconcile.Request{{NamespacedName: types.NamespacedName{Namespace: obj.GetNamespace(), Name: "network"}}}
-	})
-	builder := ctrl.NewControllerManagedBy(m).Named("foundation-network").For(&api.StacksNetwork{}).Owns(&api.StacksNetworkParticipant{}).Owns(&api.StacksGenesis{})
-	for _, obj := range []client.Object{&bitcoin.BitcoinNode{}, &bitcoin.BitcoinWallet{}, &bitcoin.BitcoinBlockProduction{}, &bitcoin.BitcoinBlockSchedule{}, &stacks.StacksAccount{}, &stacks.StacksNode{}, &stacks.StacksSigner{}, &stacks.StacksStacker{}, &stacks.StacksFaucet{}, &stacks.StacksContractSet{}, &stacks.StacksTransactionProduction{}, &api.StacksEpochSchedule{}} {
-		builder = builder.Watches(obj, enqueue)
-	}
-	return builder.WatchesMetadata(&metav1.PartialObjectMetadata{TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "Secret"}}, enqueue).Complete(r)
+	return r.setupWatches(m)
 }

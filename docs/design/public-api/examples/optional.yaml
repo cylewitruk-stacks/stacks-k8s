@@ -1,4 +1,4 @@
-# Design example: these optional runtime APIs are not served by the foundation preview.
+# Optional resources require their independently installed operators and enabled capabilities.
 ---
 apiVersion: actions.stacks.org/v1alpha2
 kind: BitcoinBlockGeneration

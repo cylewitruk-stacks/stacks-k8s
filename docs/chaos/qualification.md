@@ -1,5 +1,10 @@
 # Native delay qualification
 
+These are historical legacy-runtime results. The current profile additionally
+requires exact network and participant UIDs and `role=actor` on both selectors.
+The legacy fixture is incompatible with that profile and does not qualify the
+replacement runtime. See the [current selector checks](../../charts/stacks-chaos-profile/README.md#replacement-actor-identities).
+
 Requalified 2026-09-07 in the task-owned `kind-stacks-chaos-20260906` cluster,
 namespace `chaos-live`, network `chaos`. Existing demo clusters were untouched.
 This qualifies a narrow native `NetworkChaos` delay profile, not all of M0.5.

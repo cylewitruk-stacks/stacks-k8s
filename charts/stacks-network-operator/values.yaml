@@ -1,58 +1,14 @@
-replicaCount: 1
-
 image:
-  repository: ghcr.io/cylewitruk-stacks/stacks-network-operator
-  tag: "0.1.0"
+  repository: stacks-network-operator
+  tag: dev
   pullPolicy: IfNotPresent
-  pullSecrets: []
-
-controller:
-  maxConcurrentReconciles: 2
-  leaderElection: true
-  logLevel: info
-  # Empty watches all namespaces; set one namespace for a scoped installation.
-  watchNamespace: ""
-
-bitcoinReorganization:
-  enabled: false
-
-bitcoinGeneration:
-  enabled: false
-
-bitcoinProduction:
-  enabled: true
-
-serviceAccount:
-  create: true
-  name: ""
-  annotations: {}
-
-metrics:
-  service:
-    enabled: true
-    port: 8080
-    annotations: {}
-
-podAnnotations: {}
-podLabels: {}
-nodeSelector: {}
-tolerations: []
-affinity: {}
 resources:
   requests:
-    cpu: 25m
-    memory: 64Mi
+    cpu: 100m
+    memory: 128Mi
   limits:
-    cpu: 500m
-    memory: 256Mi
+    memory: 512Mi
 
-# Capability controllers create these workers on demand in each network namespace.
-stacksTransactions:
-  enabled: true
-stacksOperation:
-  enabled: true
-workers:
-  pullSecrets: []
-  sdkImage:
-    repository: stacks-transaction-worker
-    tag: "0.1.0"
+bitcoinActions:
+  generationEnabled: false
+  reorganizationEnabled: false

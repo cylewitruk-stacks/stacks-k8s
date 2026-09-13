@@ -1,10 +1,12 @@
+# Substitute UIDs read from the current v1alpha2 network and participant objects.
 apiVersion: chaos-mesh.org/v1alpha1
 kind: NetworkChaos
 metadata:
   name: actor-partition
   namespace: chaos-live
   labels:
-    network.stacks.org/network: chaos
+    network.stacks.org/network: network
+    network.stacks.org/network-uid: "${NETWORK_UID}"
     actions.stacks.org/correlation-id: network-partition-check
 spec:
   action: partition
@@ -14,12 +16,18 @@ spec:
   selector:
     namespaces: [chaos-live]
     labelSelectors:
-      network.stacks.org/network: chaos
+      network.stacks.org/network: network
       network.stacks.org/actor: bitcoin
+      network.stacks.org/network-uid: "${NETWORK_UID}"
+      network.stacks.org/participant-uid: "${SOURCE_PARTICIPANT_UID}"
+      network.stacks.org/role: actor
   target:
     mode: one
     selector:
       namespaces: [chaos-live]
       labelSelectors:
-        network.stacks.org/network: chaos
+        network.stacks.org/network: network
         network.stacks.org/actor: bitcoin-2
+        network.stacks.org/network-uid: "${NETWORK_UID}"
+        network.stacks.org/participant-uid: "${TARGET_PARTICIPANT_UID}"
+        network.stacks.org/role: actor

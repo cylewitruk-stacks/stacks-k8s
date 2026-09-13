@@ -146,9 +146,11 @@ type stubObserver struct {
 	snapshot topology.Snapshot
 	err      error
 	calls    int
+	expected string
 }
 
-func (s *stubObserver) Observe(context.Context, string, string, string) (topology.Snapshot, error) {
+func (s *stubObserver) Observe(_ context.Context, _, _, expected string) (topology.Snapshot, error) {
+	s.expected = expected
 	s.calls++
 	return s.snapshot, s.err
 }
@@ -176,4 +178,45 @@ func getObservation(t *testing.T, kubeClient client.Client, object *observationv
 		t.Fatal(err)
 	}
 	return updated
+}
+
+func TestReconcileRejectsLegacyExpectationWithoutObservation(t *testing.T) {
+	object, reconciler, observer := testReconciler(t, topology.Snapshot{}, nil)
+	object.Spec.ExpectedInventoryDigest = testDigest
+	if err := reconciler.Update(t.Context(), object); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := reconciler.Reconcile(t.Context(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(object)}); err != nil {
+		t.Fatal(err)
+	}
+	actual := getObservation(t, reconciler.Client, object)
+	if actual.Status.Phase != observationv1alpha1.ObservationInconclusive || observer.calls != 0 {
+		t.Fatal("legacy expectation reached participant reader")
+	}
+}
+
+func TestReconcilePinsSnapshotAndPreservesCompletion(t *testing.T) {
+	snapshot := topology.Snapshot{Binding: observationv1alpha1.NetworkBinding{Name: "network", UID: "root", ObservedGeneration: 1, NetworkAPIVersion: "network.stacks.org/v1alpha2", SnapshotDigest: testDigest}}
+	object, reconciler, observer := testReconciler(t, snapshot, nil)
+	object.Spec.ExpectedSnapshotDigest = testDigest
+	if err := reconciler.Update(t.Context(), object); err != nil {
+		t.Fatal(err)
+	}
+	request := ctrl.Request{NamespacedName: client.ObjectKeyFromObject(object)}
+	if _, err := reconciler.Reconcile(t.Context(), request); err != nil {
+		t.Fatal(err)
+	}
+	if observer.expected != testDigest {
+		t.Fatalf("snapshot expectation = %q", observer.expected)
+	}
+	actual := getObservation(t, reconciler.Client, object)
+	if actual.Status.Binding == nil || actual.Status.Binding.SnapshotDigest != testDigest || actual.Status.Binding.InventoryDigest != "" {
+		t.Fatalf("binding: %+v", actual.Status.Binding)
+	}
+	if _, err := reconciler.Reconcile(t.Context(), request); err != nil {
+		t.Fatal(err)
+	}
+	if observer.calls != 1 {
+		t.Fatal("reconciliation overwrote completed observation")
+	}
 }

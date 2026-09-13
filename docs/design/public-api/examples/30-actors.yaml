@@ -1,4 +1,4 @@
-# Foundation preview accepts these declarations; actor activation remains pending.
+# Thirty actors with separate reusable definitions and network-owned runtime participants.
 ---
 apiVersion: v1
 kind: Namespace

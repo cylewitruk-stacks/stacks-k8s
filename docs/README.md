@@ -1,44 +1,29 @@
 # Documentation
 
-[Operator installation and execution workloads](design/operator-workloads.md)
+## Running networks
 
-## Operators
+- [Network installation](../charts/stacks-network-operator/README.md)
+- [Runtime overview](network-operator/public-api-foundation.md)
+- [API reference](network-operator/api.md) and [architecture](network-operator/architecture.md)
+- [Configuration and genesis](network-operator/configuration.md)
+- [Operations and cleanup](network-operator/operations.md)
+- [Bitcoin production](network-operator/bitcoin-production.md)
+- [Stacks production and initialization](network-operator/stacks-production.md)
+- [PoX-4/PoX-5](network-operator/pox5.md)
+- [Custom actor images](network-operator/actor-images.md)
+- [Installation compatibility](network-operator/migration.md)
 
-- [Stacks network operator](../charts/stacks-network-operator/README.md)
-  - [API reference](network-operator/api.md)
-  - [Architecture](network-operator/architecture.md)
-  - [Operations](network-operator/operations.md)
-  - [Bitcoin baseline production](network-operator/bitcoin-production.md)
-  - [Custom Stacks actor images and mixed-version upgrades](network-operator/actor-images.md)
-  - [Direct PoX-4/PoX-5 operation](network-operator/pox5.md)
-  - [Stacks bootstrap and steady transfers](network-operator/stacks-production.md)
-  - [Stacks qualification evidence](network-operator/stacks-qualification.md)
-  - [Hacknet migration](network-operator/migration.md)
-- [Stacks action operator](../charts/stacks-action-operator/README.md)
-  - [Installation and operations](action-operator/operations.md)
-- [Stacks observability operator](../charts/stacks-observability-operator/README.md)
+## Experiments and observation
 
-## Native faults
+- [Bounded action operator](../charts/stacks-action-operator/README.md)
+- [Native Chaos Mesh profile](chaos/operations.md)
+- [Read-only observability operator](../charts/stacks-observability-operator/README.md)
 
-- [Optional Chaos Mesh profile](../charts/stacks-chaos-profile/README.md)
-- [Native network fault operations](chaos/operations.md)
-- [Native delay qualification](chaos/qualification.md)
-- [Native partition qualification](chaos/partition-qualification.md)
+## Design and development
 
-## Repository
-
-- [Architecture](architecture.md)
-- [Next-phase architecture design package](design/README.md)
-- [Current capabilities and gaps](design/current-state.md)
-- [Authoritative M0 remediation plan](design/m0-remediation-plan.md)
-- [Steady-state operation and review gates](design/steady-state-operation.md)
-- [Development](development.md)
-- [Local Kubernetes 1.37 qualification](local-cluster-qualification.md)
-- [Operations](operations.md)
+- [Composable public API](design/public-api/README.md)
+- [Product goals and design index](design/README.md)
+- [Roadmap](design/roadmap.md), [M0 remediation](design/m0-remediation-plan.md),
+  and [current state](design/current-state.md)
+- [Development and local cluster](development.md)
 - [Releases](releases.md)
-
-See [network configuration and genesis](network-operator/configuration.md) for immutable shared inputs
-and Go-owned provisioning/bootstrap.
-
-- [Composable public API foundation](network-operator/public-api-foundation.md): preview schemas,
-  resolution and genesis capture; runtime activation is pending.

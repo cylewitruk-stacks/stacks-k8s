@@ -36,7 +36,7 @@ func verifyManagerAndScopedJob(t *testing.T, ctx context.Context, c client.Clien
 	if err := c.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: ns}}); err != nil {
 		t.Fatal(err)
 	}
-	out, err := exec.Command("helm", "template", "foundation", filepath.Join("..", "..", "..", "..", "charts", "stacks-network-foundation"), "--namespace", ns, "--kube-version", "1.37.0").CombinedOutput()
+	out, err := exec.Command("helm", "template", "foundation", filepath.Join("..", "..", "..", "..", "charts", "stacks-network-operator"), "--namespace", ns, "--kube-version", "1.37.0").CombinedOutput()
 	if err != nil {
 		t.Fatalf("render: %v %s", err, out)
 	}

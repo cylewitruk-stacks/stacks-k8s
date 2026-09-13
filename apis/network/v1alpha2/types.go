@@ -37,6 +37,7 @@ type StacksNetwork struct {
 }
 
 // InstanceIdentity retains minimal allocation state after destructive removal.
+// +kubebuilder:validation:XValidation:rule="!has(oldSelf.worker) || has(self.worker)",message="worker binding cannot be removed"
 type InstanceIdentity struct {
 	// Name is single-use within this network UID.
 	Name string `json:"name"`
@@ -44,10 +45,14 @@ type InstanceIdentity struct {
 	UID types.UID `json:"uid"`
 	// Removing makes omission irreversible even if intent is quickly re-added.
 	Removing bool `json:"removing,omitempty"`
+	// Worker retains the exact standalone management Pod and terminal disposal evidence.
+	Worker *WorkerSession `json:"worker,omitempty"`
 }
 
 // StacksNetworkStatus is written only by the aggregate controller.
 type StacksNetworkStatus struct {
+	// ObservationPolicy identifies release freshness and progress parameters.
+	ObservationPolicy *ObservationPolicy `json:"observationPolicy,omitempty"`
 	// Phase reports the observed lifecycle, not protocol health.
 	Phase string `json:"phase,omitempty"`
 	// InputDigest identifies semantic candidate inputs.
@@ -61,6 +66,10 @@ type StacksNetworkStatus struct {
 	// +listType=map
 	// +listMapKey=name
 	Identities []InstanceIdentity `json:"identities,omitempty"`
+	// Bitcoin pins network-owned execution and initialization records before workers activate.
+	Bitcoin *BitcoinRuntimeStatus `json:"bitcoin,omitempty"`
+	// Initialization preserves frozen gate progress and the current generation ceiling.
+	Initialization *InitializationStatus `json:"initialization,omitempty"`
 	// Conditions distinguish resolution, initialization and operation.
 	// +listType=map
 	// +listMapKey=type
@@ -97,6 +106,8 @@ type StacksNetworkParticipantSpec struct {
 
 // Admission retains a complete validated public policy independently of candidate edits.
 type Admission struct {
+	// Source records the exact provenance of this retained complete policy.
+	Source Source `json:"source"`
 	// PolicyDigest identifies the whole admitted configuration.
 	PolicyDigest string `json:"policyDigest"`
 	// Configuration retains public requirements before runtime exists.
@@ -110,6 +121,14 @@ type Admission struct {
 type ParticipantStatus struct {
 	// Admission contains the complete accepted public policy.
 	Admission *Admission `json:"admission,omitempty"`
+	// Runtime contains domain-owned workload identity and readiness observations.
+	Runtime *ParticipantRuntimeStatus `json:"runtime,omitempty"`
+	// BitcoinControl contains domain-owned control process termination evidence.
+	BitcoinControl *BitcoinControlRuntimeStatus `json:"bitcoinControl,omitempty"`
+	// Scheduling projects the production domain's effective retained baseline state.
+	Scheduling *bitcoin.BitcoinSchedulingStatus `json:"scheduling,omitempty"`
+	// Execution is owned only by the exact bound Stacks worker process.
+	Execution *WorkerExecutionStatus `json:"execution,omitempty"`
 	// Conditions report resolution and replacement requirements.
 	// +listType=map
 	// +listMapKey=type
@@ -126,7 +145,7 @@ type StacksNetworkParticipant struct {
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 	// Spec contains aggregate-owned compiled policy.
 	Spec StacksNetworkParticipantSpec `json:"spec"`
-	// Status contains domain-owned admission.
+	// Status separates aggregate admission, domain runtime and worker execution.
 	Status ParticipantStatus `json:"status,omitempty"`
 }
 
@@ -167,6 +186,8 @@ type Chain struct {
 
 // BootstrapRequirement preserves values needed to evaluate the initial cohort.
 type BootstrapRequirement struct {
+	// Kind freezes the domain role independently of whether its instance still exists.
+	Kind ParticipantKind `json:"kind"`
 	// Participant is the exact initial instance identity.
 	Participant common.Binding `json:"participant"`
 	// PolicyDigest identifies its initially admitted configuration.
@@ -174,6 +195,8 @@ type BootstrapRequirement struct {
 	// Dependencies pins public credential identities.
 	// +kubebuilder:validation:MaxItems=1000
 	Dependencies []common.Binding `json:"dependencies,omitempty"`
+	// MiningEnabled preserves the initial Stacks node's mining role through bootstrap.
+	MiningEnabled *bool `json:"miningEnabled,omitempty"`
 	// AmountMicroSTX preserves required stake.
 	AmountMicroSTX *common.Amount `json:"amountMicroSTX,omitempty"`
 	// LockCycles preserves required coverage.

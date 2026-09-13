@@ -1,0 +1,1626 @@
+{
+  "oracle": "Stacks.js 7.6.0",
+  "clarity": [
+    {
+      "input": {
+        "type": 1,
+        "integer": "0"
+      },
+      "bytes": "0100000000000000000000000000000000"
+    },
+    {
+      "input": {
+        "type": 1,
+        "integer": "1"
+      },
+      "bytes": "0100000000000000000000000000000001"
+    },
+    {
+      "input": {
+        "type": 1,
+        "integer": "18446744073709551615"
+      },
+      "bytes": "010000000000000000ffffffffffffffff"
+    },
+    {
+      "input": {
+        "type": 1,
+        "integer": "340282366920938463463374607431768211455"
+      },
+      "bytes": "01ffffffffffffffffffffffffffffffff"
+    },
+    {
+      "input": {
+        "type": 0,
+        "integer": "-170141183460469231731687303715884105728"
+      },
+      "bytes": "0080000000000000000000000000000000"
+    },
+    {
+      "input": {
+        "type": 0,
+        "integer": "170141183460469231731687303715884105727"
+      },
+      "bytes": "007fffffffffffffffffffffffffffffff"
+    },
+    {
+      "input": {
+        "type": 0,
+        "integer": "-1"
+      },
+      "bytes": "00ffffffffffffffffffffffffffffffff"
+    },
+    {
+      "input": {
+        "type": 0,
+        "integer": "0"
+      },
+      "bytes": "0000000000000000000000000000000000"
+    },
+    {
+      "input": {
+        "type": 2,
+        "bytes": "00017fff"
+      },
+      "bytes": "020000000400017fff"
+    },
+    {
+      "input": {
+        "type": 2,
+        "bytes": ""
+      },
+      "bytes": "0200000000"
+    },
+    {
+      "input": {
+        "type": 3
+      },
+      "bytes": "03"
+    },
+    {
+      "input": {
+        "type": 4
+      },
+      "bytes": "04"
+    },
+    {
+      "input": {
+        "type": 5,
+        "text": "ST000000000000000000002AMW42H"
+      },
+      "bytes": "051a0000000000000000000000000000000000000000"
+    },
+    {
+      "input": {
+        "type": 6,
+        "text": "ST000000000000000000002AMW42H.pox-4"
+      },
+      "bytes": "061a000000000000000000000000000000000000000005706f782d34"
+    },
+    {
+      "input": {
+        "type": 7,
+        "items": [
+          {
+            "type": 1,
+            "integer": "1"
+          }
+        ]
+      },
+      "bytes": "070100000000000000000000000000000001"
+    },
+    {
+      "input": {
+        "type": 8,
+        "items": [
+          {
+            "type": 1,
+            "integer": "0"
+          }
+        ]
+      },
+      "bytes": "080100000000000000000000000000000000"
+    },
+    {
+      "input": {
+        "type": 9
+      },
+      "bytes": "09"
+    },
+    {
+      "input": {
+        "type": 10,
+        "items": [
+          {
+            "type": 2,
+            "bytes": "ff"
+          }
+        ]
+      },
+      "bytes": "0a0200000001ff"
+    },
+    {
+      "input": {
+        "type": 11,
+        "items": [
+          {
+            "type": 1,
+            "integer": "1"
+          },
+          {
+            "type": 1,
+            "integer": "2"
+          }
+        ]
+      },
+      "bytes": "0b0000000201000000000000000000000000000000010100000000000000000000000000000002"
+    },
+    {
+      "input": {
+        "type": 11,
+        "items": []
+      },
+      "bytes": "0b00000000"
+    },
+    {
+      "input": {
+        "type": 12,
+        "fields": {
+          "z": {
+            "type": 1,
+            "integer": "1"
+          },
+          "auth-id": {
+            "type": 1,
+            "integer": "2"
+          },
+          "a": {
+            "type": 10,
+            "items": [
+              {
+                "type": 3
+              }
+            ]
+          }
+        }
+      },
+      "bytes": "0c0000000301610a0307617574682d69640100000000000000000000000000000002017a0100000000000000000000000000000001"
+    },
+    {
+      "input": {
+        "type": 13,
+        "text": "hello\nworld"
+      },
+      "bytes": "0d0000000b68656c6c6f0a776f726c64"
+    },
+    {
+      "input": {
+        "type": 14,
+        "text": "Stacks 🦊 日本語"
+      },
+      "bytes": "0e00000015537461636b7320f09fa68a20e697a5e69cace8aa9e"
+    }
+  ],
+  "transactions": [
+    {
+      "input": {
+        "operation": "transfer",
+        "privateKey": "0000000000000000000000000000000000000000000000000000000000000001",
+        "nonce": "0",
+        "fee": "3001",
+        "version": 128,
+        "chainID": 2147483648,
+        "postConditionMode": 2,
+        "recipient": "ST1THWXQ8368SDN2MJGE4BMDKMCHZ2GSVTSQDA7QF",
+        "amount": "100",
+        "memo": "stacks-k8s baseline"
+      },
+      "bytes": "8080000000040091b24bf9f5288532960ac687abb035127b1d28a500000000000000000000000000000bb901018bd31a1003129707a9d2cf49983517d4c492061d763701a7f0ca2d9fcf879bc36795014d8f602bc3ba2252b8cac22a90fd24809bf171ae47c08b6e9bd9cc8db003020000000000051a751e76e8199196d454941c45d1b3a323f1433bd60000000000000064737461636b732d6b387320626173656c696e65000000000000000000000000000000",
+      "txid": "b3c77aef57f968348bcdfa6792b24251bf4d914a323e56c385fd5df1ea0d9b22"
+    },
+    {
+      "input": {
+        "operation": "call",
+        "privateKey": "0000000000000000000000000000000000000000000000000000000000000001",
+        "nonce": "0",
+        "fee": "3001",
+        "version": 128,
+        "chainID": 2147483648,
+        "postConditionMode": 2,
+        "address": "ST000000000000000000002AMW42H",
+        "contract": "pox-4",
+        "function": "stack-stx",
+        "args": [
+          {
+            "type": 1,
+            "integer": "1"
+          },
+          {
+            "type": 12,
+            "fields": {
+              "z": {
+                "type": 1,
+                "integer": "1"
+              },
+              "auth-id": {
+                "type": 1,
+                "integer": "2"
+              },
+              "a": {
+                "type": 10,
+                "items": [
+                  {
+                    "type": 3
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "type": 9
+          }
+        ]
+      },
+      "bytes": "8080000000040091b24bf9f5288532960ac687abb035127b1d28a500000000000000000000000000000bb9010171b88cfb141951d5fbc1042b860212ba74d64ae2345a97d73bdc10a1b667fb7f7e253afc43430f662a7fee242321d0a4a5547b33d1be7ec830117abbb341aef5030200000000021a000000000000000000000000000000000000000005706f782d3409737461636b2d7374780000000301000000000000000000000000000000010c0000000301610a0307617574682d69640100000000000000000000000000000002017a010000000000000000000000000000000109",
+      "txid": "cb9ee8400c37ac4eb8096ec1fa546ce4b2ebef888524580fc10723890b8197f8"
+    },
+    {
+      "input": {
+        "operation": "deploy",
+        "privateKey": "0000000000000000000000000000000000000000000000000000000000000001",
+        "nonce": "0",
+        "fee": "3001",
+        "version": 128,
+        "chainID": 2147483648,
+        "postConditionMode": 2,
+        "contract": "sample",
+        "source": "(define-public (hello) (ok u1))\n",
+        "clarityVersion": 2
+      },
+      "bytes": "8080000000040091b24bf9f5288532960ac687abb035127b1d28a500000000000000000000000000000bb9010114313ebee2768a8a6fde9b73e290bd5e5b3376b5638492425e7be01ff220bcff474642d40baebd6c991d1d519c113e632cb7483cdb82b507978f67e47ac7c3f203020000000006020673616d706c650000002028646566696e652d7075626c6963202868656c6c6f2920286f6b20753129290a",
+      "txid": "b14057d41735d305ad185136d5e722639ef78e4519b82a19593d1d91813e4c8a"
+    },
+    {
+      "input": {
+        "operation": "transfer",
+        "privateKey": "000000000000000000000000000000000000000000000000000000000000000201",
+        "nonce": "1",
+        "fee": "3002",
+        "version": 128,
+        "chainID": 2147483648,
+        "postConditionMode": 2,
+        "recipient": "ST1THWXQ8368SDN2MJGE4BMDKMCHZ2GSVTSQDA7QF",
+        "amount": "200",
+        "memo": "🦊"
+      },
+      "bytes": "8080000000040006afd46bcdfd22ef94ac122aa11f241244a37ecc00000000000000010000000000000bba0001117313f4ee0b560aba85dd3a60d51b6f6ca2467a9acbdf80e589265641d49d4b03a2014e79854504c5fa10b51f90e2a1862f36759173d02a592b7bf6ba1f7ed203020000000000051a751e76e8199196d454941c45d1b3a323f1433bd600000000000000c8f09fa68a000000000000000000000000000000000000000000000000000000000000",
+      "txid": "df807fdbf76c755dd9285b66b3e5bde0c190ae65c96b8fd884955b496c317de7"
+    },
+    {
+      "input": {
+        "operation": "call",
+        "privateKey": "000000000000000000000000000000000000000000000000000000000000000201",
+        "nonce": "1",
+        "fee": "3002",
+        "version": 128,
+        "chainID": 2147483648,
+        "postConditionMode": 1,
+        "address": "ST000000000000000000002AMW42H",
+        "contract": "pox-4",
+        "function": "stack-stx",
+        "args": [
+          {
+            "type": 1,
+            "integer": "2"
+          },
+          {
+            "type": 12,
+            "fields": {
+              "z": {
+                "type": 1,
+                "integer": "1"
+              },
+              "auth-id": {
+                "type": 1,
+                "integer": "2"
+              },
+              "a": {
+                "type": 10,
+                "items": [
+                  {
+                    "type": 3
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "type": 9
+          }
+        ]
+      },
+      "bytes": "8080000000040006afd46bcdfd22ef94ac122aa11f241244a37ecc00000000000000010000000000000bba0000b9a56dde213bc540b37b7d3acd83ebffd2313f42534913ffeede4dcaf13e6c161ff2eaf5f4136d6c79b102b5934773bd140574fbbb895f49042e63f7c4242622030100000000021a000000000000000000000000000000000000000005706f782d3409737461636b2d7374780000000301000000000000000000000000000000020c0000000301610a0307617574682d69640100000000000000000000000000000002017a010000000000000000000000000000000109",
+      "txid": "3eefb878d1294ab428b0098ef3340fc84de0d785c8645cdcf4b23c852c297165"
+    },
+    {
+      "input": {
+        "operation": "deploy",
+        "privateKey": "000000000000000000000000000000000000000000000000000000000000000201",
+        "nonce": "1",
+        "fee": "3002",
+        "version": 128,
+        "chainID": 2147483648,
+        "postConditionMode": 1,
+        "contract": "sample",
+        "source": "(define-public (hello) (ok u1))\n",
+        "clarityVersion": 3
+      },
+      "bytes": "8080000000040006afd46bcdfd22ef94ac122aa11f241244a37ecc00000000000000010000000000000bba00016ea417d010de9af54c230dbceca589f401a9ce68820560c9be7a0b0bc4bf410f33bc720551ae3d1030f4246f7e4e09d65b350f33454e7926ffc10632160a35db03010000000006030673616d706c650000002028646566696e652d7075626c6963202868656c6c6f2920286f6b20753129290a",
+      "txid": "75fa75198d7383124abf8a80f6c0d8b2ec01584ae60adfc0566dfa857759599f"
+    },
+    {
+      "input": {
+        "operation": "transfer",
+        "privateKey": "0000000000000000000000000000000000000000000000000000000000000003",
+        "nonce": "2",
+        "fee": "3003",
+        "version": 0,
+        "chainID": 1,
+        "postConditionMode": 2,
+        "recipient": "SP1THWXQ8368SDN2MJGE4BMDKMCHZ2GSVTS1X0BPM",
+        "amount": "300",
+        "memo": "stacks-k8s baseline"
+      },
+      "bytes": "00000000010400ec7eced2c57ed1292bc4eb9bfd13c9f7603bc33800000000000000020000000000000bbb01000fe7811cefd05acae515b648d30276e675b67ba50f3ca62bb0547d30d3b6e67a688dc8642da922e917dbf84e2d07aa15696a0f24cb352d1d2933f7fc0debd88f030200000000000516751e76e8199196d454941c45d1b3a323f1433bd6000000000000012c737461636b732d6b387320626173656c696e65000000000000000000000000000000",
+      "txid": "8a758983630847478412de284b7a63981017b67d45d9149fec8fa89653ea2504"
+    },
+    {
+      "input": {
+        "operation": "call",
+        "privateKey": "0000000000000000000000000000000000000000000000000000000000000003",
+        "nonce": "2",
+        "fee": "3003",
+        "version": 0,
+        "chainID": 1,
+        "postConditionMode": 2,
+        "address": "ST000000000000000000002AMW42H",
+        "contract": "pox-4",
+        "function": "stack-stx",
+        "args": [
+          {
+            "type": 1,
+            "integer": "3"
+          },
+          {
+            "type": 12,
+            "fields": {
+              "z": {
+                "type": 1,
+                "integer": "1"
+              },
+              "auth-id": {
+                "type": 1,
+                "integer": "2"
+              },
+              "a": {
+                "type": 10,
+                "items": [
+                  {
+                    "type": 3
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "type": 9
+          }
+        ]
+      },
+      "bytes": "00000000010400ec7eced2c57ed1292bc4eb9bfd13c9f7603bc33800000000000000020000000000000bbb0101ef5692301bbe0a0daabdde96f3a08802b8465ebb4d2141f82d83388fdd41156f18aa3621d3849c2515b723ab642c903ecbdf520f4eab6d744d014b6459cd810c030200000000021a000000000000000000000000000000000000000005706f782d3409737461636b2d7374780000000301000000000000000000000000000000030c0000000301610a0307617574682d69640100000000000000000000000000000002017a010000000000000000000000000000000109",
+      "txid": "4eef8ae752f722d032713025cd5ffb612aba052b48e85a85f7d4d18550ded582"
+    },
+    {
+      "input": {
+        "operation": "deploy",
+        "privateKey": "0000000000000000000000000000000000000000000000000000000000000003",
+        "nonce": "2",
+        "fee": "3003",
+        "version": 0,
+        "chainID": 1,
+        "postConditionMode": 2,
+        "contract": "sample",
+        "source": "(define-public (hello) (ok u1))\n",
+        "clarityVersion": 4
+      },
+      "bytes": "00000000010400ec7eced2c57ed1292bc4eb9bfd13c9f7603bc33800000000000000020000000000000bbb0101365c72f52312ba0137d60065c99688089f9710f1658ef31eff0194e8b5cd20ba37e2e8bb315ce6dc7f0f62e34787022ee65674e7e375593dbbb57653bdf7ac7503020000000006040673616d706c650000002028646566696e652d7075626c6963202868656c6c6f2920286f6b20753129290a",
+      "txid": "26b285a647632d0ce2c5dd5ec290185d9349d5438802237ecbe85decadc93910"
+    },
+    {
+      "input": {
+        "operation": "transfer",
+        "privateKey": "000000000000000000000000000000000000000000000000000000000000000401",
+        "nonce": "3",
+        "fee": "3004",
+        "version": 128,
+        "chainID": 2147483648,
+        "postConditionMode": 2,
+        "recipient": "ST1THWXQ8368SDN2MJGE4BMDKMCHZ2GSVTSQDA7QF.vault",
+        "amount": "400",
+        "memo": "🦊"
+      },
+      "bytes": "80800000000400c42e7ef92fdb603af844d064faad95db9bcdfd3d00000000000000030000000000000bbc00004b1c559d1d28814e6423f61668f26f19ff37f0efb9c3f84179a5b054bdc04ad2461068025ad6b47a2343211f8f638d4f8a2c2ea31ff8804b6d580d4b005fb80103020000000000061a751e76e8199196d454941c45d1b3a323f1433bd6057661756c740000000000000190f09fa68a000000000000000000000000000000000000000000000000000000000000",
+      "txid": "742e0db0c96051419252a477188f3f984599997ef73bcc1e9e6fbfd05be88710"
+    },
+    {
+      "input": {
+        "operation": "call",
+        "privateKey": "000000000000000000000000000000000000000000000000000000000000000401",
+        "nonce": "3",
+        "fee": "3004",
+        "version": 128,
+        "chainID": 2147483648,
+        "postConditionMode": 1,
+        "address": "ST000000000000000000002AMW42H",
+        "contract": "pox-4",
+        "function": "stack-stx",
+        "args": [
+          {
+            "type": 1,
+            "integer": "4"
+          },
+          {
+            "type": 12,
+            "fields": {
+              "z": {
+                "type": 1,
+                "integer": "1"
+              },
+              "auth-id": {
+                "type": 1,
+                "integer": "2"
+              },
+              "a": {
+                "type": 10,
+                "items": [
+                  {
+                    "type": 3
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "type": 9
+          }
+        ]
+      },
+      "bytes": "80800000000400c42e7ef92fdb603af844d064faad95db9bcdfd3d00000000000000030000000000000bbc000129e176afa674fb8c263c565192af401b5fbf45d98594f88a9bbec7d3af10734707ee30b32d7ae9529a53f9bbff97c0e60ea8570eacca7d08c0f626dc320b6a05030100000000021a000000000000000000000000000000000000000005706f782d3409737461636b2d7374780000000301000000000000000000000000000000040c0000000301610a0307617574682d69640100000000000000000000000000000002017a010000000000000000000000000000000109",
+      "txid": "c89ab0fbeed74aeac970e7aed74fb358791cbc6b9145448519b5cd9803e0a030"
+    },
+    {
+      "input": {
+        "operation": "deploy",
+        "privateKey": "000000000000000000000000000000000000000000000000000000000000000401",
+        "nonce": "3",
+        "fee": "3004",
+        "version": 128,
+        "chainID": 2147483648,
+        "postConditionMode": 1,
+        "contract": "sample",
+        "source": "(define-public (hello) (ok u1))\n",
+        "clarityVersion": 5
+      },
+      "bytes": "80800000000400c42e7ef92fdb603af844d064faad95db9bcdfd3d00000000000000030000000000000bbc0000354013eaed66fd29ce026df8188d400d38ac2d9d2403ac7f4615ace293310754013df62896ae133a39c3b5714431c62a2f457336c961dd733f2fe18afdca1d2603010000000006050673616d706c650000002028646566696e652d7075626c6963202868656c6c6f2920286f6b20753129290a",
+      "txid": "88900b5bf31d46e8e10cb0b3666652dd9abc5e4e66b8633934602054e1a4ca6f"
+    },
+    {
+      "input": {
+        "operation": "transfer",
+        "privateKey": "0000000000000000000000000000000000000000000000000000000000000005",
+        "nonce": "4",
+        "fee": "3005",
+        "version": 128,
+        "chainID": 2147483648,
+        "postConditionMode": 2,
+        "recipient": "ST1THWXQ8368SDN2MJGE4BMDKMCHZ2GSVTSQDA7QF",
+        "amount": "500",
+        "memo": "stacks-k8s baseline"
+      },
+      "bytes": "808000000004008eab8f2151da240474bf7cdd2d9065f7dcd3602e00000000000000040000000000000bbd010032841320c78613e61a4311620862e24807520a799770f80405ae8752005453fa6fd2c3d85c14d9e2c6c7eaaa4f15debd18f1f73a7de62cc9ce63e50259321ac903020000000000051a751e76e8199196d454941c45d1b3a323f1433bd600000000000001f4737461636b732d6b387320626173656c696e65000000000000000000000000000000",
+      "txid": "e566ccf97627aa50470dfc4d7015d3abc990f97312237972b27185bf4d4583b4"
+    },
+    {
+      "input": {
+        "operation": "call",
+        "privateKey": "0000000000000000000000000000000000000000000000000000000000000005",
+        "nonce": "4",
+        "fee": "3005",
+        "version": 128,
+        "chainID": 2147483648,
+        "postConditionMode": 2,
+        "address": "ST000000000000000000002AMW42H",
+        "contract": "pox-4",
+        "function": "stack-stx",
+        "args": [
+          {
+            "type": 1,
+            "integer": "5"
+          },
+          {
+            "type": 12,
+            "fields": {
+              "z": {
+                "type": 1,
+                "integer": "1"
+              },
+              "auth-id": {
+                "type": 1,
+                "integer": "2"
+              },
+              "a": {
+                "type": 10,
+                "items": [
+                  {
+                    "type": 3
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "type": 9
+          }
+        ]
+      },
+      "bytes": "808000000004008eab8f2151da240474bf7cdd2d9065f7dcd3602e00000000000000040000000000000bbd01007a41c13f7c9f0b7d7e2ed80922571099c7c6cbb01c46f4cb4c8709dbc5b838136a030057b9ec2de436258fb4711416f903c61c0bfc97169a605d58e5ce9c6bf7030200000000021a000000000000000000000000000000000000000005706f782d3409737461636b2d7374780000000301000000000000000000000000000000050c0000000301610a0307617574682d69640100000000000000000000000000000002017a010000000000000000000000000000000109",
+      "txid": "806cb7885093c4ef584e6cc13491b4e1e467d2f294e2b9d8c59a6f92042df885"
+    },
+    {
+      "input": {
+        "operation": "deploy",
+        "privateKey": "0000000000000000000000000000000000000000000000000000000000000005",
+        "nonce": "4",
+        "fee": "3005",
+        "version": 128,
+        "chainID": 2147483648,
+        "postConditionMode": 2,
+        "contract": "sample",
+        "source": "(define-public (hello) (ok u1))\n",
+        "clarityVersion": 6
+      },
+      "bytes": "808000000004008eab8f2151da240474bf7cdd2d9065f7dcd3602e00000000000000040000000000000bbd0101d7f0e5aa988ff14f9bbef2cb1f9094174eb5cfb4fcc685297d227d4ebc07a63e37aace8fc5bdb5f44afef42eb050bffe6eed4db01cbe43712fa05547565dfb9503020000000006060673616d706c650000002028646566696e652d7075626c6963202868656c6c6f2920286f6b20753129290a",
+      "txid": "2262210bfe1fa8721aba58e13fb1d64930e8b411c15b6b7691ec2e8967145e61"
+    },
+    {
+      "input": {
+        "operation": "transfer",
+        "privateKey": "000000000000000000000000000000000000000000000000000000000000000601",
+        "nonce": "5",
+        "fee": "3006",
+        "version": 0,
+        "chainID": 1,
+        "postConditionMode": 2,
+        "recipient": "SP1THWXQ8368SDN2MJGE4BMDKMCHZ2GSVTS1X0BPM",
+        "amount": "600",
+        "memo": "🦊"
+      },
+      "bytes": "000000000104007fda9cf020c16cacf529c87d8de89bfc70b8c9cb00000000000000050000000000000bbe0001ccb0f1245528ed9d01e8f767434620684e4207b80077d9e8cda2e82592aad5a1310e251392bef5e41c64638d94bb351d05c2eeeaa21e274b40fbc8c8f5c1c2ed030200000000000516751e76e8199196d454941c45d1b3a323f1433bd60000000000000258f09fa68a000000000000000000000000000000000000000000000000000000000000",
+      "txid": "1945c7bc9b3a6e6d61689f44fad0b7630b3466a7515ecef222f539aac0561c7a"
+    },
+    {
+      "input": {
+        "operation": "call",
+        "privateKey": "000000000000000000000000000000000000000000000000000000000000000601",
+        "nonce": "5",
+        "fee": "3006",
+        "version": 0,
+        "chainID": 1,
+        "postConditionMode": 1,
+        "address": "ST000000000000000000002AMW42H",
+        "contract": "pox-4",
+        "function": "stack-stx",
+        "args": [
+          {
+            "type": 1,
+            "integer": "6"
+          },
+          {
+            "type": 12,
+            "fields": {
+              "z": {
+                "type": 1,
+                "integer": "1"
+              },
+              "auth-id": {
+                "type": 1,
+                "integer": "2"
+              },
+              "a": {
+                "type": 10,
+                "items": [
+                  {
+                    "type": 3
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "type": 9
+          }
+        ]
+      },
+      "bytes": "000000000104007fda9cf020c16cacf529c87d8de89bfc70b8c9cb00000000000000050000000000000bbe00004d4fed583ff690f7317fbf92bf2b436dbcd79d9b509baeec66dfbc2cb296f7e560da079039154d16d90e8c26df200ccf66d99985d0671fb768ee36b21ee2acd4030100000000021a000000000000000000000000000000000000000005706f782d3409737461636b2d7374780000000301000000000000000000000000000000060c0000000301610a0307617574682d69640100000000000000000000000000000002017a010000000000000000000000000000000109",
+      "txid": "ec0bc70e235ae585bb9201073e479dbd689e0c73a75f25f03f6644abc2c51402"
+    },
+    {
+      "input": {
+        "operation": "deploy",
+        "privateKey": "000000000000000000000000000000000000000000000000000000000000000601",
+        "nonce": "5",
+        "fee": "3006",
+        "version": 0,
+        "chainID": 1,
+        "postConditionMode": 1,
+        "contract": "sample",
+        "source": "(define-public (hello) (ok u1))\n",
+        "clarityVersion": 1
+      },
+      "bytes": "000000000104007fda9cf020c16cacf529c87d8de89bfc70b8c9cb00000000000000050000000000000bbe000079b8e309c7d29e5dba481f22dbf232ec4f42df83ada12971f46216cbc9de20a93a83209390b8055b13e36333dafec0f9ef9e516d4467e09d10e9437029fdc08403010000000006010673616d706c650000002028646566696e652d7075626c6963202868656c6c6f2920286f6b20753129290a",
+      "txid": "6729a096f0e8b331f80571aad96e3b49219b239e7254ce693b6315385e9e568c"
+    },
+    {
+      "input": {
+        "operation": "transfer",
+        "privateKey": "0000000000000000000000000000000000000000000000000000000000000007",
+        "nonce": "6",
+        "fee": "3007",
+        "version": 128,
+        "chainID": 2147483648,
+        "postConditionMode": 2,
+        "recipient": "ST1THWXQ8368SDN2MJGE4BMDKMCHZ2GSVTSQDA7QF",
+        "amount": "700",
+        "memo": "stacks-k8s baseline"
+      },
+      "bytes": "8080000000040073ab19930b7c023b0c7e17da43649ca58a41999900000000000000060000000000000bbf0100c75f3db7576f7b498035684934be3f242ccef48d959ab94794b3f918003eff020878a1f0c915d972ee1d886b566ce091c33434efd0bec5c274b49f265fc33d2d03020000000000051a751e76e8199196d454941c45d1b3a323f1433bd600000000000002bc737461636b732d6b387320626173656c696e65000000000000000000000000000000",
+      "txid": "adb8bb4c1dd3e0a2f92e2207deda55523edce000d80195648ba73521dc681a74"
+    },
+    {
+      "input": {
+        "operation": "call",
+        "privateKey": "0000000000000000000000000000000000000000000000000000000000000007",
+        "nonce": "6",
+        "fee": "3007",
+        "version": 128,
+        "chainID": 2147483648,
+        "postConditionMode": 2,
+        "address": "ST000000000000000000002AMW42H",
+        "contract": "pox-4",
+        "function": "stack-stx",
+        "args": [
+          {
+            "type": 1,
+            "integer": "7"
+          },
+          {
+            "type": 12,
+            "fields": {
+              "z": {
+                "type": 1,
+                "integer": "1"
+              },
+              "auth-id": {
+                "type": 1,
+                "integer": "2"
+              },
+              "a": {
+                "type": 10,
+                "items": [
+                  {
+                    "type": 3
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "type": 9
+          }
+        ]
+      },
+      "bytes": "8080000000040073ab19930b7c023b0c7e17da43649ca58a41999900000000000000060000000000000bbf01012e0e90fbb60af1436ff5b55776bee03ecf24da5119a461796a18268a97a614992b28996cd780ecf71eafffe594451d82486f983b7069dcd4c3c6648d0437c562030200000000021a000000000000000000000000000000000000000005706f782d3409737461636b2d7374780000000301000000000000000000000000000000070c0000000301610a0307617574682d69640100000000000000000000000000000002017a010000000000000000000000000000000109",
+      "txid": "0e7d2d9cf9c12c1aec4dbc0a936ccc12a1690ca1f1715f1f8b6b251a9489e2f9"
+    },
+    {
+      "input": {
+        "operation": "deploy",
+        "privateKey": "0000000000000000000000000000000000000000000000000000000000000007",
+        "nonce": "6",
+        "fee": "3007",
+        "version": 128,
+        "chainID": 2147483648,
+        "postConditionMode": 2,
+        "contract": "sample",
+        "source": "(define-public (hello) (ok u1))\n",
+        "clarityVersion": 2
+      },
+      "bytes": "8080000000040073ab19930b7c023b0c7e17da43649ca58a41999900000000000000060000000000000bbf0101da1934cc65ccbfcca318d5278c3721c0c783c3bb00d254423073996875081b9f30d3cf4463eda3b26addd42adcbd51926aa438ac746641caa814c0b34729f87403020000000006020673616d706c650000002028646566696e652d7075626c6963202868656c6c6f2920286f6b20753129290a",
+      "txid": "b68c6a1c6dc593a93c984b07ac109417ff9dbc787857e29b1550ba6f35fa6a51"
+    },
+    {
+      "input": {
+        "operation": "transfer",
+        "privateKey": "000000000000000000000000000000000000000000000000000000000000000801",
+        "nonce": "7",
+        "fee": "3008",
+        "version": 128,
+        "chainID": 2147483648,
+        "postConditionMode": 2,
+        "recipient": "ST1THWXQ8368SDN2MJGE4BMDKMCHZ2GSVTSQDA7QF.vault",
+        "amount": "800",
+        "memo": "🦊"
+      },
+      "bytes": "808000000004009652d86bedf43ad264362e6e6eba6eb76450812700000000000000070000000000000bc00001642e75179f6d3d54226ac179c0ead85147fed1ee9d24476924b5d74d7d8db32d63c9720634427e879b98db2380324053e337316b425e906d9436a6548f07041703020000000000061a751e76e8199196d454941c45d1b3a323f1433bd6057661756c740000000000000320f09fa68a000000000000000000000000000000000000000000000000000000000000",
+      "txid": "28757e50baab47429769233faa6d60dfdf1a49e08d131d664627b5cb7320ff6b"
+    },
+    {
+      "input": {
+        "operation": "call",
+        "privateKey": "000000000000000000000000000000000000000000000000000000000000000801",
+        "nonce": "7",
+        "fee": "3008",
+        "version": 128,
+        "chainID": 2147483648,
+        "postConditionMode": 1,
+        "address": "ST000000000000000000002AMW42H",
+        "contract": "pox-4",
+        "function": "stack-stx",
+        "args": [
+          {
+            "type": 1,
+            "integer": "8"
+          },
+          {
+            "type": 12,
+            "fields": {
+              "z": {
+                "type": 1,
+                "integer": "1"
+              },
+              "auth-id": {
+                "type": 1,
+                "integer": "2"
+              },
+              "a": {
+                "type": 10,
+                "items": [
+                  {
+                    "type": 3
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "type": 9
+          }
+        ]
+      },
+      "bytes": "808000000004009652d86bedf43ad264362e6e6eba6eb76450812700000000000000070000000000000bc00001fe3edb01687aeaf31004a6eefae19154caa075fab34be8e0b73680e2e3841f4d28d73e772ecb7c3eb2dd133a8cb6f0c0c2e1a4412c6597ad9625706a549a68b2030100000000021a000000000000000000000000000000000000000005706f782d3409737461636b2d7374780000000301000000000000000000000000000000080c0000000301610a0307617574682d69640100000000000000000000000000000002017a010000000000000000000000000000000109",
+      "txid": "4639fca7c46745a2d195f7719172cacea224a1d070a947d1e896a51d18c79eef"
+    },
+    {
+      "input": {
+        "operation": "deploy",
+        "privateKey": "000000000000000000000000000000000000000000000000000000000000000801",
+        "nonce": "7",
+        "fee": "3008",
+        "version": 128,
+        "chainID": 2147483648,
+        "postConditionMode": 1,
+        "contract": "sample",
+        "source": "(define-public (hello) (ok u1))\n",
+        "clarityVersion": 3
+      },
+      "bytes": "808000000004009652d86bedf43ad264362e6e6eba6eb76450812700000000000000070000000000000bc000009b3c3789e2d72e29810cd0eb4c3cc262e56210824691be89e9b900a5ef034a6110f8ea13dd4ffe5414c211b4bf6bd21408d201069a526232bb40aa426b709a9c03010000000006030673616d706c650000002028646566696e652d7075626c6963202868656c6c6f2920286f6b20753129290a",
+      "txid": "21996af242c11d2738735ab8d08ac6bdb9a099dcf92e9bcffca0c3b4e6c5af03"
+    },
+    {
+      "input": {
+        "operation": "transfer",
+        "privateKey": "0000000000000000000000000000000000000000000000000000000000000009",
+        "nonce": "8",
+        "fee": "3009",
+        "version": 0,
+        "chainID": 1,
+        "postConditionMode": 2,
+        "recipient": "SP1THWXQ8368SDN2MJGE4BMDKMCHZ2GSVTS1X0BPM",
+        "amount": "900",
+        "memo": "stacks-k8s baseline"
+      },
+      "bytes": "00000000010400808dc34fd51c936e2db7c702745228b5a6a53d5500000000000000080000000000000bc10100085e130a63ebec9383b5cd6ea6becc9c9377b4e8e49ad3a425c39189572d4a3d259b732782c1a62a172c712e0feac4aa8b5e1c9e52d1a27639fc8785cae3701d030200000000000516751e76e8199196d454941c45d1b3a323f1433bd60000000000000384737461636b732d6b387320626173656c696e65000000000000000000000000000000",
+      "txid": "f65200674b115b8602956d23d8e71afb60c7f843471d1f0408666a74bd1eec1a"
+    },
+    {
+      "input": {
+        "operation": "call",
+        "privateKey": "0000000000000000000000000000000000000000000000000000000000000009",
+        "nonce": "8",
+        "fee": "3009",
+        "version": 0,
+        "chainID": 1,
+        "postConditionMode": 2,
+        "address": "ST000000000000000000002AMW42H",
+        "contract": "pox-4",
+        "function": "stack-stx",
+        "args": [
+          {
+            "type": 1,
+            "integer": "9"
+          },
+          {
+            "type": 12,
+            "fields": {
+              "z": {
+                "type": 1,
+                "integer": "1"
+              },
+              "auth-id": {
+                "type": 1,
+                "integer": "2"
+              },
+              "a": {
+                "type": 10,
+                "items": [
+                  {
+                    "type": 3
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "type": 9
+          }
+        ]
+      },
+      "bytes": "00000000010400808dc34fd51c936e2db7c702745228b5a6a53d5500000000000000080000000000000bc101006468f1fd2609ea998a22d3024b504dd08d9d10f3cdea342fa9ad38e0652235fe1b5e21edc904c8b0a076a28cbf9519dc62dedea074e9a07d1c46188f82732b3e030200000000021a000000000000000000000000000000000000000005706f782d3409737461636b2d7374780000000301000000000000000000000000000000090c0000000301610a0307617574682d69640100000000000000000000000000000002017a010000000000000000000000000000000109",
+      "txid": "8fd13d22f11472362560f6de17838ebc21dca810271e89011af88c44403d64f9"
+    },
+    {
+      "input": {
+        "operation": "deploy",
+        "privateKey": "0000000000000000000000000000000000000000000000000000000000000009",
+        "nonce": "8",
+        "fee": "3009",
+        "version": 0,
+        "chainID": 1,
+        "postConditionMode": 2,
+        "contract": "sample",
+        "source": "(define-public (hello) (ok u1))\n",
+        "clarityVersion": 4
+      },
+      "bytes": "00000000010400808dc34fd51c936e2db7c702745228b5a6a53d5500000000000000080000000000000bc101008a8b3d7ece68359d62fec81c0189710bbc49657d37ce263633ea79d0d66b1ac37d9e737e4f76eb06d5c2c61299c3ed86eade52af9114595df2ab9fed99c5b04d03020000000006040673616d706c650000002028646566696e652d7075626c6963202868656c6c6f2920286f6b20753129290a",
+      "txid": "c9880fe497693e93df4a6ba9de473dad6461c0c2033b89031469396aa653cc0b"
+    },
+    {
+      "input": {
+        "operation": "transfer",
+        "privateKey": "000000000000000000000000000000000000000000000000000000000000000a01",
+        "nonce": "9",
+        "fee": "3010",
+        "version": 128,
+        "chainID": 2147483648,
+        "postConditionMode": 2,
+        "recipient": "ST1THWXQ8368SDN2MJGE4BMDKMCHZ2GSVTSQDA7QF",
+        "amount": "1000",
+        "memo": "🦊"
+      },
+      "bytes": "80800000000400185140bb54704a9e735016faa7a8dbee4449bddc00000000000000090000000000000bc20000393a10804d1cb3650654817567d8fd92e13389b7ca2f2317fe55495e30a2377a4bd3b85abee4852fa4eb8204a0a2f2e2bca9452d9ba56550daf226b592a22b3e03020000000000051a751e76e8199196d454941c45d1b3a323f1433bd600000000000003e8f09fa68a000000000000000000000000000000000000000000000000000000000000",
+      "txid": "3f5976a34cf1a2e667e7085014adc6c1d4302a2468fe6559c142499f36ec1c8f"
+    },
+    {
+      "input": {
+        "operation": "call",
+        "privateKey": "000000000000000000000000000000000000000000000000000000000000000a01",
+        "nonce": "9",
+        "fee": "3010",
+        "version": 128,
+        "chainID": 2147483648,
+        "postConditionMode": 1,
+        "address": "ST000000000000000000002AMW42H",
+        "contract": "pox-4",
+        "function": "stack-stx",
+        "args": [
+          {
+            "type": 1,
+            "integer": "10"
+          },
+          {
+            "type": 12,
+            "fields": {
+              "z": {
+                "type": 1,
+                "integer": "1"
+              },
+              "auth-id": {
+                "type": 1,
+                "integer": "2"
+              },
+              "a": {
+                "type": 10,
+                "items": [
+                  {
+                    "type": 3
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "type": 9
+          }
+        ]
+      },
+      "bytes": "80800000000400185140bb54704a9e735016faa7a8dbee4449bddc00000000000000090000000000000bc20000f8f55c0831b31f2ea534696899041c55534574a2b5ab6e7fc96591d439bcb94a1290ec75ab940ae972aa3428566d4f223139e9c3bc9c7ce7934901e35869a44e030100000000021a000000000000000000000000000000000000000005706f782d3409737461636b2d73747800000003010000000000000000000000000000000a0c0000000301610a0307617574682d69640100000000000000000000000000000002017a010000000000000000000000000000000109",
+      "txid": "ca1033d5813fc2e64403c292094ad9a4db3f65025117d4e9d2428c2cb7f8533f"
+    },
+    {
+      "input": {
+        "operation": "deploy",
+        "privateKey": "000000000000000000000000000000000000000000000000000000000000000a01",
+        "nonce": "9",
+        "fee": "3010",
+        "version": 128,
+        "chainID": 2147483648,
+        "postConditionMode": 1,
+        "contract": "sample",
+        "source": "(define-public (hello) (ok u1))\n",
+        "clarityVersion": 5
+      },
+      "bytes": "80800000000400185140bb54704a9e735016faa7a8dbee4449bddc00000000000000090000000000000bc200003a7a1d2268ed966d9676d4eee7237fa2be1142ec3b76dc727a8507fe0b9a27f240d0866241be8a90f055feb1cb6a4b3d0dbf84b1c319624d86c041ce6089889f03010000000006050673616d706c650000002028646566696e652d7075626c6963202868656c6c6f2920286f6b20753129290a",
+      "txid": "51d49d136433289a4fb642570216188cd8953edcc02260ae5fb5aca322391b3c"
+    },
+    {
+      "input": {
+        "operation": "transfer",
+        "privateKey": "000000000000000000000000000000000000000000000000000000000000000b",
+        "nonce": "10",
+        "fee": "3011",
+        "version": 128,
+        "chainID": 2147483648,
+        "postConditionMode": 2,
+        "recipient": "ST1THWXQ8368SDN2MJGE4BMDKMCHZ2GSVTSQDA7QF",
+        "amount": "1100",
+        "memo": "stacks-k8s baseline"
+      },
+      "bytes": "80800000000400ef31f6db0c690071007448c034d35e1d4ef2ec4a000000000000000a0000000000000bc30101ed820ad8da2cb0c78be00c2019bcd9ebc94ff3a1aa6d161fe2cd78fffc4b28467e108461f418c66633f91e9b0040659f5989154ad82db1d1062b93dfc19b0bec03020000000000051a751e76e8199196d454941c45d1b3a323f1433bd6000000000000044c737461636b732d6b387320626173656c696e65000000000000000000000000000000",
+      "txid": "633d12891b5b55852d0d6fb739e91465151fcf34a70120360558136a2b5fb4b9"
+    },
+    {
+      "input": {
+        "operation": "call",
+        "privateKey": "000000000000000000000000000000000000000000000000000000000000000b",
+        "nonce": "10",
+        "fee": "3011",
+        "version": 128,
+        "chainID": 2147483648,
+        "postConditionMode": 2,
+        "address": "ST000000000000000000002AMW42H",
+        "contract": "pox-4",
+        "function": "stack-stx",
+        "args": [
+          {
+            "type": 1,
+            "integer": "11"
+          },
+          {
+            "type": 12,
+            "fields": {
+              "z": {
+                "type": 1,
+                "integer": "1"
+              },
+              "auth-id": {
+                "type": 1,
+                "integer": "2"
+              },
+              "a": {
+                "type": 10,
+                "items": [
+                  {
+                    "type": 3
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "type": 9
+          }
+        ]
+      },
+      "bytes": "80800000000400ef31f6db0c690071007448c034d35e1d4ef2ec4a000000000000000a0000000000000bc3010102218029c2de078997882563d082b13cc26388e45cceb1d02172465d0c1e6250734eafeabc605ef6ab5cdfe063ae3a9d7cdab9ea52c39b703b3fafec497b25c3030200000000021a000000000000000000000000000000000000000005706f782d3409737461636b2d73747800000003010000000000000000000000000000000b0c0000000301610a0307617574682d69640100000000000000000000000000000002017a010000000000000000000000000000000109",
+      "txid": "a71d58058cc650ab141ffa8f67b365ea2b342c19309d2222ee38b64d78b4deec"
+    },
+    {
+      "input": {
+        "operation": "deploy",
+        "privateKey": "000000000000000000000000000000000000000000000000000000000000000b",
+        "nonce": "10",
+        "fee": "3011",
+        "version": 128,
+        "chainID": 2147483648,
+        "postConditionMode": 2,
+        "contract": "sample",
+        "source": "(define-public (hello) (ok u1))\n",
+        "clarityVersion": 6
+      },
+      "bytes": "80800000000400ef31f6db0c690071007448c034d35e1d4ef2ec4a000000000000000a0000000000000bc3010100866344ef684b7c8508fc1aeefb195ee9ac51f573e8373f9a291671964fd711341028b6b4cebb89e8fa200945d217fa29f83d086c9c9cba83099c810ca20f3803020000000006060673616d706c650000002028646566696e652d7075626c6963202868656c6c6f2920286f6b20753129290a",
+      "txid": "81b10a5a04032e3e128ba881f01a2f0934b605eaebb99f1aa0437f9f8ab79fbf"
+    },
+    {
+      "input": {
+        "operation": "transfer",
+        "privateKey": "000000000000000000000000000000000000000000000000000000000000000c01",
+        "nonce": "18446744073709551615",
+        "fee": "18446744073709551615",
+        "version": 0,
+        "chainID": 1,
+        "postConditionMode": 2,
+        "recipient": "SP1THWXQ8368SDN2MJGE4BMDKMCHZ2GSVTS1X0BPM.vault",
+        "amount": "18446744073709551615",
+        "memo": "🦊"
+      },
+      "bytes": "00000000010400dd100be7d9aea5721158ebde6d6a1fd8fff93bb1ffffffffffffffffffffffffffffffff0001f26c3359c0c5adeb04ccca895c71abac7c639d8cfbd3dd4686aad8e27362f12d2d4b9ee13d20ab41eaee33210f83b032b7a8853614f0e8ba0ef31b2731c52e36030200000000000616751e76e8199196d454941c45d1b3a323f1433bd6057661756c74fffffffffffffffff09fa68a000000000000000000000000000000000000000000000000000000000000",
+      "txid": "87d5d289e6487efe3d2e67818191a1c4c721e17b5d470cf95a646715315a5c83"
+    },
+    {
+      "input": {
+        "operation": "call",
+        "privateKey": "000000000000000000000000000000000000000000000000000000000000000c01",
+        "nonce": "18446744073709551615",
+        "fee": "18446744073709551615",
+        "version": 0,
+        "chainID": 1,
+        "postConditionMode": 1,
+        "address": "ST000000000000000000002AMW42H",
+        "contract": "pox-4",
+        "function": "stack-stx",
+        "args": [
+          {
+            "type": 1,
+            "integer": "12"
+          },
+          {
+            "type": 12,
+            "fields": {
+              "z": {
+                "type": 1,
+                "integer": "1"
+              },
+              "auth-id": {
+                "type": 1,
+                "integer": "2"
+              },
+              "a": {
+                "type": 10,
+                "items": [
+                  {
+                    "type": 3
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "type": 9
+          }
+        ]
+      },
+      "bytes": "00000000010400dd100be7d9aea5721158ebde6d6a1fd8fff93bb1ffffffffffffffffffffffffffffffff0001645dd33f8ee094745d9d696b7e24a06df5d1c8d04ed11d4aaaa4604fab47dd70022c278d84a4d2c7d67e0d71a2b754d34a7574130256e3d3bd948765802cde94030100000000021a000000000000000000000000000000000000000005706f782d3409737461636b2d73747800000003010000000000000000000000000000000c0c0000000301610a0307617574682d69640100000000000000000000000000000002017a010000000000000000000000000000000109",
+      "txid": "e54b43ad0f65a9b849a7092a70c9950aec7fbafb365024e4bda9519c790c727e"
+    },
+    {
+      "input": {
+        "operation": "deploy",
+        "privateKey": "000000000000000000000000000000000000000000000000000000000000000c01",
+        "nonce": "18446744073709551615",
+        "fee": "18446744073709551615",
+        "version": 0,
+        "chainID": 1,
+        "postConditionMode": 1,
+        "contract": "sample",
+        "source": "(define-public (hello) (ok u1))\n",
+        "clarityVersion": 1
+      },
+      "bytes": "00000000010400dd100be7d9aea5721158ebde6d6a1fd8fff93bb1ffffffffffffffffffffffffffffffff0001221ef09069f8b6ea9d2662d09de8685ea73eea2c62226a2271323a4527b6c74272e7f46d8308cc12b2eb1ee33deb161df15b88059fd2a7ad0cb5e23b0ac6e88503010000000006010673616d706c650000002028646566696e652d7075626c6963202868656c6c6f2920286f6b20753129290a",
+      "txid": "5e14a78be6c704c3c734a3ed76b40a0b386c582281cd3cbe6a8db65b9a93834a"
+    }
+  ],
+  "signatures": [
+    {
+      "kind": "grant",
+      "privateKey": "0000000000000000000000000000000000000000000000000000000000000001",
+      "manager": "ST000000000000000000002AMW42H.direct-manager",
+      "authID": "1",
+      "signature": "a620f42b90852e482d78e6d902defcc3b41d0f9751dffc42a5188f1e8e5802910430817f9c9238503fba7bdb3da88b3f759820515b932561911f7fbdff71a06001",
+      "digest": "c92d4fc61368672d351b9b72db20fdd636fce55216837f37995b38865b66547d"
+    },
+    {
+      "kind": "pox",
+      "privateKey": "0000000000000000000000000000000000000000000000000000000000000001",
+      "authID": "1",
+      "topic": "stack-stx",
+      "rewardCycle": 1,
+      "period": 12,
+      "maxAmount": "340282366920938463463374607431768211455",
+      "poxVersion": 0,
+      "poxHash": "751e76e8199196d454941c45d1b3a323f1433bd6",
+      "signature": "0c2fe585d849836427a4d40c8db88743ef5dbfcfa71aa12d2a6cf61dca693b9f154330f36eb7a589c6a2d55eca7f749c210c8cd8013e5530d1db8c147855d3ba01"
+    },
+    {
+      "kind": "grant",
+      "privateKey": "000000000000000000000000000000000000000000000000000000000000000201",
+      "manager": "ST000000000000000000002AMW42H.direct-manager",
+      "authID": "2",
+      "signature": "c3013a7e697320e4345e49736f5c037d1aa1251ac8f1d0298624632b3ebea08123f7106132d5e52ecd8fbb62f59a518bc74ec43d80015c0b9e942e2e5fc7233d01",
+      "digest": "a118a65ac16bf31327767aec237524378e36146e60a63cf0c7adc51afb928a9d"
+    },
+    {
+      "kind": "pox",
+      "privateKey": "000000000000000000000000000000000000000000000000000000000000000201",
+      "authID": "2",
+      "topic": "stack-extend",
+      "rewardCycle": 2,
+      "period": 12,
+      "maxAmount": "340282366920938463463374607431768211455",
+      "poxVersion": 0,
+      "poxHash": "751e76e8199196d454941c45d1b3a323f1433bd6",
+      "signature": "10ca5d67aac40e7f3655408218fe2313e95026158dce7b811375eae191178b8036dc0f4d62bf5e1517bcab49d385ef2b21f4d7535476e92344eafc8b1baee3c901"
+    },
+    {
+      "kind": "grant",
+      "privateKey": "0000000000000000000000000000000000000000000000000000000000000003",
+      "manager": "ST000000000000000000002AMW42H.direct-manager",
+      "authID": "3",
+      "signature": "d823787cbea93177c257716fd2e579308f2e93df4a69de85e9f91e6ad06d9b0d25647036657d8b5a1e8087047e06e1b8b4d29a3e55f5b47c232a551e620dd36801",
+      "digest": "b880a12b449b81558028264a5f3c7aaac7b91799bffc3fb94c58fe6a8f622f70"
+    },
+    {
+      "kind": "pox",
+      "privateKey": "0000000000000000000000000000000000000000000000000000000000000003",
+      "authID": "3",
+      "topic": "stack-stx",
+      "rewardCycle": 3,
+      "period": 12,
+      "maxAmount": "340282366920938463463374607431768211455",
+      "poxVersion": 0,
+      "poxHash": "751e76e8199196d454941c45d1b3a323f1433bd6",
+      "signature": "65a74b52950a133724ba1f9e8580fed4e0ffad8b534d88e86e855d41935ef75109bced25a823ea96bc4eb9a688f103a139697a9a1aed93b4dcdacd4aae89e49c00"
+    },
+    {
+      "kind": "grant",
+      "privateKey": "000000000000000000000000000000000000000000000000000000000000000401",
+      "manager": "ST000000000000000000002AMW42H.direct-manager",
+      "authID": "4",
+      "signature": "71f29c53fc5a2cbd197565917585089fd5ac6700aee972b4d8251b9a279c1344402e82957c9a954158145464ab9934e75a1b83e96df5b929440427ae1934197801",
+      "digest": "99f8435f546ed332d5d72430fb5e7f32e3c47ded1c400d32b34fa1bd6d1f0a64"
+    },
+    {
+      "kind": "pox",
+      "privateKey": "000000000000000000000000000000000000000000000000000000000000000401",
+      "authID": "4",
+      "topic": "stack-extend",
+      "rewardCycle": 4,
+      "period": 12,
+      "maxAmount": "340282366920938463463374607431768211455",
+      "poxVersion": 0,
+      "poxHash": "751e76e8199196d454941c45d1b3a323f1433bd6",
+      "signature": "66f8f68f3791a61001a1e3c0279afe95338465fb22556d2e96d59f796db738923473d5ce36ea73c4596ea2666e4e91dd1b8075861b6de491cdfc099084e4bc6800"
+    },
+    {
+      "kind": "grant",
+      "privateKey": "0000000000000000000000000000000000000000000000000000000000000005",
+      "manager": "ST000000000000000000002AMW42H.direct-manager",
+      "authID": "5",
+      "signature": "4b71e441b8d9ad510b4d15aaeb08c5724fd90f9cbd5a475ac6a30dbc7e1bd19859a783259dda5f433d37eeefed64fbcf444073d57ac62cc747d6f94ddc1ee72d00",
+      "digest": "ef9334521e50a8282bea67659a3b4a11bd330de4442ce08308a93d2623731de0"
+    },
+    {
+      "kind": "pox",
+      "privateKey": "0000000000000000000000000000000000000000000000000000000000000005",
+      "authID": "5",
+      "topic": "stack-stx",
+      "rewardCycle": 5,
+      "period": 12,
+      "maxAmount": "340282366920938463463374607431768211455",
+      "poxVersion": 0,
+      "poxHash": "751e76e8199196d454941c45d1b3a323f1433bd6",
+      "signature": "d64610c967c2bf56eca5c3c31ccf944b5503c8af2cce95aa6abe5cbb8dd3e4fc4214c5e5c770c6abc397c3f74951835322800b6fc2c44d36aa6ed2bf70ba7d7700"
+    },
+    {
+      "kind": "grant",
+      "privateKey": "000000000000000000000000000000000000000000000000000000000000000601",
+      "manager": "ST000000000000000000002AMW42H.direct-manager",
+      "authID": "6",
+      "signature": "08cc716261ecabe26575aa6438f9d9582011b71d07d1bca1e9c7712bb74e6fe52173f4210478cc4e468840870de094d95a564765b4d63c942df599f48764a19901",
+      "digest": "81f07996fa2c5689209ba84e4368e03fc50cdda3e469b0dce6b2f6e4d0d5edbb"
+    },
+    {
+      "kind": "pox",
+      "privateKey": "000000000000000000000000000000000000000000000000000000000000000601",
+      "authID": "6",
+      "topic": "stack-extend",
+      "rewardCycle": 6,
+      "period": 12,
+      "maxAmount": "340282366920938463463374607431768211455",
+      "poxVersion": 0,
+      "poxHash": "751e76e8199196d454941c45d1b3a323f1433bd6",
+      "signature": "aefbb1d5928779de1713bfe85718a8a5d7133764774dd0c4f79e3a327b2b3dab65bfd36f8e95a3f299ba3771dfa18e23ea3ef9c495dd5e446841f32ca3c4ab0d00"
+    },
+    {
+      "kind": "grant",
+      "privateKey": "0000000000000000000000000000000000000000000000000000000000000007",
+      "manager": "ST000000000000000000002AMW42H.direct-manager",
+      "authID": "7",
+      "signature": "3164c93553916e3e1e02fb62179c615926d61e8d06afb17c2cd0b83456662ce65f7a5ab1cac2b273f16d9c4adc656720a56efa085afb2621fdbf5e2e495b8c4301",
+      "digest": "a18758eacf982d117d4a7defcffa412d36850e48cfea2ef00a5439ba1a2adaca"
+    },
+    {
+      "kind": "pox",
+      "privateKey": "0000000000000000000000000000000000000000000000000000000000000007",
+      "authID": "7",
+      "topic": "stack-stx",
+      "rewardCycle": 7,
+      "period": 12,
+      "maxAmount": "340282366920938463463374607431768211455",
+      "poxVersion": 0,
+      "poxHash": "751e76e8199196d454941c45d1b3a323f1433bd6",
+      "signature": "48412245f93d751101513c4aa427fa734999c5d2cf29e885ddd087eb06a0f7c52db852287e1728768e43a8dfbfc3897aa2a2adef5fb42380987419e23ee6bfc200"
+    },
+    {
+      "kind": "grant",
+      "privateKey": "000000000000000000000000000000000000000000000000000000000000000801",
+      "manager": "ST000000000000000000002AMW42H.direct-manager",
+      "authID": "8",
+      "signature": "9576de0a84795a8c56fd43b7f969cee658ef8777392a02378473a6ffd00a464300490f06177ab1a6979663d7f835813314ed94e43b729e6fc25de0ec03386b8801",
+      "digest": "37de160fb4db44d264c3db8db1d71a86e60042b2eb41e10b2fbd0c838e904416"
+    },
+    {
+      "kind": "pox",
+      "privateKey": "000000000000000000000000000000000000000000000000000000000000000801",
+      "authID": "8",
+      "topic": "stack-extend",
+      "rewardCycle": 8,
+      "period": 12,
+      "maxAmount": "340282366920938463463374607431768211455",
+      "poxVersion": 0,
+      "poxHash": "751e76e8199196d454941c45d1b3a323f1433bd6",
+      "signature": "211d5b805e000ebd0269bbf8390d0e417370ee804e213a57a86e80784869e548188daea45b4408b324bfae7009e2c288947e0db905b6ad5922776928fd89c70100"
+    },
+    {
+      "kind": "grant",
+      "privateKey": "0000000000000000000000000000000000000000000000000000000000000009",
+      "manager": "ST000000000000000000002AMW42H.direct-manager",
+      "authID": "9",
+      "signature": "c8223c0562015e37d1b47ae0c97ff24b0025d3ddc6c0e6fe014fa5a584ffcfad1659a688d88d91a75eed7c2a0bc9b357a47585fa9a8da21215cbded0df78d0c100",
+      "digest": "22fc189cc6b2be0739df3c6bae302a08a95c96f2a6c431a19241d725af9e4edf"
+    },
+    {
+      "kind": "pox",
+      "privateKey": "0000000000000000000000000000000000000000000000000000000000000009",
+      "authID": "9",
+      "topic": "stack-stx",
+      "rewardCycle": 9,
+      "period": 12,
+      "maxAmount": "340282366920938463463374607431768211455",
+      "poxVersion": 0,
+      "poxHash": "751e76e8199196d454941c45d1b3a323f1433bd6",
+      "signature": "666b75f647638e863e3cc762bea4a7e804365b5dac87c43bbfec53644138e2510ebc274153502b7cae693bd9bd414a58b1bec6b912733e4e386bd861752c3c1600"
+    },
+    {
+      "kind": "grant",
+      "privateKey": "000000000000000000000000000000000000000000000000000000000000000a01",
+      "manager": "ST000000000000000000002AMW42H.direct-manager",
+      "authID": "10",
+      "signature": "dbf7a75c594c7dd18134997359b1c25a43c8609345813907130b55e72322037119c527a481dc91c27a481d25fe36ebbbe0af31dcaaa5228f0dfdb5f375dd9db501",
+      "digest": "71792ede3cbcbcf09b35cd22bb08d9a11b8ad922716a6e3351eda17f4795d21c"
+    },
+    {
+      "kind": "pox",
+      "privateKey": "000000000000000000000000000000000000000000000000000000000000000a01",
+      "authID": "10",
+      "topic": "stack-extend",
+      "rewardCycle": 10,
+      "period": 12,
+      "maxAmount": "340282366920938463463374607431768211455",
+      "poxVersion": 0,
+      "poxHash": "751e76e8199196d454941c45d1b3a323f1433bd6",
+      "signature": "2fc365b4aa6d06e8cfc56e3f16547d6dc605e464f0cfd9cfe27097dad26050353695f3cc14bd8fbfee56fcf5eae3baa3d1af0afc918643b850d10558aee0e0cd00"
+    },
+    {
+      "kind": "grant",
+      "privateKey": "000000000000000000000000000000000000000000000000000000000000000b",
+      "manager": "ST000000000000000000002AMW42H.direct-manager",
+      "authID": "11",
+      "signature": "1c0c6ce94cc70926a705e5f296cbd966846255d550fda2f16ae6f7cd4e98427e3e10ba094bb1df2ba5ec3083c820b8a6256425ba1054fd73352b142ff26dd0f601",
+      "digest": "7ecd19cb0705090bdb97655358ca0d834a818bbf84e78e5420cb03b6995cbea2"
+    },
+    {
+      "kind": "pox",
+      "privateKey": "000000000000000000000000000000000000000000000000000000000000000b",
+      "authID": "11",
+      "topic": "stack-stx",
+      "rewardCycle": 11,
+      "period": 12,
+      "maxAmount": "340282366920938463463374607431768211455",
+      "poxVersion": 0,
+      "poxHash": "751e76e8199196d454941c45d1b3a323f1433bd6",
+      "signature": "cf76ab7e954f97212b2ebe27bac38ad156283cd961e87e31455e9becba07c177657be57078e896a9af16b0ce26a11b718dd5f5d07b76cb9c03c6036dde4444b101"
+    },
+    {
+      "kind": "grant",
+      "privateKey": "000000000000000000000000000000000000000000000000000000000000000c01",
+      "manager": "ST000000000000000000002AMW42H.direct-manager",
+      "authID": "12",
+      "signature": "22ee32dd05c50395c3055f3b9ec591762dfb1310774b34c28adf5d9de925ecc50696ad033ca053beecdb7f76772f0fe8e91b6c21581a5f9c8094567d2030ba7500",
+      "digest": "b95a401ada9246b52e1f62eb6cecee1859c267edf96332635947431f74381674"
+    },
+    {
+      "kind": "pox",
+      "privateKey": "000000000000000000000000000000000000000000000000000000000000000c01",
+      "authID": "12",
+      "topic": "stack-extend",
+      "rewardCycle": 12,
+      "period": 12,
+      "maxAmount": "340282366920938463463374607431768211455",
+      "poxVersion": 0,
+      "poxHash": "751e76e8199196d454941c45d1b3a323f1433bd6",
+      "signature": "ce8b24dde702dc0ac531da722c0b0be02bd073cc2c1375e32e17923d42c9eb93536bc7fcd24128dbdd832e9e920f64d4495784fb411c580b325f0401870bb40300"
+    }
+  ],
+  "poxCalls": [
+    {
+      "operation": "enroll",
+      "privateKey": "0000000000000000000000000000000000000000000000000000000000000001",
+      "nonce": "0",
+      "fee": "3001",
+      "authID": "1",
+      "signerKey": "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+      "signature": "0c2fe585d849836427a4d40c8db88743ef5dbfcfa71aa12d2a6cf61dca693b9f154330f36eb7a589c6a2d55eca7f749c210c8cd8013e5530d1db8c147855d3ba01",
+      "args": [
+        "010000000000000000000000174876e800",
+        "0c00000002096861736862797465730200000014751e76e8199196d454941c45d1b3a323f1433bd60776657273696f6e020000000100",
+        "01000000000000000000000000000000cb",
+        "010000000000000000000000000000000c",
+        "0a02000000410c2fe585d849836427a4d40c8db88743ef5dbfcfa71aa12d2a6cf61dca693b9f154330f36eb7a589c6a2d55eca7f749c210c8cd8013e5530d1db8c147855d3ba01",
+        "02000000210279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+        "01ffffffffffffffffffffffffffffffff",
+        "0100000000000000000000000000000001"
+      ],
+      "bytes": "8080000000040091b24bf9f5288532960ac687abb035127b1d28a500000000000000000000000000000bb90100d943497a3484e2361faeee635f78425354113f7e3483a350a661d9c5afcf74e50355b133054b12638244cb41b1bd8ce767837e286f45a7b45af034ac667298d2030200000000021a000000000000000000000000000000000000000005706f782d3409737461636b2d73747800000008010000000000000000000000174876e8000c00000002096861736862797465730200000014751e76e8199196d454941c45d1b3a323f1433bd60776657273696f6e02000000010001000000000000000000000000000000cb010000000000000000000000000000000c0a02000000410c2fe585d849836427a4d40c8db88743ef5dbfcfa71aa12d2a6cf61dca693b9f154330f36eb7a589c6a2d55eca7f749c210c8cd8013e5530d1db8c147855d3ba0102000000210279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f8179801ffffffffffffffffffffffffffffffff0100000000000000000000000000000001",
+      "txid": "b9248758ffdba66db13662bc3f31f8124d083d9efc7a52068b20889d5c2b8b71"
+    },
+    {
+      "operation": "extend",
+      "privateKey": "000000000000000000000000000000000000000000000000000000000000000201",
+      "nonce": "1",
+      "fee": "3002",
+      "authID": "2",
+      "signerKey": "02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5",
+      "signature": "10ca5d67aac40e7f3655408218fe2313e95026158dce7b811375eae191178b8036dc0f4d62bf5e1517bcab49d385ef2b21f4d7535476e92344eafc8b1baee3c901",
+      "args": [
+        "010000000000000000000000000000000c",
+        "0c00000002096861736862797465730200000014751e76e8199196d454941c45d1b3a323f1433bd60776657273696f6e020000000100",
+        "0a020000004110ca5d67aac40e7f3655408218fe2313e95026158dce7b811375eae191178b8036dc0f4d62bf5e1517bcab49d385ef2b21f4d7535476e92344eafc8b1baee3c901",
+        "020000002102c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5",
+        "01ffffffffffffffffffffffffffffffff",
+        "0100000000000000000000000000000002"
+      ],
+      "bytes": "8080000000040006afd46bcdfd22ef94ac122aa11f241244a37ecc00000000000000010000000000000bba000194f134893d264d661956df7e3329ec41cd9c0adc604ea92fd6156bc233673fa221972fedacd3a8f79e336e40dbefc4011af8b25536125d47d6f973be084d3460030200000000021a000000000000000000000000000000000000000005706f782d340c737461636b2d657874656e6400000006010000000000000000000000000000000c0c00000002096861736862797465730200000014751e76e8199196d454941c45d1b3a323f1433bd60776657273696f6e0200000001000a020000004110ca5d67aac40e7f3655408218fe2313e95026158dce7b811375eae191178b8036dc0f4d62bf5e1517bcab49d385ef2b21f4d7535476e92344eafc8b1baee3c901020000002102c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee501ffffffffffffffffffffffffffffffff0100000000000000000000000000000002",
+      "txid": "478223c43337d9c12942f67c8b0ab733ca0718f7d3d207f8ff7c564a66488938"
+    },
+    {
+      "operation": "enroll",
+      "privateKey": "0000000000000000000000000000000000000000000000000000000000000003",
+      "nonce": "2",
+      "fee": "3003",
+      "authID": "3",
+      "signerKey": "02f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
+      "signature": "",
+      "args": [
+        "010000000000000000000000174876e800",
+        "0c00000002096861736862797465730200000014751e76e8199196d454941c45d1b3a323f1433bd60776657273696f6e020000000100",
+        "01000000000000000000000000000000cb",
+        "010000000000000000000000000000000c",
+        "09",
+        "020000002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
+        "01ffffffffffffffffffffffffffffffff",
+        "0100000000000000000000000000000003"
+      ],
+      "bytes": "80800000000400ec7eced2c57ed1292bc4eb9bfd13c9f7603bc33800000000000000020000000000000bbb0100628494eccc75d61909cb56b8150372ca7e19c325b7556f8d6230d09bf23d0ad7458b55d9273af9450186e60b25897a57cf99036fc100b59ae99c6c0678aaff8c030200000000021a000000000000000000000000000000000000000005706f782d3409737461636b2d73747800000008010000000000000000000000174876e8000c00000002096861736862797465730200000014751e76e8199196d454941c45d1b3a323f1433bd60776657273696f6e02000000010001000000000000000000000000000000cb010000000000000000000000000000000c09020000002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f901ffffffffffffffffffffffffffffffff0100000000000000000000000000000003",
+      "txid": "65850607f8a0b47993cd49f5a7d50177900e1db542446c464bcef4adba24cbfd"
+    },
+    {
+      "operation": "extend",
+      "privateKey": "000000000000000000000000000000000000000000000000000000000000000401",
+      "nonce": "3",
+      "fee": "3004",
+      "authID": "4",
+      "signerKey": "02e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd13",
+      "signature": "66f8f68f3791a61001a1e3c0279afe95338465fb22556d2e96d59f796db738923473d5ce36ea73c4596ea2666e4e91dd1b8075861b6de491cdfc099084e4bc6800",
+      "args": [
+        "010000000000000000000000000000000c",
+        "0c00000002096861736862797465730200000014751e76e8199196d454941c45d1b3a323f1433bd60776657273696f6e020000000100",
+        "0a020000004166f8f68f3791a61001a1e3c0279afe95338465fb22556d2e96d59f796db738923473d5ce36ea73c4596ea2666e4e91dd1b8075861b6de491cdfc099084e4bc6800",
+        "020000002102e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd13",
+        "01ffffffffffffffffffffffffffffffff",
+        "0100000000000000000000000000000004"
+      ],
+      "bytes": "80800000000400c42e7ef92fdb603af844d064faad95db9bcdfd3d00000000000000030000000000000bbc00014d5203ab1ef536da5dec07c60eef28d86657db03e8ce7f6c9275fa42222fe35736762e5978bf714146fc78e4ffbc1a5fd366b9148abbb36d6ba5d3c6349a3986030200000000021a000000000000000000000000000000000000000005706f782d340c737461636b2d657874656e6400000006010000000000000000000000000000000c0c00000002096861736862797465730200000014751e76e8199196d454941c45d1b3a323f1433bd60776657273696f6e0200000001000a020000004166f8f68f3791a61001a1e3c0279afe95338465fb22556d2e96d59f796db738923473d5ce36ea73c4596ea2666e4e91dd1b8075861b6de491cdfc099084e4bc6800020000002102e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd1301ffffffffffffffffffffffffffffffff0100000000000000000000000000000004",
+      "txid": "5a6b9256aaa0d79b8ca402e496384f14af1c5150932ffdd4479b4a558cdb1af5"
+    },
+    {
+      "operation": "enroll",
+      "privateKey": "0000000000000000000000000000000000000000000000000000000000000005",
+      "nonce": "4",
+      "fee": "3005",
+      "authID": "5",
+      "signerKey": "022f8bde4d1a07209355b4a7250a5c5128e88b84bddc619ab7cba8d569b240efe4",
+      "signature": "d64610c967c2bf56eca5c3c31ccf944b5503c8af2cce95aa6abe5cbb8dd3e4fc4214c5e5c770c6abc397c3f74951835322800b6fc2c44d36aa6ed2bf70ba7d7700",
+      "args": [
+        "010000000000000000000000174876e800",
+        "0c00000002096861736862797465730200000014751e76e8199196d454941c45d1b3a323f1433bd60776657273696f6e020000000100",
+        "01000000000000000000000000000000cb",
+        "010000000000000000000000000000000c",
+        "0a0200000041d64610c967c2bf56eca5c3c31ccf944b5503c8af2cce95aa6abe5cbb8dd3e4fc4214c5e5c770c6abc397c3f74951835322800b6fc2c44d36aa6ed2bf70ba7d7700",
+        "0200000021022f8bde4d1a07209355b4a7250a5c5128e88b84bddc619ab7cba8d569b240efe4",
+        "01ffffffffffffffffffffffffffffffff",
+        "0100000000000000000000000000000005"
+      ],
+      "bytes": "808000000004008eab8f2151da240474bf7cdd2d9065f7dcd3602e00000000000000040000000000000bbd0101dfc4dd8a8338a44da9549cb429c7dd8bacfde83a901a558eb9ed978104d07fe67a806beee6ddd1bc06a84cdcbae2f3a719d554b253e18697261749fad86af452030200000000021a000000000000000000000000000000000000000005706f782d3409737461636b2d73747800000008010000000000000000000000174876e8000c00000002096861736862797465730200000014751e76e8199196d454941c45d1b3a323f1433bd60776657273696f6e02000000010001000000000000000000000000000000cb010000000000000000000000000000000c0a0200000041d64610c967c2bf56eca5c3c31ccf944b5503c8af2cce95aa6abe5cbb8dd3e4fc4214c5e5c770c6abc397c3f74951835322800b6fc2c44d36aa6ed2bf70ba7d77000200000021022f8bde4d1a07209355b4a7250a5c5128e88b84bddc619ab7cba8d569b240efe401ffffffffffffffffffffffffffffffff0100000000000000000000000000000005",
+      "txid": "3c0fed88b716eed7929aee9113077afb68771f03a8ae8578d620c1ec586f9c4f"
+    },
+    {
+      "operation": "extend",
+      "privateKey": "000000000000000000000000000000000000000000000000000000000000000601",
+      "nonce": "5",
+      "fee": "3006",
+      "authID": "6",
+      "signerKey": "03fff97bd5755eeea420453a14355235d382f6472f8568a18b2f057a1460297556",
+      "signature": "",
+      "args": [
+        "010000000000000000000000000000000c",
+        "0c00000002096861736862797465730200000014751e76e8199196d454941c45d1b3a323f1433bd60776657273696f6e020000000100",
+        "09",
+        "020000002103fff97bd5755eeea420453a14355235d382f6472f8568a18b2f057a1460297556",
+        "01ffffffffffffffffffffffffffffffff",
+        "0100000000000000000000000000000006"
+      ],
+      "bytes": "808000000004007fda9cf020c16cacf529c87d8de89bfc70b8c9cb00000000000000050000000000000bbe00013ac70322c9482c338b415370725589ebe89f9c70778f601dc9b389fc66624e173a9a26c2674f53c65d7c5b4d8961474480ce4f4021b3ad9c54f53b8cb66ae4aa030200000000021a000000000000000000000000000000000000000005706f782d340c737461636b2d657874656e6400000006010000000000000000000000000000000c0c00000002096861736862797465730200000014751e76e8199196d454941c45d1b3a323f1433bd60776657273696f6e02000000010009020000002103fff97bd5755eeea420453a14355235d382f6472f8568a18b2f057a146029755601ffffffffffffffffffffffffffffffff0100000000000000000000000000000006",
+      "txid": "221887dda347b68ca71fbb1f0aabca155495f4c60cb35400f2016d10457eba15"
+    },
+    {
+      "operation": "enroll",
+      "privateKey": "0000000000000000000000000000000000000000000000000000000000000007",
+      "nonce": "6",
+      "fee": "3007",
+      "authID": "7",
+      "signerKey": "025cbdf0646e5db4eaa398f365f2ea7a0e3d419b7e0330e39ce92bddedcac4f9bc",
+      "signature": "48412245f93d751101513c4aa427fa734999c5d2cf29e885ddd087eb06a0f7c52db852287e1728768e43a8dfbfc3897aa2a2adef5fb42380987419e23ee6bfc200",
+      "args": [
+        "010000000000000000000000174876e800",
+        "0c00000002096861736862797465730200000014751e76e8199196d454941c45d1b3a323f1433bd60776657273696f6e020000000100",
+        "01000000000000000000000000000000cb",
+        "010000000000000000000000000000000c",
+        "0a020000004148412245f93d751101513c4aa427fa734999c5d2cf29e885ddd087eb06a0f7c52db852287e1728768e43a8dfbfc3897aa2a2adef5fb42380987419e23ee6bfc200",
+        "0200000021025cbdf0646e5db4eaa398f365f2ea7a0e3d419b7e0330e39ce92bddedcac4f9bc",
+        "01ffffffffffffffffffffffffffffffff",
+        "0100000000000000000000000000000007"
+      ],
+      "bytes": "8080000000040073ab19930b7c023b0c7e17da43649ca58a41999900000000000000060000000000000bbf0101d666b1b1b8407c3b075e73fc8dbcd9bfba224dcce0b5417222b00a55e3f161c27f17b0de2202e0f777da85bcbf00ae6617e2fd49bc30eceb02e46e7bf4d60b2a030200000000021a000000000000000000000000000000000000000005706f782d3409737461636b2d73747800000008010000000000000000000000174876e8000c00000002096861736862797465730200000014751e76e8199196d454941c45d1b3a323f1433bd60776657273696f6e02000000010001000000000000000000000000000000cb010000000000000000000000000000000c0a020000004148412245f93d751101513c4aa427fa734999c5d2cf29e885ddd087eb06a0f7c52db852287e1728768e43a8dfbfc3897aa2a2adef5fb42380987419e23ee6bfc2000200000021025cbdf0646e5db4eaa398f365f2ea7a0e3d419b7e0330e39ce92bddedcac4f9bc01ffffffffffffffffffffffffffffffff0100000000000000000000000000000007",
+      "txid": "45c466cd6f0633a176c22981382ff0d6ed4de4a9922621b45a8bddcbeec72d7b"
+    },
+    {
+      "operation": "extend",
+      "privateKey": "000000000000000000000000000000000000000000000000000000000000000801",
+      "nonce": "7",
+      "fee": "3008",
+      "authID": "8",
+      "signerKey": "022f01e5e15cca351daff3843fb70f3c2f0a1bdd05e5af888a67784ef3e10a2a01",
+      "signature": "211d5b805e000ebd0269bbf8390d0e417370ee804e213a57a86e80784869e548188daea45b4408b324bfae7009e2c288947e0db905b6ad5922776928fd89c70100",
+      "args": [
+        "010000000000000000000000000000000c",
+        "0c00000002096861736862797465730200000014751e76e8199196d454941c45d1b3a323f1433bd60776657273696f6e020000000100",
+        "0a0200000041211d5b805e000ebd0269bbf8390d0e417370ee804e213a57a86e80784869e548188daea45b4408b324bfae7009e2c288947e0db905b6ad5922776928fd89c70100",
+        "0200000021022f01e5e15cca351daff3843fb70f3c2f0a1bdd05e5af888a67784ef3e10a2a01",
+        "01ffffffffffffffffffffffffffffffff",
+        "0100000000000000000000000000000008"
+      ],
+      "bytes": "808000000004009652d86bedf43ad264362e6e6eba6eb76450812700000000000000070000000000000bc000001cc76bb7e08ce382bacbd4dc3774a6568abd9162f078ab6222c2b7f06262c56a5a84958b022752845fd8a92fbe70ff945f855d6c2ce8b10dfe5e930c97830a40030200000000021a000000000000000000000000000000000000000005706f782d340c737461636b2d657874656e6400000006010000000000000000000000000000000c0c00000002096861736862797465730200000014751e76e8199196d454941c45d1b3a323f1433bd60776657273696f6e0200000001000a0200000041211d5b805e000ebd0269bbf8390d0e417370ee804e213a57a86e80784869e548188daea45b4408b324bfae7009e2c288947e0db905b6ad5922776928fd89c701000200000021022f01e5e15cca351daff3843fb70f3c2f0a1bdd05e5af888a67784ef3e10a2a0101ffffffffffffffffffffffffffffffff0100000000000000000000000000000008",
+      "txid": "41824f5a6a271d97c7ec7f55fb404d001a667e2ad033c0dd4bb33fb347233dfd"
+    },
+    {
+      "operation": "enroll",
+      "privateKey": "0000000000000000000000000000000000000000000000000000000000000009",
+      "nonce": "8",
+      "fee": "3009",
+      "authID": "9",
+      "signerKey": "03acd484e2f0c7f65309ad178a9f559abde09796974c57e714c35f110dfc27ccbe",
+      "signature": "",
+      "args": [
+        "010000000000000000000000174876e800",
+        "0c00000002096861736862797465730200000014751e76e8199196d454941c45d1b3a323f1433bd60776657273696f6e020000000100",
+        "01000000000000000000000000000000cb",
+        "010000000000000000000000000000000c",
+        "09",
+        "020000002103acd484e2f0c7f65309ad178a9f559abde09796974c57e714c35f110dfc27ccbe",
+        "01ffffffffffffffffffffffffffffffff",
+        "0100000000000000000000000000000009"
+      ],
+      "bytes": "80800000000400808dc34fd51c936e2db7c702745228b5a6a53d5500000000000000080000000000000bc101014a1ed62f6dd368728d4338548d111bbedf58463b510639ab2426ab459cd3e1537aa224319e902a0407cde922e16d502c05c1b69f62f204a0a3d9e0a8bdde4e8d030200000000021a000000000000000000000000000000000000000005706f782d3409737461636b2d73747800000008010000000000000000000000174876e8000c00000002096861736862797465730200000014751e76e8199196d454941c45d1b3a323f1433bd60776657273696f6e02000000010001000000000000000000000000000000cb010000000000000000000000000000000c09020000002103acd484e2f0c7f65309ad178a9f559abde09796974c57e714c35f110dfc27ccbe01ffffffffffffffffffffffffffffffff0100000000000000000000000000000009",
+      "txid": "65718b949ba11591c91447ff0d93082632ee915282ad1a0606917a083edc819a"
+    },
+    {
+      "operation": "extend",
+      "privateKey": "000000000000000000000000000000000000000000000000000000000000000a01",
+      "nonce": "9",
+      "fee": "3010",
+      "authID": "10",
+      "signerKey": "03a0434d9e47f3c86235477c7b1ae6ae5d3442d49b1943c2b752a68e2a47e247c7",
+      "signature": "2fc365b4aa6d06e8cfc56e3f16547d6dc605e464f0cfd9cfe27097dad26050353695f3cc14bd8fbfee56fcf5eae3baa3d1af0afc918643b850d10558aee0e0cd00",
+      "args": [
+        "010000000000000000000000000000000c",
+        "0c00000002096861736862797465730200000014751e76e8199196d454941c45d1b3a323f1433bd60776657273696f6e020000000100",
+        "0a02000000412fc365b4aa6d06e8cfc56e3f16547d6dc605e464f0cfd9cfe27097dad26050353695f3cc14bd8fbfee56fcf5eae3baa3d1af0afc918643b850d10558aee0e0cd00",
+        "020000002103a0434d9e47f3c86235477c7b1ae6ae5d3442d49b1943c2b752a68e2a47e247c7",
+        "01ffffffffffffffffffffffffffffffff",
+        "010000000000000000000000000000000a"
+      ],
+      "bytes": "80800000000400185140bb54704a9e735016faa7a8dbee4449bddc00000000000000090000000000000bc20001ecc9b67a2b87007de7664c3e5c36bd6a34f5b9371b782e867c8840839bd2d59d1b5fc75cf97a779f66eeccea17cbb601c1d6f1791dc7e97990b185cdc163de02030200000000021a000000000000000000000000000000000000000005706f782d340c737461636b2d657874656e6400000006010000000000000000000000000000000c0c00000002096861736862797465730200000014751e76e8199196d454941c45d1b3a323f1433bd60776657273696f6e0200000001000a02000000412fc365b4aa6d06e8cfc56e3f16547d6dc605e464f0cfd9cfe27097dad26050353695f3cc14bd8fbfee56fcf5eae3baa3d1af0afc918643b850d10558aee0e0cd00020000002103a0434d9e47f3c86235477c7b1ae6ae5d3442d49b1943c2b752a68e2a47e247c701ffffffffffffffffffffffffffffffff010000000000000000000000000000000a",
+      "txid": "c34df734623731fd0a9a2a84d52e7227e264c877803158be4af641a3e93280aa"
+    },
+    {
+      "operation": "enroll",
+      "privateKey": "000000000000000000000000000000000000000000000000000000000000000b",
+      "nonce": "10",
+      "fee": "3011",
+      "authID": "11",
+      "signerKey": "03774ae7f858a9411e5ef4246b70c65aac5649980be5c17891bbec17895da008cb",
+      "signature": "cf76ab7e954f97212b2ebe27bac38ad156283cd961e87e31455e9becba07c177657be57078e896a9af16b0ce26a11b718dd5f5d07b76cb9c03c6036dde4444b101",
+      "args": [
+        "010000000000000000000000174876e800",
+        "0c00000002096861736862797465730200000014751e76e8199196d454941c45d1b3a323f1433bd60776657273696f6e020000000100",
+        "01000000000000000000000000000000cb",
+        "010000000000000000000000000000000c",
+        "0a0200000041cf76ab7e954f97212b2ebe27bac38ad156283cd961e87e31455e9becba07c177657be57078e896a9af16b0ce26a11b718dd5f5d07b76cb9c03c6036dde4444b101",
+        "020000002103774ae7f858a9411e5ef4246b70c65aac5649980be5c17891bbec17895da008cb",
+        "01ffffffffffffffffffffffffffffffff",
+        "010000000000000000000000000000000b"
+      ],
+      "bytes": "80800000000400ef31f6db0c690071007448c034d35e1d4ef2ec4a000000000000000a0000000000000bc30101fe703110b4314829434717b69801f438dd2650dac3091aeb324050fe098e58cf4a45f84cf151ebb55da4c2b9e0e7641398fd49a4068774a2d703b9d3a8af0841030200000000021a000000000000000000000000000000000000000005706f782d3409737461636b2d73747800000008010000000000000000000000174876e8000c00000002096861736862797465730200000014751e76e8199196d454941c45d1b3a323f1433bd60776657273696f6e02000000010001000000000000000000000000000000cb010000000000000000000000000000000c0a0200000041cf76ab7e954f97212b2ebe27bac38ad156283cd961e87e31455e9becba07c177657be57078e896a9af16b0ce26a11b718dd5f5d07b76cb9c03c6036dde4444b101020000002103774ae7f858a9411e5ef4246b70c65aac5649980be5c17891bbec17895da008cb01ffffffffffffffffffffffffffffffff010000000000000000000000000000000b",
+      "txid": "273572a51375146e44043fcc062573f026c8df3f96f9e55d7f2ee057f81085dc"
+    },
+    {
+      "operation": "extend",
+      "privateKey": "000000000000000000000000000000000000000000000000000000000000000c01",
+      "nonce": "18446744073709551615",
+      "fee": "18446744073709551615",
+      "authID": "12",
+      "signerKey": "03d01115d548e7561b15c38f004d734633687cf4419620095bc5b0f47070afe85a",
+      "signature": "",
+      "args": [
+        "010000000000000000000000000000000c",
+        "0c00000002096861736862797465730200000014751e76e8199196d454941c45d1b3a323f1433bd60776657273696f6e020000000100",
+        "09",
+        "020000002103d01115d548e7561b15c38f004d734633687cf4419620095bc5b0f47070afe85a",
+        "01ffffffffffffffffffffffffffffffff",
+        "010000000000000000000000000000000c"
+      ],
+      "bytes": "80800000000400dd100be7d9aea5721158ebde6d6a1fd8fff93bb1ffffffffffffffffffffffffffffffff00018db13c196141eb9a588c311a1320a1d1ce30997fed2f01fc29db64d30f42720f07cdfe0e4a819fc7722b35e08ececd07f4e9480faf9b2c306448a2855d9b85de030200000000021a000000000000000000000000000000000000000005706f782d340c737461636b2d657874656e6400000006010000000000000000000000000000000c0c00000002096861736862797465730200000014751e76e8199196d454941c45d1b3a323f1433bd60776657273696f6e02000000010009020000002103d01115d548e7561b15c38f004d734633687cf4419620095bc5b0f47070afe85a01ffffffffffffffffffffffffffffffff010000000000000000000000000000000c",
+      "txid": "17b71f144fa9225b3f39a91dc8b1c7926b13b5451b0dbbeedc86353627f22d70"
+    }
+  ]
+}

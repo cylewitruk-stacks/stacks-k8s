@@ -26,7 +26,7 @@ enrollment does not bypass admission. Existing controller updates and deletion
 remain possible after de-enrollment.
 
 The profile permits one source actor and one distinct remote actor in the same
-network and namespace, selected only by exact network/actor labels. It requires
+network and namespace, selected by exact network/participant UID and actor-role labels. It requires
 `mode: one` on both sides and an integer 1–120 s duration. Enabled delay uses
 `action: delay`, `direction: to`, and 1–1000 ms latency. Enabled partition uses
 `action: partition`, `direction: both`, and no delay parameters. Both affect all
@@ -74,3 +74,41 @@ against the checksum-verified upstream CRD in envtest, and Helm checks. The
 upstream CRD is downloaded into a temporary cache, never modified or vendored.
 Set `STACKS_CHAOS_CRD_FILE` to the identical file for offline testing. Live
 qualification is separately opt-in and requires the documented disposable fixture.
+
+## Replacement actor identities
+
+An optional `network.stacks.org/participant-kind` selector may narrow either end to
+`BitcoinNode`, `StacksNode` or `StacksSigner`; other extra selector labels are rejected.
+New faults require five labels on **both** selectors: network name,
+`network.stacks.org/network-uid`, `network.stacks.org/participant-uid`,
+`network.stacks.org/actor`, and `network.stacks.org/role=actor`. Network and
+participant UIDs use the current Kubernetes UUIDs. Both sides must have the same
+network UID and distinct participant UIDs and actor names. Fault metadata also
+retains the network UID. Configuration, control and protocol worker Pods remain
+outside these selectors.
+
+Admission checks selector shape and equality; it does not perform live resource
+lookups. Read the current `v1alpha2` network and participant identities before
+constructing a fault. The examples deliberately contain `${...}` placeholders and
+are rejected until these are substituted. Stale UIDs match no replacement actor;
+an actor name alone cannot follow a replacement environment or participant.
+
+The earlier live delay/partition fixtures use legacy APIs, Pod names and RPC
+credential layouts. They are incompatible with the replacement runtime and are
+not current-profile qualification. Their selector constructors now require real
+replacement identities and never add invented UID labels. Historical results
+remain historical; existing fault cleanup is still allowed by the update policy.
+
+A read-only live selector check is available with the existing cluster and an
+installed profile with delay enabled:
+
+```bash
+STACKS_CHAOS_IDENTITY_LIVE=1 \
+STACKS_CHAOS_KUBECONFIG="$KUBECONFIG" STACKS_CHAOS_CONTEXT=kind-stacks-k8s \
+STACKS_CHAOS_NAMESPACE=my-network STACKS_CHAOS_SOURCE=bitcoin \
+STACKS_CHAOS_TARGET=bitcoin-2 \
+go -C tools/chart-policy test -tags=live ./internal/integration -run TestLiveCurrentActorSelectors -count=1
+```
+
+This check resolves both current actor Pods and uses server-side dry runs. It does
+not establish injection, recovery or behavior during control-path loss.

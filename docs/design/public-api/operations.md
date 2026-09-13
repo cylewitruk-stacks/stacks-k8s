@@ -1,8 +1,9 @@
 # Operators, workloads and visible interfaces
 
-Status: proposed. Names below define required products/artifact roles, not a claim
-that the new versions or images have been built. No per-network Helm release is
-required. Install shared controllers once, then apply namespaced declarations.
+This contract defines product and artifact responsibilities.
+[Qualification records](../../network-operator/public-api-qualification.md) identify tested images
+and behavior. No per-network Helm release is required. Install shared controllers once, then
+apply namespaced declarations.
 
 ## Installed products
 
@@ -22,9 +23,10 @@ new networks; incompatible network API upgrades require fresh execution state.
 
 ## Controller ownership and subscriptions
 
-Domain controllers write resolution, admission and workload status. Stacks workers
-write only their assigned execution status, as defined below. The network controller
-alone writes network lifecycle/status. Runtime roots have their generated participant
+The network controller alone writes each participant's complete admission and
+resolution/policy projections, as well as network lifecycle/status. Domain controllers
+publish configuration validation reports and workload/runtime facts; scoped workers
+write only their assigned execution status, as defined below. Runtime roots have their generated participant
 as controller ownerRef; participants belong to the network; StatefulSet Pods,
 Deployment ReplicaSets/Pods and Job Pods retain their standard workload-owner chain.
 All carry network/participant labels identifying the runtime instance; reusable identity children
@@ -35,20 +37,20 @@ Kubernetes Events are notifications, not reliable command queues.
 
 | Controller / operator | Watches or polls | Managed outputs/effects |
 | --- | --- | --- |
-| Network / network | Root entries, referenced definitions/schedules, identity reports and instance status | Resolve explicit selected topology; publish StacksGenesis; resolve/start/pause/stop/delete; own participant specs/shared records; report inventory. Preserve reusable declarations. |
-| Participant domains / network | Generated instances filtered by kind, direct dependencies, owned runtime | Domain admission and workload/status reconciliation; generated spec remains aggregate-owned. |
+| Network / network | Root entries, referenced definitions/schedules, identity/configuration reports and instance status | Resolve selected topology; own participant specs, complete admission and resolution/policy conditions; publish StacksGenesis, lifecycle, frozen-gate progress and shared identity records. Preserve reusable declarations. |
+| Participant domains / network | Generated instances filtered by kind, admitted policy, candidate inputs, direct dependencies, owned runtime | Provision non-mutating configuration resolvers; report validation, workload/runtime references, readiness and placement. Consume aggregate admission before activation. |
 | Genesis / network | Selected validated initial inputs | Network controller creates one immutable StacksGenesis, reports digest; renderers consume it, no autonomous runtime. |
 | Epoch schedule / network | Immutable schedule spec | Structural validation/digest only; consuming profile checks compatibility. |
 | Account / network | Key spec, Secret metadata, resolver report | Optional reusable key Secret and public identity, resolved from direct inputs even without a network. No lease, funding or nonce state. |
 | Bitcoin wallet / network | Key/descriptor inputs, resolver reports | Reusable descriptor/key identity resolved from direct inputs without a network; no node-global balance. |
-| Bitcoin node / network | Frozen network context, walletRefs, peer declarations, owned-runtime labels, control-worker reports | Participant-owned StatefulSet/Services/config/PVCs and control-worker Deployment. Loads its wallet instances and executes scoped Bitcoin RPC. |
+| Bitcoin node / network | Frozen network context, admitted walletRefs/peers, owned-runtime labels, control-worker reports | Participant-owned StatefulSet/Services/config/PVCs and control-worker Deployment; projects node/wallet readiness. The scoped control worker alone loads wallets and executes mutation RPC. |
 | Stacks node / network | Frozen network genesis, Bitcoin/account refs, peers, signer attachments and config Secret metadata | Reusable generated identity if omitted; participant-owned config, StatefulSet/Services/PVCs and signer event subscription. |
 | Consensus signer / network | Node/account refs and run runtime | Participant-owned StatefulSet/event Service/config/PVC. No stacking administration. |
-| Stacker / network | Holder/admin/signer/ingress refs, policy generation, live worker reports | One participant-owned Go worker Pod; registration/manager deployment and maintenance. Shared identities permitted. |
-| Contract set / network | Public deployer/registry inputs, context, worker report | One participant-owned Go worker Pod; public principal resolution and exact real-contract initialization. |
-| Faucet / network | Selected faucet/account, requests for this network, ingress and worker report | Optional reusable account; one participant-owned Go worker Pod; resolves request admission, not execution outcomes. |
+| Stacker / network | Admitted holder/admin/signer/ingress refs, policy generation, live worker reports | One participant-owned Go worker Pod and readiness/placement facts; worker performs registration/manager deployment and maintenance. Shared identities permitted. |
+| Contract set / network | Admitted public deployer/registry inputs, context, worker report | Public configuration validation and one participant-owned Go worker Pod; worker performs exact real-contract initialization. |
+| Faucet / network | Selected faucet/account, admitted ingress and worker report | Optional reusable account, one participant-owned Go worker Pod and runtime facts; request controller admits requests, worker executes them. |
 | Faucet request / network | Explicit networkUID, faucet/destination, deadline | No additional worker. Publishes resolved admission for the surviving faucet worker to watch; no implicit replay into later runs. |
-| Transaction production / network | Account/recipient/ingress, policy, context and worker report | One participant-owned Go worker Pod and mutable live policy; offered STX transfers. |
+| Transaction production / network | Admitted account/recipient/ingress policy, context and worker report | One participant-owned Go worker Pod and runtime facts; worker offers STX transfers under aggregate-admitted live policy. |
 | Bitcoin schedule / network | Immutable cadence | Validated reusable value; no workload. |
 | Bitcoin production / network | Active network, schedule/override, selected targets/wallet views, records | Network-owned initialization/target execution records; scheduling policy/status on the participant. Per-node workers alone perform generation. |
 | Schedule override / network | Explicit network and production refs, clocks | Activation/expiry/cancellation status; no Pod or baseline spec restoration. |
@@ -64,12 +66,29 @@ for ambiguity, receipts and cleanup; adapt record ownership/identity to run scop
 Do not reuse a record or its counter for a later network. User declarations request
 production/actions; users do not create or edit execution records directly.
 
-Root watches its named entries and referenced definitions and filters source updates to
-generation, UID, deletion, resolution/binding
-and meaningful health/control changes. High-frequency counters and identical poll
-results stay on domain status and do not enqueue the whole graph. Dependency indexes
-route identity/actor changes only to their consumers; controller resync is a repair
-mechanism, not a two-second full-topology rebuild.
+Root watches route generation, UID, deletion, binding and relevant validation changes
+to admission resolution through dependency indexes. High-frequency counters and
+unchanged observation heartbeats do not enqueue the whole graph. Meaningful
+health/control changes still drive the separate network lifecycle projection;
+freshness expiry is scheduled from the release observation policy without rebuilding
+admission. An admission-only predicate must not suppress those transitions. Keep
+uncached identity reads at authorization/freeze boundaries; memoize only within that
+validation pass. Controller resync repairs missed state, not a periodic full-topology
+rebuild.
+
+Bitcoin finite actions consume the existing per-node execution reservation. The
+independent action lifecycle controller acknowledges exact admission and final receipts;
+it never writes executor status or provisions a second mutation worker. Generation and
+reorganization require separate installation opt-ins, both disabled on the network
+operator by default. Unknown Armed work retains exclusion across worker replacement.
+Change installation flags only after reservations settle or environment disposal;
+disabling removes read permission and can strand cleanup. It is not cancellation.
+Use action deletion or network pause while the installed capability retains access.
+
+The scheduler checks signing-Secret metadata while admitting a short-lived baseline
+offer. Bitcoin workers recheck public account/wallet identities and their own exact RPC
+credentials/configuration at dispatch. They receive no Stacks signing-Secret permission;
+deleting such a key affects its signing holder, not the immutable public payout address.
 
 ## Images and configuration artifacts
 
@@ -111,7 +130,8 @@ carry configuration artifacts, never faucet requests or pause commands.
 ## Go protocol library and runtime boundary
 
 Controllers, resolvers and workers run Go. The independent libs/stacks module owns
-protocol RPC/encoding/signing; workers own policy, nonce coordination and submission.
+protocol RPC/encoding/signing; workers execute admitted policy and own nonce
+coordination and submission.
 Signing keys stay in scoped worker/resolver Pods. Stacks.js 7.6.0 is a development-only
 oracle, not a runtime dependency. [Implementation notes](implementation-notes.md#go-protocol-library-and-runtime-boundary)
 define module isolation, source attribution and qualification requirements.
@@ -146,7 +166,7 @@ replace root-owned session identity or authorize worker crash recovery.
 | StacksNode P2P 20444 | Stacks peers. |
 | StacksNode RPC 20443 | Consensus signer and assigned Stacks workers; native state, contract, transaction and submission APIs. |
 | StacksSigner events 30000 | Its configured Stacks node's required native event observer for consensus input. |
-| Kubernetes API | Scoped Go workers watch admitted CRs/root lifecycle and patch assigned status fields. No worker status Service or application command endpoint. Standard local process probes are not a control protocol. |
+| Kubernetes API | Scoped Go workers watch admitted CRs/root lifecycle and apply only their assigned execution fields through the status subresource. No worker status Service or application command endpoint. Standard local process probes are not a control protocol. |
 | Optional telemetry query 8080 | User/agent via port-forward; `/healthz`, `/v1/sources`, `/v1/events?from=...&to=...&cursor=...`. Read-only paginated facts/gaps, maximum 1000 entries per page. |
 
 Status publishes actual endpoints and workload refs; clients must not invent DNS or
@@ -156,13 +176,15 @@ with bounded suffix space for Kubernetes descendants. See the
 
 ## Admission, execution status and faucet dispatch
 
-Before genesis freeze, domain controllers persist each initial participant's complete
-public policy and resolved input identities in status.admission. This policy admission
+Before genesis freeze, the network controller persists each initial participant's complete
+public policy and resolved input identities in status.admission, using domain validation
+reports and reusable identity reports. Candidate configuration resolvers may run before
+admission; configuration validation must not depend on an activated actor. This policy admission
 does not activate runtime: genesis and exact runtime bindings are added only when
 available. Freeze captures the admitted policy digests and bootstrap requirements;
 conflicting updates cannot replace those policies while their gates remain unfinished.
 
-Domain controllers publish complete `status.admission` bindings on
+The network controller alone publishes complete `status.admission` bindings on
 Stacks participant instances: network/participant/Pod UIDs, pinned resolved dependencies, selected
 policy generation/digest and complete public policy inputs. Workers watch their own
 participant, root lifecycle and, for a faucet, its requests. They never reconstruct a
@@ -179,7 +201,8 @@ Status ownership is explicit:
 | Resource / fields | Writer |
 | --- | --- |
 | StacksNetwork status, including allocated participant and bound worker identities | Network controller only. |
-| Participant resolution, admission, workload readiness and policy evaluation | Domain controller. |
+| Participant complete status.admission and resolution/policy projections, including Resolved and PolicyDeferred conditions | Network controller only; domain reports supply facts, never partial admission writes. |
+| Participant configuration validation reports, status.runtime, workload readiness and placement conditions | Corresponding domain controller; ConfigVerified, WorkloadReady and placement conditions remain disjoint from aggregate resolution/policy conditions. |
 | Participant status.execution | Bound worker: applied policy digest/generation, acknowledged control generation/root lifecycle, observation time and bounded protocol summaries. |
 | FaucetRequest status.admission | Request controller: decision/reason, exact network/faucet/worker binding, resolved immutable transfer inputs and expiresAt. |
 | FaucetRequest status.phase / conditions | Request controller projects admission/execution and worker availability; never asserts inclusion or no-send without evidence. |
@@ -187,14 +210,25 @@ Status ownership is explicit:
 
 Existing public policy/control summaries are controller projections of those worker
 acknowledgements, not independently inferred execution. The root reports Paused only
-once current acknowledgements agree. Use distinct status field managers and granular
-schema maps for these subtrees; never replace the whole status or share ownership of
-a condition entry. Instance deletion follows process termination; there is no field
-handoff for reuse of an old instance. Status writes carry object UID/conflict
+once current acknowledgements agree. All shared-status writers use server-side apply
+through the status subresource with fixed managers and minimal assigned-field payloads.
+Conditions are map-lists keyed by type; no condition entry has concurrent writers.
+See the [status apply contract](implementation-notes.md#shared-status-apply-contract)
+for schema, payload, migration and handoff requirements. Instance deletion follows
+process termination; no ownership transfer permits reuse of an old instance.
+Status writes carry object UID/conflict
 preconditions and cannot create or adopt a replacement CR.
 A worker may update only its assigned execution subtree; RBAC grants status access
 at resource/object granularity, not per field. Field ownership is a trusted-worker
 contract, not an RBAC isolation guarantee.
+
+Until a participant kind has a domain runtime controller, the network controller
+owns only that kind's fallback WorkloadReady=False, reason RuntimeNotImplemented.
+Admission may still succeed for a complete valid cohort; it does not assert actor or
+worker existence or permit an unsupported initialization gate to pass. Transfer this
+condition to the domain controller in the same delivery that enables its runtime,
+disable the fallback for that kind and test the handoff. The network controller
+retains complete admission ownership throughout.
 
 For requests, absent execution means Pending while admission is unresolved. A
 negative admission decision exposes Rejected (or Expired only when execution was
@@ -341,7 +375,7 @@ not themselves authorize deleting/reinitializing actors or resetting genesis. No
 StatefulSet process replacement remains part of actor behavior. Removing a participant
 withdraws its workload; a fault does not retain membership or recreate the actor.
 
-The proposed profile requires spec.target and same-namespace selectors on both ends.
+The profile requires spec.target and same-namespace selectors on both ends.
 Both the primary selector and target.selector must contain exact network-uid,
 participant-uid and role=actor labels under network.stacks.org/. participant-kind may
 further constrain selection; it never substitutes for participant-uid. Correlation
@@ -358,8 +392,8 @@ A selector matching no current Pod is a no-op, not proof of complete network hea
 static admission does not validate live membership. See [upstream selector semantics](https://chaos-mesh.org/docs/define-chaos-experiment-scope/).
 
 The profile's selector admission, delay/partition bounds and control-path exclusions
-require joint qualification. [Implementation notes](implementation-notes.md#chaos-profile-transition)
-cover the selector transition and legacy-object cleanup.
+require joint qualification. [Implementation notes](implementation-notes.md#chaos-profile-validation)
+cover selector validation and legacy-object cleanup.
 
 Protocol partitions must preserve worker→actor RPC, worker→Kubernetes API and consensus
 support paths that are outside the intended fault. Separate Services do not isolate

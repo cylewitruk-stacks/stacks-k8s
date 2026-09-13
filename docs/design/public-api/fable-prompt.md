@@ -1,7 +1,7 @@
 # Fable review prompt
 
 ```text
-Review the proposed public API in:
+Review the public API contract in:
 /Users/cylwit/Code/github.com/cylewitruk-stacks/stacks-k8s/docs/design/public-api/
 
 First review this directory's Markdown and three YAML examples as a new design,

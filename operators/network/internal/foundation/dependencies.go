@@ -15,14 +15,17 @@ import (
 // dependencyCheck validates current bindings at admission and capture boundaries.
 // Reads are uncached; memoization lasts only for this validation pass.
 type dependencyCheck struct {
-	reader   client.Reader
-	root     *api.StacksNetwork
-	results  map[common.Binding]error
-	visiting map[common.Binding]bool
+	// publicOnly excludes credential metadata checks for consumers of immutable public facts.
+	publicOnly bool
+	reader     client.Reader
+	root       *api.StacksNetwork
+	results    map[common.Binding]error
+	sources    map[common.Binding]error
+	visiting   map[common.Binding]bool
 }
 
 func newDependencyCheck(reader client.Reader, root *api.StacksNetwork) *dependencyCheck {
-	return &dependencyCheck{reader: reader, root: root, results: map[common.Binding]error{}, visiting: map[common.Binding]bool{}}
+	return &dependencyCheck{reader: reader, root: root, results: map[common.Binding]error{}, sources: map[common.Binding]error{}, visiting: map[common.Binding]bool{}}
 }
 
 // validate keeps historical bindings separate from evidence of current availability.
@@ -50,6 +53,12 @@ func (v *dependencyCheck) binding(ctx context.Context, b common.Binding) error {
 }
 
 func (v *dependencyCheck) read(ctx context.Context, b common.Binding) error {
+	if b.Kind == "Secret" && v.publicOnly {
+		if b.Name == "" || b.UID == "" {
+			return fmt.Errorf("credential identity unavailable")
+		}
+		return nil
+	}
 	var obj client.Object
 	switch b.Kind {
 	case "StacksAccount":
@@ -68,8 +77,16 @@ func (v *dependencyCheck) read(ctx context.Context, b common.Binding) error {
 		return fmt.Errorf("unsupported dependency kind %s", b.Kind)
 	}
 	key := client.ObjectKey{Namespace: v.root.Namespace, Name: b.Name}
-	if err := v.reader.Get(ctx, key, obj); err != nil || b.UID == "" || obj.GetUID() != b.UID || obj.GetDeletionTimestamp() != nil {
+	if err := v.reader.Get(ctx, key, obj); err != nil {
+		return fmt.Errorf("%s %s identity unavailable: %w", b.Kind, b.Name, err)
+	}
+	if b.UID == "" || obj.GetUID() != b.UID || obj.GetDeletionTimestamp() != nil {
 		return fmt.Errorf("%s %s identity unavailable", b.Kind, b.Name)
+	}
+	if wallet, ok := obj.(*bitcoin.BitcoinWallet); ok {
+		if err := ValidateWalletProfile(wallet.Spec); err != nil {
+			return err
+		}
 	}
 	if identity, ok := obj.(resolvable); ok && (b.Kind == "StacksAccount" || b.Kind == "BitcoinWallet") {
 		status := identity.GetResolutionStatus()
@@ -101,16 +118,57 @@ func (v *dependencyCheck) read(ctx context.Context, b common.Binding) error {
 		if p.Status.Admission == nil {
 			return fmt.Errorf("participant %s has no admitted policy", p.Spec.ParticipantName)
 		}
-		if source := p.Spec.Source; source.Name != "" {
-			definition := DefinitionObject(p.Spec.Kind)
-			if definition == nil {
-				return fmt.Errorf("participant %s has an unsupported definition", p.Spec.ParticipantName)
-			}
-			if err := v.reader.Get(ctx, client.ObjectKey{Namespace: v.root.Namespace, Name: source.Name}, definition); err != nil || definition.GetUID() != source.UID || definition.GetDeletionTimestamp() != nil {
-				return fmt.Errorf("participant %s definition identity unavailable", p.Spec.ParticipantName)
-			}
+		if err := v.source(ctx, p); err != nil {
+			return err
 		}
 		return v.validate(ctx, p.Status.Admission.Dependencies)
 	}
 	return nil
+}
+
+// ValidateParticipantAdmission checks a current complete policy and all captured dependencies.
+// The caller must read the root and participant through the uncached reader and separately
+// enforce operation, runtime identity and capability-specific gates before mutation.
+func ValidateParticipantAdmission(ctx context.Context, reader client.Reader, root *api.StacksNetwork, participant *api.StacksNetworkParticipant) error {
+	if participant.Namespace != root.Namespace || participant.Status.Admission == nil || Digest(participant.Status.Admission.Configuration) != participant.Status.Admission.PolicyDigest {
+		return fmt.Errorf("participant has no complete admitted policy")
+	}
+	return newDependencyCheck(reader, root).validate(ctx, []common.Binding{{Kind: "StacksNetworkParticipant", Name: participant.Name, UID: participant.UID}})
+}
+
+// ValidateDependencyBindings checks an explicitly selected set of admitted mandatory inputs.
+// Capability controllers select these inputs; target liveness remains a separate decision.
+func ValidateDependencyBindings(ctx context.Context, reader client.Reader, root *api.StacksNetwork, bindings []common.Binding) error {
+	return newDependencyCheck(reader, root).validate(ctx, bindings)
+}
+
+// ValidatePublicDependencyBindings validates public identities without granting signing Secret access.
+// Bitcoin dispatch uses this after the scheduler validated credential metadata for its short-lived offer.
+func ValidatePublicDependencyBindings(ctx context.Context, reader client.Reader, root *api.StacksNetwork, bindings []common.Binding) error {
+	check := newDependencyCheck(reader, root)
+	check.publicOnly = true
+	return check.validate(ctx, bindings)
+}
+
+// ValidatePublicParticipantAdmission validates an admitted actor using public dependencies only.
+func ValidatePublicParticipantAdmission(ctx context.Context, reader client.Reader, root *api.StacksNetwork, participant *api.StacksNetworkParticipant) error {
+	if participant.Namespace != root.Namespace || participant.Status.Admission == nil || Digest(participant.Status.Admission.Configuration) != participant.Status.Admission.PolicyDigest {
+		return fmt.Errorf("participant has no complete admitted policy")
+	}
+	return ValidatePublicDependencyBindings(ctx, reader, root, []common.Binding{{Kind: "StacksNetworkParticipant", Name: participant.Name, UID: participant.UID}})
+}
+
+// source memoizes immutable source identity checks only within this validation pass.
+func (v *dependencyCheck) source(ctx context.Context, p *api.StacksNetworkParticipant) error {
+	if p.Status.Admission == nil || p.Status.Admission.Source.Name == "" {
+		return ValidateAdmissionSource(ctx, v.reader, p)
+	}
+	source := p.Status.Admission.Source
+	key := common.Binding{Kind: string(p.Spec.Kind), Name: source.Name, UID: source.UID}
+	if err, ok := v.sources[key]; ok {
+		return err
+	}
+	err := ValidateAdmissionSource(ctx, v.reader, p)
+	v.sources[key] = err
+	return err
 }

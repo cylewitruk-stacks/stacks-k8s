@@ -62,7 +62,7 @@ The [initial delivery scope](m0-remediation-plan.md#initial-delivery-scope)
 permits the implemented R1 foundation and constrained Bitcoin baseline while
 other M0 work remains open. Publication alone enables no RPC execution; the
 [initial baseline profile](../network-operator/bitcoin-production.md) defines
-the separately enabled mutation controller and its limitations.
+the scoped mutation worker and its limitations.
 
 ## M1: baseline and bounded Bitcoin production
 
@@ -96,13 +96,12 @@ execution-aware adapter are deferred capabilities, not M1 prerequisites.
   journal; do not infer acknowledged effects from observed chain tips.
 
 **Done:** baseline production runs with actions/observation/Chaos disabled,
-resumes after a successful [graceful controller
-drain](target-admission-and-rpc-execution.md#deadlines-and-receipt-collection),
+continues across operator restarts that preserve its worker processes,
 and progresses on a valid target while
 unrelated actors are unready. Ambiguous server work cannot authorize unsafe
 takeover, retry, or resumption.
-Grace-period exhaustion, crashes, and lost receipts are outside successful
-drain and may leave a target closed, including during a routine rollout.
+Worker termination requires receipt drainage; grace-period exhaustion, crashes
+and lost receipts may leave a target closed.
 Unresolved targets remain closed across restarts/replacement; fresh isolated
 environments are the initial recovery option. Measure that limitation in real
 use before prioritizing in-place recovery.
@@ -113,8 +112,9 @@ use before prioritizing in-place recovery.
 implements managed direct PoX-4/PoX-5 initialization/renewal and an isolated
 one-account transfer worker. The [PoX-5 profile](../network-operator/pox5.md)
 uses real sBTC contracts with explicit test registry initialization. Native
-inclusion, pause/update, backpressure and pending-worker recovery
-are qualified on a local normal image. Multi-profile compatibility, overrides,
+inclusion, pause/update, backpressure and surviving-process receipt retention
+are implemented; bound Stacks-worker loss is a terminal experiment failure. Multi-profile
+compatibility, overrides,
 and wider rotation/revocation remain open; M2 is not complete.
 
 **Outcome:** supported Stacks images reach productive operation with explicit
@@ -125,7 +125,8 @@ bootstrap inputs and ongoing offered traffic.
   activation. Controllers reconcile these prerequisites from declared state.
 - Implement the reviewed steady transaction producer capability, provisionally
   `StacksTransactionProduction`, through owned baseline declarations.
-- Enforce account/nonce ownership, bounded in-flight work, funding assumptions,
+- Keep per-worker nonce ownership and bounded in-flight work; permit shared-key experiments
+  without cross-worker coordination. Validate funding assumptions,
   backpressure, and explicit ambiguous submission.
 - Validate the M0.6 signing-authority contract, including credential isolation
   and rotation/revocation for designated transaction workers.
@@ -260,3 +261,13 @@ Autonomous node-local Bitcoin production, hard aggregate action accounting,
 advanced native faults, and unavailable instrumented-image hooks need separate
 contracts. External image building, investigation planning, replay, reduction,
 and diagnosis remain outside operators. Runtime determinism is not a goal.
+
+## Composable runtime delivery
+
+The `v1alpha2` implementation replaces the network/action runtime and external
+bootstrap workflow with explicit reusable inputs and network-owned participants.
+Go workers perform ongoing production, initialization and renewal. The
+[current-state inventory](current-state.md) and [public API](public-api/README.md)
+define delivered behavior; broader action, telemetry/export and release matrices
+remain the milestones above. A successful local cohort does not close arbitrary
+image, placement or fault compatibility requirements.

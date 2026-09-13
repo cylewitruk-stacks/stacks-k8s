@@ -1,5 +1,10 @@
 # Native partition qualification
 
+These are historical legacy-runtime results. The current profile additionally
+requires exact network and participant UIDs and `role=actor` on both selectors.
+The legacy fixture is incompatible with that profile and does not qualify the
+replacement runtime. See the [current selector checks](../../charts/stacks-chaos-profile/README.md#replacement-actor-identities).
+
 Tested 2026-09-07 on the fresh `kind-stacks-partition-20260907` cluster.
 Native injection/cleanup and Bitcoin recovery passed. Stacks recovery passed an
 initial run but failed a later reward-cycle transition; that limit remains open.

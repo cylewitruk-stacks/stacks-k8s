@@ -51,8 +51,11 @@ func gates(epochs []api.Epoch, pox api.PoX) ([]api.Gate, error) {
 	firstCycle := nakamoto / l
 	secondCycle := waterfall/l + 1
 	enroll4 := firstCycle*l - p - 1
-	enroll5 := waterfall + 2
-	if firstCycle < 1 || enroll4 <= epochs[7].StartHeight+1 || nakamoto-1 <= enroll4 || waterfall-1 <= nakamoto || enroll5 >= secondCycle*l-p || secondCycle*l-1 <= enroll5 {
+	// A Bitcoin activation height does not establish an epoch-4 Stacks tenure.
+	// Keep confirmation opportunities available until the last height at which
+	// PoX-5 accepts enrollment for the first waterfall cycle.
+	enroll5 := secondCycle*l - p - 1
+	if firstCycle < 1 || enroll4 <= epochs[7].StartHeight+1 || nakamoto-1 <= enroll4 || waterfall-1 <= nakamoto || enroll5 < waterfall+2 || secondCycle*l-1 <= enroll5 {
 		return nil, fmt.Errorf("epoch schedule leaves insufficient enrollment and initialization windows")
 	}
 	return []api.Gate{{Name: "PrepareBitcoin", BitcoinCeiling: epochs[2].StartHeight}, {Name: "EnrollPoX4", BitcoinCeiling: enroll4, TargetCycle: ptr.To(firstCycle)}, {Name: "PrepareNakamoto", BitcoinCeiling: nakamoto - 1, TargetCycle: ptr.To(firstCycle)}, {Name: "PreparePoX5", BitcoinCeiling: waterfall - 1}, {Name: "EnrollPoX5", BitcoinCeiling: enroll5, TargetCycle: ptr.To(secondCycle)}, {Name: "PrepareWaterfall", BitcoinCeiling: secondCycle*l - 1, TargetCycle: ptr.To(secondCycle)}}, nil
@@ -137,8 +140,14 @@ func compileGenesis(ctx context.Context, r client.Reader, root *api.StacksNetwor
 	for _, name := range names {
 		c := all[name]
 		v := c.configuration
+		if unverified(v) {
+			continue
+		}
 		counts[c.instance.Spec.Kind]++
-		req := api.BootstrapRequirement{Participant: binding("StacksNetworkParticipant", c.instance, ""), PolicyDigest: Digest(v), Dependencies: c.dependencies}
+		req := api.BootstrapRequirement{Kind: c.instance.Spec.Kind, Participant: binding("StacksNetworkParticipant", c.instance, ""), PolicyDigest: Digest(v), Dependencies: c.dependencies}
+		if v.StacksNode != nil {
+			req.MiningEnabled = ptr.To(v.StacksNode.Mining != nil && ptr.Deref(v.StacksNode.Mining.Enabled, false))
+		}
 		accountNames := make([]string, 0, len(c.accounts))
 		for name := range c.accounts {
 			accountNames = append(accountNames, name)
@@ -197,6 +206,9 @@ func compileGenesis(ctx context.Context, r client.Reader, root *api.StacksNetwor
 		}
 		if v.StacksContractSet != nil {
 			s := v.StacksContractSet
+			if err := validateRegistryInitialization(s.Initialization); err != nil {
+				return spec, err
+			}
 			if err := requireFunding(c, s.DeployerAccountRef); err != nil {
 				return spec, err
 			}
@@ -234,7 +246,7 @@ func compileGenesis(ctx context.Context, r client.Reader, root *api.StacksNetwor
 		return spec, fmt.Errorf("initial network requires a Stacks miner")
 	}
 	for name, c := range all {
-		if c.configuration.StacksSigner != nil && !stackedSigners[name] {
+		if c.configuration.StacksSigner != nil && !unverified(c.configuration) && !stackedSigners[name] {
 			return spec, fmt.Errorf("signer %s has no initial stacker", name)
 		}
 	}

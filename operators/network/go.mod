@@ -11,10 +11,8 @@ replace github.com/cylewitruk-stacks/stacks-k8s/operators/action => ../action
 require (
 	github.com/cylewitruk-stacks/stacks-k8s/apis/network v0.1.0
 	github.com/cylewitruk-stacks/stacks-k8s/libs/stacks v0.1.0
-	github.com/cylewitruk-stacks/stacks-k8s/operators/action v0.1.0
 	github.com/pelletier/go-toml/v2 v2.4.3
 	k8s.io/api v0.37.0
-	k8s.io/apiextensions-apiserver v0.37.0
 	k8s.io/apimachinery v0.37.0
 	k8s.io/client-go v0.37.0
 	k8s.io/utils v0.0.0-20260707023825-cf1189d6abe3
@@ -76,6 +74,7 @@ require (
 	google.golang.org/protobuf v1.36.12 // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
+	k8s.io/apiextensions-apiserver v0.37.0 // indirect
 	k8s.io/klog/v2 v2.140.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20260821135717-be32def86098 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect

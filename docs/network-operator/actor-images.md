@@ -90,64 +90,42 @@ Avoid reusing tags or selecting `Always` for images available only locally. See
 
 ## Select images in a network
 
-For initial provisioning, pass `--stacks-image="$STACKS_IMAGE"` to the Go
-`stacks-environment` command in the [production guide](stacks-production.md#provision-and-bootstrap).
-The image supplies both the initial node and signer defaults.
-
-The parent also supports these fields:
+Network defaults are immutable once the root is created. Set the default images
+before applying a new network, or use mutable per-participant overrides for actor
+rollouts:
 
 | Field | Scope |
 | --- | --- |
-| `spec.defaults.stacksNodeImage` | Default image for Stacks nodes. |
-| `spec.defaults.stacksSignerImage` | Default image for signers. |
-| `spec.stacksNodes[*].image` | Override for one named node. |
-| `spec.signers[*].image` | Override for one named signer. |
-| `spec.defaults.imagePullPolicy` | Shared actor pull policy; defaults to `IfNotPresent`. |
+| `spec.defaults.images.bitcoin` | Default Bitcoin image |
+| `spec.defaults.images.stacksNode` | Default Stacks node image |
+| `spec.defaults.images.stacksSigner` | Default signer image |
+| `spec.participants[*].overrides.image` | One actor instance |
+| Reusable actor definition `spec.image` | Selected instances using that definition |
 
-For a fresh mixed-version network, edit the complete generated document before
-applying it, retaining each actor's other fields and the managed capability
-references. Controllers compile and admit the declared topology.
+The heterogeneous participant's `kind` selects the override schema. Preserve its
+name, kind and definition/inline source when changing only the image. Edit
+`StacksNetwork/network` in the selected namespace, not generated participant
+admission, configuration or Pod fields.
 
-For an existing network, edit the parent with the selected kubeconfig/context,
-from the stacks-k8s repository root:
+The aggregate admits the new policy; the actor controller updates its StatefulSet.
+A direct Pod image edit is not the supported rollout path and invalidates trusted
+runtime identity. Inspect the new Pod's image ID, native RPC and protocol progress
+before updating another actor. There is no network-wide upgrade sequencer.
 
-```bash
-STACKS_NAMESPACE=my-network
-STACKS_NETWORK=my-network
-kubectl --kubeconfig "$STACKS_KUBECONFIG" \
-  --context "$STACKS_CONTEXT" --namespace "$STACKS_NAMESPACE" \
-  edit stacksnetwork "$STACKS_NETWORK"
-```
+## Mixed versions and storage
 
-Set the selected actor's `image` to the loaded tag. The aggregate controller
-updates its owned actor leaf; that leaf's controller updates its StatefulSet.
-Direct edits to an owned leaf are reconciled back to the parent's declaration.
+Load all selected tags into kind first. Give every distinct build a distinct tag;
+`IfNotPresent` permits use of locally loaded images. A participant's PVC can preserve
+chain data across Pod replacement. `ephemeral: true` uses `emptyDir` and loses that
+data. Binary/database compatibility determines whether a revision can reopen it;
+selecting an older image is not a database rollback.
 
-A direct Pod image edit is not automatically reversed by these controllers.
-When its image differs from the declared image, the leaf reports `Progressing`
-without ready identity. Relevant production capability admission then fails
-closed. Change the parent's image declaration to perform supported updates;
-Pod edits are not a substitute for that path.
+Images must provide `stacks-node` or `stacks-signer` on PATH and support the admitted
+configuration, epochs, peer protocol and native RPC endpoints. Arbitrary historical
+or adversarial builds are not automatically compatible or qualified. A changed
+image does not require new genesis; changed genesis inputs do.
 
-## Mixed-version upgrades and compatibility
-
-Load all required images first. Update one actor image at a time, observe its
-replacement Pod and protocol progress, then update the next actor. Changing a
-shared default can update several actors concurrently; there is no network-wide
-upgrade sequencer. The external user or agent decides ordering and acceptance
-criteria. Kubernetes readiness alone does not establish protocol recovery.
-
-Each actor uses its own StatefulSet. With PVC-backed storage, a Pod replacement
-retains chain data; explicitly disabled storage uses `emptyDir` and loses it on
-replacement. Binary/database compatibility still determines whether a revision
-can reopen existing data. Selecting the old image is not a database rollback.
-
-The image must provide the relevant executable on `PATH`: nodes run
-`stacks-node start --config ...`, and signers run `stacks-signer run --config ...`.
-It must support the selected configuration, genesis epochs, peer protocol and
-any RPC endpoints required by enabled production capabilities. Arbitrary
-historical or modified revisions are not automatically compatible or qualified.
-
-An image change does not require changing genesis. A changed genesis requires a
-fresh network and chain data. Managed initialization requires compatible epoch,
-contract and receipt capabilities; see [configuration and genesis](configuration.md).
+Management-worker placement and process identity have stricter controls than actor
+rollouts. Do not replace a bound stacker, contract or traffic worker as an image
+upgrade experiment; its loss ends the network's managed experiment. See
+[lifecycle](../design/public-api/lifecycle.md).
