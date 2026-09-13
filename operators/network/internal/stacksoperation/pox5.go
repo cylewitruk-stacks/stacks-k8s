@@ -80,7 +80,7 @@ func (r *StackerRole) Step(ctx context.Context, snapshot stacksworker.Snapshot) 
 	r.current = nil
 	r.legacy.Now, r.legacy.Resolve = r.Now, r.ResolvePoX4
 	if r.failed {
-		return r.result("PoX5OperationFailed"), nil
+		return r.result(reasonPoX5OperationFailed), nil
 	}
 	if !r.transitioned && r.legacy.pending() != 0 {
 		result, err := r.legacyStep(ctx, snapshot)
@@ -100,27 +100,27 @@ func (r *StackerRole) Step(ctx context.Context, snapshot stacksworker.Snapshot) 
 		return r.result(r.observeGoal(ctx)), nil
 	}
 	if r.ResolvePoX5 == nil || snapshot.Participant == nil || snapshot.Participant.Status.Admission == nil {
-		return r.result("PolicyUnavailable"), nil
+		return r.result(reasonPolicyUnavailable), nil
 	}
 	input, snapshot, err := r.inputs(ctx, snapshot)
 	if err != nil {
-		return r.result("DependenciesUnavailable"), nil
+		return r.result(reasonDependenciesUnavailable), nil
 	}
 	if input.Node == nil || input.Holder != r.legacy.stream.Address || input.Administrator != r.administrator.Address || input.SignerPublicKey != r.legacy.signerPublic || input.Amount == nil || input.Amount.Sign() <= 0 || input.Amount.BitLen() > 128 || input.LockCycles < 2 || input.LockCycles > 12 || input.RenewWhenRemainingCycles < 1 || input.RenewWhenRemainingCycles >= input.LockCycles || input.Epoch4Height == 0 {
 		r.cached = nil
-		return r.result("InvalidPolicy"), nil
+		return r.result(reasonInvalidPolicy), nil
 	}
 	copy := clonePoX5Inputs(input)
 	r.cached, r.cachedDigest = &copy, snapshot.Participant.Status.Admission.PolicyDigest
 	pox, err := input.Node.PoX(ctx)
 	if err != nil {
-		return r.result("PoXObservationUnavailable"), nil
+		return r.result(reasonPoXObservationUnavailable), nil
 	}
 	if pox.Contract == PoX4Contract && !r.transitioned {
 		return r.legacyStep(ctx, snapshot)
 	}
 	if pox.Contract != PoX5Contract {
-		return r.result("AwaitingPoX5"), nil
+		return r.result(reasonAwaitingPoX5), nil
 	}
 	r.transitioned = true
 	r.applied = snapshot.Participant.Status.Admission.PolicyDigest
@@ -133,18 +133,18 @@ func (r *StackerRole) Step(ctx context.Context, snapshot stacksworker.Snapshot) 
 	}
 	state, err := observePoX5(ctx, input, target, r.now())
 	if err != nil {
-		return r.result("PoXObservationUnavailable"), nil
+		return r.result(reasonPoXObservationUnavailable), nil
 	}
 	r.current = state.observation
 	if state.conflict {
-		return r.result("Conflict"), nil
+		return r.result(reasonConflict), nil
 	}
 	if state.observation != nil && (!input.InitialCohort || target == input.TargetCycle) {
 		r.initialDone = true
 	}
 	if input.InitialCohort && !r.initialDone && state.pox.RewardCycle >= input.TargetCycle {
 		r.failed = true
-		return r.result("BootstrapWindowMissed"), nil
+		return r.result(reasonBootstrapWindowMissed), nil
 	}
 	if snapshot.Paused {
 		return r.result(reasonPaused), nil
@@ -160,15 +160,15 @@ func (r *StackerRole) Step(ctx context.Context, snapshot stacksworker.Snapshot) 
 	}
 	if !state.exists {
 		if state.pox.RewardCycle == math.MaxUint64 || state.pox.RewardCycle+1 > math.MaxUint64-input.LockCycles {
-			return r.result("InvalidPoXCycle"), nil
+			return r.result(reasonInvalidPoXCycle), nil
 		}
 		first := state.pox.RewardCycle + 1
 		if input.InitialCohort && !r.initialDone && (first > input.TargetCycle || first+input.LockCycles <= input.TargetCycle) {
 			r.failed = true
-			return r.result("BootstrapWindowMissed"), nil
+			return r.result(reasonBootstrapWindowMissed), nil
 		}
 		if state.holder.Locked.Integer == nil || state.holder.Locked.Integer.Sign() != 0 {
-			return r.result("AwaitingPoX4Unlock"), nil
+			return r.result(reasonAwaitingPoX4Unlock), nil
 		}
 		if r.initialDone || !input.InitialCohort {
 			target = first
@@ -176,13 +176,13 @@ func (r *StackerRole) Step(ctx context.Context, snapshot stacksworker.Snapshot) 
 		return r.offer(ctx, snapshot, input, state, api.PostconditionPoX5Enrollment, first, first+input.LockCycles, target)
 	}
 	if state.amount.Cmp(input.Amount) != 0 {
-		return r.result("AwaitingUnlockForAmountChange"), nil
+		return r.result(reasonAwaitingUnlockForAmountChange), nil
 	}
 	if state.observation == nil {
-		return r.result("EnrollmentStateMismatch"), nil
+		return r.result(reasonEnrollmentStateMismatch), nil
 	}
 	if state.pox.RewardCycle >= state.end || state.pox.RewardCycle == math.MaxUint64 {
-		return r.result("AwaitingUnlock"), nil
+		return r.result(reasonAwaitingUnlock), nil
 	}
 	remaining := state.end - state.pox.RewardCycle
 	if remaining > input.RenewWhenRemainingCycles {
@@ -190,7 +190,7 @@ func (r *StackerRole) Step(ctx context.Context, snapshot stacksworker.Snapshot) 
 	}
 	firstNext := state.pox.RewardCycle + 1
 	if firstNext > math.MaxUint64-input.LockCycles {
-		return r.result("InvalidPoXCycle"), nil
+		return r.result(reasonInvalidPoXCycle), nil
 	}
 	end := firstNext + input.LockCycles
 	if end <= state.end {
@@ -260,17 +260,17 @@ func (r *StackerRole) observeGoal(ctx context.Context) string {
 		stream = r.administrator
 	}
 	reason, _ := stream.Observe(ctx, r.now())
-	if reason == "ExecutionRejected" {
+	if reason == reasonExecutionRejected {
 		r.failed = true
 		return reason
 	}
 	state, err := observePoX5(ctx, goal.input, goal.target, r.now())
 	if err != nil {
-		return "PoXObservationUnavailable"
+		return reasonPoXObservationUnavailable
 	}
 	r.current = state.observation
 	if state.conflict {
-		return "Conflict"
+		return reasonConflict
 	}
 	var proof any
 	switch goal.kind {
@@ -290,7 +290,7 @@ func (r *StackerRole) observeGoal(ctx context.Context) string {
 		}
 	}
 	if proof == nil {
-		return "AwaitingPoXPostcondition"
+		return reasonAwaitingPoXPostcondition
 	}
 	if stream.Pending() != 0 {
 		nonce := state.holder.Nonce
@@ -343,6 +343,6 @@ func (r *StackerRole) Drain(ctx context.Context, snapshot stacksworker.Snapshot)
 	if r.goal != nil {
 		r.observeGoal(ctx)
 	}
-	result := r.result("Draining")
+	result := r.result(reasonDraining)
 	return stacksworker.DrainResult{Done: result.Pending == 0, Settled: result.Pending == 0, Pending: result.Pending, Transactions: result.Transactions, AdministratorTransactions: result.AdministratorTransactions, PoX4: r.legacy.current.DeepCopy(), PoX5: result.PoX5}, nil
 }

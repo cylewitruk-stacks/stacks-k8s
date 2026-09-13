@@ -55,7 +55,7 @@ func collectStacksProtocol(ctx context.Context, node StacksProtocolRPC, previous
 		if previous != nil {
 			advancedAt = previous.LastHeightAdvancedAt
 		}
-		return &api.StacksProtocolObservation{Reason: "AwaitingFirstAnchor", ObservedAt: at, LastHeightAdvancedAt: advancedAt, NetworkID: uint64(before.NetworkID), BurnHeight: before.BurnHeight, StacksTip: before.Tip, IndexBlockID: before.IndexBlockID, BurnConsensusHash: before.BurnConsensusHash, FullySynced: before.FullySynced}, nil
+		return &api.StacksProtocolObservation{Reason: api.ReasonAwaitingFirstAnchor, ObservedAt: at, LastHeightAdvancedAt: advancedAt, NetworkID: uint64(before.NetworkID), BurnHeight: before.BurnHeight, StacksTip: before.Tip, IndexBlockID: before.IndexBlockID, BurnConsensusHash: before.BurnConsensusHash, FullySynced: before.FullySynced}, nil
 	}
 	pox, err := node.PoXAt(ctx, before.IndexBlockID)
 	if err != nil {
@@ -65,7 +65,7 @@ func collectStacksProtocol(ctx context.Context, node StacksProtocolRPC, previous
 		return nil, fmt.Errorf("native chain views disagree")
 	}
 	at := metav1.NewTime(now.UTC().Truncate(time.Second))
-	observation := &api.StacksProtocolObservation{Available: true, Reason: "Observed", ObservedAt: at, HighestStacksHeight: before.StacksHeight, LastHeightAdvancedAt: at, NetworkID: uint64(before.NetworkID), BurnHeight: before.BurnHeight, StacksHeight: before.StacksHeight, StacksTip: before.Tip, IndexBlockID: before.IndexBlockID, BurnConsensusHash: before.BurnConsensusHash, FullySynced: before.FullySynced, PoXContract: pox.Contract, PoXBurnHeight: pox.BurnHeight, RewardCycle: pox.RewardCycle, CycleLength: pox.CycleLength}
+	observation := &api.StacksProtocolObservation{Available: true, Reason: reasonObserved, ObservedAt: at, HighestStacksHeight: before.StacksHeight, LastHeightAdvancedAt: at, NetworkID: uint64(before.NetworkID), BurnHeight: before.BurnHeight, StacksHeight: before.StacksHeight, StacksTip: before.Tip, IndexBlockID: before.IndexBlockID, BurnConsensusHash: before.BurnConsensusHash, FullySynced: before.FullySynced, PoXContract: pox.Contract, PoXBurnHeight: pox.BurnHeight, RewardCycle: pox.RewardCycle, CycleLength: pox.CycleLength}
 	if previous != nil && before.StacksHeight <= previous.HighestStacksHeight {
 		observation.HighestStacksHeight = previous.HighestStacksHeight
 		observation.LastHeightAdvancedAt = previous.LastHeightAdvancedAt
@@ -98,10 +98,10 @@ func (r *Reconciler) observeStacksProtocol(ctx context.Context, root *api.Stacks
 	defer func() {
 		if observeErr != nil && state.Protocol != nil {
 			state.Protocol.Available = false
-			state.Protocol.Reason = "ObservationUnavailable"
+			state.Protocol.Reason = api.ReasonObservationUnavailable
 		}
 	}()
-	if root.Status.GenesisRef == nil || root.Status.GenesisRef.Kind != "StacksGenesis" || state.PodRef == nil || state.ContainerID == "" || net.ParseIP(pod.Status.PodIP) == nil {
+	if root.Status.GenesisRef == nil || root.Status.GenesisRef.Kind != api.KindStacksGenesis || state.PodRef == nil || state.ContainerID == "" || net.ParseIP(pod.Status.PodIP) == nil {
 		return fmt.Errorf("protocol target identity unavailable")
 	}
 	if p.Status.Runtime != nil && p.Status.Runtime.Protocol != nil {

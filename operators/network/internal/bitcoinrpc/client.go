@@ -51,19 +51,19 @@ func (r *Client) Check(ctx context.Context, endpoint, address string) error {
 	var chain struct {
 		Chain string `json:"chain"`
 	}
-	if err := r.Call(ctx, endpoint, "preflight-chain", "getblockchaininfo", []any{}, &chain); err != nil {
+	if err := r.Call(ctx, endpoint, "preflight-chain", MethodGetBlockchainInfo, []any{}, &chain); err != nil {
 		return err
 	}
 	if chain.Chain == "" {
 		return fmt.Errorf("RPC preflight omitted chain identity")
 	}
-	if chain.Chain != "regtest" {
+	if chain.Chain != ChainRegtest {
 		return fmt.Errorf("%w: target is not regtest", ErrInvalidPreflight)
 	}
 	var validation struct {
 		Valid *bool `json:"isvalid"`
 	}
-	if err := r.Call(ctx, endpoint, "preflight-address", "validateaddress", []any{address}, &validation); err != nil {
+	if err := r.Call(ctx, endpoint, "preflight-address", MethodValidateAddress, []any{address}, &validation); err != nil {
 		return err
 	}
 	if validation.Valid == nil {
@@ -78,7 +78,7 @@ func (r *Client) Check(ctx context.Context, endpoint, address string) error {
 // Generate requests exactly one block and requires an attributable success receipt.
 func (r *Client) Generate(ctx context.Context, endpoint, address, id string) (string, error) {
 	var hashes []string
-	if err := r.Call(ctx, endpoint, id, "generatetoaddress", []any{1, address, 1000000}, &hashes); err != nil {
+	if err := r.Call(ctx, endpoint, id, MethodGenerateToAddress, []any{1, address, 1000000}, &hashes); err != nil {
 		return "", err
 	}
 	if len(hashes) != 1 || len(hashes[0]) != 64 {

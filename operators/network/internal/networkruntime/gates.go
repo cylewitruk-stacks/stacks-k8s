@@ -77,7 +77,7 @@ func (r *Reconciler) projectGates(ctx context.Context, root *api.StacksNetwork, 
 	observation := &state.Gates[state.GateIndex]
 	now := time.Now()
 	if gate.Name != api.GatePrepareBitcoin && gate.Name != api.GateEnrollPoX4 && gate.Name != api.GatePrepareNakamoto && gate.Name != api.GatePreparePoX5 && gate.Name != api.GateEnrollPoX5 && gate.Name != api.GatePrepareWaterfall {
-		set(root, "Initialized", metav1.ConditionFalse, "GateRuntimeNotImplemented", "The next frozen protocol gate is not implemented yet")
+		set(root, api.ConditionInitialized, metav1.ConditionFalse, reasonGateRuntimeNotImplemented, "The next frozen protocol gate is not implemented yet")
 		return false, nil
 	}
 	// The first gate owns its own exact observation boundary in its execution record.
@@ -90,7 +90,7 @@ func (r *Reconciler) projectGates(ctx context.Context, root *api.StacksNetwork, 
 	}
 	if known && height > gate.BitcoinCeiling {
 		root.Status.Phase = api.NetworkPhaseFailed
-		set(root, "Failed", metav1.ConditionTrue, "FrozenCeilingExceeded", "The frozen initialization ceiling was exceeded; recreate the network")
+		set(root, api.ConditionFailed, metav1.ConditionTrue, api.ReasonFrozenCeilingExceeded, "The frozen initialization ceiling was exceeded; recreate the network")
 		return true, nil
 	}
 	if known && height == gate.BitcoinCeiling && observation.FirstCeilingObservedAt == nil {
@@ -100,7 +100,7 @@ func (r *Reconciler) projectGates(ctx context.Context, root *api.StacksNetwork, 
 	preparedInTime := gate.Name == api.GatePrepareBitcoin && record.Status.PreparedAt != nil && !record.Status.PreparedAt.Time.After(now) && (record.Status.FirstCeilingObservedAt == nil || record.Status.PreparedAt.Time.Before(record.Status.FirstCeilingObservedAt.Add(120*time.Second)))
 	if !preparedInTime && observation.FirstCeilingObservedAt != nil && !now.Before(observation.FirstCeilingObservedAt.Add(120*time.Second)) {
 		root.Status.Phase = api.NetworkPhaseFailed
-		set(root, "Failed", metav1.ConditionTrue, "BootstrapObservationDeadline", "The frozen gate observation deadline expired; recreate the network")
+		set(root, api.ConditionFailed, metav1.ConditionTrue, reasonBootstrapObservationDeadline, "The frozen gate observation deadline expired; recreate the network")
 		return true, nil
 	}
 	complete := false
@@ -118,7 +118,7 @@ func (r *Reconciler) projectGates(ctx context.Context, root *api.StacksNetwork, 
 	case api.GatePrepareWaterfall:
 		complete = known && pox5CohortSatisfied(root, genesis, participants, gate, now) && preparedCohortSatisfied(root, genesis, participants, gate, now)
 	default:
-		set(root, "Initialized", metav1.ConditionFalse, "GateRuntimeNotImplemented", "The next frozen protocol gate is not implemented yet")
+		set(root, api.ConditionInitialized, metav1.ConditionFalse, reasonGateRuntimeNotImplemented, "The next frozen protocol gate is not implemented yet")
 		return false, nil
 	}
 	if !complete {
@@ -197,10 +197,10 @@ func (r *Reconciler) reconcileGates(ctx context.Context, root *api.StacksNetwork
 		root.Status = trial.Status
 	}
 	if err != nil {
-		if !meta.IsStatusConditionTrue(root.Status.Conditions, "Initialized") {
-			set(root, "Initialized", metav1.ConditionUnknown, "GateObservationUnavailable", "Current frozen gate evidence is unavailable")
+		if !meta.IsStatusConditionTrue(root.Status.Conditions, api.ConditionInitialized) {
+			set(root, api.ConditionInitialized, metav1.ConditionUnknown, reasonGateObservationUnavailable, "Current frozen gate evidence is unavailable")
 		}
-		observationUnavailable(root, "GateObservationUnavailable", "Current frozen gate evidence is unavailable")
+		observationUnavailable(root, reasonGateObservationUnavailable, "Current frozen gate evidence is unavailable")
 	}
 	return failed, err
 }

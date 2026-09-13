@@ -65,10 +65,10 @@ func (r *Reconciler) reconcileRuntime(ctx context.Context, request ctrl.Request)
 	}
 	base := root.DeepCopy()
 	operation, err := r.Runtime.Reconcile(ctx, &root)
-	if failed := meta.FindStatusCondition(base.Status.Conditions, "Failed"); failed != nil && failed.Status == metav1.ConditionTrue {
+	if failed := meta.FindStatusCondition(base.Status.Conditions, api.ConditionFailed); failed != nil && failed.Status == metav1.ConditionTrue {
 		meta.SetStatusCondition(&root.Status.Conditions, *failed)
 	}
-	if base.Status.Phase == api.NetworkPhaseFailed && !meta.IsStatusConditionTrue(root.Status.Conditions, "Failed") {
+	if base.Status.Phase == api.NetworkPhaseFailed && !meta.IsStatusConditionTrue(root.Status.Conditions, api.ConditionFailed) {
 		root.Status.Phase = api.NetworkPhaseFailed
 	}
 	if !reflect.DeepEqual(base.Status, root.Status) {

@@ -93,7 +93,11 @@ func TestActionAPIAdmissionAndReceiptOwnership(t *testing.T) {
 	must(c.Status().Update(ctx, root))
 	for _, kind := range []string{"BitcoinBlockGeneration", "BitcoinReorganization"} {
 		t.Run(kind, func(t *testing.T) {
-			r := &Reconciler{Client: restricted, Reader: restricted, Kind: action.Kind(kind)}
+			var prototype client.Object = &action.BitcoinBlockGeneration{}
+			if kind == "BitcoinReorganization" {
+				prototype = &action.BitcoinReorganization{}
+			}
+			r := &Reconciler{Client: restricted, Reader: restricted, Prototype: prototype}
 			object, status, err := r.object()
 			must(err)
 			object.SetName("request")

@@ -40,7 +40,7 @@ func (r *ArtifactReconciler) Reconcile(ctx context.Context, request ctrl.Request
 		return ctrl.Result{}, nil
 	}
 	owner := metav1.GetControllerOf(object)
-	if owner == nil || owner.APIVersion != api.GroupVersion.String() || owner.Kind != "StacksNetwork" || owner.Name != "network" || owner.UID == "" {
+	if owner == nil || owner.APIVersion != api.GroupVersion.String() || owner.Kind != api.KindStacksNetwork || owner.Name != "network" || owner.UID == "" {
 		return ctrl.Result{}, fmt.Errorf("shared artifact network ownership unavailable")
 	}
 	var participants api.StacksNetworkParticipantList

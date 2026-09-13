@@ -6,6 +6,7 @@ import (
 
 	bitcoin "github.com/cylewitruk-stacks/stacks-k8s/apis/network/bitcoin/v1alpha2"
 	api "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha2"
+	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/objectref"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -54,7 +55,7 @@ func (r *OverrideReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		if initial.UID != ref.UID || initial.Spec.NetworkUID != root.UID || !metav1.IsControlledBy(&initial, root) {
 			return ctrl.Result{RequeueAfter: time.Second}, nil
 		}
-		if candidate := initial.Status.Override; candidate != nil && candidate.Override == binding("BitcoinBlockScheduleOverride", request) {
+		if candidate := initial.Status.Override; candidate != nil && candidate.Override == objectref.BitcoinScheduleOverride(request) {
 			active = candidate.DeepCopy()
 		}
 	}
@@ -65,28 +66,28 @@ func (r *OverrideReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	if active != nil {
 		status.Admission = active
 		status.Phase = bitcoin.OverrideActive
-		status.Reason = "Activated"
+		status.Reason = reasonActivated
 		if request.DeletionTimestamp != nil {
 			status.Phase = bitcoin.OverrideCancelled
-			status.Reason = "CancellationRequested"
+			status.Reason = reasonCancellationRequested
 		} else if !r.Now().Before(active.ExpiresAt.Time) {
 			status.Phase = bitcoin.OverrideCompleted
-			status.Reason = "DurationElapsed"
+			status.Reason = reasonDurationElapsed
 		}
 	} else if !overrideTerminal(status.Phase) {
 		switch {
 		case status.Admission != nil:
 			status.Phase = bitcoin.OverrideCancelled
-			status.Reason = "ActivationWithdrawn"
+			status.Reason = reasonActivationWithdrawn
 		case request.DeletionTimestamp != nil:
 			status.Phase = bitcoin.OverrideCancelled
-			status.Reason = "CancelledBeforeActivation"
+			status.Reason = reasonCancelledBeforeActivation
 		case !r.Now().Before(pending.Time):
 			status.Phase = bitcoin.OverrideExpired
-			status.Reason = "PendingDeadline"
+			status.Reason = reasonPendingDeadline
 		default:
 			status.Phase = bitcoin.OverridePending
-			status.Reason = "WaitingForActivation"
+			status.Reason = reasonWaitingForActivation
 		}
 	}
 	if err := r.applyStatus(ctx, request, status); err != nil {
@@ -114,7 +115,7 @@ func (r *OverrideReconciler) applyStatus(ctx context.Context, request *bitcoin.B
 	if equality.Semantic.DeepEqual(request.Status, status) {
 		return nil
 	}
-	patch := &bitcoin.BitcoinBlockScheduleOverride{TypeMeta: metav1.TypeMeta{APIVersion: bitcoin.GroupVersion.String(), Kind: "BitcoinBlockScheduleOverride"}, ObjectMeta: metav1.ObjectMeta{Name: request.Name, Namespace: request.Namespace, UID: request.UID, ResourceVersion: request.ResourceVersion}, Status: status}
+	patch := &bitcoin.BitcoinBlockScheduleOverride{TypeMeta: metav1.TypeMeta{APIVersion: bitcoin.GroupVersion.String(), Kind: bitcoin.KindBitcoinBlockScheduleOverride}, ObjectMeta: metav1.ObjectMeta{Name: request.Name, Namespace: request.Namespace, UID: request.UID, ResourceVersion: request.ResourceVersion}, Status: status}
 	if err := r.Client.Status().Patch(ctx, patch, client.Apply, client.FieldOwner(OverrideFieldManager), client.ForceOwnership); err != nil {
 		return err
 	}

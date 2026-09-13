@@ -12,6 +12,7 @@ import (
 	"github.com/cylewitruk-stacks/stacks-k8s/libs/stacks/identity"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/foundation"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/naming"
+	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/objectref"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -73,7 +74,7 @@ func EnsureRecords(ctx context.Context, c client.Client, reader client.Reader, s
 		if e := foundation.ValidateParticipantAdmission(ctx, reader, root, p); e != nil {
 			continue
 		}
-		record := &bitcoin.BitcoinExecution{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: root.Namespace, Labels: labels(p, "support"), Finalizers: []string{foundation.ArtifactFinalizer}}, Spec: bitcoin.BitcoinExecutionSpec{NetworkUID: root.UID, Participant: binding("StacksNetworkParticipant", p)}}
+		record := &bitcoin.BitcoinExecution{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: root.Namespace, Labels: labels(p, api.RoleSupport), Finalizers: []string{foundation.ArtifactFinalizer}}, Spec: bitcoin.BitcoinExecutionSpec{NetworkUID: root.UID, Participant: objectref.Participant(p)}}
 		if e := controllerutil.SetControllerReference(root, record, scheme); e != nil {
 			return refs, initRef, e
 		}
@@ -93,7 +94,7 @@ func EnsureRecords(ctx context.Context, c client.Client, reader client.Reader, s
 			}
 			record = current
 		}
-		refs = append(refs, binding("BitcoinExecution", record))
+		refs = append(refs, objectref.BitcoinExecution(record))
 	}
 	sort.Slice(refs, func(i, j int) bool { return refs[i].Name < refs[j].Name })
 	if initRef != nil || root.Status.GenesisRef == nil {
@@ -110,7 +111,7 @@ func EnsureRecords(ctx context.Context, c client.Client, reader client.Reader, s
 	if e != nil {
 		return refs, nil, e
 	}
-	name := naming.RuntimeName(string(root.UID), "", "BitcoinInitialization", "network", "initialization")
+	name := naming.RuntimeName(string(root.UID), "", bitcoin.KindBitcoinInitialization, "network", "initialization")
 	record := &bitcoin.BitcoinInitialization{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: root.Namespace, Finalizers: []string{foundation.ArtifactFinalizer}}, Spec: spec}
 	if e = controllerutil.SetControllerReference(root, record, scheme); e != nil {
 		return refs, nil, e
@@ -130,13 +131,13 @@ func EnsureRecords(ctx context.Context, c client.Client, reader client.Reader, s
 		}
 		record = current
 	}
-	b := binding("BitcoinInitialization", record)
+	b := objectref.BitcoinInitialization(record)
 	return refs, &b, nil
 }
 
 // freezeInitialization preserves the full captured Bitcoin cohort without weakening genesis.
 func freezeInitialization(ctx context.Context, reader client.Reader, root *api.StacksNetwork, genesis *api.StacksGenesis, participants []api.StacksNetworkParticipant) (bitcoin.BitcoinInitializationSpec, error) {
-	spec := bitcoin.BitcoinInitializationSpec{NetworkUID: root.UID, Genesis: binding("StacksGenesis", genesis)}
+	spec := bitcoin.BitcoinInitializationSpec{NetworkUID: root.UID, Genesis: objectref.Genesis(genesis)}
 	spec.Genesis.Fingerprint = foundation.Digest(genesis.Spec)
 	if len(genesis.Spec.Bootstrap.Gates) == 0 || genesis.Spec.Bootstrap.Gates[0].Name != api.GatePrepareBitcoin {
 		return spec, fmt.Errorf("first frozen Bitcoin gate unavailable")
@@ -174,7 +175,7 @@ func freezeInitialization(ctx context.Context, reader client.Reader, root *api.S
 		return spec, fmt.Errorf("initialization target unavailable")
 	}
 	spec.Production = production.Participant
-	spec.Target = binding("StacksNetworkParticipant", target)
+	spec.Target = objectref.Participant(target)
 	spec.MinimumHeight = initial.MinimumHeight
 	spec.MatureOutputsPerMiner = initial.MatureOutputsPerMiner
 	if spec.MinimumHeight != genesis.Spec.Bootstrap.Gates[0].BitcoinCeiling || initial.MatureOutputsPerMiner < 1 {
@@ -199,7 +200,7 @@ func freezeInitialization(ctx context.Context, reader client.Reader, root *api.S
 		var ref *common.Binding
 		for i := range production.Dependencies {
 			b := &production.Dependencies[i]
-			if b.Kind == "BitcoinWallet" && b.Name == name.Name {
+			if b.Kind == bitcoin.KindBitcoinWallet && b.Name == name.Name {
 				ref = b
 				break
 			}
@@ -233,12 +234,7 @@ func publicWallet(w *bitcoin.BitcoinWallet) (bitcoin.FrozenBitcoinWallet, error)
 	if name == "" || len(name) > 253 {
 		return bitcoin.FrozenBitcoinWallet{}, fmt.Errorf("invalid local wallet name")
 	}
-	return bitcoin.FrozenBitcoinWallet{Wallet: common.Binding{Kind: "BitcoinWallet", Name: w.Name, UID: w.UID, Fingerprint: w.Status.Digest}, Name: name, Address: address, Descriptor: w.Status.Descriptor}, nil
-}
-
-// binding captures an exact Kubernetes object identity.
-func binding(kind string, obj metav1.Object) common.Binding {
-	return common.Binding{Kind: kind, Name: obj.GetName(), UID: obj.GetUID()}
+	return bitcoin.FrozenBitcoinWallet{Wallet: objectref.WithFingerprint(objectref.BitcoinWallet(w), w.Status.Digest), Name: name, Address: address, Descriptor: w.Status.Descriptor}, nil
 }
 
 // hasBinding checks a retained name and, when supplied, its exact UID.
@@ -253,5 +249,5 @@ func hasBinding(refs []common.Binding, name string, uid types.UID) bool {
 
 // labels matches the public participant runtime identity contract.
 func labels(p *api.StacksNetworkParticipant, role string) map[string]string {
-	return map[string]string{api.LabelManagedBy: "stacks-network-operator", api.LabelNetwork: "network", api.LabelNetworkUID: string(p.Spec.NetworkUID), api.LabelParticipant: p.Spec.ParticipantName, api.LabelParticipantUID: string(p.UID), api.LabelParticipantKind: string(p.Spec.Kind), api.LabelRole: role}
+	return map[string]string{api.LabelManagedBy: api.ManagedByNetworkOperator, api.LabelNetwork: api.NetworkLabelValue, api.LabelNetworkUID: string(p.Spec.NetworkUID), api.LabelParticipant: p.Spec.ParticipantName, api.LabelParticipantUID: string(p.UID), api.LabelParticipantKind: string(p.Spec.Kind), api.LabelRole: role}
 }

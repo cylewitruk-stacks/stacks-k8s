@@ -12,7 +12,7 @@ import (
 
 const (
 	managedByLabel    = api.LabelManagedBy
-	foundationManager = "stacks-network-operator"
+	foundationManager = api.ManagedByNetworkOperator
 )
 
 // CacheOptions excludes unrelated runtime objects without filtering user declarations.

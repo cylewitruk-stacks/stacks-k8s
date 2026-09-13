@@ -18,30 +18,30 @@ import (
 // stopReason distinguishes terminal disposal from reversible pause/suspension.
 func stopReason(root *api.StacksNetwork, p *api.StacksNetworkParticipant) string {
 	if failed(root) {
-		return "NetworkFailed"
+		return api.ReasonNetworkFailed
 	}
 	if root.DeletionTimestamp != nil {
-		return "NetworkDeleting"
+		return api.ReasonNetworkDeleting
 	}
 	if root.Spec.Operation == api.NetworkOperationStopped {
-		return "NetworkStopped"
+		return api.ReasonNetworkStopped
 	}
 	if p != nil {
 		for _, id := range root.Status.Identities {
 			if id.Name == p.Spec.ParticipantName && (id.UID != p.UID || id.Removing) {
-				return "ParticipantRemoved"
+				return api.ReasonParticipantRemoved
 			}
 		}
 	}
 	if p == nil || p.DeletionTimestamp != nil {
-		return "ParticipantRemoved"
+		return api.ReasonParticipantRemoved
 	}
 	for _, entry := range root.Spec.Participants {
 		if entry.Name == p.Spec.ParticipantName && entry.Kind == p.Spec.Kind {
 			return ""
 		}
 	}
-	return "ParticipantRemoved"
+	return api.ReasonParticipantRemoved
 }
 
 // stop closes local mutation admission before bounded receipt draining and acknowledgement.
@@ -211,7 +211,7 @@ func terminalDrainAcknowledged(record *bitcoin.BitcoinExecution, root *api.Stack
 		return false
 	}
 	switch d.Reason {
-	case "ParticipantRemoved", "NetworkStopped", "NetworkDeleting", "NetworkFailed":
+	case api.ReasonParticipantRemoved, api.ReasonNetworkStopped, api.ReasonNetworkDeleting, api.ReasonNetworkFailed:
 		return d.Outcome == bitcoin.DrainDrained || d.Outcome == bitcoin.DrainUncertain
 	}
 	return false

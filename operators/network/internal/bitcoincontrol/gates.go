@@ -28,7 +28,7 @@ func currentGate(ctx context.Context, reader client.Reader, root *api.StacksNetw
 	var authority gateAuthority
 	state := root.Status.Initialization
 	ref := root.Status.GenesisRef
-	if ref == nil || ref.Kind != "StacksGenesis" || ref.Name != initial.Spec.Genesis.Name || ref.UID != initial.Spec.Genesis.UID || ref.Fingerprint != initial.Spec.Genesis.Fingerprint {
+	if ref == nil || ref.Kind != api.KindStacksGenesis || ref.Name != initial.Spec.Genesis.Name || ref.UID != initial.Spec.Genesis.UID || ref.Fingerprint != initial.Spec.Genesis.Fingerprint {
 		return authority, errors.New("bootstrap gate authority unavailable")
 	}
 	var genesis api.StacksGenesis
@@ -98,7 +98,7 @@ func advancementReady(ctx context.Context, reader client.Reader, root *api.Stack
 			if p.Spec.Control != nil && ptr.Deref(p.Spec.Control.Suspended, false) || rt == nil || rt.ObservedGeneration != p.Generation || rt.PolicyDigest != p.Status.Admission.PolicyDigest || rt.PodRef == nil || rt.PodRef.UID == "" || rt.ConfigRef == nil || rt.ConfigRef.UID == "" || rt.ContainerID == "" || rt.Terminated {
 				return false, errors.New("captured Stacks actor is not ready")
 			}
-			for _, kind := range []string{"WorkloadReady", "ConfigVerified"} {
+			for _, kind := range []string{api.ConditionWorkloadReady, api.ConditionConfigVerified} {
 				condition := meta.FindStatusCondition(p.Status.Conditions, kind)
 				if condition == nil || condition.Status != metav1.ConditionTrue || condition.ObservedGeneration != p.Generation {
 					return false, errors.New("captured Stacks actor is not verified")
@@ -149,5 +149,5 @@ func awaitingFirstAnchor(root *api.StacksNetwork, runtime *api.ParticipantRuntim
 	view := runtime.Protocol
 	policy := foundation.ObservationPolicy()
 	freshness := time.Duration(3*policy.PollIntervalSeconds+policy.RPCAllowanceSeconds) * time.Second
-	return view != nil && !view.Available && view.Reason == "AwaitingFirstAnchor" && view.NetworkID == 0x80000000 && view.StacksHeight == 0 && view.HighestStacksHeight == 0 && view.StacksTip == strings.Repeat("0", 64) && view.FullySynced && height >= 0 && view.BurnHeight == uint64(height) && root.Status.GenesisRef != nil && view.GenesisUID == root.Status.GenesisRef.UID && runtime.PodRef != nil && view.PodUID == runtime.PodRef.UID && view.ContainerID == runtime.ContainerID && view.ConfigurationDigest == runtime.ConfigurationDigest && !view.ObservedAt.IsZero() && !view.ObservedAt.After(now) && now.Sub(view.ObservedAt.Time) <= freshness
+	return view != nil && !view.Available && view.Reason == api.ReasonAwaitingFirstAnchor && view.NetworkID == 0x80000000 && view.StacksHeight == 0 && view.HighestStacksHeight == 0 && view.StacksTip == strings.Repeat("0", 64) && view.FullySynced && height >= 0 && view.BurnHeight == uint64(height) && root.Status.GenesisRef != nil && view.GenesisUID == root.Status.GenesisRef.UID && runtime.PodRef != nil && view.PodUID == runtime.PodRef.UID && view.ContainerID == runtime.ContainerID && view.ConfigurationDigest == runtime.ConfigurationDigest && !view.ObservedAt.IsZero() && !view.ObservedAt.After(now) && now.Sub(view.ObservedAt.Time) <= freshness
 }

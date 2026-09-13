@@ -33,7 +33,7 @@ func Apply(ctx context.Context, c client.Client, p *api.StacksNetworkParticipant
 		}
 	}
 	patch := &api.StacksNetworkParticipant{
-		TypeMeta:   metav1.TypeMeta{APIVersion: api.GroupVersion.String(), Kind: "StacksNetworkParticipant"},
+		TypeMeta:   metav1.TypeMeta{APIVersion: api.GroupVersion.String(), Kind: api.KindStacksNetworkParticipant},
 		ObjectMeta: metav1.ObjectMeta{Name: p.Name, Namespace: p.Namespace, UID: p.UID, ResourceVersion: p.ResourceVersion},
 		Status:     owned,
 	}
@@ -66,7 +66,7 @@ func legacyManagers(p *api.StacksNetworkParticipant) sets.Set[string] {
 		}
 		// csaupgrade acts on every matching manager/subresource entry. One unsafe
 		// entry vetoes conversion of that manager, including across API versions.
-		if entry.FieldsType != "FieldsV1" || entry.FieldsV1 == nil || entry.APIVersion != api.GroupVersion.String() {
+		if entry.FieldsType != managedFieldsFormat || entry.FieldsV1 == nil || entry.APIVersion != api.GroupVersion.String() {
 			return sets.New[string]()
 		}
 		var fields map[string]map[string]json.RawMessage
@@ -138,3 +138,6 @@ func OwnsCondition(p *api.StacksNetworkParticipant, manager, conditionType strin
 	}
 	return false
 }
+
+// managedFieldsFormat identifies a structural input name at this reflection/metadata boundary.
+const managedFieldsFormat = "FieldsV1"

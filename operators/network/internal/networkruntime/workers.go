@@ -43,7 +43,7 @@ func (r *Reconciler) projectWorkers(ctx context.Context, root *api.StacksNetwork
 			unstarted[p.UID] = true
 		}
 		if fact.Failed {
-			set(root, "Failed", metav1.ConditionTrue, fact.Reason, "A bound management worker cannot continue; recreate the network")
+			set(root, api.ConditionFailed, metav1.ConditionTrue, fact.Reason, "A bound management worker cannot continue; recreate the network")
 			root.Status.Phase = api.NetworkPhaseFailed
 		}
 		if (fact.Unknown && !unstarted[p.UID]) || fact.Changed {

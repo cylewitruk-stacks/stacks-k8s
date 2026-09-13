@@ -23,7 +23,7 @@ func observeConfigurationReport(ctx context.Context, reads *directRead, p *api.S
 	var matched types.UID
 	for i := range reports.Items {
 		report := &reports.Items[i]
-		if !exactOwner(report, api.GroupVersion.String(), "StacksNetworkParticipant", p.Name, p.UID) {
+		if !exactOwner(report, api.GroupVersion.String(), api.KindStacksNetworkParticipant, p.Name, p.UID) {
 			continue
 		}
 		raw := report.Data["input.json"]
@@ -45,7 +45,7 @@ func observeConfigurationReport(ctx context.Context, reads *directRead, p *api.S
 			InputDigest  string `json:"inputDigest"`
 			ConfigDigest string `json:"configDigest"`
 		}
-		if report.DeletionTimestamp != nil || report.UID == "" || matched != "" || input.Namespace != p.Namespace || input.ParticipantUID != p.UID || input.PolicyDigest != p.Status.Admission.PolicyDigest || input.Config.Kind != "Secret" || input.Config.UID != p.Status.Runtime.ConfigRef.UID || input.Report.Kind != "ConfigMap" || input.Report.Name != report.Name || input.Report.UID != report.UID || json.Unmarshal([]byte(result), &output) != nil || output.InputDigest != bytesDigest([]byte(raw)) || output.ConfigDigest != p.Status.Runtime.ConfigRef.Fingerprint {
+		if report.DeletionTimestamp != nil || report.UID == "" || matched != "" || input.Namespace != p.Namespace || input.ParticipantUID != p.UID || input.PolicyDigest != p.Status.Admission.PolicyDigest || input.Config.Kind != common.KindSecret || input.Config.UID != p.Status.Runtime.ConfigRef.UID || input.Report.Kind != common.KindConfigMap || input.Report.Name != report.Name || input.Report.UID != report.UID || json.Unmarshal([]byte(result), &output) != nil || output.InputDigest != bytesDigest([]byte(raw)) || output.ConfigDigest != p.Status.Runtime.ConfigRef.Fingerprint {
 			return "", &InconclusiveError{Reason: "public configuration report binding differs"}
 		}
 		matched = report.UID

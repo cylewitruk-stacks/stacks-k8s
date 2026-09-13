@@ -10,6 +10,8 @@ import (
 	common "github.com/cylewitruk-stacks/stacks-k8s/apis/network/common/v1alpha2"
 	stacks "github.com/cylewitruk-stacks/stacks-k8s/apis/network/stacks/v1alpha2"
 	api "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha2"
+	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/objectref"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -26,9 +28,6 @@ type candidate struct {
 	wallets       map[string]*bitcoin.BitcoinWallet
 }
 
-func binding(kind string, obj client.Object, digest string) common.Binding {
-	return common.Binding{Kind: kind, Name: obj.GetName(), UID: obj.GetUID(), Fingerprint: digest}
-}
 func (c *candidate) account(ctx context.Context, r client.Reader, ref *common.NameRef, sign bool) error {
 	if ref == nil {
 		return fmt.Errorf("required account reference is missing")
@@ -44,7 +43,7 @@ func (c *candidate) account(ctx context.Context, r client.Reader, ref *common.Na
 		return fmt.Errorf("account %s lacks signing credentials", ref.Name)
 	}
 	c.accounts[ref.Name] = &a
-	c.dependencies = append(c.dependencies, binding("StacksAccount", &a, a.Status.Digest))
+	c.dependencies = append(c.dependencies, objectref.WithFingerprint(objectref.Account(&a), a.Status.Digest))
 	return nil
 }
 func (c *candidate) wallet(ctx context.Context, r client.Reader, ref *common.NameRef) error {
@@ -62,7 +61,7 @@ func (c *candidate) wallet(ctx context.Context, r client.Reader, ref *common.Nam
 		return fmt.Errorf("wallet %s unresolved", ref.Name)
 	}
 	c.wallets[ref.Name] = &w
-	c.dependencies = append(c.dependencies, binding("BitcoinWallet", &w, w.Status.Digest))
+	c.dependencies = append(c.dependencies, objectref.WithFingerprint(objectref.BitcoinWallet(&w), w.Status.Digest))
 	return nil
 }
 func (c *candidate) participant(all map[string]*candidate, ref *common.NameRef, kind api.ParticipantKind) error {
@@ -76,7 +75,7 @@ func (c *candidate) participant(all map[string]*candidate, ref *common.NameRef, 
 	if unverified(other.configuration) && !unverified(c.configuration) {
 		return fmt.Errorf("managed participant cannot target Unverified actor %s", ref.Name)
 	}
-	c.dependencies = append(c.dependencies, binding("StacksNetworkParticipant", other.instance, ""))
+	c.dependencies = append(c.dependencies, objectref.Participant(other.instance))
 	return nil
 }
 func positive(v *common.Amount) error {
@@ -194,7 +193,7 @@ func (c *candidate) validate(ctx context.Context, r client.Reader, all map[strin
 			} else {
 				v.Schedule = &schedule.Spec
 				v.ScheduleRef = nil
-				c.dependencies = append(c.dependencies, binding("BitcoinBlockSchedule", &schedule, Digest(schedule.Spec)))
+				c.dependencies = append(c.dependencies, objectref.WithFingerprint(objectref.BitcoinBlockSchedule(&schedule), Digest(schedule.Spec)))
 			}
 		}
 		if v.Schedule == nil {
@@ -242,15 +241,19 @@ func (c *candidate) validate(ctx context.Context, r client.Reader, all map[strin
 					errs = append(errs, fmt.Errorf("Service alias %s selects an unavailable participant", ref.Alias))
 					continue
 				}
-				c.dependencies = append(c.dependencies, binding("StacksNetworkParticipant", target.instance, ""))
+				c.dependencies = append(c.dependencies, objectref.Participant(target.instance))
 			}
 		}
 		if cfg := fields.Config; cfg != nil && cfg.SecretRef != nil {
-			metadata := &metav1.PartialObjectMetadata{TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "Secret"}}
+			metadata := &metav1.PartialObjectMetadata{TypeMeta: metav1.TypeMeta{APIVersion: corev1.SchemeGroupVersion.String(), Kind: common.KindSecret}}
 			if err := r.Get(ctx, types.NamespacedName{Namespace: c.instance.Namespace, Name: cfg.SecretRef.Name}, metadata); err != nil || metadata.DeletionTimestamp != nil {
 				errs = append(errs, fmt.Errorf("configuration Secret metadata unavailable"))
 			} else {
-				c.dependencies = append(c.dependencies, binding("Secret", metadata, ""))
+				ref, err := objectref.SecretMetadata(metadata)
+				errs = append(errs, err)
+				if err == nil {
+					c.dependencies = append(c.dependencies, ref)
+				}
 			}
 		}
 	}

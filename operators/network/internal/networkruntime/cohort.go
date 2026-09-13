@@ -66,7 +66,7 @@ func requiredWorker(root *api.StacksNetwork, requirement api.BootstrapRequiremen
 	if session == nil || session.Shutdown != nil || session.Disposal != nil || execution == nil || execution.PodUID != session.Pod.UID || execution.ProfileDigest != session.ProfileDigest || execution.ProcessNonce == "" || execution.AppliedPolicyDigest != p.Status.Admission.PolicyDigest || execution.Phase == api.WorkerPhaseFailed || execution.Phase == api.WorkerPhaseUnknown || execution.ObservedGeneration != p.Generation {
 		return nil
 	}
-	ready := meta.FindStatusCondition(p.Status.Conditions, "WorkloadReady")
+	ready := meta.FindStatusCondition(p.Status.Conditions, api.ConditionWorkloadReady)
 	if ready == nil || ready.Status != metav1.ConditionTrue || ready.ObservedGeneration != p.Generation {
 		return nil
 	}
@@ -99,7 +99,7 @@ func capturedSigner(root *api.StacksNetwork, g *api.StacksGenesis, requirement a
 		}
 		bound := false
 		for _, dep := range requirement.Dependencies {
-			if dep.Kind == "StacksNetworkParticipant" && dep.Name == signer.Name && dep.UID == signer.UID {
+			if dep.Kind == api.KindStacksNetworkParticipant && dep.Name == signer.Name && dep.UID == signer.UID {
 				bound = true
 			}
 		}

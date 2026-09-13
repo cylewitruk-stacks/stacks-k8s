@@ -24,12 +24,12 @@ type faucetNotice struct {
 
 // CollectionWatches selects the request collection in this worker's namespace.
 func (r *FaucetRole) CollectionWatches() []stacksworker.CollectionWatch {
-	return []stacksworker.CollectionWatch{{APIVersion: stacks.GroupVersion.String(), Resource: "stacksfaucetrequests"}}
+	return []stacksworker.CollectionWatch{{APIVersion: stacks.GroupVersion.String(), Resource: stacks.ResourceStacksFaucetRequest}}
 }
 
 // CollectionChanged records bounded hints from initial lists, relists and duplicate events.
 func (r *FaucetRole) CollectionChanged(ref stacksworker.CollectionWatch, object *unstructured.Unstructured, deleted bool) {
-	if ref.APIVersion != stacks.GroupVersion.String() || ref.Resource != "stacksfaucetrequests" || object.GetNamespace() != r.Namespace {
+	if ref.APIVersion != stacks.GroupVersion.String() || ref.Resource != stacks.ResourceStacksFaucetRequest || object.GetNamespace() != r.Namespace {
 		return
 	}
 	var request stacks.StacksFaucetRequest

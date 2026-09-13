@@ -87,7 +87,7 @@ func identityInputs(object client.Object) (map[string]any, error) {
 	case *api.StacksNetworkParticipant:
 		fields = []string{"admission", "runtime"}
 	case *unstructured.Unstructured:
-		if object.GetObjectKind().GroupVersionKind() == api.GroupVersion.WithKind("StacksNetworkParticipant") {
+		if object.GetObjectKind().GroupVersionKind() == api.GroupVersion.WithKind(api.KindStacksNetworkParticipant) {
 			fields = []string{"admission", "runtime"}
 		}
 	}
@@ -120,7 +120,7 @@ func (r Reader) observeParticipants(ctx context.Context, namespace, name, expect
 		return Snapshot{}, &NotReadyError{Reason: "network identity is unavailable or deleting"}
 	}
 	participants := &unstructured.UnstructuredList{}
-	participants.SetGroupVersionKind(schema.GroupVersionKind{Group: api.GroupVersion.Group, Version: VersionV1Alpha2, Kind: "StacksNetworkParticipantList"})
+	participants.SetGroupVersionKind(schema.GroupVersionKind{Group: api.GroupVersion.Group, Version: VersionV1Alpha2, Kind: api.KindStacksNetworkParticipantList})
 	if err := r.APIReader.List(ctx, participants, client.InNamespace(namespace), client.Limit(1001)); err != nil {
 		return Snapshot{}, err
 	}
@@ -167,7 +167,7 @@ func (r Reader) observeParticipants(ctx context.Context, namespace, name, expect
 			}
 			return Snapshot{}, &InconclusiveError{Reason: err.Error()}
 		}
-		if p.Spec.NetworkUID != root.UID || p.Spec.ParticipantName != selected.Name || p.Spec.Kind != selected.Kind || !exactOwner(p, api.GroupVersion.String(), "StacksNetwork", root.Name, root.UID) || p.DeletionTimestamp != nil {
+		if p.Spec.NetworkUID != root.UID || p.Spec.ParticipantName != selected.Name || p.Spec.Kind != selected.Kind || !exactOwner(p, api.GroupVersion.String(), api.KindStacksNetwork, root.Name, root.UID) || p.DeletionTimestamp != nil {
 			return Snapshot{}, &InconclusiveError{Reason: "participant owner or allocation identity differs"}
 		}
 		reads.objects = append(reads.objects, raw.DeepCopy())
@@ -255,11 +255,11 @@ func exactOwner(object metav1.Object, version, kind, name string, uid types.UID)
 func actorContainerV2(kind api.ParticipantKind) string {
 	switch kind {
 	case api.ParticipantBitcoinNode:
-		return "bitcoin"
+		return api.ContainerBitcoin
 	case api.ParticipantStacksNode:
-		return "stacks-node"
+		return api.ContainerStacksNode
 	case api.ParticipantStacksSigner:
-		return "stacks-signer"
+		return api.ContainerStacksSigner
 	}
 	return ""
 }

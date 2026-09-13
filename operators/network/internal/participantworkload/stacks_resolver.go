@@ -97,7 +97,7 @@ func RunStacksCandidateConfigResolver(ctx context.Context, c client.Client, in S
 
 // runStacksConfigResolver shares exact private rendering with explicit candidate enrollment.
 func runStacksConfigResolver(ctx context.Context, c client.Client, in StacksConfigInput, candidate bool) error {
-	validGenesis := in.CandidateDigest == "" && in.Genesis.UID != "" && in.Genesis.Kind == "StacksGenesis"
+	validGenesis := in.CandidateDigest == "" && in.Genesis.UID != "" && in.Genesis.Kind == api.KindStacksGenesis
 	if candidate {
 		validGenesis = strings.HasPrefix(in.CandidateDigest, "sha256:") && in.Genesis.UID == "" && in.Genesis.Kind == ""
 	}
@@ -197,7 +197,7 @@ func runStacksConfigResolver(ctx context.Context, c client.Client, in StacksConf
 
 // readPrivateInput enforces immutable UID and optional node ownership inside the Job.
 func readPrivateInput(ctx context.Context, c client.Client, namespace string, in PrivateInput) (*corev1.Secret, error) {
-	if in.Binding.Kind != "Secret" || in.Binding.Name == "" || in.Binding.UID == "" {
+	if in.Binding.Kind != common.KindSecret || in.Binding.Name == "" || in.Binding.UID == "" {
 		return nil, fmt.Errorf("private input lacks exact identity")
 	}
 	var secret corev1.Secret
@@ -236,7 +236,7 @@ func generateEventToken(ctx context.Context, c client.Client, secret *corev1.Sec
 
 // writePublicConfigReport publishes one exact immutable logical result using optimistic locking.
 func writePublicConfigReport(ctx context.Context, c client.Client, namespace string, owner types.UID, ref common.Binding, result any) error {
-	if ref.Kind != "ConfigMap" || ref.UID == "" {
+	if ref.Kind != common.KindConfigMap || ref.UID == "" {
 		return fmt.Errorf("public report binding missing")
 	}
 	var report corev1.ConfigMap

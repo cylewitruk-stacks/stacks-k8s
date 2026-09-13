@@ -32,6 +32,19 @@ func TestVocabularyWireValues(t *testing.T) {
 		{"ReasonActionCancelled", ReasonActionCancelled, `"ActionCancelled"`},
 		{"ReasonActionDeadlineExceeded", ReasonActionDeadlineExceeded, `"ActionDeadlineExceeded"`},
 		{"ReasonMechanismFailed", ReasonMechanismFailed, `"MechanismFailed"`},
+		{"ConditionAdmitted", ConditionAdmitted, `"Admitted"`},
+		{"ConditionCleanupComplete", ConditionCleanupComplete, `"CleanupComplete"`},
+		{"ConditionEffectObserved", ConditionEffectObserved, `"EffectObserved"`},
+		{"ConditionProgressing", ConditionProgressing, `"Progressing"`},
+		{"ReasonAdmissionObserved", ReasonAdmissionObserved, `"AdmissionObserved"`},
+		{"ReasonAdmissionUnavailable", ReasonAdmissionUnavailable, `"AdmissionUnavailable"`},
+		{"ReasonCleanupEvidence", ReasonCleanupEvidence, `"CleanupEvidence"`},
+		{"ReasonEnvironmentDisposed", ReasonEnvironmentDisposed, `"EnvironmentDisposed"`},
+		{"ReasonExecutionUnavailable", ReasonExecutionUnavailable, `"ExecutionUnavailable"`},
+		{"ReasonNoDispatch", ReasonNoDispatch, `"NoDispatch"`},
+		{"ReasonPending", ReasonPending, `"Pending"`},
+		{"ReasonReceiptEvidence", ReasonReceiptEvidence, `"ReceiptEvidence"`},
+		{"ReasonReceiptsComplete", ReasonReceiptsComplete, `"ReceiptsComplete"`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			raw, err := json.Marshal(tc.value)

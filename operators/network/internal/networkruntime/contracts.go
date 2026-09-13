@@ -4,6 +4,7 @@ import (
 	"slices"
 	"time"
 
+	stacks "github.com/cylewitruk-stacks/stacks-k8s/apis/network/stacks/v1alpha2"
 	api "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha2"
 	"github.com/cylewitruk-stacks/stacks-k8s/libs/stacks/identity"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/foundation"
@@ -35,7 +36,7 @@ func contractObservationMatches(o *api.ContractSetObservation, g *api.StacksGene
 		return false
 	}
 	registry := requirement.RegistryInitialization
-	if registry == nil || registry.Mode != "ExplicitTestRegistry" || o.Threshold != uint64(registry.Threshold) {
+	if registry == nil || registry.Mode != stacks.RegistryInitializationExplicitTestRegistry || o.Threshold != uint64(registry.Threshold) {
 		return false
 	}
 	keys := make([]string, 0, len(registry.SignerAccountRefs))

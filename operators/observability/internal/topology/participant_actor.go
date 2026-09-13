@@ -24,7 +24,7 @@ func observeActor(ctx context.Context, reads *directRead, p *api.StacksNetworkPa
 	invalid := func(reason string) (observation.ObservedActorIdentity, error) {
 		return observation.ObservedActorIdentity{}, &InconclusiveError{Reason: reason}
 	}
-	if state.PolicyDigest != p.Status.Admission.PolicyDigest || !validBinding(state.PodRef, "Pod") || !validBinding(state.ConfigRef, "Secret") || !validBinding(&state.WorkloadRefs[0], "StatefulSet") || immutableImageID(state.ConfigRef.Fingerprint) != state.ConfigRef.Fingerprint || state.ConfigRef.Fingerprint == "" {
+	if state.PolicyDigest != p.Status.Admission.PolicyDigest || !validBinding(state.PodRef, common.KindPod) || !validBinding(state.ConfigRef, common.KindSecret) || !validBinding(&state.WorkloadRefs[0], common.KindStatefulSet) || immutableImageID(state.ConfigRef.Fingerprint) != state.ConfigRef.Fingerprint || state.ConfigRef.Fingerprint == "" {
 		return invalid("actor runtime policy or configuration binding differs")
 	}
 	fields, role, err := admittedActor(p)
@@ -35,7 +35,7 @@ func observeActor(ctx context.Context, reads *directRead, p *api.StacksNetworkPa
 	if err := reads.get(ctx, client.ObjectKey{Namespace: p.Namespace, Name: state.WorkloadRefs[0].Name}, workload); err != nil {
 		return observation.ObservedActorIdentity{}, err
 	}
-	if workload.UID != state.WorkloadRefs[0].UID || !exactOwner(workload, api.GroupVersion.String(), "StacksNetworkParticipant", p.Name, p.UID) || workload.DeletionTimestamp != nil {
+	if workload.UID != state.WorkloadRefs[0].UID || !exactOwner(workload, api.GroupVersion.String(), api.KindStacksNetworkParticipant, p.Name, p.UID) || workload.DeletionTimestamp != nil {
 		return invalid("StatefulSet identity differs")
 	}
 	if workload.Spec.Replicas == nil || *workload.Spec.Replicas != 1 || workload.Status.ObservedGeneration != workload.Generation || workload.Status.ReadyReplicas != 1 || workload.Status.CurrentRevision == "" || workload.Status.CurrentRevision != workload.Status.UpdateRevision {
@@ -45,13 +45,13 @@ func observeActor(ctx context.Context, reads *directRead, p *api.StacksNetworkPa
 	if err := reads.get(ctx, client.ObjectKey{Namespace: p.Namespace, Name: state.PodRef.Name}, pod); err != nil {
 		return observation.ObservedActorIdentity{}, err
 	}
-	if pod.UID != state.PodRef.UID || !exactOwner(pod, "apps/v1", "StatefulSet", workload.Name, workload.UID) || pod.DeletionTimestamp != nil {
+	if pod.UID != state.PodRef.UID || !exactOwner(pod, "apps/v1", common.KindStatefulSet, workload.Name, workload.UID) || pod.DeletionTimestamp != nil {
 		return invalid("Pod identity differs")
 	}
 	if !podReady(pod) {
 		return observation.ObservedActorIdentity{}, &NotReadyError{Reason: "actor Pod is not ready"}
 	}
-	expectedLabels := map[string]string{api.LabelNetworkUID: string(p.Spec.NetworkUID), api.LabelParticipant: p.Spec.ParticipantName, api.LabelParticipantUID: string(p.UID), api.LabelParticipantKind: string(p.Spec.Kind), api.LabelRole: "actor"}
+	expectedLabels := map[string]string{api.LabelNetworkUID: string(p.Spec.NetworkUID), api.LabelParticipant: p.Spec.ParticipantName, api.LabelParticipantUID: string(p.UID), api.LabelParticipantKind: string(p.Spec.Kind), api.LabelRole: api.RoleActor}
 	for _, labels := range []map[string]string{pod.Labels, workload.Labels, workload.Spec.Template.Labels} {
 		for key, value := range expectedLabels {
 			if labels[key] != value {
@@ -182,11 +182,11 @@ func verifyActorSpec(spec *corev1.PodSpec, containerName, image, configuration s
 // observeServices verifies every native endpoint against the selected actor Pod.
 func observeServices(ctx context.Context, reads *directRead, p *api.StacksNetworkParticipant, pod *corev1.Pod, expectedLabels map[string]string) ([]observation.ObservedServiceIdentity, error) {
 	services := []observation.ObservedServiceIdentity{}
-	ports := map[string]int32{"p2p": 18444, "rpc": 18443}
+	ports := map[string]int32{common.EndpointP2P: 18444, common.EndpointRPC: 18443}
 	if p.Spec.Kind == api.ParticipantStacksNode {
-		ports = map[string]int32{"p2p": 20444, "rpc": 20443}
+		ports = map[string]int32{common.EndpointP2P: 20444, common.EndpointRPC: 20443}
 	} else if p.Spec.Kind == api.ParticipantStacksSigner {
-		ports = map[string]int32{"events": 30000}
+		ports = map[string]int32{common.EndpointEvents: 30000}
 	}
 	if len(p.Status.Runtime.Endpoints) != len(ports) {
 		return nil, &InconclusiveError{Reason: "actor endpoint set differs"}
@@ -203,7 +203,7 @@ func observeServices(ctx context.Context, reads *directRead, p *api.StacksNetwor
 		if err := reads.get(ctx, client.ObjectKey{Namespace: p.Namespace, Name: name}, service); err != nil {
 			return nil, err
 		}
-		if service.UID == "" || service.DeletionTimestamp != nil || !exactOwner(service, api.GroupVersion.String(), "StacksNetworkParticipant", p.Name, p.UID) || len(service.Spec.Ports) != 1 {
+		if service.UID == "" || service.DeletionTimestamp != nil || !exactOwner(service, api.GroupVersion.String(), api.KindStacksNetworkParticipant, p.Name, p.UID) || len(service.Spec.Ports) != 1 {
 			return nil, &InconclusiveError{Reason: "actor Service identity differs"}
 		}
 		for key, value := range expectedLabels {

@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"time"
 
+	common "github.com/cylewitruk-stacks/stacks-k8s/apis/network/common/v1alpha2"
 	api "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha2"
 	"github.com/cylewitruk-stacks/stacks-k8s/libs/stacks/rpc"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/foundation"
@@ -35,7 +36,7 @@ func (r PublicInputs) PoX4(ctx context.Context, s stacksworker.Snapshot) (PoX4In
 		return input, errors.New("PoX holder identity changed")
 	}
 	signerName := foundation.ParticipantName(string(s.Network.UID), policy.SignerRef.Name)
-	signerBinding, err := dependency(s.Participant, "StacksNetworkParticipant", signerName)
+	signerBinding, err := dependency(s.Participant, api.KindStacksNetworkParticipant, signerName)
 	if err != nil {
 		return input, err
 	}
@@ -69,7 +70,7 @@ func (r PublicInputs) PoX4(ctx context.Context, s stacksworker.Snapshot) (PoX4In
 	}
 	endpoint := ""
 	for _, ep := range target.Status.Runtime.Endpoints {
-		if ep.Name == "rpc" && ep.Host != "" && ep.Port > 0 && ep.Port <= 65535 {
+		if ep.Name == common.EndpointRPC && ep.Host != "" && ep.Port > 0 && ep.Port <= 65535 {
 			endpoint = (&url.URL{Scheme: "http", Host: net.JoinHostPort(ep.Host, strconv.Itoa(int(ep.Port)))}).String()
 		}
 	}
@@ -99,7 +100,7 @@ func (r PublicInputs) PoX4(ctx context.Context, s stacksworker.Snapshot) (PoX4In
 			holderMatched = holderMatched || account.Binding.UID == holder.UID && account.Identity == *holder.Status.Identity
 		}
 		for _, dep := range required.Dependencies {
-			signerMatched = signerMatched || dep.Kind == "StacksNetworkParticipant" && dep.UID == signer.UID
+			signerMatched = signerMatched || dep.Kind == api.KindStacksNetworkParticipant && dep.UID == signer.UID
 		}
 		captured = holderMatched && signerMatched
 	}

@@ -80,7 +80,7 @@ func RunBitcoinConfigResolver(ctx context.Context, c client.Client, in BitcoinCo
 	if err := generateCredential(ctx, c, control, "control"); err != nil {
 		return err
 	}
-	if err := generateCredential(ctx, c, actor, "actor"); err != nil {
+	if err := generateCredential(ctx, c, actor, common.BitcoinActorRPCUsername); err != nil {
 		return err
 	}
 	config, err := resolverSecret(ctx, c, in, in.Config)
@@ -149,12 +149,12 @@ func RunBitcoinConfigResolver(ctx context.Context, c client.Client, in BitcoinCo
 // resolverOwned verifies ownership of a scoped resolver input or output.
 func resolverOwned(obj metav1.Object, uid types.UID) bool {
 	owner := metav1.GetControllerOf(obj)
-	return owner != nil && owner.APIVersion == api.GroupVersion.String() && owner.Kind == "StacksNetworkParticipant" && owner.UID == uid
+	return owner != nil && owner.APIVersion == api.GroupVersion.String() && owner.Kind == api.KindStacksNetworkParticipant && owner.UID == uid
 }
 
 // resolverSecret reads private data only inside a resolver with exact UID checks.
 func resolverSecret(ctx context.Context, c client.Client, in BitcoinConfigInput, ref common.Binding) (*corev1.Secret, error) {
-	if ref.UID == "" || ref.Kind != "Secret" {
+	if ref.UID == "" || ref.Kind != common.KindSecret {
 		return nil, fmt.Errorf("missing exact Secret binding")
 	}
 	var secret corev1.Secret
@@ -222,7 +222,7 @@ func BitcoinConfigRules(in BitcoinConfigInput) []rbacv1.PolicyRule {
 // provisionResolver creates one input-bound Job and its narrow named-resource permissions.
 func (r *Reconciler) provisionResolver(ctx context.Context, p *api.StacksNetworkParticipant, in BitcoinConfigInput) error {
 	data, _ := json.Marshal(in)
-	return r.provisionConfigurationJob(ctx, p, in.PolicyDigest, "resolve-bitcoin-config", data, BitcoinConfigRules(in), p.Status.Admission.Configuration.BitcoinNode.WorkerPlacement, in.Report.Name)
+	return r.provisionConfigurationJob(ctx, p, in.PolicyDigest, ModeResolveBitcoinConfig, data, BitcoinConfigRules(in), p.Status.Admission.Configuration.BitcoinNode.WorkerPlacement, in.Report.Name)
 }
 
 // provisionConfigurationJob shares bounded support-job lifecycle across native renderers.
@@ -231,10 +231,10 @@ func (r *Reconciler) provisionConfigurationJob(ctx context.Context, p *api.Stack
 		return fmt.Errorf("resolver image is required")
 	}
 	purpose := "resolve-" + strings.TrimPrefix(revision, "sha256:")
-	metadata := objectMeta(p, purpose, "support")
+	metadata := objectMeta(p, purpose, api.RoleSupport)
 	account := &corev1.ServiceAccount{ObjectMeta: metadata}
 	role := &rbacv1.Role{ObjectMeta: metadata, Rules: rules}
-	binding := &rbacv1.RoleBinding{ObjectMeta: metadata, RoleRef: rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: "Role", Name: metadata.Name}, Subjects: []rbacv1.Subject{{Kind: "ServiceAccount", Name: metadata.Name, Namespace: p.Namespace}}}
+	binding := &rbacv1.RoleBinding{ObjectMeta: metadata, RoleRef: rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: common.KindRole, Name: metadata.Name}, Subjects: []rbacv1.Subject{{Kind: common.KindServiceAccount, Name: metadata.Name, Namespace: p.Namespace}}}
 	for _, object := range []client.Object{account, role, binding} {
 		if err := r.createOwned(ctx, p, object); err != nil {
 			return err
@@ -246,7 +246,7 @@ func (r *Reconciler) provisionConfigurationJob(ctx context.Context, p *api.Stack
 			BackoffLimit:          ptr.To[int32](3),
 			ActiveDeadlineSeconds: ptr.To[int64](120),
 			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{Labels: Labels(p, "support")},
+				ObjectMeta: metav1.ObjectMeta{Labels: Labels(p, api.RoleSupport)},
 				Spec: corev1.PodSpec{
 					ServiceAccountName: metadata.Name,
 					RestartPolicy:      corev1.RestartPolicyNever,
@@ -273,7 +273,7 @@ func (r *Reconciler) provisionConfigurationJob(ctx context.Context, p *api.Stack
 		pod.Containers[0].VolumeMounts = []corev1.VolumeMount{{Name: "input", MountPath: "/input", ReadOnly: true}}
 		pod.Volumes = []corev1.Volume{{Name: "input", VolumeSource: corev1.VolumeSource{ConfigMap: &corev1.ConfigMapVolumeSource{LocalObjectReference: corev1.LocalObjectReference{Name: inputConfigMap}, Items: []corev1.KeyToPath{{Key: "input.json", Path: "input.json"}}}}}}
 	}
-	applyPlacement(&job.Spec.Template.Spec, placement, Labels(p, "support"))
+	applyPlacement(&job.Spec.Template.Spec, placement, Labels(p, api.RoleSupport))
 	if err := r.createOwned(ctx, p, job); err != nil {
 		return err
 	}

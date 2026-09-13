@@ -13,6 +13,7 @@ import (
 	"time"
 
 	stacks "github.com/cylewitruk-stacks/stacks-k8s/apis/network/stacks/v1alpha2"
+	api "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha2"
 	"github.com/cylewitruk-stacks/stacks-k8s/libs/stacks/identity"
 	"github.com/cylewitruk-stacks/stacks-k8s/libs/stacks/transaction"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/faucetrequest"
@@ -84,25 +85,25 @@ func (r *FaucetRole) now() time.Time {
 // Step handles fresh request state; cached baselines never authorize faucet dispatch.
 func (r *FaucetRole) Step(ctx context.Context, s stacksworker.Snapshot) (stacksworker.RoleResult, error) {
 	if r.Client == nil || r.Resolve == nil || s.Network == nil || s.Participant == nil || s.Participant.UID != r.ParticipantUID || s.Participant.Status.Admission == nil || s.Participant.Status.Execution == nil || s.Participant.Status.Execution.PodUID != r.PodUID || s.Participant.Status.Execution.ProcessNonce == "" {
-		return r.result("WorkerIdentityUnavailable"), nil
+		return r.result(reasonWorkerIdentityUnavailable), nil
 	}
 	if r.processNonce == "" {
 		r.processNonce = s.Participant.Status.Execution.ProcessNonce
 	}
 	if r.processNonce != s.Participant.Status.Execution.ProcessNonce {
 		r.failed = true
-		return r.result("WorkerProcessChanged"), nil
+		return r.result(reasonWorkerProcessChanged), nil
 	}
 	r.applied = s.Participant.Status.Admission.PolicyDigest
 	_ = r.ObservePending(ctx)
 	if err := r.flush(ctx, s); err != nil {
-		return r.result("RequestPublicationUnavailable"), nil
+		return r.result(reasonRequestPublicationUnavailable), nil
 	}
 	if r.failed {
-		return r.result("RequestStateLost"), nil
+		return r.result(reasonRequestStateLost), nil
 	}
 	if err := r.rescanNotices(ctx); err != nil {
-		return r.result("RequestListUnavailable"), nil
+		return r.result(reasonRequestListUnavailable), nil
 	}
 	var entry *faucetEntry
 	for _, candidate := range r.entries {
@@ -114,44 +115,44 @@ func (r *FaucetRole) Step(ctx context.Context, s stacksworker.Snapshot) (stacksw
 	if entry == nil {
 		notice, ok := r.takeNotice(r.stream.Pending() != 0)
 		if !ok {
-			return r.result("WaitingRequests"), nil
+			return r.result(reasonWaitingRequests), nil
 		}
 		var request stacks.StacksFaucetRequest
 		if err := r.Client.Get(ctx, notice.key, &request); err != nil {
 			if apierrors.IsNotFound(err) {
 				r.forgetNotice(notice.uid)
-				return r.result("RequestAbsent"), nil
+				return r.result(reasonRequestAbsent), nil
 			}
-			return r.result("RequestReadUnavailable"), nil
+			return r.result(reasonRequestReadUnavailable), nil
 		}
 		if request.UID != notice.uid || !r.matches(&request, s) {
 			r.forgetNotice(notice.uid)
-			return r.result("RequestBindingUnavailable"), nil
+			return r.result(reasonRequestBindingUnavailable), nil
 		}
 		if faucetrequest.MatchingExecution(&request) && faucetrequest.TerminalExecution(request.Status.Execution) {
 			r.forgetNotice(notice.uid)
-			return r.result("RequestAlreadySettled"), nil
+			return r.result(reasonRequestAlreadySettled), nil
 		}
 		if request.Status.Execution != nil {
 			r.failed = true
-			return r.result("RequestStateLost"), nil
+			return r.result(reasonRequestStateLost), nil
 		}
 		entry = &faucetEntry{request: request.DeepCopy()}
 		r.putEntry(entry)
 	}
 	if entry.request.DeletionTimestamp != nil {
-		r.noSend(entry, stacks.FaucetExecutionExpired, "DeletedBeforeSend")
+		r.noSend(entry, stacks.FaucetExecutionExpired, reasonDeletedBeforeSend)
 		_ = r.flush(ctx, s)
-		return r.result("RequestExpired"), nil
+		return r.result(reasonRequestExpired), nil
 	}
 	deadline, err := faucetrequest.Deadline(entry.request)
 	if err != nil {
-		return r.result("InvalidRequestDeadline"), nil
+		return r.result(reasonInvalidRequestDeadline), nil
 	}
 	if !r.now().Before(deadline) {
-		r.noSend(entry, stacks.FaucetExecutionExpired, "DeadlineBeforeSend")
+		r.noSend(entry, stacks.FaucetExecutionExpired, reasonDeadlineBeforeSend)
 		_ = r.flush(ctx, s)
-		return r.result("RequestExpired"), nil
+		return r.result(reasonRequestExpired), nil
 	}
 	if s.Paused || s.CachedApplied {
 		return r.result(reasonPaused), nil
@@ -161,22 +162,22 @@ func (r *FaucetRole) Step(ctx context.Context, s stacksworker.Snapshot) (stacksw
 	}
 	input, err := r.Resolve(ctx, s, entry.request.Status.Admission)
 	if err != nil || input.Node == nil {
-		return r.result("DependenciesUnavailable"), nil
+		return r.result(reasonDependenciesUnavailable), nil
 	}
 	info, err := input.Node.Info(ctx)
 	if err != nil {
-		return r.result("ChainUnavailable"), nil
+		return r.result(reasonChainUnavailable), nil
 	}
 	if info.NetworkID != 0x80000000 || input.StartHeight == 0 || info.BurnHeight < input.StartHeight {
-		return r.result("AwaitingNakamoto"), nil
+		return r.result(reasonAwaitingNakamoto), nil
 	}
 	amount, err := strconv.ParseUint(string(entry.request.Status.Admission.AmountMicroSTX), 10, 64)
 	if err != nil || amount == 0 {
-		return r.result("InvalidRequestAmount"), nil
+		return r.result(reasonInvalidRequestAmount), nil
 	}
 	fee, err := strconv.ParseUint(string(entry.request.Status.Admission.FeeMicroSTX), 10, 64)
 	if err != nil || fee != faucetrequest.FeeMicroSTX {
-		return r.result("InvalidRequestFee"), nil
+		return r.result(reasonInvalidRequestFee), nil
 	}
 	funds := new(big.Int).Add(new(big.Int).SetUint64(amount), new(big.Int).SetUint64(fee))
 	reason, offerErr := r.stream.Offer(ctx, r.now, input.Node, funds, func(ctx context.Context) error { return r.authorize(ctx, s, entry) }, func(nonce uint64) (transaction.Transaction, error) {
@@ -191,24 +192,24 @@ func (r *FaucetRole) Step(ctx context.Context, s stacksworker.Snapshot) (stacksw
 		}
 	} else {
 		switch {
-		case strings.HasPrefix(reason, "Rejected") && rpc.ValidationRejectionReason(strings.TrimPrefix(reason, "Rejected")):
+		case strings.HasPrefix(reason, stacks.RejectionReasonPrefix) && rpc.ValidationRejectionReason(strings.TrimPrefix(reason, stacks.RejectionReasonPrefix)):
 			entry.outcome = r.execution(entry, stacks.FaucetExecutionRejected, reason, false)
 			entry.outcome.TxID = r.stream.facts.LastTxID
 			r.increment(&r.summary.Rejected)
 		case errors.Is(offerErr, errFaucetDeadline):
-			r.noSend(entry, stacks.FaucetExecutionExpired, "DeadlineBeforeSend")
+			r.noSend(entry, stacks.FaucetExecutionExpired, reasonDeadlineBeforeSend)
 		case errors.Is(offerErr, errFaucetDeleted):
-			r.noSend(entry, stacks.FaucetExecutionExpired, "DeletedBeforeSend")
+			r.noSend(entry, stacks.FaucetExecutionExpired, reasonDeletedBeforeSend)
 		case errors.Is(offerErr, errFaucetTerminal):
 			r.forgetEntry(entry.request.UID)
-		case reason == "InsufficientFunds":
-			r.noSend(entry, stacks.FaucetExecutionRejected, "InsufficientFunds")
-		case reason == "ConstructionFailed":
-			r.noSend(entry, stacks.FaucetExecutionRejected, "ConstructionFailed")
+		case reason == reasonInsufficientFunds:
+			r.noSend(entry, stacks.FaucetExecutionRejected, reasonInsufficientFunds)
+		case reason == reasonConstructionFailed:
+			r.noSend(entry, stacks.FaucetExecutionRejected, reasonConstructionFailed)
 		}
 	}
 	if err := r.flush(ctx, s); err != nil {
-		return r.result("RequestPublicationUnavailable"), nil
+		return r.result(reasonRequestPublicationUnavailable), nil
 	}
 	return r.result(reason), nil
 }
@@ -285,7 +286,7 @@ func (r *FaucetRole) ObservePending(ctx context.Context) error {
 		entry.outcome.Reason = reasonIncluded
 		if !inclusion.Success {
 			entry.outcome.Phase = stacks.FaucetExecutionRejected
-			entry.outcome.Reason = "ExecutionRejected"
+			entry.outcome.Reason = reasonExecutionRejected
 			r.increment(&r.summary.Rejected)
 		} else {
 			r.increment(&r.summary.Completed)
@@ -298,7 +299,7 @@ func (r *FaucetRole) ObservePending(ctx context.Context) error {
 	deadline, _ := faucetrequest.Deadline(entry.request)
 	if !r.now().Before(deadline) && entry.outcome.Phase != stacks.FaucetExecutionInconclusive {
 		entry.outcome.Phase = stacks.FaucetExecutionInconclusive
-		entry.outcome.Reason = "DeadlineOutcomeUnknown"
+		entry.outcome.Reason = api.ReasonDeadlineOutcomeUnknown
 		entry.outcome.ObservedAt = metav1.NewTime(r.now().UTC())
 	}
 	_ = reason
@@ -349,7 +350,7 @@ func (r *FaucetRole) flush(ctx context.Context, s stacksworker.Snapshot) error {
 		err := r.Client.Get(ctx, client.ObjectKeyFromObject(entry.request), &current)
 		if apierrors.IsNotFound(err) || err == nil && current.UID != entry.request.UID {
 			entry.orphaned = true
-			retained := &stacks.FaucetRetainedOutcome{Request: stacks.FaucetBinding{Kind: "StacksFaucetRequest", Name: entry.request.Name, UID: entry.request.UID}, Execution: *entry.outcome.DeepCopy()}
+			retained := &stacks.FaucetRetainedOutcome{Request: stacks.FaucetBinding{Kind: stacks.KindStacksFaucetRequest, Name: entry.request.Name, UID: entry.request.UID}, Execution: *entry.outcome.DeepCopy()}
 			r.summary.LastDeletedOutcome = retained
 			acknowledged := s.Participant.Status.Execution.Faucet != nil && equality.Semantic.DeepEqual(s.Participant.Status.Execution.Faucet.LastDeletedOutcome, retained)
 			if !acknowledged {
@@ -390,7 +391,7 @@ func (r *FaucetRole) result(reason string) stacksworker.RoleResult {
 			r.summary.Orphaned++
 		}
 	}
-	return stacksworker.RoleResult{Faucet: r.summary.DeepCopy(), Transactions: r.stream.Facts(), AppliedPolicyDigest: r.applied, Pending: int32(active), Reason: reason, Failed: r.failed, Blocked: reason == "WorkerIdentityUnavailable" || reason == "DependenciesUnavailable" || reason == "RequestPublicationUnavailable" || reason == "RequestStateLost", RequeueAfter: time.Second}
+	return stacksworker.RoleResult{Faucet: r.summary.DeepCopy(), Transactions: r.stream.Facts(), AppliedPolicyDigest: r.applied, Pending: int32(active), Reason: reason, Failed: r.failed, Blocked: reason == reasonWorkerIdentityUnavailable || reason == reasonDependenciesUnavailable || reason == reasonRequestPublicationUnavailable || reason == reasonRequestStateLost, RequeueAfter: time.Second}
 }
 
 // Drain refuses queued unsent work and preserves submitted coordination until exact settlement.
@@ -401,7 +402,7 @@ func (r *FaucetRole) Drain(ctx context.Context, s stacksworker.Snapshot) (stacks
 	_ = r.ObservePending(ctx)
 	for _, entry := range r.entries {
 		if entry.outcome == nil {
-			r.noSend(entry, stacks.FaucetExecutionExpired, "WorkerStoppedBeforeSend")
+			r.noSend(entry, stacks.FaucetExecutionExpired, reasonWorkerStoppedBeforeSend)
 		}
 	}
 	err := r.flush(ctx, s)
@@ -430,10 +431,10 @@ func (r *FaucetRole) Drain(ctx context.Context, s stacksworker.Snapshot) (stacks
 		}
 		entry := &faucetEntry{request: request.DeepCopy()}
 		r.putEntry(entry)
-		r.noSend(entry, stacks.FaucetExecutionExpired, "WorkerStoppedBeforeSend")
+		r.noSend(entry, stacks.FaucetExecutionExpired, reasonWorkerStoppedBeforeSend)
 		err = r.flush(ctx, s)
 	}
-	result := r.result("Draining")
+	result := r.result(reasonDraining)
 	done := result.Pending == 0 && !r.failed
 	return stacksworker.DrainResult{Done: done, Settled: done, Pending: result.Pending, Faucet: result.Faucet, Transactions: result.Transactions}, err
 }

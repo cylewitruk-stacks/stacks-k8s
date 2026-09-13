@@ -96,7 +96,7 @@ func (r *TransferRole) Step(ctx context.Context, snapshot stacksworker.Snapshot)
 		r.captureInclusion()
 		// Preserve the post-send result even if a subsequent observation is unavailable.
 		if err != nil {
-			return r.result("InclusionUnavailable", time.Second), nil
+			return r.result(reasonInclusionUnavailable, time.Second), nil
 		}
 		return r.result(reason, time.Second), nil
 	}
@@ -104,16 +104,16 @@ func (r *TransferRole) Step(ctx context.Context, snapshot stacksworker.Snapshot)
 		return r.result(reasonPaused, time.Second), nil
 	}
 	if r.Resolve == nil || snapshot.Participant == nil || snapshot.Participant.Status.Admission == nil {
-		return r.result("PolicyUnavailable", time.Second), nil
+		return r.result(reasonPolicyUnavailable, time.Second), nil
 	}
 	input, resolved, err := r.inputs.resolve(ctx, snapshot, r.applied, r.Resolve, cloneTransferInputs)
 	if err != nil {
-		return r.result("DependenciesUnavailable", time.Second), nil
+		return r.result(reasonDependenciesUnavailable, time.Second), nil
 	}
 	snapshot = resolved
 	if input.Node == nil || input.Amount == 0 || input.Fee == 0 || input.Interval < time.Second || input.Interval > time.Hour {
 		r.inputs.invalidate(snapshot, r.applied)
-		return r.result("InvalidPolicy", time.Second), nil
+		return r.result(reasonInvalidPolicy, time.Second), nil
 	}
 	r.inputs.remember(snapshot, input, cloneTransferInputs)
 	r.interval = input.Interval
@@ -131,13 +131,13 @@ func (r *TransferRole) Step(ctx context.Context, snapshot stacksworker.Snapshot)
 	}
 	info, err := input.Node.Info(ctx)
 	if err != nil {
-		return r.result("ChainUnavailable", time.Second), nil
+		return r.result(reasonChainUnavailable, time.Second), nil
 	}
 	if info.NetworkID != 0x80000000 {
-		return r.result("ChainIdentityMismatch", time.Second), nil
+		return r.result(reasonChainIdentityMismatch, time.Second), nil
 	}
 	if info.BurnHeight < input.StartHeight {
-		return r.result("AwaitingEpoch3", time.Second), nil
+		return r.result(reasonAwaitingEpoch3, time.Second), nil
 	}
 	amount := new(big.Int).Add(new(big.Int).SetUint64(input.Amount), new(big.Int).SetUint64(input.Fee))
 	before := r.stream.facts.Offered

@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"time"
 
+	common "github.com/cylewitruk-stacks/stacks-k8s/apis/network/common/v1alpha2"
+	stacks "github.com/cylewitruk-stacks/stacks-k8s/apis/network/stacks/v1alpha2"
 	api "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha2"
 	"github.com/cylewitruk-stacks/stacks-k8s/libs/stacks/clarity"
 	"github.com/cylewitruk-stacks/stacks-k8s/libs/stacks/rpc"
@@ -52,7 +54,7 @@ func (r PublicInputs) Contracts(ctx context.Context, s stacksworker.Snapshot) (C
 		return in, errors.New("contract admission unavailable")
 	}
 	policy := s.Participant.Status.Admission.Configuration.StacksContractSet
-	if policy == nil || policy.DeployerAccountRef == nil || policy.TargetNodeRef == nil || policy.Bundle == nil || policy.Initialization == nil || policy.Initialization.Mode != "ExplicitTestRegistry" {
+	if policy == nil || policy.DeployerAccountRef == nil || policy.TargetNodeRef == nil || policy.Bundle == nil || policy.Initialization == nil || policy.Initialization.Mode != stacks.RegistryInitializationExplicitTestRegistry {
 		return in, errors.New("contract policy incomplete")
 	}
 	deployer, err := r.account(ctx, s.Participant, policy.DeployerAccountRef.Name)
@@ -68,7 +70,7 @@ func (r PublicInputs) Contracts(ctx context.Context, s stacksworker.Snapshot) (C
 	}
 	endpoint := ""
 	for _, ep := range target.Status.Runtime.Endpoints {
-		if ep.Name == "rpc" && ep.Host != "" && ep.Port > 0 && ep.Port <= 65535 {
+		if ep.Name == common.EndpointRPC && ep.Host != "" && ep.Port > 0 && ep.Port <= 65535 {
 			endpoint = (&url.URL{Scheme: "http", Host: net.JoinHostPort(ep.Host, strconv.Itoa(int(ep.Port)))}).String()
 		}
 	}

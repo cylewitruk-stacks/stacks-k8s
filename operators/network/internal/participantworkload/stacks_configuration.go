@@ -13,6 +13,7 @@ import (
 	stacks "github.com/cylewitruk-stacks/stacks-k8s/apis/network/stacks/v1alpha2"
 	api "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha2"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/foundation"
+	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/objectref"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/participantworkload/stacksconfig"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -37,7 +38,7 @@ func (r *Reconciler) stacksConfiguration(ctx context.Context, root *api.StacksNe
 	if err != nil {
 		return false, false, err
 	}
-	report := &corev1.ConfigMap{ObjectMeta: objectMeta(p, "report-"+strings.TrimPrefix(revision, "sha256:"), "support")}
+	report := &corev1.ConfigMap{ObjectMeta: objectMeta(p, "report-"+strings.TrimPrefix(revision, "sha256:"), api.RoleSupport)}
 	if err := r.createOwned(ctx, p, report); err != nil {
 		return false, false, err
 	}
@@ -45,7 +46,7 @@ func (r *Reconciler) stacksConfiguration(ctx context.Context, root *api.StacksNe
 		return false, false, err
 	}
 	in.Config = *config
-	in.Report = *binding("ConfigMap", report)
+	in.Report = objectref.ConfigMap(report)
 	state.ConfigRef = config
 	state.ConfigurationDigest = revision
 	state.PolicyDigest = in.PolicyDigest
@@ -80,9 +81,9 @@ func (r *Reconciler) stacksConfiguration(ctx context.Context, root *api.StacksNe
 	if root.Spec.Defaults != nil {
 		placement = root.Spec.Defaults.WorkerPlacement
 	}
-	mode := "resolve-stacks-config"
+	mode := ModeResolveStacksConfig
 	if in.CandidateDigest != "" {
-		mode = "validate-stacks-config"
+		mode = ModeValidateStacksConfig
 	}
 	return false, false, r.provisionConfigurationJob(ctx, p, revision, mode, data, StacksConfigRules(in), placement, report.Name)
 }
@@ -105,7 +106,7 @@ func (r *Reconciler) stacksInput(ctx context.Context, root *api.StacksNetwork, p
 		if genesis.UID != root.Status.GenesisRef.UID || genesis.DeletionTimestamp != nil || digest(genesis.Spec.Chain) != root.Status.GenesisDigest {
 			return in, fmt.Errorf("frozen genesis identity changed")
 		}
-		in.Genesis = *binding("StacksGenesis", &genesis)
+		in.Genesis = objectref.Genesis(&genesis)
 		in.Genesis.Fingerprint = root.Status.GenesisDigest
 	}
 	fields, err := actorFields(p)
@@ -139,16 +140,16 @@ func (r *Reconciler) stacksInput(ctx context.Context, root *api.StacksNetwork, p
 			return in, err
 		}
 		in.EventAuth = PrivateInput{Binding: *state.EventAuthSecretRef, OwnerUID: p.UID, Key: "token"}
-		p2p, err := r.allocatedService(ctx, p, "p2p")
+		p2p, err := r.allocatedService(ctx, p, common.EndpointP2P)
 		if err != nil {
 			return in, err
 		}
-		rpc, err := r.allocatedService(ctx, p, "rpc")
+		rpc, err := r.allocatedService(ctx, p, common.EndpointRPC)
 		if err != nil {
 			return in, err
 		}
-		in.ServiceBindings = append(in.ServiceBindings, *binding("Service", p2p), *binding("Service", rpc))
-		in.Node = stacksconfig.NodeParameters{Name: p.Spec.ParticipantName, Chain: genesis.Spec.Chain, P2PAddress: p2p.Spec.ClusterIP, RPCHost: rpc.Spec.ClusterIP, BitcoinHost: serviceHost(btc, "p2p")}
+		in.ServiceBindings = append(in.ServiceBindings, objectref.Service(p2p), objectref.Service(rpc))
+		in.Node = stacksconfig.NodeParameters{Name: p.Spec.ParticipantName, Chain: genesis.Spec.Chain, P2PAddress: p2p.Spec.ClusterIP, RPCHost: rpc.Spec.ClusterIP, BitcoinHost: serviceHost(btc, common.EndpointP2P)}
 		in.Node.BootstrapPeers, err = r.stacksSeedSnapshot(ctx, root, p)
 		if err != nil {
 			return in, err
@@ -190,20 +191,20 @@ func (r *Reconciler) stacksInput(ctx context.Context, root *api.StacksNetwork, p
 		}
 		state.EventAuthSecretRef = &ref
 		in.EventAuth = PrivateInput{Binding: ref, OwnerUID: node.UID, Key: "token"}
-		in.NodeHost = serviceHost(node, "rpc")
+		in.NodeHost = serviceHost(node, common.EndpointRPC)
 	}
 	account, err := r.boundAccount(ctx, p, accountRef)
 	if err != nil {
 		return in, err
 	}
 	in.Identity = *account.Status.Identity
-	in.Key = PrivateInput{Binding: common.Binding{Kind: "Secret", Name: account.Status.CredentialsRef.Name, UID: account.Status.CredentialsUID}, Key: account.Status.CredentialsRef.Key}
+	in.Key = PrivateInput{Binding: common.Binding{Kind: common.KindSecret, Name: account.Status.CredentialsRef.Name, UID: account.Status.CredentialsUID}, Key: account.Status.CredentialsRef.Key}
 	if err := r.privateMetadata(ctx, p.Namespace, in.Key.Binding, ""); err != nil {
 		return in, err
 	}
 	if in.Customization != nil {
 		if ref := in.Customization.SecretRef; ref != nil {
-			pin, ok := admittedBinding(p, "Secret", ref.Name)
+			pin, ok := admittedBinding(p, common.KindSecret, ref.Name)
 			if !ok {
 				return in, fmt.Errorf("custom configuration Secret was not admitted")
 			}
@@ -239,10 +240,10 @@ func (r *Reconciler) allocatedService(ctx context.Context, p *api.StacksNetworkP
 
 // privateMetadata checks pinned identity without decoding Secret data.
 func (r *Reconciler) privateMetadata(ctx context.Context, namespace string, ref common.Binding, ownerUID types.UID) error {
-	if ref.Kind != "Secret" || ref.UID == "" {
+	if ref.Kind != common.KindSecret || ref.UID == "" {
 		return fmt.Errorf("private input binding missing")
 	}
-	obj := &metav1.PartialObjectMetadata{TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "Secret"}}
+	obj := &metav1.PartialObjectMetadata{TypeMeta: metav1.TypeMeta{APIVersion: corev1.SchemeGroupVersion.String(), Kind: common.KindSecret}}
 	if err := r.Reader.Get(ctx, client.ObjectKey{Namespace: namespace, Name: ref.Name}, obj); err != nil {
 		return err
 	}
@@ -270,7 +271,7 @@ func (r *Reconciler) boundParticipant(ctx context.Context, root *api.StacksNetwo
 		return nil, fmt.Errorf("mandatory participant reference missing")
 	}
 	name := foundation.ParticipantName(string(root.UID), ref.Name)
-	pin, ok := admittedBinding(p, "StacksNetworkParticipant", name)
+	pin, ok := admittedBinding(p, api.KindStacksNetworkParticipant, name)
 	if !ok {
 		return nil, fmt.Errorf("mandatory participant was not admitted")
 	}
@@ -294,7 +295,7 @@ func (r *Reconciler) boundAccount(ctx context.Context, p *api.StacksNetworkParti
 	if ref == nil {
 		return nil, fmt.Errorf("actor account is required")
 	}
-	pin, ok := admittedBinding(p, "StacksAccount", ref.Name)
+	pin, ok := admittedBinding(p, stacks.KindStacksAccount, ref.Name)
 	if !ok {
 		return nil, fmt.Errorf("actor account was not admitted")
 	}
@@ -313,7 +314,7 @@ func (r *Reconciler) minerWallet(ctx context.Context, p *api.StacksNetworkPartic
 	if ref == nil {
 		return nil, fmt.Errorf("miner wallet is required")
 	}
-	pin, ok := admittedBinding(p, "BitcoinWallet", ref.Name)
+	pin, ok := admittedBinding(p, bitcoin.KindBitcoinWallet, ref.Name)
 	if !ok {
 		return nil, fmt.Errorf("miner wallet was not admitted")
 	}
@@ -335,7 +336,7 @@ func (r *Reconciler) customServiceHosts(ctx context.Context, root *api.StacksNet
 			return nil, fmt.Errorf("duplicate or empty Service alias")
 		}
 		kind := api.ParticipantKind(ref.Kind)
-		if !((kind == api.ParticipantBitcoinNode || kind == api.ParticipantStacksNode) && (ref.Endpoint == "rpc" || ref.Endpoint == "p2p") || kind == api.ParticipantStacksSigner && ref.Endpoint == "events") {
+		if !((kind == api.ParticipantBitcoinNode || kind == api.ParticipantStacksNode) && (ref.Endpoint == common.EndpointRPC || ref.Endpoint == common.EndpointP2P) || kind == api.ParticipantStacksSigner && ref.Endpoint == common.EndpointEvents) {
 			return nil, fmt.Errorf("unsupported Service endpoint")
 		}
 		target, err := r.boundParticipant(ctx, root, p, &common.NameRef{Name: ref.Name}, kind)
@@ -376,7 +377,7 @@ func (r *Reconciler) pairedSignerHost(ctx context.Context, root *api.StacksNetwo
 		if host != "" {
 			return "", fmt.Errorf("multiple consensus signers target one node")
 		}
-		host = serviceHost(&signer, "events")
+		host = serviceHost(&signer, common.EndpointEvents)
 	}
 	return host, nil
 }
@@ -387,7 +388,7 @@ func (r *Reconciler) stacksSeedSnapshot(ctx context.Context, root *api.StacksNet
 	if r.candidateConfiguration != nil {
 		revision = candidateConfigurationDigest(*r.candidateConfiguration)
 	}
-	snapshot := &corev1.ConfigMap{ObjectMeta: objectMeta(p, "seeds-"+strings.TrimPrefix(revision, "sha256:"), "support")}
+	snapshot := &corev1.ConfigMap{ObjectMeta: objectMeta(p, "seeds-"+strings.TrimPrefix(revision, "sha256:"), api.RoleSupport)}
 	if err := r.createOwned(ctx, p, snapshot); err != nil {
 		return nil, err
 	}
@@ -436,7 +437,7 @@ func (r *Reconciler) stacksSeedSnapshot(ctx context.Context, root *api.StacksNet
 		if err != nil {
 			return nil, err
 		}
-		seeds = append(seeds, account.Status.Identity.PublicKey+"@"+serviceHost(&peer, "p2p")+":20444")
+		seeds = append(seeds, account.Status.Identity.PublicKey+"@"+serviceHost(&peer, common.EndpointP2P)+":20444")
 	}
 	data, _ := json.Marshal(seeds)
 	base := snapshot.DeepCopy()

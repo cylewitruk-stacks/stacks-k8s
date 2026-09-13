@@ -67,9 +67,9 @@ func (r *ProductionStatusReconciler) Reconcile(ctx context.Context, request ctrl
 	if root.UID != p.Spec.NetworkUID || !metav1.IsControlledBy(p, root) {
 		return ctrl.Result{}, fmt.Errorf("production root binding unavailable")
 	}
-	phase, reason := bitcoin.InitializationWaiting, "SchedulerNotEnrolled"
+	phase, reason := bitcoin.InitializationWaiting, reasonSchedulerNotEnrolled
 	if stopReason(root, p) != "" {
-		phase, reason = bitcoin.InitializationAbandoned, "DesiredStop"
+		phase, reason = bitcoin.InitializationAbandoned, reasonDesiredStop
 	} else if root.Status.Bitcoin != nil && root.Status.Bitcoin.InitializationRef != nil {
 		ref := root.Status.Bitcoin.InitializationRef
 		initial := &bitcoin.BitcoinInitialization{}
@@ -101,9 +101,9 @@ func productionStatus(p *api.StacksNetworkParticipant, phase bitcoin.Initializat
 		ready = metav1.ConditionTrue
 	}
 	if reason == "" {
-		reason = "SchedulerWaiting"
+		reason = reasonSchedulerWaiting
 	}
-	meta.SetStatusCondition(&conditions, metav1.Condition{Type: "WorkloadReady", Status: ready, Reason: reason, Message: "Bitcoin production scheduler state: " + string(phase), ObservedGeneration: p.Generation})
+	meta.SetStatusCondition(&conditions, metav1.Condition{Type: api.ConditionWorkloadReady, Status: ready, Reason: reason, Message: "Bitcoin production scheduler state: " + string(phase), ObservedGeneration: p.Generation})
 	return api.ParticipantStatus{Runtime: runtime, Conditions: conditions}
 }
 
@@ -111,7 +111,7 @@ func productionStatus(p *api.StacksNetworkParticipant, phase bitcoin.Initializat
 func productionConditions(all []metav1.Condition) []metav1.Condition {
 	out := []metav1.Condition{}
 	for _, condition := range all {
-		if condition.Type == "WorkloadReady" {
+		if condition.Type == api.ConditionWorkloadReady {
 			out = append(out, condition)
 		}
 	}

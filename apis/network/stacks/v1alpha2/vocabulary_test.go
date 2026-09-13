@@ -27,6 +27,9 @@ func TestVocabularyWireValues(t *testing.T) {
 		{"FaucetRejected", FaucetRejected, `"Rejected"`},
 		{"FaucetInconclusive", FaucetInconclusive, `"Inconclusive"`},
 		{"FaucetExpired", FaucetExpired, `"Expired"`},
+		{"ConditionCompleted", ConditionCompleted, `"Completed"`},
+		{"RejectionReasonPrefix", RejectionReasonPrefix, `"Rejected"`},
+		{"RegistryInitializationExplicitTestRegistry", RegistryInitializationExplicitTestRegistry, `"ExplicitTestRegistry"`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			raw, err := json.Marshal(tc.value)

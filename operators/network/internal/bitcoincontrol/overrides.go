@@ -10,6 +10,7 @@ import (
 	common "github.com/cylewitruk-stacks/stacks-k8s/apis/network/common/v1alpha2"
 	api "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha2"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/foundation"
+	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/objectref"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -33,7 +34,7 @@ func (s *Scheduler) reconcileOverride(ctx context.Context, root *api.StacksNetwo
 		}
 		current := err == nil && request.UID == active.Override.UID
 		production, productionErr := s.currentProduction(ctx, root, record)
-		valid := current && request.DeletionTimestamp == nil && !overrideTerminal(request.Status.Phase) && root.DeletionTimestamp == nil && !failed(root) && root.Spec.Operation != api.NetworkOperationStopped && productionErr == nil && binding("StacksNetworkParticipant", production) == active.Production && s.Now().Before(active.ExpiresAt.Time)
+		valid := current && request.DeletionTimestamp == nil && !overrideTerminal(request.Status.Phase) && root.DeletionTimestamp == nil && !failed(root) && root.Spec.Operation != api.NetworkOperationStopped && productionErr == nil && objectref.Participant(production) == active.Production && s.Now().Before(active.ExpiresAt.Time)
 		if valid {
 			schedule, pin, err := s.overrideSchedule(ctx, root.Namespace, request)
 			valid = err == nil && equality.Semantic.DeepEqual(schedule, &active.Schedule) && equality.Semantic.DeepEqual(pin, active.ScheduleRef)
@@ -89,7 +90,7 @@ func (s *Scheduler) reconcileOverride(ctx context.Context, root *api.StacksNetwo
 			continue
 		}
 		now := metav1.NewTime(s.Now().UTC())
-		record.Status.Override = &bitcoin.BitcoinActiveOverride{Override: binding("BitcoinBlockScheduleOverride", request), Production: binding("StacksNetworkParticipant", production), Schedule: *schedule, ScheduleRef: pin, StartedAt: now, ExpiresAt: metav1.NewTime(now.Add(duration))}
+		record.Status.Override = &bitcoin.BitcoinActiveOverride{Override: objectref.BitcoinScheduleOverride(request), Production: objectref.Participant(production), Schedule: *schedule, ScheduleRef: pin, StartedAt: now, ExpiresAt: metav1.NewTime(now.Add(duration))}
 		s.withdrawTiming(record)
 		return true, s.Client.Status().Update(ctx, record)
 	}
@@ -112,7 +113,7 @@ func (s *Scheduler) overrideSchedule(ctx context.Context, namespace string, requ
 			return nil, nil, fmt.Errorf("schedule identity unavailable")
 		}
 		schedule = object.Spec.DeepCopy()
-		value := binding("BitcoinBlockSchedule", &object)
+		value := objectref.BitcoinBlockSchedule(&object)
 		value.Fingerprint = foundation.Digest(object.Spec)
 		pin = &value
 	}
@@ -195,5 +196,5 @@ func ValidateSchedulingOverride(ctx context.Context, reader client.Reader, root 
 		return fmt.Errorf("effective timing projection differs")
 	}
 	worker := Worker{Reader: reader, Now: func() time.Time { return now }}
-	return worker.authorizeTimingOverride(ctx, admitted{root: root, initialization: &initial}, &bitcoin.BitcoinBlockOffer{Production: binding("StacksNetworkParticipant", production), Override: overrideBinding(&initial)})
+	return worker.authorizeTimingOverride(ctx, admitted{root: root, initialization: &initial}, &bitcoin.BitcoinBlockOffer{Production: objectref.Participant(production), Override: overrideBinding(&initial)})
 }

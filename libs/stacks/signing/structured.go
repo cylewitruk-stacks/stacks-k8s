@@ -98,7 +98,7 @@ type PoXAuthorization struct {
 // PoX signs an explicit PoX-4 authorization without enrollment policy or RPC.
 func PoX(privateKey string, a PoXAuthorization) ([65]byte, error) {
 	switch a.Topic {
-	case "stack-stx", "stack-extend", "stack-increase", "agg-commit", "agg-increase":
+	case TopicStackSTX, TopicStackExtend, TopicStackIncrease, TopicAggregateCommit, TopicAggregateIncrease:
 	default:
 		return [65]byte{}, errors.New("unsupported PoX topic")
 	}
@@ -122,6 +122,6 @@ func SignerGrant(privateKey, manager string, authID clarity.Value, chainID uint3
 	if authID.Type != clarity.UInt {
 		return [65]byte{}, errors.New("grant auth ID requires uint128")
 	}
-	message := clarity.Value{Type: clarity.Tuple, Fields: map[string]clarity.Value{"signer-manager": principal, "topic": {Type: clarity.ASCII, Text: "grant-authorization"}, "auth-id": authID}}
+	message := clarity.Value{Type: clarity.Tuple, Fields: map[string]clarity.Value{"signer-manager": principal, "topic": {Type: clarity.ASCII, Text: TopicGrantAuthorization}, "auth-id": authID}}
 	return Structured(privateKey, Domain("pox-5-signer", "1.0.0", chainID), message)
 }

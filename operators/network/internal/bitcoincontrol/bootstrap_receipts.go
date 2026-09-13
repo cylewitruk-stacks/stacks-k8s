@@ -5,6 +5,7 @@ import (
 
 	bitcoin "github.com/cylewitruk-stacks/stacks-k8s/apis/network/bitcoin/v1alpha2"
 	api "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha2"
+	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/objectref"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -16,11 +17,11 @@ func accountBootstrapReceipt(root *api.StacksNetwork, initial *bitcoin.BitcoinIn
 		return false
 	}
 	receipt := execution.Status.LastReceipt
-	if receipt == nil || receipt.Request.Method != bitcoin.RPCGenerate || receipt.Request.Action != nil || receipt.Request.Offer == nil || receipt.Request.Reservation != binding("BitcoinInitialization", initial) || receipt.Request.Target.Participant != initial.Spec.Target || !hashValid(receipt.BlockHash) {
+	if receipt == nil || receipt.Request.Method != bitcoin.RPCGenerate || receipt.Request.Action != nil || receipt.Request.Offer == nil || receipt.Request.Reservation != objectref.BitcoinInitialization(initial) || receipt.Request.Target.Participant != initial.Spec.Target || !hashValid(receipt.BlockHash) {
 		return false
 	}
 	offer := receipt.Request.Offer
-	if offer.Mode != "" && offer.Mode != bitcoin.OfferBootstrap || offer.Initialization != binding("BitcoinInitialization", initial) || offer.Production.Kind != "StacksNetworkParticipant" || offer.Production.UID == "" || offer.Production.Name == "" || offer.Number <= initial.Status.LastAccountedOffer || offer.Number != execution.Status.CompletedOffer || offer.ExpectedHeight < 0 || offer.ExpectedHeight >= offer.Ceiling {
+	if offer.Mode != "" && offer.Mode != bitcoin.OfferBootstrap || offer.Initialization != objectref.BitcoinInitialization(initial) || offer.Production.Kind != api.KindStacksNetworkParticipant || offer.Production.UID == "" || offer.Production.Name == "" || offer.Number <= initial.Status.LastAccountedOffer || offer.Number != execution.Status.CompletedOffer || offer.ExpectedHeight < 0 || offer.ExpectedHeight >= offer.Ceiling {
 		return false
 	}
 	known := offer.Wallet == initial.Spec.PayoutWallet.Wallet && offer.Address == initial.Spec.PayoutWallet.Address

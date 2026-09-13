@@ -6,3 +6,6 @@ const (
 	// profileJSONAnnotation identifies runtime-owned metadata.
 	profileJSONAnnotation = "network.stacks.org/worker-profile-json"
 )
+
+// workloadStacksWorker selects the scoped Stacks management process Pods.
+const workloadStacksWorker = "stacks-worker"

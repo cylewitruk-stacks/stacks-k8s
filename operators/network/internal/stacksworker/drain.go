@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	common "github.com/cylewitruk-stacks/stacks-k8s/apis/network/common/v1alpha2"
 	api "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -20,7 +21,7 @@ func CheckActorStop(ctx context.Context, reader client.Reader, actor *api.Stacks
 		return false, err
 	}
 	owner := metav1.GetControllerOf(actor)
-	if root.UID == "" || owner == nil || owner.APIVersion != api.GroupVersion.String() || owner.Kind != "StacksNetwork" || owner.Name != root.Name {
+	if root.UID == "" || owner == nil || owner.APIVersion != api.GroupVersion.String() || owner.Kind != api.KindStacksNetwork || owner.Name != root.Name {
 		return false, fmt.Errorf("actor root ownership unavailable")
 	}
 	if _, err := Session(root, actor); err != nil {
@@ -34,7 +35,7 @@ func CheckActorStop(ctx context.Context, reader client.Reader, actor *api.Stacks
 		if session == nil {
 			continue
 		}
-		if identity.UID == "" || identity.Name == "" || session.Pod.Kind != "Pod" || session.Pod.Name == "" || session.Pod.UID == "" || session.ProfileDigest == "" {
+		if identity.UID == "" || identity.Name == "" || session.Pod.Kind != common.KindPod || session.Pod.Name == "" || session.Pod.UID == "" || session.ProfileDigest == "" {
 			return false, fmt.Errorf("retained worker identity unavailable")
 		}
 		if session.Disposal == nil {

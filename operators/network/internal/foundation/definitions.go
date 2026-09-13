@@ -15,6 +15,7 @@ import (
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 )
 
 // DefinitionReconciler validates reusable inputs without creating network workloads.
@@ -23,24 +24,29 @@ type DefinitionReconciler struct {
 	Client client.Client
 	// Scheme supplies owner reference type information.
 	Scheme *runtime.Scheme
-	// Kind selects the independent definition controller.
-	Kind string
+	// Prototype selects the declaration type; each reconcile receives a fresh copy.
+	Prototype client.Object
 }
 
-func (r *DefinitionReconciler) object() resolvable {
-	switch r.Kind {
-	case "StacksEpochSchedule":
-		return &api.StacksEpochSchedule{}
-	case "BitcoinBlockSchedule":
-		return &bitcoin.BitcoinBlockSchedule{}
-	default:
-		return DefinitionObject(api.ParticipantKind(r.Kind)).(resolvable)
+// object restricts registration to supported definitions and never returns the prototype itself.
+func (r *DefinitionReconciler) object() (resolvable, error) {
+	switch r.Prototype.(type) {
+	case *bitcoin.BitcoinNode, *bitcoin.BitcoinBlockProduction, *bitcoin.BitcoinBlockSchedule,
+		*stacks.StacksNode, *stacks.StacksSigner, *stacks.StacksStacker, *stacks.StacksFaucet,
+		*stacks.StacksContractSet, *stacks.StacksTransactionProduction, *api.StacksEpochSchedule:
+		if object := r.Prototype.DeepCopyObject(); object != nil {
+			return object.(resolvable), nil
+		}
 	}
+	return nil, fmt.Errorf("unsupported or nil definition prototype %T", r.Prototype)
 }
 
 // Reconcile records intrinsic validity; network-relative wiring is resolved by the root.
 func (r *DefinitionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	obj := r.object()
+	obj, err := r.object()
+	if err != nil {
+		return ctrl.Result{}, err
+	}
 	if err := r.Client.Get(ctx, req.NamespacedName, obj); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
@@ -71,10 +77,10 @@ func (r *DefinitionReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 	status.ObservedGeneration = obj.GetGeneration()
 	status.Digest = Digest(input)
-	condition := metav1.Condition{Type: "Resolved", Status: metav1.ConditionTrue, Reason: "DefinitionValid", Message: "Intrinsic inputs valid; instance wiring is resolved by StacksNetwork", ObservedGeneration: obj.GetGeneration()}
+	condition := metav1.Condition{Type: common.ConditionResolved, Status: metav1.ConditionTrue, Reason: reasonDefinitionValid, Message: "Intrinsic inputs valid; instance wiring is resolved by StacksNetwork", ObservedGeneration: obj.GetGeneration()}
 	if validation != nil {
 		condition.Status = metav1.ConditionFalse
-		condition.Reason = "DefinitionUnavailable"
+		condition.Reason = reasonDefinitionUnavailable
 		condition.Message = validation.Error()
 	}
 	meta.SetStatusCondition(&status.Conditions, condition)
@@ -91,10 +97,15 @@ func (r *DefinitionReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 // SetupWithManager registers one resource-focused definition controller.
 func (r *DefinitionReconciler) SetupWithManager(m ctrl.Manager) error {
-	if r.object() == nil {
-		return fmt.Errorf("unsupported definition kind")
+	object, err := r.object()
+	if err != nil {
+		return err
 	}
-	return ctrl.NewControllerManagedBy(m).Named("foundation-definition-" + r.Kind).For(r.object()).Owns(&stacks.StacksAccount{}).Complete(r)
+	gvk, err := apiutil.GVKForObject(object, m.GetScheme())
+	if err != nil {
+		return err
+	}
+	return ctrl.NewControllerManagedBy(m).Named("foundation-definition-" + gvk.Kind).For(object).Owns(&stacks.StacksAccount{}).Complete(r)
 }
 
 func defaultAccount(config *api.Configuration, owner client.Object) *common.NameRef {

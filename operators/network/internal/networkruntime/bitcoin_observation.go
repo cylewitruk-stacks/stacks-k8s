@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	bitcoin "github.com/cylewitruk-stacks/stacks-k8s/apis/network/bitcoin/v1alpha2"
+	common "github.com/cylewitruk-stacks/stacks-k8s/apis/network/common/v1alpha2"
 	api "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha2"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -36,7 +37,7 @@ func (r *Reconciler) currentBitcoinObservation(ctx context.Context, root *api.St
 		name string
 		uid  string
 	}{{state.ConfigRef.Name, string(state.ConfigRef.UID)}, {state.RPCSecretRef.Name, string(state.RPCSecretRef.UID)}} {
-		metadata := &metav1.PartialObjectMetadata{TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "Secret"}}
+		metadata := &metav1.PartialObjectMetadata{TypeMeta: metav1.TypeMeta{APIVersion: corev1.SchemeGroupVersion.String(), Kind: common.KindSecret}}
 		if err := r.Reader.Get(ctx, client.ObjectKey{Namespace: root.Namespace, Name: binding.name}, metadata); err != nil {
 			return false, err
 		}
@@ -52,7 +53,7 @@ func (r *Reconciler) currentBitcoinObservation(ctx context.Context, root *api.St
 		return false, nil
 	}
 	owner := metav1.GetControllerOf(&pod)
-	if owner == nil || owner.Kind != "StatefulSet" {
+	if owner == nil || owner.Kind != common.KindStatefulSet {
 		return false, nil
 	}
 	var workload appsv1.StatefulSet
@@ -61,7 +62,7 @@ func (r *Reconciler) currentBitcoinObservation(ctx context.Context, root *api.St
 	}
 	bound := false
 	for _, ref := range state.WorkloadRefs {
-		if ref.Kind == "StatefulSet" && ref.Name == workload.Name && ref.UID == workload.UID {
+		if ref.Kind == common.KindStatefulSet && ref.Name == workload.Name && ref.UID == workload.UID {
 			bound = true
 		}
 	}
@@ -70,7 +71,7 @@ func (r *Reconciler) currentBitcoinObservation(ctx context.Context, root *api.St
 	}
 	process := false
 	for _, container := range pod.Status.ContainerStatuses {
-		if container.Name == "bitcoin" && container.ContainerID == target.ContainerID && container.State.Running != nil && container.Ready {
+		if container.Name == api.ContainerBitcoin && container.ContainerID == target.ContainerID && container.State.Running != nil && container.Ready {
 			process = true
 		}
 	}
@@ -78,7 +79,7 @@ func (r *Reconciler) currentBitcoinObservation(ctx context.Context, root *api.St
 		return false, nil
 	}
 	for _, endpoint := range state.Endpoints {
-		if endpoint.Name == "rpc" && endpoint.Port > 0 && endpoint.Port <= 65535 {
+		if endpoint.Name == common.EndpointRPC && endpoint.Port > 0 && endpoint.Port <= 65535 {
 			return target.Endpoint == "http://"+net.JoinHostPort(pod.Status.PodIP, strconv.Itoa(int(endpoint.Port))), nil
 		}
 	}

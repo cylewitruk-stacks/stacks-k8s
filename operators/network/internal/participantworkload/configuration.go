@@ -10,6 +10,7 @@ import (
 	common "github.com/cylewitruk-stacks/stacks-k8s/apis/network/common/v1alpha2"
 	api "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha2"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/foundation"
+	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/objectref"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -37,18 +38,18 @@ func (r *Reconciler) configuration(ctx context.Context, root *api.StacksNetwork,
 		*item.destination = ref
 	}
 	state.PolicyDigest = policy
-	report := &corev1.ConfigMap{ObjectMeta: objectMeta(p, "report-"+strings.TrimPrefix(policy, "sha256:"), "support")}
+	report := &corev1.ConfigMap{ObjectMeta: objectMeta(p, "report-"+strings.TrimPrefix(policy, "sha256:"), api.RoleSupport)}
 	if err := r.createOwned(ctx, p, report); err != nil {
 		return false, err
 	}
 	if err := r.Reader.Get(ctx, client.ObjectKeyFromObject(report), report); err != nil {
 		return false, err
 	}
-	in := BitcoinConfigInput{Namespace: p.Namespace, ParticipantUID: p.UID, PolicyDigest: policy, Config: *state.ConfigRef, ControlCredentials: *state.RPCSecretRef, ActorCredentials: *state.ActorRPCSecretRef, Report: *binding("ConfigMap", report)}
+	in := BitcoinConfigInput{Namespace: p.Namespace, ParticipantUID: p.UID, PolicyDigest: policy, Config: *state.ConfigRef, ControlCredentials: *state.RPCSecretRef, ActorCredentials: *state.ActorRPCSecretRef, Report: objectref.ConfigMap(report)}
 	in.Customization = p.Status.Admission.Configuration.BitcoinNode.Config
 	if in.Customization != nil {
 		if ref := in.Customization.SecretRef; ref != nil {
-			pin, ok := admittedBinding(p, "Secret", ref.Name)
+			pin, ok := admittedBinding(p, common.KindSecret, ref.Name)
 			if !ok {
 				return false, fmt.Errorf("custom configuration Secret was not admitted")
 			}
@@ -102,11 +103,11 @@ func (r *Reconciler) configuration(ctx context.Context, root *api.StacksNetwork,
 
 // emptySecret inspects metadata only; private data is generated and read in the Job.
 func (r *Reconciler) emptySecret(ctx context.Context, p *api.StacksNetworkParticipant, purpose string, pin *common.Binding) (*common.Binding, error) {
-	metadata := &metav1.PartialObjectMetadata{TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "Secret"}}
+	metadata := &metav1.PartialObjectMetadata{TypeMeta: metav1.TypeMeta{APIVersion: corev1.SchemeGroupVersion.String(), Kind: common.KindSecret}}
 	key := client.ObjectKey{Namespace: p.Namespace, Name: Name(p, purpose)}
 	err := r.Reader.Get(ctx, key, metadata)
 	if apierrors.IsNotFound(err) && pin == nil {
-		empty := &corev1.Secret{ObjectMeta: objectMeta(p, purpose, "support")}
+		empty := &corev1.Secret{ObjectMeta: objectMeta(p, purpose, api.RoleSupport)}
 		if err := r.Client.Create(ctx, empty); err != nil && !apierrors.IsAlreadyExists(err) {
 			return nil, err
 		}
@@ -121,7 +122,11 @@ func (r *Reconciler) emptySecret(ctx context.Context, p *api.StacksNetworkPartic
 	if pin != nil && (pin.Name != metadata.Name || pin.UID != metadata.UID) {
 		return nil, fmt.Errorf("RPC/config Secret identity changed")
 	}
-	return binding("Secret", metadata), nil
+	ref, err := objectref.SecretMetadata(metadata)
+	if err != nil {
+		return nil, err
+	}
+	return &ref, nil
 }
 
 // peerSeeds resolves allocated peer identities without readiness cycles.
@@ -157,7 +162,7 @@ func peerSeeds(root *api.StacksNetwork, p *api.StacksNetworkParticipant) ([]stri
 	sort.Strings(names)
 	seeds := make([]string, 0, len(names))
 	for _, name := range names {
-		seeds = append(seeds, foundation.RuntimeName(string(root.UID), string(selected[name].UID), string(api.ParticipantBitcoinNode), name, "p2p")+"."+root.Namespace+".svc")
+		seeds = append(seeds, foundation.RuntimeName(string(root.UID), string(selected[name].UID), string(api.ParticipantBitcoinNode), name, common.EndpointP2P)+"."+root.Namespace+".svc")
 	}
 	return seeds, nil
 }

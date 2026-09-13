@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"time"
 
+	common "github.com/cylewitruk-stacks/stacks-k8s/apis/network/common/v1alpha2"
 	stacks "github.com/cylewitruk-stacks/stacks-k8s/apis/network/stacks/v1alpha2"
 	api "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha2"
 	"github.com/cylewitruk-stacks/stacks-k8s/libs/stacks/rpc"
@@ -57,7 +58,7 @@ func (r PublicInputs) Faucet(ctx context.Context, s stacksworker.Snapshot, admis
 	}
 	endpoint := ""
 	for _, ep := range target.Status.Runtime.Endpoints {
-		if ep.Name == "rpc" && ep.Host != "" && ep.Port > 0 && ep.Port <= 65535 {
+		if ep.Name == common.EndpointRPC && ep.Host != "" && ep.Port > 0 && ep.Port <= 65535 {
 			endpoint = (&url.URL{Scheme: "http", Host: net.JoinHostPort(ep.Host, strconv.Itoa(int(ep.Port)))}).String()
 		}
 	}

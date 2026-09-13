@@ -25,7 +25,7 @@ func (r *Reconciler) stacksStartAuthorized(ctx context.Context, root *api.Stacks
 		return err
 	}
 	owner := metav1.GetControllerOf(&initialization)
-	if ref.Kind != "BitcoinInitialization" || ref.UID == "" || initialization.UID != ref.UID || initialization.DeletionTimestamp != nil || initialization.Spec.NetworkUID != root.UID || owner == nil || owner.UID != root.UID || owner.Kind != "StacksNetwork" || owner.APIVersion != api.GroupVersion.String() || initialization.Spec.Genesis.UID != root.Status.GenesisRef.UID || initialization.Spec.Genesis.Name != root.Status.GenesisRef.Name || initialization.Status.PreparedAt == nil {
+	if ref.Kind != bitcoin.KindBitcoinInitialization || ref.UID == "" || initialization.UID != ref.UID || initialization.DeletionTimestamp != nil || initialization.Spec.NetworkUID != root.UID || owner == nil || owner.UID != root.UID || owner.Kind != api.KindStacksNetwork || owner.APIVersion != api.GroupVersion.String() || initialization.Spec.Genesis.UID != root.Status.GenesisRef.UID || initialization.Spec.Genesis.Name != root.Status.GenesisRef.Name || initialization.Status.PreparedAt == nil {
 		return fmt.Errorf("PrepareBitcoin has not completed for this frozen network identity")
 	}
 	// Consensus startup deliberately has no enrollment or PoX registration dependency.
@@ -41,7 +41,7 @@ func (r *Reconciler) stacksStartAuthorized(ctx context.Context, root *api.Stacks
 	}
 	// The live workload records prior miner activation; preparing a new config does not.
 	var existing appsv1.StatefulSet
-	if err := r.Reader.Get(ctx, client.ObjectKey{Namespace: p.Namespace, Name: Name(p, "actor")}, &existing); err == nil {
+	if err := r.Reader.Get(ctx, client.ObjectKey{Namespace: p.Namespace, Name: Name(p, actorPurpose)}, &existing); err == nil {
 		if !owned(&existing, p) || existing.DeletionTimestamp != nil {
 			return fmt.Errorf("miner workload identity unavailable")
 		}
@@ -72,7 +72,7 @@ func (r *Reconciler) stacksStartAuthorized(ctx context.Context, root *api.Stacks
 			continue
 		}
 		owner := metav1.GetControllerOf(&execution)
-		if executionRef.Kind != "BitcoinExecution" || executionRef.UID == "" || execution.UID != executionRef.UID || execution.DeletionTimestamp != nil || execution.Spec.NetworkUID != root.UID || owner == nil || owner.UID != root.UID || owner.Kind != "StacksNetwork" || owner.APIVersion != api.GroupVersion.String() {
+		if executionRef.Kind != bitcoin.KindBitcoinExecution || executionRef.UID == "" || execution.UID != executionRef.UID || execution.DeletionTimestamp != nil || execution.Spec.NetworkUID != root.UID || owner == nil || owner.UID != root.UID || owner.Kind != api.KindStacksNetwork || owner.APIVersion != api.GroupVersion.String() {
 			return fmt.Errorf("Bitcoin execution identity changed")
 		}
 		observation := execution.Status.Observation

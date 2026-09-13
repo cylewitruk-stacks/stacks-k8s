@@ -34,15 +34,15 @@ func selectedMember(root *api.StacksNetwork, kind api.ParticipantKind, participa
 				p := &participants[i]
 				if p.UID == id.UID && p.Spec.Kind == kind && p.Spec.ParticipantName == entry.Name && p.Spec.NetworkUID == root.UID && metav1.IsControlledBy(p, root) && p.DeletionTimestamp == nil {
 					if p.Status.Admission == nil {
-						return nil, predicate{metav1.ConditionUnknown, string(kind) + "AdmissionUnavailable"}
+						return nil, predicate{metav1.ConditionUnknown, string(kind) + api.ReasonAdmissionUnavailable}
 					}
-					return p, predicate{metav1.ConditionTrue, "Selected"}
+					return p, predicate{metav1.ConditionTrue, reasonSelected}
 				}
 			}
 		}
-		return nil, predicate{metav1.ConditionUnknown, string(kind) + "InstanceUnavailable"}
+		return nil, predicate{metav1.ConditionUnknown, string(kind) + reasonInstanceUnavailable}
 	}
-	return nil, predicate{metav1.ConditionFalse, string(kind) + "Missing"}
+	return nil, predicate{metav1.ConditionFalse, string(kind) + reasonMissing}
 }
 
 // capabilityPaused includes newer root intent before control projection reaches the instance.
@@ -79,14 +79,14 @@ func bitcoinOperational(root *api.StacksNetwork, participants []api.StacksNetwor
 		return result
 	}
 	if capabilityPaused(root, p) {
-		return predicate{metav1.ConditionFalse, "BitcoinProductionPaused"}
+		return predicate{metav1.ConditionFalse, reasonBitcoinProductionPaused}
 	}
 	s := p.Status.Scheduling
 	if s == nil || s.ObservedAt == nil || !fresh(*s.ObservedAt, now) || s.PolicyDigest != p.Status.Admission.PolicyDigest || s.Schedule == nil {
-		return predicate{metav1.ConditionUnknown, "BitcoinObservationUnavailable"}
+		return predicate{metav1.ConditionUnknown, reasonBitcoinObservationUnavailable}
 	}
 	if s.EligibleTargets == 0 {
-		return predicate{metav1.ConditionFalse, "BitcoinTargetsUnavailable"}
+		return predicate{metav1.ConditionFalse, reasonBitcoinTargetsUnavailable}
 	}
 	var bound time.Duration
 	var err error
@@ -101,12 +101,12 @@ func bitcoinOperational(root *api.StacksNetwork, participants []api.StacksNetwor
 		}
 	}
 	if err != nil || bound < time.Second || bound > time.Hour || s.ProgressWindowSeconds != int64(foundation.ProgressWindow(bound)/time.Second) {
-		return predicate{metav1.ConditionUnknown, "BitcoinTimingUnavailable"}
+		return predicate{metav1.ConditionUnknown, reasonBitcoinTimingUnavailable}
 	}
 	if s.LastAcknowledgedAt == nil || s.LastAcknowledgedAt.Time.After(now) || now.Sub(s.LastAcknowledgedAt.Time) > foundation.ProgressWindow(bound) {
-		return predicate{metav1.ConditionFalse, "BitcoinProgressOverdue"}
+		return predicate{metav1.ConditionFalse, reasonBitcoinProgressOverdue}
 	}
-	return predicate{metav1.ConditionTrue, "BitcoinProgressObserved"}
+	return predicate{metav1.ConditionTrue, reasonBitcoinProgressObserved}
 }
 
 // minerOperational excludes intentionally unverified and suspended peers from the required miner set.
@@ -126,18 +126,18 @@ func minerOperational(root *api.StacksNetwork, participants []api.StacksNetworkP
 				continue
 			}
 			if currentActorReady(p) {
-				return predicate{metav1.ConditionTrue, "MinerReady"}
+				return predicate{metav1.ConditionTrue, reasonMinerReady}
 			}
-			c := meta.FindStatusCondition(p.Status.Conditions, "WorkloadReady")
+			c := meta.FindStatusCondition(p.Status.Conditions, api.ConditionWorkloadReady)
 			if c == nil || c.ObservedGeneration != p.Generation || c.Status == metav1.ConditionUnknown {
 				waiting = true
 			}
 		}
 	}
 	if waiting {
-		return predicate{metav1.ConditionUnknown, "MinerObservationUnavailable"}
+		return predicate{metav1.ConditionUnknown, reasonMinerObservationUnavailable}
 	}
-	return predicate{metav1.ConditionFalse, "NoReadyMiner"}
+	return predicate{metav1.ConditionFalse, reasonNoReadyMiner}
 }
 
 // trafficOperational requires current canonical inclusion, exact original ingress, and recent progress.
@@ -147,17 +147,17 @@ func trafficOperational(root *api.StacksNetwork, g *api.StacksGenesis, participa
 		return result
 	}
 	if capabilityPaused(root, p) {
-		return predicate{metav1.ConditionFalse, "TrafficPaused"}
+		return predicate{metav1.ConditionFalse, reasonTrafficPaused}
 	}
 	if !currentWorker(root, p, now) || p.Status.Execution.Traffic == nil || p.Status.Execution.Transactions == nil {
-		return predicate{metav1.ConditionUnknown, "TrafficObservationUnavailable"}
+		return predicate{metav1.ConditionUnknown, reasonTrafficObservationUnavailable}
 	}
 	o := p.Status.Execution.Traffic
 	if !o.Available || !fresh(o.ObservedAt, now) || o.GenesisUID != g.UID {
-		return predicate{metav1.ConditionUnknown, "TrafficObservationUnavailable"}
+		return predicate{metav1.ConditionUnknown, reasonTrafficObservationUnavailable}
 	}
 	if !o.Found || !o.Success {
-		return predicate{metav1.ConditionFalse, "CanonicalTransferUnavailable"}
+		return predicate{metav1.ConditionFalse, reasonCanonicalTransferUnavailable}
 	}
 	ingress := false
 	for i := range participants {
@@ -172,17 +172,17 @@ func trafficOperational(root *api.StacksNetwork, g *api.StacksGenesis, participa
 		}
 	}
 	if !ingress {
-		return predicate{metav1.ConditionUnknown, "TrafficIngressUnavailable"}
+		return predicate{metav1.ConditionUnknown, reasonTrafficIngressUnavailable}
 	}
 	interval := time.Duration(o.EffectiveIntervalSeconds) * time.Second
 	if interval < time.Second || interval > time.Hour || o.ProgressWindowSeconds != uint64(foundation.ProgressWindow(interval)/time.Second) {
-		return predicate{metav1.ConditionUnknown, "TrafficTimingUnavailable"}
+		return predicate{metav1.ConditionUnknown, reasonTrafficTimingUnavailable}
 	}
 	inclusion := p.Status.Execution.Transactions.LastInclusion
 	if inclusion == nil || inclusion.TxID != o.TxID || !inclusion.Success || inclusion.ObservedAt.Time.After(now) || now.Sub(inclusion.ObservedAt.Time) > foundation.ProgressWindow(interval) {
-		return predicate{metav1.ConditionFalse, "TrafficProgressOverdue"}
+		return predicate{metav1.ConditionFalse, reasonTrafficProgressOverdue}
 	}
-	return predicate{metav1.ConditionTrue, "CanonicalTransferObserved"}
+	return predicate{metav1.ConditionTrue, reasonCanonicalTransferObserved}
 }
 
 // contractsOperational uses current membership and frozen public contract inputs without replaying gates.
@@ -192,22 +192,22 @@ func contractsOperational(root *api.StacksNetwork, g *api.StacksGenesis, partici
 		return result
 	}
 	if !currentWorker(root, p, now) {
-		return predicate{metav1.ConditionUnknown, "ContractObservationUnavailable"}
+		return predicate{metav1.ConditionUnknown, api.ReasonContractObservationUnavailable}
 	}
 	o := p.Status.Execution.Contracts
 	if o == nil || !fresh(o.ObservedAt, now) {
-		return predicate{metav1.ConditionUnknown, "ContractObservationUnavailable"}
+		return predicate{metav1.ConditionUnknown, api.ReasonContractObservationUnavailable}
 	}
 	policy := p.Status.Admission.Configuration.StacksContractSet
 	if policy == nil {
-		return predicate{metav1.ConditionUnknown, "ContractAdmissionUnavailable"}
+		return predicate{metav1.ConditionUnknown, reasonContractAdmissionUnavailable}
 	}
 	for _, req := range g.Spec.Bootstrap.Requirements {
 		if req.Kind == api.ParticipantStacksContractSet && foundation.Digest(req.RegistryInitialization) == foundation.Digest(policy.Initialization) && contractObservationMatches(o, g, req, now) {
-			return predicate{metav1.ConditionTrue, "ContractsObserved"}
+			return predicate{metav1.ConditionTrue, reasonContractsObserved}
 		}
 	}
-	return predicate{metav1.ConditionFalse, "ContractPostconditionsDiffer"}
+	return predicate{metav1.ConditionFalse, reasonContractPostconditionsDiffer}
 }
 
 // combinePredicates gives known unmet requirements precedence over stale observations.
@@ -222,7 +222,7 @@ func combinePredicates(values ...predicate) predicate {
 			return p
 		}
 	}
-	return predicate{metav1.ConditionTrue, "BaselineProgressObserved"}
+	return predicate{metav1.ConditionTrue, reasonBaselineProgressObserved}
 }
 
 // projectOperation distinguishes completed initialization, requested operation and recent protocol progress.
@@ -236,26 +236,26 @@ func (r *Reconciler) projectOperation(ctx context.Context, root *api.StacksNetwo
 		return err
 	}
 	traffic := trafficOperational(root, g, participants, now)
-	if !meta.IsStatusConditionTrue(root.Status.Conditions, "Initialized") {
+	if !meta.IsStatusConditionTrue(root.Status.Conditions, api.ConditionInitialized) {
 		if traffic.status != metav1.ConditionTrue || !postWaterfallObserved(root, g, participants, now) {
 			return nil
 		}
-		set(root, "Initialized", metav1.ConditionTrue, "BootstrapCompleted", "Frozen gates and post-waterfall canonical production are observed")
+		set(root, api.ConditionInitialized, metav1.ConditionTrue, reasonBootstrapCompleted, "Frozen gates and post-waterfall canonical production are observed")
 	}
 	if root.Spec.Operation != api.NetworkOperationRunning {
 		return nil
 	}
 	root.Status.Phase = api.NetworkPhaseRunning
-	set(root, "Running", metav1.ConditionTrue, "Running", "Initialization is complete and running operation is requested")
+	set(root, api.ConditionRunning, metav1.ConditionTrue, api.ReasonRunning, "Initialization is complete and running operation is requested")
 	bitcoin := bitcoinOperational(root, participants, now)
 	if bitcoin.status == metav1.ConditionTrue {
 		production, _ := selectedMember(root, api.ParticipantBitcoinBlockProduction, participants)
 		if err := bitcoincontrol.ValidateSchedulingOverride(ctx, r.Reader, root, production, production.Status.Scheduling, now); err != nil {
-			bitcoin = predicate{metav1.ConditionUnknown, "BitcoinTimingUnavailable"}
+			bitcoin = predicate{metav1.ConditionUnknown, reasonBitcoinTimingUnavailable}
 		}
 	}
 	result := combinePredicates(bitcoin, minerOperational(root, participants), traffic, contractsOperational(root, g, participants, now))
-	set(root, "Operational", result.status, result.reason, "Recent baseline availability and canonical progress are assessed independently of experiment controls")
+	set(root, api.ConditionOperational, result.status, result.reason, "Recent baseline availability and canonical progress are assessed independently of experiment controls")
 	return nil
 }
 

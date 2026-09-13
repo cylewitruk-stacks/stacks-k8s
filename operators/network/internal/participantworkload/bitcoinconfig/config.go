@@ -73,7 +73,7 @@ func ValidateCustomization(config *common.Config) error {
 		if len(validation.IsDNS1123Label(ref.Alias)) != 0 || aliases[ref.Alias] || len(validation.IsDNS1123Label(ref.Name)) != 0 {
 			return fmt.Errorf("invalid or duplicate Service alias")
 		}
-		if !((ref.Kind == string(api.ParticipantBitcoinNode) || ref.Kind == string(api.ParticipantStacksNode)) && (ref.Endpoint == "rpc" || ref.Endpoint == "p2p") || ref.Kind == string(api.ParticipantStacksSigner) && ref.Endpoint == "events") {
+		if !((ref.Kind == string(api.ParticipantBitcoinNode) || ref.Kind == string(api.ParticipantStacksNode)) && (ref.Endpoint == common.EndpointRPC || ref.Endpoint == common.EndpointP2P) || ref.Kind == string(api.ParticipantStacksSigner) && ref.Endpoint == common.EndpointEvents) {
 			return fmt.Errorf("unsupported Service endpoint")
 		}
 		aliases[ref.Alias] = true

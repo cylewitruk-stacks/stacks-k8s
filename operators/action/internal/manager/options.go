@@ -42,7 +42,7 @@ type Options struct {
 
 // Bind registers manager flags.
 func (o *Options) Bind(flags *flag.FlagSet) {
-	flags.StringVar(&o.APIVersion, "api-version", "v1alpha2", "Served action API version.")
+	flags.StringVar(&o.APIVersion, "api-version", actionv2.GroupVersion.Version, "Served action API version.")
 	flags.BoolVar(&o.GenerationEnabled, "bitcoin-generation-enabled", true, "Enable finite generation lifecycle.")
 	flags.BoolVar(&o.ReorganizationEnabled, "bitcoin-reorganization-enabled", false, "Enable reorganization lifecycle.")
 	flags.StringVar(&o.MetricsAddress, "metrics-bind-address", ":8080", "Prometheus metrics address.")
@@ -54,7 +54,7 @@ func (o *Options) Bind(flags *flag.FlagSet) {
 
 // New constructs a namespaced controller manager.
 func (o Options) New(configuration *rest.Config, scheme *runtime.Scheme) (ctrl.Manager, error) {
-	if o.APIVersion != "" && o.APIVersion != "v1alpha2" {
+	if o.APIVersion != "" && o.APIVersion != actionv2.GroupVersion.Version {
 		return nil, fmt.Errorf("unsupported action API version")
 	}
 	if !o.GenerationEnabled && !o.ReorganizationEnabled {

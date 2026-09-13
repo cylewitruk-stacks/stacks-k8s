@@ -13,7 +13,9 @@ import (
 	bitcoin "github.com/cylewitruk-stacks/stacks-k8s/apis/network/bitcoin/v1alpha2"
 	common "github.com/cylewitruk-stacks/stacks-k8s/apis/network/common/v1alpha2"
 	stacks "github.com/cylewitruk-stacks/stacks-k8s/apis/network/stacks/v1alpha2"
+	api "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha2"
 	"github.com/cylewitruk-stacks/stacks-k8s/libs/stacks/identity"
+	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/objectref"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -70,16 +72,16 @@ func (r *IdentityReconciler) Reconcile(ctx context.Context, request ctrl.Request
 	}
 	inputDigest := Digest(input)
 	result, resolveErr := r.resolve(ctx, obj, inputDigest)
-	reason := "Resolved"
+	reason := common.ConditionResolved
 	condition := metav1.ConditionTrue
 	message := "Public identity resolved"
 	if resolveErr != nil {
-		reason = "IdentityUnavailable"
+		reason = api.ReasonIdentityUnavailable
 		if errors.Is(resolveErr, errResolverFailed) {
-			reason = "ResolverFailed"
+			reason = reasonResolverFailed
 		}
 		if errors.Is(resolveErr, ErrUnsupportedWalletProfile) {
-			reason = "UnsupportedWalletProfile"
+			reason = reasonUnsupportedWalletProfile
 		}
 		condition = metav1.ConditionFalse
 		message = resolveErr.Error()
@@ -87,7 +89,7 @@ func (r *IdentityReconciler) Reconcile(ctx context.Context, request ctrl.Request
 		*status = result
 	}
 	status.ObservedGeneration = obj.GetGeneration()
-	meta.SetStatusCondition(&status.Conditions, metav1.Condition{Type: "Resolved", Status: condition, Reason: reason, Message: message, ObservedGeneration: obj.GetGeneration()})
+	meta.SetStatusCondition(&status.Conditions, metav1.Condition{Type: common.ConditionResolved, Status: condition, Reason: reason, Message: message, ObservedGeneration: obj.GetGeneration()})
 	if !equal(previous, *status) {
 		if err := r.Client.Status().Patch(ctx, obj, client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{})); err != nil {
 			return ctrl.Result{}, err
@@ -134,7 +136,7 @@ func (r *IdentityReconciler) resolve(ctx context.Context, obj resolvable, inputD
 				if len(status.Dependencies) > 0 && status.Dependencies[0].UID != account.UID {
 					return status, fmt.Errorf("miner account identity changed")
 				}
-				status.Dependencies = []common.Binding{{Kind: "StacksAccount", Name: account.Name, UID: account.UID, Fingerprint: account.Status.Digest}}
+				status.Dependencies = []common.Binding{objectref.WithFingerprint(objectref.Account(&account), account.Status.Digest)}
 				public, err := identity.FromPublic(account.Status.Identity.PublicKey)
 				if err != nil {
 					return status, err
@@ -148,15 +150,15 @@ func (r *IdentityReconciler) resolve(ctx context.Context, obj resolvable, inputD
 			}
 		}
 	}
-	kind := "StacksAccount"
+	kind := stacks.KindStacksAccount
 	if r.Wallet {
-		kind = "BitcoinWallet"
+		kind = bitcoin.KindBitcoinWallet
 	}
 	credentials := common.SecretKeyRef{Name: RuntimeName("", string(obj.GetUID()), kind, obj.GetName(), "key"), Key: "privateKey"}
 	if imported != nil {
 		credentials = *imported
 	}
-	metadata := &metav1.PartialObjectMetadata{TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "Secret"}}
+	metadata := &metav1.PartialObjectMetadata{TypeMeta: metav1.TypeMeta{APIVersion: corev1.SchemeGroupVersion.String(), Kind: common.KindSecret}}
 	err := r.Reader.Get(ctx, types.NamespacedName{Namespace: obj.GetNamespace(), Name: credentials.Name}, metadata)
 	if apierrors.IsNotFound(err) && generated && status.Digest == "" {
 		empty := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: credentials.Name, Namespace: obj.GetNamespace()}}
@@ -229,7 +231,7 @@ func resolvedIdentity(status common.ResolutionStatus, p identity.Public, descrip
 }
 func resolved(obj resolvable) bool {
 	s := obj.GetResolutionStatus()
-	return obj.GetDeletionTimestamp() == nil && s.ObservedGeneration == obj.GetGeneration() && s.Identity != nil && meta.IsStatusConditionTrue(s.Conditions, "Resolved")
+	return obj.GetDeletionTimestamp() == nil && s.ObservedGeneration == obj.GetGeneration() && s.Identity != nil && meta.IsStatusConditionTrue(s.Conditions, common.ConditionResolved)
 }
 
 // SetupWithManager registers targeted public-report and metadata-only credential notifications.

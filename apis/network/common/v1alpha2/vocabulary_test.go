@@ -15,6 +15,13 @@ func TestVocabularyWireValues(t *testing.T) {
 		{"CompatibilityManaged", CompatibilityManaged, `"Managed"`},
 		{"CompatibilityUnverified", CompatibilityUnverified, `"Unverified"`},
 		{"DiscoveryNetwork", DiscoveryNetwork, `"Network"`},
+		{"ConditionResolved", ConditionResolved, `"Resolved"`},
+		{"ReasonContainerStatusUnknown", ReasonContainerStatusUnknown, `"ContainerStatusUnknown"`},
+		{"ReasonNodeLost", ReasonNodeLost, `"NodeLost"`},
+		{"EndpointRPC", EndpointRPC, `"rpc"`},
+		{"EndpointP2P", EndpointP2P, `"p2p"`},
+		{"EndpointEvents", EndpointEvents, `"events"`},
+		{"BitcoinActorRPCUsername", BitcoinActorRPCUsername, `"actor"`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			raw, err := json.Marshal(tc.value)

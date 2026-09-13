@@ -13,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
@@ -31,9 +32,15 @@ func main() {
 	must(err)
 	m, err := options.New(configuration, scheme)
 	must(err)
-	for kind, enabled := range map[actionv2.Kind]bool{actionv2.KindBitcoinBlockGeneration: options.GenerationEnabled, actionv2.KindBitcoinReorganization: options.ReorganizationEnabled} {
-		if enabled {
-			must((&foundation.Reconciler{Client: m.GetClient(), Reader: m.GetAPIReader(), Kind: kind, Concurrency: options.Concurrency}).SetupWithManager(m))
+	for _, registration := range []struct {
+		prototype client.Object
+		enabled   bool
+	}{
+		{&actionv2.BitcoinBlockGeneration{}, options.GenerationEnabled},
+		{&actionv2.BitcoinReorganization{}, options.ReorganizationEnabled},
+	} {
+		if registration.enabled {
+			must((&foundation.Reconciler{Client: m.GetClient(), Reader: m.GetAPIReader(), Prototype: registration.prototype, Concurrency: options.Concurrency}).SetupWithManager(m))
 		}
 	}
 	must(m.Start(ctrl.SetupSignalHandler()))

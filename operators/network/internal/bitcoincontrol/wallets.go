@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	bitcoin "github.com/cylewitruk-stacks/stacks-k8s/apis/network/bitcoin/v1alpha2"
+	bitcoinrpc "github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/bitcoinrpc"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -21,10 +22,10 @@ func (w *Worker) chain(ctx context.Context, endpoint string) (int64, string, err
 		Blocks *int64 `json:"blocks"`
 		Best   string `json:"bestblockhash"`
 	}
-	if e := w.RPC.Call(ctx, endpoint, "observe-chain", "getblockchaininfo", nil, &result); e != nil {
+	if e := w.RPC.Call(ctx, endpoint, "observe-chain", bitcoinrpc.MethodGetBlockchainInfo, nil, &result); e != nil {
 		return 0, "", e
 	}
-	if result.Chain != "regtest" || result.Blocks == nil || *result.Blocks < 0 || !hashValid(result.Best) {
+	if result.Chain != bitcoinrpc.ChainRegtest || result.Blocks == nil || *result.Blocks < 0 || !hashValid(result.Best) {
 		return 0, "", fmt.Errorf("complete regtest tip unavailable")
 	}
 	return *result.Blocks, result.Best, nil
@@ -44,7 +45,7 @@ func (w *Worker) wallets(ctx context.Context, a admitted) ([]bitcoin.FrozenBitco
 		}
 		pinned := false
 		for _, binding := range a.participant.Status.Admission.Dependencies {
-			pinned = pinned || binding.Kind == "BitcoinWallet" && binding.Name == wallet.Name && binding.UID == wallet.UID && binding.Fingerprint == wallet.Status.Digest
+			pinned = pinned || binding.Kind == bitcoin.KindBitcoinWallet && binding.Name == wallet.Name && binding.UID == wallet.UID && binding.Fingerprint == wallet.Status.Digest
 		}
 		if !pinned || wallet.DeletionTimestamp != nil {
 			return nil, fmt.Errorf("attached wallet identity unavailable")
@@ -78,7 +79,7 @@ func (w *Worker) observe(ctx context.Context, a admitted, record *bitcoin.Bitcoi
 	}
 	if removal := record.Status.PendingWalletRemoval; removal != nil {
 		var loaded []string
-		if e := w.RPC.Call(ctx, a.target.Endpoint, "detached-wallet-list", "listwallets", nil, &loaded); e != nil {
+		if e := w.RPC.Call(ctx, a.target.Endpoint, "detached-wallet-list", bitcoinrpc.MethodListWallets, nil, &loaded); e != nil {
 			return nil, nil, e
 		}
 		for _, name := range loaded {
@@ -120,7 +121,7 @@ func (w *Worker) observe(ctx context.Context, a admitted, record *bitcoin.Bitcoi
 				return observation, nil, fmt.Errorf("removed wallet retains frozen initialization obligations")
 			}
 			if !listed {
-				if e := w.RPC.Call(ctx, a.target.Endpoint, "removed-wallet-list", "listwallets", nil, &loaded); e != nil {
+				if e := w.RPC.Call(ctx, a.target.Endpoint, "removed-wallet-list", bitcoinrpc.MethodListWallets, nil, &loaded); e != nil {
 					return nil, nil, e
 				}
 				listed = true
@@ -149,7 +150,7 @@ func (w *Worker) observeWallet(ctx context.Context, endpoint string, wallet bitc
 		return &bitcoin.BitcoinArmedRPC{Method: method, Wallet: &bitcoin.BitcoinWalletOperation{Wallet: wallet.Wallet, Name: wallet.Name, Descriptor: descriptor}}
 	}
 	var loaded []string
-	if e := w.RPC.Call(ctx, endpoint, "wallet-list", "listwallets", nil, &loaded); e != nil {
+	if e := w.RPC.Call(ctx, endpoint, "wallet-list", bitcoinrpc.MethodListWallets, nil, &loaded); e != nil {
 		return state, nil, e
 	}
 	found := false
@@ -162,7 +163,7 @@ func (w *Worker) observeWallet(ctx context.Context, endpoint string, wallet bitc
 				Name string `json:"name"`
 			} `json:"wallets"`
 		}
-		if e := w.RPC.Call(ctx, endpoint, "wallet-directory", "listwalletdir", nil, &directory); e != nil {
+		if e := w.RPC.Call(ctx, endpoint, "wallet-directory", bitcoinrpc.MethodListWalletDir, nil, &directory); e != nil {
 			return state, nil, e
 		}
 		for _, item := range directory.Wallets {
@@ -178,7 +179,7 @@ func (w *Worker) observeWallet(ctx context.Context, endpoint string, wallet bitc
 		Private     *bool  `json:"private_keys_enabled"`
 		Descriptors *bool  `json:"descriptors"`
 	}
-	if e := w.RPC.Call(ctx, local, "wallet-info", "getwalletinfo", nil, &info); e != nil {
+	if e := w.RPC.Call(ctx, local, "wallet-info", bitcoinrpc.MethodGetWalletInfo, nil, &info); e != nil {
 		return state, nil, e
 	}
 	if info.Name != wallet.Name || info.Private == nil || *info.Private || info.Descriptors == nil || !*info.Descriptors {
@@ -188,7 +189,7 @@ func (w *Worker) observeWallet(ctx context.Context, endpoint string, wallet bitc
 		Descriptor string `json:"descriptor"`
 		Private    *bool  `json:"hasprivatekeys"`
 	}
-	if e := w.RPC.Call(ctx, endpoint, "wallet-descriptor", "getdescriptorinfo", []any{wallet.Descriptor}, &descriptor); e != nil {
+	if e := w.RPC.Call(ctx, endpoint, "wallet-descriptor", bitcoinrpc.MethodGetDescriptorInfo, []any{wallet.Descriptor}, &descriptor); e != nil {
 		return state, nil, e
 	}
 	if descriptor.Private == nil || *descriptor.Private || !strings.HasPrefix(descriptor.Descriptor, wallet.Descriptor+"#") {
@@ -199,7 +200,7 @@ func (w *Worker) observeWallet(ctx context.Context, endpoint string, wallet bitc
 			Desc string `json:"desc"`
 		} `json:"descriptors"`
 	}
-	if e := w.RPC.Call(ctx, local, "wallet-descriptors", "listdescriptors", []any{false}, &listing); e != nil {
+	if e := w.RPC.Call(ctx, local, "wallet-descriptors", bitcoinrpc.MethodListDescriptors, []any{false}, &listing); e != nil {
 		return state, nil, e
 	}
 	found = false
@@ -215,7 +216,7 @@ func (w *Worker) observeWallet(ctx context.Context, endpoint string, wallet bitc
 		TxID          string `json:"txid"`
 		Vout          uint32 `json:"vout"`
 	}
-	if e := w.RPC.Call(ctx, local, "wallet-maturity", "listunspent", []any{101, 9999999, []string{wallet.Address}, false, map[string]any{"maximumCount": 100}}, &outputs); e != nil {
+	if e := w.RPC.Call(ctx, local, "wallet-maturity", bitcoinrpc.MethodListUnspent, []any{101, 9999999, []string{wallet.Address}, false, map[string]any{"maximumCount": 100}}, &outputs); e != nil {
 		return state, nil, e
 	}
 	if len(outputs) > 100 {
@@ -229,7 +230,7 @@ func (w *Worker) observeWallet(ctx context.Context, endpoint string, wallet bitc
 			Coinbase      *bool `json:"coinbase"`
 			Confirmations int64 `json:"confirmations"`
 		}
-		if e := w.RPC.Call(ctx, endpoint, "wallet-coinbase", "gettxout", []any{output.TxID, output.Vout, true}, &coin); e != nil {
+		if e := w.RPC.Call(ctx, endpoint, "wallet-coinbase", bitcoinrpc.MethodGetTxOut, []any{output.TxID, output.Vout, true}, &coin); e != nil {
 			return state, nil, e
 		}
 		if coin.Coinbase == nil || coin.Confirmations < 101 {
@@ -249,9 +250,9 @@ func (w *Worker) mutate(ctx context.Context, request bitcoin.BitcoinArmedRPC) (s
 		if request.Action == nil || !hashValid(request.BlockHash) {
 			return "", fmt.Errorf("invalid finite marker inputs")
 		}
-		method := "invalidateblock"
+		method := bitcoinrpc.MethodInvalidateBlock
 		if request.Method == bitcoin.RPCReconsiderBlock {
-			method = "reconsiderblock"
+			method = bitcoinrpc.MethodReconsiderBlock
 		}
 		var result json.RawMessage
 		if err := w.RPC.Call(ctx, request.Target.Endpoint, request.ID, method, []any{request.BlockHash}, &result); err != nil {
@@ -278,9 +279,9 @@ func (w *Worker) mutate(ctx context.Context, request bitcoin.BitcoinArmedRPC) (s
 	endpoint := request.Target.Endpoint
 	switch request.Method {
 	case bitcoin.RPCCreateWallet, bitcoin.RPCLoadWallet:
-		method, args := "loadwallet", []any{wallet.Name, true}
+		method, args := bitcoinrpc.MethodLoadWallet, []any{wallet.Name, true}
 		if request.Method == bitcoin.RPCCreateWallet {
-			method, args = "createwallet", []any{wallet.Name, true, true, "", false, true, true}
+			method, args = bitcoinrpc.MethodCreateWallet, []any{wallet.Name, true, true, "", false, true, true}
 		}
 		var result struct {
 			Name string `json:"name"`
@@ -295,7 +296,7 @@ func (w *Worker) mutate(ctx context.Context, request bitcoin.BitcoinArmedRPC) (s
 		var imported []struct {
 			Success bool `json:"success"`
 		}
-		if e := w.RPC.Call(ctx, endpoint+"/wallet/"+url.PathEscape(wallet.Name), request.ID, "importdescriptors", []any{[]any{map[string]any{"desc": wallet.Descriptor, "timestamp": 0}}}, &imported); e != nil {
+		if e := w.RPC.Call(ctx, endpoint+"/wallet/"+url.PathEscape(wallet.Name), request.ID, bitcoinrpc.MethodImportDescriptors, []any{[]any{map[string]any{"desc": wallet.Descriptor, "timestamp": 0}}}, &imported); e != nil {
 			return "", e
 		}
 		if len(imported) != 1 || !imported[0].Success {
@@ -303,7 +304,7 @@ func (w *Worker) mutate(ctx context.Context, request bitcoin.BitcoinArmedRPC) (s
 		}
 	case bitcoin.RPCUnloadWallet:
 		var result map[string]any
-		if e := w.RPC.Call(ctx, endpoint, request.ID, "unloadwallet", []any{wallet.Name, false}, &result); e != nil {
+		if e := w.RPC.Call(ctx, endpoint, request.ID, bitcoinrpc.MethodUnloadWallet, []any{wallet.Name, false}, &result); e != nil {
 			return "", e
 		}
 	default:

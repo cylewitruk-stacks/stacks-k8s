@@ -135,11 +135,11 @@ func protocolRole(kind api.ParticipantKind, profile stacksworker.Profile, reader
 		}
 		return "", fmt.Errorf("required signing key mount is missing")
 	}
-	senderRole := "sender"
+	senderRole := stacksworker.KeyRoleSender
 	if kind == api.ParticipantStacksStacker {
-		senderRole = "holder"
+		senderRole = stacksworker.KeyRoleHolder
 	} else if kind == api.ParticipantStacksContractSet {
-		senderRole = "deployer"
+		senderRole = stacksworker.KeyRoleDeployer
 	}
 	key, err := read(senderRole)
 	if err != nil {
@@ -174,7 +174,7 @@ func protocolRole(kind api.ParticipantKind, profile stacksworker.Profile, reader
 		if err != nil {
 			return nil, nil, err
 		}
-		administratorKey, err := read("administrator")
+		administratorKey, err := read(stacksworker.KeyRoleAdministrator)
 		if err != nil {
 			return nil, nil, err
 		}

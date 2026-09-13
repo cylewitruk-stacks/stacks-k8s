@@ -13,17 +13,53 @@ the independently versioned API, runtime, and generator dependency graphs.
 
 ## Domain vocabulary
 
-Public kind, lifecycle and cadence constants live with their API types in
-`apis/network`; runtime-only metadata stays with its owning controller package.
-Use typed values through domain helpers and convert to strings at generic
-Kubernetes, CLI, naming or document boundaries. Use concrete object switches
-for supported action dispatch and return errors for unknown or nil inputs.
+Keep machine-readable vocabulary with its owner. Public kinds, REST resource
+names, condition types and cross-controller reasons live in their API packages.
+Producer-specific reasons stay in the producer package. Worker modes, signing-key
+roles, metadata selectors and RPC methods belong to the component defining that
+process or protocol boundary. Consumers reuse those definitions.
 
-Keep schema enums, YAML examples and wire-test expectations independent of
-implementation constants. A constant refactor must preserve serialized values
-and generated schemas; a named Go string type does not validate external input
-or make switches exhaustive. Condition reasons remain extensible strings, with
-shared constants for reasons that coordinate execution across controllers.
+Use named string types for domain fields and helper signatures that benefit from
+them. Kubernetes condition types/reasons and generic object bindings remain
+extensible strings with named constants. A `Running` condition, desired operation,
+phase and reason are distinct symbols even when their wire values match. Constants
+do not validate unknown input or make Go switches exhaustive.
+
+### Object identity and supported kinds
+
+When a concrete object is available, use its Go type instead of passing a second
+Kind argument. The network runtime's `internal/objectref` constructors accept
+specific resource types and capture name/UID without reading contents; fingerprints
+remain explicit. Metadata-only Secret references require the expected GVK.
+
+Register resource-focused controllers with typed prototypes. Use the manager's
+scheme for generic GVK lookup and fresh object allocation, preserving the selected
+version and excluding previously fetched fields. Never silently choose between
+ambiguous registrations. Scheme registration does not authorize a capability:
+keep supported-kind checks at declaration, request and persisted-reference
+boundaries. Expected owner kinds, dynamic references and SSA TypeMeta still need
+explicit Kubernetes identity.
+
+### Literal boundaries
+
+The following literals remain intentional; they are declarations or independently
+specified data rather than undocumented controller vocabulary.
+
+| Boundary | Motivation |
+| --- | --- |
+| Constant definitions | The owning declaration must define the actual wire value once. |
+| JSON/TOML tags, codec keys, URL/path grammar and fixed configuration presets | Keeping the format at its encoder/decoder or preset makes the wire layout reviewable. Extract a shared identifier when another runtime component depends on the same contract. |
+| RBAC validation fixtures and native option allow/deny tables | These express an independently checked permission/configuration policy. Keep expected values independent of the producer and avoid obscuring the policy behind shared production constants. |
+| Kubernetes security-context literals such as dropping `ALL` capabilities | A self-contained native policy declaration is directly auditable; use upstream constants where provided. |
+| CLI flag declarations, help, diagnostics and log messages | Their declaration site explains their meaning. Worker mode values transported between Pods and entrypoints use constants. |
+| Tests, schema enums, YAML and contract fixtures | Independent literal expectations catch accidental wire changes; coupling them to production constants would weaken that check. |
+| Empty strings and syntax delimiters | These express absence or grammar, not a product state. |
+
+A one-use status reason is still machine-readable vocabulary. New literals used
+for status publication, branching, resource lookup or producer/consumer identity
+must use an existing domain symbol or receive a named owner. Do not create a
+repository-wide miscellaneous constants package or generate code merely to ban
+all string literals.
 
 ## Kubernetes compatibility
 

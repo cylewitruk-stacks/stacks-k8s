@@ -179,20 +179,20 @@ func provisionKeyJob(ctx context.Context, c client.Client, reader client.Reader,
 	if err := createOwned(ctx, c, s, owner, role); err != nil {
 		return err
 	}
-	binding := &rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: owner.GetNamespace()}, RoleRef: rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: "Role", Name: name}, Subjects: []rbacv1.Subject{{Kind: "ServiceAccount", Name: name, Namespace: owner.GetNamespace()}}}
+	binding := &rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: owner.GetNamespace()}, RoleRef: rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: common.KindRole, Name: name}, Subjects: []rbacv1.Subject{{Kind: common.KindServiceAccount, Name: name, Namespace: owner.GetNamespace()}}}
 	if err := createOwned(ctx, c, s, owner, binding); err != nil {
 		return err
 	}
 	data, _ := json.Marshal(in)
 	job := &batchv1.Job{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: owner.GetNamespace(), Labels: map[string]string{managedByLabel: foundationManager, api.LabelRole: "support", api.LabelSourceUID: string(owner.GetUID()), api.LabelSourceKind: gvk.Kind}, Annotations: map[string]string{api.AnnotationSourceName: owner.GetName()}},
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: owner.GetNamespace(), Labels: map[string]string{managedByLabel: foundationManager, api.LabelRole: api.RoleSupport, api.LabelSourceUID: string(owner.GetUID()), api.LabelSourceKind: gvk.Kind}, Annotations: map[string]string{api.AnnotationSourceName: owner.GetName()}},
 		Spec: batchv1.JobSpec{
 			BackoffLimit: ptr.To[int32](3), ActiveDeadlineSeconds: ptr.To[int64](120),
-			Template: corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{managedByLabel: foundationManager, api.LabelRole: "support", api.LabelSourceUID: string(owner.GetUID()), api.LabelSourceKind: gvk.Kind}}, Spec: corev1.PodSpec{
+			Template: corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{managedByLabel: foundationManager, api.LabelRole: api.RoleSupport, api.LabelSourceUID: string(owner.GetUID()), api.LabelSourceKind: gvk.Kind}}, Spec: corev1.PodSpec{
 				ServiceAccountName: name, RestartPolicy: corev1.RestartPolicyNever,
 				SecurityContext: &corev1.PodSecurityContext{RunAsNonRoot: ptr.To(true), RunAsUser: ptr.To[int64](65532), SeccompProfile: &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault}},
 				Containers: []corev1.Container{{
-					Name: "resolver", Image: image, Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("10m"), corev1.ResourceMemory: resource.MustParse("32Mi")}, Limits: corev1.ResourceList{corev1.ResourceMemory: resource.MustParse("128Mi")}}, Command: []string{"/foundation"}, Args: []string{"--mode=resolve-key", "--input=" + string(data)},
+					Name: "resolver", Image: image, Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("10m"), corev1.ResourceMemory: resource.MustParse("32Mi")}, Limits: corev1.ResourceList{corev1.ResourceMemory: resource.MustParse("128Mi")}}, Command: []string{"/foundation"}, Args: []string{"--mode=" + ModeResolveKey, "--input=" + string(data)},
 					SecurityContext: &corev1.SecurityContext{AllowPrivilegeEscalation: ptr.To(false), ReadOnlyRootFilesystem: ptr.To(true), Capabilities: &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}}},
 				}},
 			}},

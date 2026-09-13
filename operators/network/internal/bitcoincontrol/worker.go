@@ -10,6 +10,7 @@ import (
 	"time"
 
 	bitcoin "github.com/cylewitruk-stacks/stacks-k8s/apis/network/bitcoin/v1alpha2"
+	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/objectref"
 	"k8s.io/apimachinery/pkg/api/equality"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -227,7 +228,7 @@ func (w *Worker) arm(ctx context.Context, record *bitcoin.BitcoinExecution, a ad
 	if !equality.Semantic.DeepEqual(fresh.target, a.target) {
 		return fmt.Errorf("target admission changed before arm")
 	}
-	reservation := binding("BitcoinInitialization", fresh.initialization)
+	reservation := objectref.BitcoinInitialization(fresh.initialization)
 	if operation.Action != nil {
 		reservation = *operation.Action
 	}
@@ -269,7 +270,7 @@ func (w *Worker) arm(ctx context.Context, record *bitcoin.BitcoinExecution, a ad
 	if e != nil || !equality.Semantic.DeepEqual(confirmed.target, fresh.target) {
 		reason := ""
 		if errors.Is(e, errExternalChainMovement) {
-			reason = "ExternalChainMovement"
+			reason = reasonExternalChainMovement
 		}
 		return w.withdraw(ctx, current, reason)
 	}

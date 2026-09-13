@@ -28,7 +28,7 @@ type PublicInputs struct {
 
 // account validates the exact admitted account fingerprint without reading key material.
 func (r PublicInputs) account(ctx context.Context, p *api.StacksNetworkParticipant, name string) (*stacks.StacksAccount, error) {
-	binding, err := dependency(p, "StacksAccount", name)
+	binding, err := dependency(p, stacks.KindStacksAccount, name)
 	if err != nil {
 		return nil, err
 	}
@@ -36,7 +36,7 @@ func (r PublicInputs) account(ctx context.Context, p *api.StacksNetworkParticipa
 	if err := r.Reader.Get(ctx, client.ObjectKey{Namespace: p.Namespace, Name: name}, &account); err != nil {
 		return nil, err
 	}
-	if account.UID != binding.UID || account.DeletionTimestamp != nil || account.Status.Digest != binding.Fingerprint || account.Status.Identity == nil || account.Status.ObservedGeneration != account.Generation || !meta.IsStatusConditionTrue(account.Status.Conditions, "Resolved") {
+	if account.UID != binding.UID || account.DeletionTimestamp != nil || account.Status.Digest != binding.Fingerprint || account.Status.Identity == nil || account.Status.ObservedGeneration != account.Generation || !meta.IsStatusConditionTrue(account.Status.Conditions, common.ConditionResolved) {
 		return nil, fmt.Errorf("account identity unavailable")
 	}
 	return &account, nil
@@ -66,7 +66,7 @@ func (r PublicInputs) target(ctx context.Context, s stacksworker.Snapshot, name 
 	var binding *common.Binding
 	for i := range s.Participant.Status.Admission.Dependencies {
 		b := &s.Participant.Status.Admission.Dependencies[i]
-		if b.Kind == "StacksNetworkParticipant" && b.UID == identity.UID {
+		if b.Kind == api.KindStacksNetworkParticipant && b.UID == identity.UID {
 			binding = b
 			break
 		}
@@ -85,7 +85,7 @@ func (r PublicInputs) target(ctx context.Context, s stacksworker.Snapshot, name 
 	if runtime.ObservedGeneration != target.Generation || runtime.PolicyDigest != target.Status.Admission.PolicyDigest || runtime.PodRef == nil || runtime.ContainerID == "" || runtime.Terminated {
 		return nil, fmt.Errorf("target runtime unavailable")
 	}
-	for _, kind := range []string{"ConfigVerified", "WorkloadReady"} {
+	for _, kind := range []string{api.ConditionConfigVerified, api.ConditionWorkloadReady} {
 		c := meta.FindStatusCondition(target.Status.Conditions, kind)
 		if c == nil || c.Status != metav1.ConditionTrue || c.ObservedGeneration != target.Generation {
 			return nil, fmt.Errorf("target runtime is not verified and ready")

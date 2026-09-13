@@ -16,21 +16,21 @@ type ParticipantKind string
 
 const (
 	// ParticipantBitcoinNode selects the BitcoinNode participant domain.
-	ParticipantBitcoinNode ParticipantKind = "BitcoinNode"
+	ParticipantBitcoinNode ParticipantKind = bitcoin.KindBitcoinNode
 	// ParticipantStacksNode selects the StacksNode participant domain.
-	ParticipantStacksNode ParticipantKind = "StacksNode"
+	ParticipantStacksNode ParticipantKind = stacks.KindStacksNode
 	// ParticipantStacksSigner selects the StacksSigner participant domain.
-	ParticipantStacksSigner ParticipantKind = "StacksSigner"
+	ParticipantStacksSigner ParticipantKind = stacks.KindStacksSigner
 	// ParticipantStacksStacker selects the StacksStacker participant domain.
-	ParticipantStacksStacker ParticipantKind = "StacksStacker"
+	ParticipantStacksStacker ParticipantKind = stacks.KindStacksStacker
 	// ParticipantStacksFaucet selects the StacksFaucet participant domain.
-	ParticipantStacksFaucet ParticipantKind = "StacksFaucet"
+	ParticipantStacksFaucet ParticipantKind = stacks.KindStacksFaucet
 	// ParticipantStacksContractSet selects the StacksContractSet participant domain.
-	ParticipantStacksContractSet ParticipantKind = "StacksContractSet"
+	ParticipantStacksContractSet ParticipantKind = stacks.KindStacksContractSet
 	// ParticipantStacksTransactionProduction selects the StacksTransactionProduction participant domain.
-	ParticipantStacksTransactionProduction ParticipantKind = "StacksTransactionProduction"
+	ParticipantStacksTransactionProduction ParticipantKind = stacks.KindStacksTransactionProduction
 	// ParticipantBitcoinBlockProduction selects the BitcoinBlockProduction participant domain.
-	ParticipantBitcoinBlockProduction ParticipantKind = "BitcoinBlockProduction"
+	ParticipantBitcoinBlockProduction ParticipantKind = bitcoin.KindBitcoinBlockProduction
 )
 
 // Configuration contains exactly the branch selected by the outer kind.

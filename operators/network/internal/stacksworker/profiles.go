@@ -11,6 +11,7 @@ import (
 	stacks "github.com/cylewitruk-stacks/stacks-k8s/apis/network/stacks/v1alpha2"
 	api "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha2"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/foundation"
+	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/objectref"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -51,23 +52,23 @@ func (r Profiles) account(ctx context.Context, p *api.StacksNetworkParticipant, 
 	captured := false
 	if p.Status.Admission != nil {
 		for _, b := range p.Status.Admission.Dependencies {
-			if b.Kind == "StacksAccount" && b.Name == name && b.UID == account.UID && b.Fingerprint == account.Status.Digest {
+			if b.Kind == stacks.KindStacksAccount && b.Name == name && b.UID == account.UID && b.Fingerprint == account.Status.Digest {
 				captured = true
 			}
 		}
 	}
-	if !captured || account.DeletionTimestamp != nil || account.Status.ObservedGeneration != account.Generation || !meta.IsStatusConditionTrue(account.Status.Conditions, "Resolved") || account.Status.Identity == nil || account.Status.CredentialsRef == nil || account.Status.CredentialsUID == "" {
+	if !captured || account.DeletionTimestamp != nil || account.Status.ObservedGeneration != account.Generation || !meta.IsStatusConditionTrue(account.Status.Conditions, common.ConditionResolved) || account.Status.Identity == nil || account.Status.CredentialsRef == nil || account.Status.CredentialsUID == "" {
 		return bootstrapAccount{}, fmt.Errorf("role account is not admitted and resolved")
 	}
-	key := KeyMount{Role: role, Secret: common.Binding{Kind: "Secret", Name: account.Status.CredentialsRef.Name, UID: account.Status.CredentialsUID}, Key: account.Status.CredentialsRef.Key}
-	secretMeta := &metav1.PartialObjectMetadata{TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "Secret"}}
+	key := KeyMount{Role: role, Secret: common.Binding{Kind: common.KindSecret, Name: account.Status.CredentialsRef.Name, UID: account.Status.CredentialsUID}, Key: account.Status.CredentialsRef.Key}
+	secretMeta := &metav1.PartialObjectMetadata{TypeMeta: metav1.TypeMeta{APIVersion: corev1.SchemeGroupVersion.String(), Kind: common.KindSecret}}
 	if err := r.Reader.Get(ctx, client.ObjectKey{Namespace: p.Namespace, Name: key.Secret.Name}, secretMeta); err != nil {
 		return bootstrapAccount{}, err
 	}
 	if secretMeta.UID != key.Secret.UID || secretMeta.DeletionTimestamp != nil {
 		return bootstrapAccount{}, fmt.Errorf("role key identity changed")
 	}
-	return bootstrapAccount{Account: common.Binding{Kind: "StacksAccount", Name: account.Name, UID: account.UID, Fingerprint: account.Status.Digest}, Identity: *account.Status.Identity, Credential: key}, nil
+	return bootstrapAccount{Account: objectref.WithFingerprint(objectref.Account(&account), account.Status.Digest), Identity: *account.Status.Identity, Credential: key}, nil
 }
 
 // signer resolves the exact admitted consensus participant without reading its private config.
@@ -79,7 +80,7 @@ func (r Profiles) signer(ctx context.Context, root *api.StacksNetwork, p *api.St
 	}
 	captured := false
 	for _, b := range p.Status.Admission.Dependencies {
-		if b.Kind == "StacksNetworkParticipant" && b.Name == generated && b.UID == signer.UID {
+		if b.Kind == api.KindStacksNetworkParticipant && b.Name == generated && b.UID == signer.UID {
 			captured = true
 		}
 	}
@@ -113,7 +114,7 @@ func (r Profiles) Resolve(ctx context.Context, root *api.StacksNetwork, p *api.S
 			return Profile{}, fmt.Errorf("faucet policy unavailable")
 		}
 		placement = policy.StacksFaucet.WorkerPlacement
-		if err := add(p, policy.StacksFaucet.AccountRef, "sender"); err != nil {
+		if err := add(p, policy.StacksFaucet.AccountRef, KeyRoleSender); err != nil {
 			return Profile{}, err
 		}
 	case api.ParticipantStacksTransactionProduction:
@@ -121,7 +122,7 @@ func (r Profiles) Resolve(ctx context.Context, root *api.StacksNetwork, p *api.S
 			return Profile{}, fmt.Errorf("transaction policy unavailable")
 		}
 		placement = policy.StacksTransactionProduction.WorkerPlacement
-		if err := add(p, policy.StacksTransactionProduction.AccountRef, "sender"); err != nil {
+		if err := add(p, policy.StacksTransactionProduction.AccountRef, KeyRoleSender); err != nil {
 			return Profile{}, err
 		}
 	case api.ParticipantStacksContractSet:
@@ -129,7 +130,7 @@ func (r Profiles) Resolve(ctx context.Context, root *api.StacksNetwork, p *api.S
 			return Profile{}, fmt.Errorf("contract policy unavailable")
 		}
 		placement = policy.StacksContractSet.WorkerPlacement
-		if err := add(p, policy.StacksContractSet.DeployerAccountRef, "deployer"); err != nil {
+		if err := add(p, policy.StacksContractSet.DeployerAccountRef, KeyRoleDeployer); err != nil {
 			return Profile{}, err
 		}
 	case api.ParticipantStacksStacker:
@@ -138,10 +139,10 @@ func (r Profiles) Resolve(ctx context.Context, root *api.StacksNetwork, p *api.S
 			return Profile{}, fmt.Errorf("stacker policy unavailable")
 		}
 		placement = stacker.WorkerPlacement
-		if err := add(p, stacker.HolderAccountRef, "holder"); err != nil {
+		if err := add(p, stacker.HolderAccountRef, KeyRoleHolder); err != nil {
 			return Profile{}, err
 		}
-		if err := add(p, stacker.AdministratorAccountRef, "administrator"); err != nil {
+		if err := add(p, stacker.AdministratorAccountRef, KeyRoleAdministrator); err != nil {
 			return Profile{}, err
 		}
 		signer, err := r.signer(ctx, root, p, stacker.SignerRef.Name)
@@ -167,7 +168,7 @@ func (r Profiles) Resolve(ctx context.Context, root *api.StacksNetwork, p *api.S
 		Participant common.Binding     `json:"participant"`
 		Genesis     common.Binding     `json:"genesis"`
 		Accounts    []bootstrapAccount `json:"accounts"`
-	}{common.Binding{Kind: "StacksNetwork", Name: root.Name, UID: root.UID}, common.Binding{Kind: "StacksNetworkParticipant", Name: p.Name, UID: p.UID}, *root.Status.GenesisRef, accounts}
+	}{objectref.Network(root), objectref.Participant(p), *root.Status.GenesisRef, accounts}
 	raw, err := json.Marshal(input)
 	if err != nil {
 		return Profile{}, err
@@ -193,7 +194,7 @@ func (r Profiles) Resolve(ctx context.Context, root *api.StacksNetwork, p *api.S
 	for _, account := range accounts {
 		keys = append(keys, account.Credential)
 	}
-	return (Profile{Image: r.Image, Configuration: *objectBinding("ConfigMap", &current), Keys: keys, Reads: reads, Placement: placement}).Normalize()
+	return (Profile{Image: r.Image, Configuration: objectref.ConfigMap(&current), Keys: keys, Reads: reads, Placement: placement}).Normalize()
 }
 
 // Reads selects current public dependencies; keys remain mounted and never API-readable.
@@ -201,17 +202,17 @@ func (r Profiles) Reads(ctx context.Context, root *api.StacksNetwork, p *api.Sta
 	if p.Status.Admission == nil || root.Status.GenesisRef == nil {
 		return nil, fmt.Errorf("worker admitted dependencies unavailable")
 	}
-	reads := []ReadBinding{{APIVersion: api.GroupVersion.String(), Resource: "stacksgeneses", Name: root.Status.GenesisRef.Name}}
+	reads := []ReadBinding{{APIVersion: api.GroupVersion.String(), Resource: api.ResourceStacksGenesis, Name: root.Status.GenesisRef.Name}}
 	if source := p.Status.Admission.Source; source.Name != "" {
 		reads = append(reads, ReadBinding{APIVersion: stacks.GroupVersion.String(), Resource: strings.ToLower(string(p.Spec.Kind)) + "s", Name: source.Name})
 	}
 	add := func(dependencies []common.Binding) {
 		for _, b := range dependencies {
 			switch b.Kind {
-			case "StacksAccount":
-				reads = append(reads, ReadBinding{APIVersion: stacks.GroupVersion.String(), Resource: "stacksaccounts", Name: b.Name})
-			case "StacksNetworkParticipant":
-				reads = append(reads, ReadBinding{APIVersion: api.GroupVersion.String(), Resource: "stacksnetworkparticipants", Name: b.Name})
+			case stacks.KindStacksAccount:
+				reads = append(reads, ReadBinding{APIVersion: stacks.GroupVersion.String(), Resource: stacks.ResourceStacksAccount, Name: b.Name})
+			case api.KindStacksNetworkParticipant:
+				reads = append(reads, ReadBinding{APIVersion: api.GroupVersion.String(), Resource: api.ResourceStacksNetworkParticipant, Name: b.Name})
 			}
 		}
 	}

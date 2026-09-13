@@ -214,11 +214,11 @@ func (r *Reconciler) validateCandidateImage(ctx context.Context, p *api.StacksNe
 		Image     string
 	}{candidate, *state.ConfigRef, ptr.Deref(fields.Image, "")})
 	job := &batchv1.Job{
-		ObjectMeta: objectMeta(p, "validate-"+strings.TrimPrefix(revision, "sha256:"), "support"),
+		ObjectMeta: objectMeta(p, "validate-"+strings.TrimPrefix(revision, "sha256:"), api.RoleSupport),
 		Spec: batchv1.JobSpec{
 			BackoffLimit: ptr.To[int32](0), ActiveDeadlineSeconds: ptr.To[int64](120),
 			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{Labels: Labels(p, "support")},
+				ObjectMeta: metav1.ObjectMeta{Labels: Labels(p, api.RoleSupport)},
 				Spec: corev1.PodSpec{
 					AutomountServiceAccountToken: ptr.To(false), RestartPolicy: corev1.RestartPolicyNever,
 					SecurityContext: &corev1.PodSecurityContext{RunAsNonRoot: ptr.To(true), RunAsUser: ptr.To[int64](1000), RunAsGroup: ptr.To[int64](1000), FSGroup: ptr.To[int64](1000)},
@@ -235,7 +235,7 @@ func (r *Reconciler) validateCandidateImage(ctx context.Context, p *api.StacksNe
 	}
 	job.Annotations = map[string]string{candidateConfigurationAnnotation: revision}
 	if r.candidateConfiguration != nil && r.candidateConfiguration.Root.Spec.Defaults != nil {
-		applyPlacement(&job.Spec.Template.Spec, r.candidateConfiguration.Root.Spec.Defaults.WorkerPlacement, Labels(p, "support"))
+		applyPlacement(&job.Spec.Template.Spec, r.candidateConfiguration.Root.Spec.Defaults.WorkerPlacement, Labels(p, api.RoleSupport))
 	}
 	if err := r.createOwned(ctx, p, job); err != nil {
 		return false, err

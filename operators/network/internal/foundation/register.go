@@ -1,8 +1,11 @@
 package foundation
 
 import (
+	bitcoin "github.com/cylewitruk-stacks/stacks-k8s/apis/network/bitcoin/v1alpha2"
+	stacks "github.com/cylewitruk-stacks/stacks-k8s/apis/network/stacks/v1alpha2"
 	api "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha2"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // RuntimeOptions installs supported domains and the aggregate-owned runtime projection.
@@ -38,8 +41,12 @@ func Register(manager ctrl.Manager, image string, options ...RuntimeOptions) err
 			return err
 		}
 	}
-	for _, kind := range []string{string(api.ParticipantBitcoinNode), string(api.ParticipantStacksNode), string(api.ParticipantStacksSigner), string(api.ParticipantStacksStacker), string(api.ParticipantStacksFaucet), string(api.ParticipantStacksContractSet), string(api.ParticipantStacksTransactionProduction), string(api.ParticipantBitcoinBlockProduction), "StacksEpochSchedule", "BitcoinBlockSchedule"} {
-		r := &DefinitionReconciler{Client: manager.GetClient(), Scheme: manager.GetScheme(), Kind: kind}
+	for _, prototype := range []client.Object{
+		&bitcoin.BitcoinNode{}, &stacks.StacksNode{}, &stacks.StacksSigner{}, &stacks.StacksStacker{},
+		&stacks.StacksFaucet{}, &stacks.StacksContractSet{}, &stacks.StacksTransactionProduction{},
+		&bitcoin.BitcoinBlockProduction{}, &api.StacksEpochSchedule{}, &bitcoin.BitcoinBlockSchedule{},
+	} {
+		r := &DefinitionReconciler{Client: manager.GetClient(), Scheme: manager.GetScheme(), Prototype: prototype}
 		if err := r.SetupWithManager(manager); err != nil {
 			return err
 		}

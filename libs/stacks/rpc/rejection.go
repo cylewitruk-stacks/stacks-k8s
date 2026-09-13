@@ -35,10 +35,10 @@ func ClassifySubmissionRejection(status int, data []byte, txid string) *Submissi
 		Error  string `json:"error"`
 		Reason string `json:"reason"`
 	}
-	if json.Unmarshal(data, &rejection) != nil || strings.TrimPrefix(rejection.TxID, "0x") != txid || rejection.Error != "transaction rejected" || rejection.Reason == "" {
+	if json.Unmarshal(data, &rejection) != nil || strings.TrimPrefix(rejection.TxID, "0x") != txid || rejection.Error != nativeRejectionEnvelope || rejection.Reason == "" {
 		return nil
 	}
-	reason := "Other"
+	reason := RejectionOther
 	if ValidationRejectionReason(rejection.Reason) {
 		reason = rejection.Reason
 	}
@@ -51,8 +51,25 @@ func (r *SubmissionRejection) Definite() bool { return ValidationRejectionReason
 // ValidationRejectionReason excludes unknown reasons and server/database failures.
 func ValidationRejectionReason(reason string) bool {
 	switch reason {
-	case "FeeTooLow", "BadNonce", "ConflictingNonceInMempool", "NotEnoughFunds":
+	case RejectionFeeTooLow, RejectionBadNonce, RejectionConflictingNonceInMempool, RejectionNotEnoughFunds:
 		return true
 	}
 	return false
 }
+
+// Native rejection names accepted by the bounded ingress classifier.
+const (
+	// RejectionFeeTooLow identifies the FeeTooLow ingress classification.
+	RejectionFeeTooLow = "FeeTooLow"
+	// RejectionBadNonce identifies the BadNonce ingress classification.
+	RejectionBadNonce = "BadNonce"
+	// RejectionConflictingNonceInMempool identifies the ConflictingNonceInMempool ingress classification.
+	RejectionConflictingNonceInMempool = "ConflictingNonceInMempool"
+	// RejectionNotEnoughFunds identifies the NotEnoughFunds ingress classification.
+	RejectionNotEnoughFunds = "NotEnoughFunds"
+	// RejectionOther identifies the Other ingress classification.
+	RejectionOther = "Other"
+)
+
+// nativeRejectionEnvelope distinguishes the native mempool refusal from generic HTTP failures.
+const nativeRejectionEnvelope = "transaction rejected"

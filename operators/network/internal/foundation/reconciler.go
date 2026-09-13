@@ -9,6 +9,7 @@ import (
 
 	common "github.com/cylewitruk-stacks/stacks-k8s/apis/network/common/v1alpha2"
 	api "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha2"
+	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/objectref"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/participantstatus"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -43,25 +44,25 @@ func condition(conditions *[]metav1.Condition, generation int64, kind string, st
 	meta.SetStatusCondition(conditions, metav1.Condition{Type: kind, Status: status, Reason: reason, Message: message, ObservedGeneration: generation})
 }
 func (r *Reconciler) report(ctx context.Context, root *api.StacksNetwork, base *api.StacksNetwork, phase api.NetworkPhase, reason, message string) (ctrl.Result, error) {
-	failed := root.Status.Phase == api.NetworkPhaseFailed || meta.IsStatusConditionTrue(root.Status.Conditions, "Failed")
+	failed := root.Status.Phase == api.NetworkPhaseFailed || meta.IsStatusConditionTrue(root.Status.Conditions, api.ConditionFailed)
 	if phase == api.NetworkPhaseFailed || (!failed && (r.Runtime == nil || root.Status.GenesisRef == nil)) {
 		root.Status.Phase = phase
 	}
 	if phase == api.NetworkPhaseFailed {
-		condition(&root.Status.Conditions, root.Generation, "Failed", metav1.ConditionTrue, reason, message)
+		condition(&root.Status.Conditions, root.Generation, api.ConditionFailed, metav1.ConditionTrue, reason, message)
 	}
 	if r.Runtime == nil {
-		condition(&root.Status.Conditions, root.Generation, "Initialized", metav1.ConditionFalse, "RuntimeNotImplemented", "This delivery resolves and captures genesis; protocol initialization is not implemented")
-		condition(&root.Status.Conditions, root.Generation, "Running", metav1.ConditionFalse, "RuntimeNotImplemented", "No actor or protocol workers are activated by the foundation")
-		condition(&root.Status.Conditions, root.Generation, "Operational", metav1.ConditionFalse, "RuntimeNotImplemented", "Protocol health is not asserted")
+		condition(&root.Status.Conditions, root.Generation, api.ConditionInitialized, metav1.ConditionFalse, reasonRuntimeNotImplemented, "This delivery resolves and captures genesis; protocol initialization is not implemented")
+		condition(&root.Status.Conditions, root.Generation, api.ConditionRunning, metav1.ConditionFalse, reasonRuntimeNotImplemented, "No actor or protocol workers are activated by the foundation")
+		condition(&root.Status.Conditions, root.Generation, api.ConditionOperational, metav1.ConditionFalse, reasonRuntimeNotImplemented, "Protocol health is not asserted")
 	}
 	resolvedStatus := metav1.ConditionUnknown
 	if phase == api.NetworkPhaseResolutionError || phase == api.NetworkPhaseFailed {
 		resolvedStatus = metav1.ConditionFalse
-	} else if reason == "PausedBeforeInitialization" || reason == "GenesisCaptured" {
+	} else if reason == reasonPausedBeforeInitialization || reason == reasonGenesisCaptured {
 		resolvedStatus = metav1.ConditionTrue
 	}
-	condition(&root.Status.Conditions, root.Generation, "Resolved", resolvedStatus, reason, message)
+	condition(&root.Status.Conditions, root.Generation, common.ConditionResolved, resolvedStatus, reason, message)
 	if !equal(base.Status, root.Status) {
 		if err := r.Client.Status().Patch(ctx, root, client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{})); err != nil {
 			return ctrl.Result{}, err
@@ -72,7 +73,7 @@ func (r *Reconciler) report(ctx context.Context, root *api.StacksNetwork, base *
 	if phase == api.NetworkPhaseResolutionError {
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
-	if reason == "Allocating" || reason == "Withdrawing" || reason == "GenesisRecovered" {
+	if reason == reasonAllocating || reason == reasonWithdrawing || reason == reasonGenesisRecovered {
 		return ctrl.Result{RequeueAfter: time.Millisecond}, nil
 	}
 	return ctrl.Result{}, nil
@@ -99,7 +100,7 @@ func (r *Reconciler) reconcileTopology(ctx context.Context, req ctrl.Request) (c
 		selected[entry.Name] = entry
 	}
 	var resolutionErr error
-	resolutionReason := "InputsUnavailable"
+	resolutionReason := reasonInputsUnavailable
 	issue := func(reason, message string) {
 		if resolutionErr == nil {
 			resolutionReason, resolutionErr = reason, fmt.Errorf("%s", message)
@@ -110,27 +111,27 @@ func (r *Reconciler) reconcileTopology(ctx context.Context, req ctrl.Request) (c
 		id := &root.Status.Identities[i]
 		if _, ok := selected[id.Name]; !ok && !id.Removing {
 			id.Removing = true
-			return r.report(ctx, &root, base, api.NetworkPhaseResolving, "Withdrawing", "Participant removal recorded before destructive cleanup")
+			return r.report(ctx, &root, base, api.NetworkPhaseResolving, reasonWithdrawing, "Participant removal recorded before destructive cleanup")
 		}
 		if id.Removing {
 			if err := r.deleteParticipant(ctx, &root, *id); err != nil {
 				return ctrl.Result{}, err
 			}
 			if _, ok := selected[id.Name]; ok {
-				issue("NameAlreadyUsed", "Removed participant names are single-use; choose a new name")
+				issue(reasonNameAlreadyUsed, "Removed participant names are single-use; choose a new name")
 			}
 		}
 	}
-	if root.Status.Phase == api.NetworkPhaseFailed || meta.IsStatusConditionTrue(root.Status.Conditions, "Failed") {
+	if root.Status.Phase == api.NetworkPhaseFailed || meta.IsStatusConditionTrue(root.Status.Conditions, api.ConditionFailed) {
 		return ctrl.Result{}, nil
 	}
 	if root.Status.GenesisRef == nil {
 		existing := &api.StacksGenesis{}
-		key := types.NamespacedName{Namespace: root.Namespace, Name: RuntimeName(string(root.UID), "", "StacksGenesis", root.Name, "genesis")}
+		key := types.NamespacedName{Namespace: root.Namespace, Name: RuntimeName(string(root.UID), "", api.KindStacksGenesis, root.Name, "genesis")}
 		err := r.Reader.Get(ctx, key, existing)
 		if err == nil {
 			if !ownedUID(existing, root.UID) || existing.Spec.Source.NetworkUID != root.UID || existing.DeletionTimestamp != nil {
-				return r.report(ctx, &root, base, api.NetworkPhaseFailed, "GenesisUnavailable", "Existing genesis is foreign or being removed")
+				return r.report(ctx, &root, base, api.NetworkPhaseFailed, reasonGenesisUnavailable, "Existing genesis is foreign or being removed")
 			}
 			for _, required := range existing.Spec.Bootstrap.Requirements {
 				var p api.StacksNetworkParticipant
@@ -138,16 +139,16 @@ func (r *Reconciler) reconcileTopology(ctx context.Context, req ctrl.Request) (c
 					if !apierrors.IsNotFound(err) {
 						return ctrl.Result{}, err
 					}
-					return r.report(ctx, &root, base, api.NetworkPhaseFailed, "BootstrapPolicyUnavailable", "Captured participant unavailable; recreate the network")
+					return r.report(ctx, &root, base, api.NetworkPhaseFailed, reasonBootstrapPolicyUnavailable, "Captured participant unavailable; recreate the network")
 				}
 				if p.UID != required.Participant.UID || p.Status.Admission == nil || p.Status.Admission.PolicyDigest != required.PolicyDigest {
-					return r.report(ctx, &root, base, api.NetworkPhaseFailed, "BootstrapPolicyUnavailable", "Captured initial policy unavailable; recreate the network")
+					return r.report(ctx, &root, base, api.NetworkPhaseFailed, reasonBootstrapPolicyUnavailable, "Captured initial policy unavailable; recreate the network")
 				}
 			}
-			root.Status.GenesisRef = ptrBinding(binding("StacksGenesis", existing, Digest(existing.Spec)))
+			root.Status.GenesisRef = ptrBinding(objectref.WithFingerprint(objectref.Genesis(existing), Digest(existing.Spec)))
 			root.Status.GenesisDigest = Digest(existing.Spec.Chain)
 			root.Status.InputDigest = existing.Spec.Source.InputDigest
-			return r.report(ctx, &root, base, api.NetworkPhaseInitializing, "GenesisRecovered", "Recovered the immutable capture; current intent still requires resolution")
+			return r.report(ctx, &root, base, api.NetworkPhaseInitializing, reasonGenesisRecovered, "Recovered the immutable capture; current intent still requires resolution")
 		}
 		if !apierrors.IsNotFound(err) {
 			return ctrl.Result{}, err
@@ -161,14 +162,14 @@ func (r *Reconciler) reconcileTopology(ctx context.Context, req ctrl.Request) (c
 			if !apierrors.IsNotFound(err) {
 				return ctrl.Result{}, err
 			}
-			return r.report(ctx, &root, base, api.NetworkPhaseFailed, "GenesisUnavailable", "Published genesis disappeared; recreate the network")
+			return r.report(ctx, &root, base, api.NetworkPhaseFailed, reasonGenesisUnavailable, "Published genesis disappeared; recreate the network")
 		}
 		if frozen.UID != root.Status.GenesisRef.UID || !ownedUID(frozen, root.UID) || frozen.DeletionTimestamp != nil || Digest(frozen.Spec) != root.Status.GenesisRef.Fingerprint {
-			return r.report(ctx, &root, base, api.NetworkPhaseFailed, "GenesisUnavailable", "Published genesis identity or content changed; recreate the network")
+			return r.report(ctx, &root, base, api.NetworkPhaseFailed, reasonGenesisUnavailable, "Published genesis identity or content changed; recreate the network")
 		}
 	}
 	if root.Spec.Operation == api.NetworkOperationStopped {
-		return r.report(ctx, &root, base, api.NetworkPhaseStopped, "Stopped", "Terminal stop; participant removals remain destructive")
+		return r.report(ctx, &root, base, api.NetworkPhaseStopped, api.ReasonStopped, "Terminal stop; participant removals remain destructive")
 	}
 	all := map[string]*candidate{}
 	instances := map[string]*api.StacksNetworkParticipant{}
@@ -185,10 +186,10 @@ func (r *Reconciler) reconcileTopology(ctx context.Context, req ctrl.Request) (c
 		err := r.Reader.Get(ctx, types.NamespacedName{Namespace: root.Namespace, Name: name}, instance)
 		if apierrors.IsNotFound(err) {
 			if id != nil {
-				return r.report(ctx, &root, base, api.NetworkPhaseFailed, "InstanceLost", "Recorded participant disappeared; replacement requires a fresh network")
+				return r.report(ctx, &root, base, api.NetworkPhaseFailed, reasonInstanceLost, "Recorded participant disappeared; replacement requires a fresh network")
 			}
 			if len(root.Status.Identities) >= 1000 {
-				issue("InstanceLimit", "Network lifetime participant allocation limit reached")
+				issue(reasonInstanceLimit, "Network lifetime participant allocation limit reached")
 				continue
 			}
 			instance = &api.StacksNetworkParticipant{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: root.Namespace}, Spec: api.StacksNetworkParticipantSpec{NetworkUID: root.UID, ParticipantName: entry.Name, Kind: entry.Kind}}
@@ -201,22 +202,22 @@ func (r *Reconciler) reconcileTopology(ctx context.Context, req ctrl.Request) (c
 			return ctrl.Result{}, err
 		}
 		if !ownedUID(instance, root.UID) || instance.Spec.NetworkUID != root.UID || instance.Spec.ParticipantName != entry.Name || instance.DeletionTimestamp != nil || id != nil && id.UID != instance.UID {
-			return r.report(ctx, &root, base, api.NetworkPhaseFailed, "InstanceIdentityChanged", "Participant identity changed or is foreign; recreate the network")
+			return r.report(ctx, &root, base, api.NetworkPhaseFailed, reasonInstanceIdentityChanged, "Participant identity changed or is foreign; recreate the network")
 		}
 		if instance.Spec.Kind != entry.Kind {
 			const message = "Participant kind is immutable while its entry exists"
-			issue("KindChanged", message)
-			if err := r.participantStatus(ctx, &root, dependencies, instance, nil, "KindChanged", message); err != nil {
+			issue(reasonKindChanged, message)
+			if err := r.participantStatus(ctx, &root, dependencies, instance, nil, reasonKindChanged, message); err != nil {
 				return ctrl.Result{}, err
 			}
 			continue
 		}
 		if id == nil {
 			if ManagementKind(entry.Kind) && !PendingWorkerAllocation(&root, instance) {
-				return r.report(ctx, &root, base, api.NetworkPhaseFailed, "WorkerIdentityLost", "Participant worker history exists without its identity ledger; recreate the network")
+				return r.report(ctx, &root, base, api.NetworkPhaseFailed, api.ReasonWorkerIdentityLost, "Participant worker history exists without its identity ledger; recreate the network")
 			}
 			root.Status.Identities = append(root.Status.Identities, api.InstanceIdentity{Name: entry.Name, UID: instance.UID})
-			return r.report(ctx, &root, base, api.NetworkPhaseResolving, "Allocating", "Participant identity recorded before resolving instance-owned inputs")
+			return r.report(ctx, &root, base, api.NetworkPhaseResolving, reasonAllocating, "Participant identity recorded before resolving instance-owned inputs")
 		}
 		instances[entry.Name] = instance
 		// Controls are independent of candidate policy validity, including composition errors.
@@ -230,8 +231,8 @@ func (r *Reconciler) reconcileTopology(ctx context.Context, req ctrl.Request) (c
 		}
 		c, err := r.compose(ctx, r.Client, &root, entry, instance)
 		if err != nil {
-			issue("InputsUnavailable", fmt.Sprintf("%s: %v", entry.Name, err))
-			if err := r.participantStatus(ctx, &root, dependencies, instance, nil, "ResolutionError", err.Error()); err != nil {
+			issue(reasonInputsUnavailable, fmt.Sprintf("%s: %v", entry.Name, err))
+			if err := r.participantStatus(ctx, &root, dependencies, instance, nil, reasonResolutionError, err.Error()); err != nil {
 				return ctrl.Result{}, err
 			}
 			continue
@@ -246,23 +247,23 @@ func (r *Reconciler) reconcileTopology(ctx context.Context, req ctrl.Request) (c
 		}
 		if err := c.validate(ctx, r.Client, all); err != nil {
 			invalid[entry.Name] = true
-			issue("InputsUnavailable", fmt.Sprintf("%s: %v", entry.Name, err))
-			if err := r.participantStatus(ctx, &root, dependencies, c.instance, nil, "ResolutionError", err.Error()); err != nil {
+			issue(reasonInputsUnavailable, fmt.Sprintf("%s: %v", entry.Name, err))
+			if err := r.participantStatus(ctx, &root, dependencies, c.instance, nil, reasonResolutionError, err.Error()); err != nil {
 				return ctrl.Result{}, err
 			}
 		}
 	}
 	for name, message := range topologyConflicts(all, instances, invalid) {
 		invalid[name] = true
-		issue("TopologyConflict", name+": "+message)
-		if err := r.participantStatus(ctx, &root, dependencies, all[name].instance, nil, "TopologyConflict", message); err != nil {
+		issue(reasonTopologyConflict, name+": "+message)
+		if err := r.participantStatus(ctx, &root, dependencies, all[name].instance, nil, reasonTopologyConflict, message); err != nil {
 			return ctrl.Result{}, err
 		}
 	}
 	for name, err := range r.configurationResults(ctx, &root, all, frozen, resolutionErr == nil) {
 		invalid[name] = true
-		issue("ConfigurationValidation", name+": "+err.Error())
-		if err := r.participantStatus(ctx, &root, dependencies, all[name].instance, nil, "InvalidConfiguration", err.Error()); err != nil {
+		issue(reasonConfigurationValidation, name+": "+err.Error())
+		if err := r.participantStatus(ctx, &root, dependencies, all[name].instance, nil, api.ReasonInvalidConfiguration, err.Error()); err != nil {
 			return ctrl.Result{}, err
 		}
 	}
@@ -278,12 +279,12 @@ func (r *Reconciler) reconcileTopology(ctx context.Context, req ctrl.Request) (c
 				continue
 			}
 			for _, dependency := range c.dependencies {
-				if dependency.Kind != "StacksNetworkParticipant" {
+				if dependency.Kind != api.KindStacksNetworkParticipant {
 					continue
 				}
 				if invalid[byUID[dependency.UID]] {
 					invalid[name], changed = true, true
-					if err := r.participantStatus(ctx, &root, dependencies, c.instance, nil, "ResolutionError", "A required participant is unresolved"); err != nil {
+					if err := r.participantStatus(ctx, &root, dependencies, c.instance, nil, reasonResolutionError, "A required participant is unresolved"); err != nil {
 						return ctrl.Result{}, err
 					}
 					break
@@ -297,12 +298,12 @@ func (r *Reconciler) reconcileTopology(ctx context.Context, req ctrl.Request) (c
 		if c == nil || invalid[entry.Name] {
 			continue
 		}
-		admissionReason, admissionMessage := "Admitted", "Complete public policy admitted; workload and protocol status are reported separately"
+		admissionReason, admissionMessage := reasonAdmitted, "Complete public policy admitted; workload and protocol status are reported separately"
 		admission := &api.Admission{Source: c.source, PolicyDigest: Digest(c.configuration), Configuration: c.configuration, Dependencies: c.dependencies}
 		if frozen != nil && !bitcoinBootstrapCompatible(c, frozen.Spec.Bootstrap) {
 			message := "Bitcoin payout and initialization must match the frozen network, including for a new participant"
-			issue("RequiresReplacement", entry.Name+": "+message)
-			if err := r.participantStatus(ctx, &root, dependencies, c.instance, nil, "RequiresReplacement", message); err != nil {
+			issue(api.ReasonRequiresReplacement, entry.Name+": "+message)
+			if err := r.participantStatus(ctx, &root, dependencies, c.instance, nil, api.ReasonRequiresReplacement, message); err != nil {
 				return ctrl.Result{}, err
 			}
 			continue
@@ -312,8 +313,8 @@ func (r *Reconciler) reconcileTopology(ctx context.Context, req ctrl.Request) (c
 			if c.instance.Spec.Kind == api.ParticipantBitcoinBlockProduction {
 				message = "Bitcoin payout or initialization binding changes require a fresh network"
 			}
-			issue("RequiresReplacement", entry.Name+": "+message)
-			if err := r.participantStatus(ctx, &root, dependencies, c.instance, nil, "RequiresReplacement", message); err != nil {
+			issue(api.ReasonRequiresReplacement, entry.Name+": "+message)
+			if err := r.participantStatus(ctx, &root, dependencies, c.instance, nil, api.ReasonRequiresReplacement, message); err != nil {
 				return ctrl.Result{}, err
 			}
 			continue
@@ -322,11 +323,11 @@ func (r *Reconciler) reconcileTopology(ctx context.Context, req ctrl.Request) (c
 			for _, required := range frozen.Spec.Bootstrap.Requirements {
 				if required.Participant.UID == c.instance.UID && bootstrapPolicyPending(completedGates, required) {
 					if c.instance.Status.Admission == nil || Digest(c.instance.Status.Admission.Configuration) != c.instance.Status.Admission.PolicyDigest || !BootstrapPolicyCompatible(required, c.instance.Status.Admission.Configuration) {
-						return r.report(ctx, &root, base, api.NetworkPhaseFailed, "BootstrapPolicyUnavailable", "Captured initial policy unavailable; recreate the network")
+						return r.report(ctx, &root, base, api.NetworkPhaseFailed, reasonBootstrapPolicyUnavailable, "Captured initial policy unavailable; recreate the network")
 					}
 					if !BootstrapPolicyCompatible(required, admission.Configuration) {
 						admission = c.instance.Status.Admission
-						admissionReason, admissionMessage = "BootstrapPending", "Candidate policy deferred until initialization gates complete"
+						admissionReason, admissionMessage = api.ReasonBootstrapPending, "Candidate policy deferred until initialization gates complete"
 					}
 				}
 			}
@@ -334,15 +335,15 @@ func (r *Reconciler) reconcileTopology(ctx context.Context, req ctrl.Request) (c
 		candidate := c.instance.DeepCopy()
 		candidate.Status.Admission = admission
 		if err := dependencies.source(ctx, candidate); err != nil {
-			issue("DefinitionUnavailable", entry.Name+": "+err.Error())
-			if err := r.participantStatus(ctx, &root, dependencies, c.instance, nil, "ResolutionError", err.Error()); err != nil {
+			issue(reasonDefinitionUnavailable, entry.Name+": "+err.Error())
+			if err := r.participantStatus(ctx, &root, dependencies, c.instance, nil, reasonResolutionError, err.Error()); err != nil {
 				return ctrl.Result{}, err
 			}
 			continue
 		}
 		if err := dependencies.validate(ctx, admission.Dependencies); err != nil {
-			issue("DependencyUnavailable", entry.Name+": "+err.Error())
-			if err := r.participantStatus(ctx, &root, dependencies, c.instance, nil, "DependencyUnavailable", err.Error()); err != nil {
+			issue(reasonDependencyUnavailable, entry.Name+": "+err.Error())
+			if err := r.participantStatus(ctx, &root, dependencies, c.instance, nil, reasonDependencyUnavailable, err.Error()); err != nil {
 				return ctrl.Result{}, err
 			}
 			continue
@@ -368,18 +369,18 @@ func (r *Reconciler) reconcileTopology(ctx context.Context, req ctrl.Request) (c
 		return r.report(ctx, &root, base, api.NetworkPhaseResolutionError, resolutionReason, resolutionErr.Error())
 	}
 	if frozen != nil {
-		return r.report(ctx, &root, base, api.NetworkPhaseInitializing, "GenesisCaptured", "Immutable genesis captured; admitted participants may converge toward declared operation")
+		return r.report(ctx, &root, base, api.NetworkPhaseInitializing, reasonGenesisCaptured, "Immutable genesis captured; admitted participants may converge toward declared operation")
 	}
 	spec, err := compileGenesis(ctx, r.Client, &root, all)
 	if err != nil {
-		return r.report(ctx, &root, base, api.NetworkPhaseResolutionError, "GenesisInputsUnavailable", err.Error())
+		return r.report(ctx, &root, base, api.NetworkPhaseResolutionError, reasonGenesisInputsUnavailable, err.Error())
 	}
 	root.Status.InputDigest = spec.Source.InputDigest
 	if root.Spec.ExpectedInputDigest != nil && *root.Spec.ExpectedInputDigest != spec.Source.InputDigest {
-		return r.report(ctx, &root, base, api.NetworkPhaseResolutionError, "InputDigestMismatch", "Resolved inputs differ from the expected digest")
+		return r.report(ctx, &root, base, api.NetworkPhaseResolutionError, reasonInputDigestMismatch, "Resolved inputs differ from the expected digest")
 	}
 	if root.Spec.Operation == api.NetworkOperationPaused {
-		return r.report(ctx, &root, base, api.NetworkPhaseResolving, "PausedBeforeInitialization", "Inputs resolved; pause prevents genesis capture")
+		return r.report(ctx, &root, base, api.NetworkPhaseResolving, reasonPausedBeforeInitialization, "Inputs resolved; pause prevents genesis capture")
 	}
 	// Re-resolve public inputs with uncached reads immediately before freezing.
 	fresh := map[string]*candidate{}
@@ -415,16 +416,16 @@ func (r *Reconciler) reconcileTopology(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{RequeueAfter: time.Millisecond}, nil
 	}
 	for name, err := range r.configurationResults(ctx, &root, fresh, nil, true) {
-		return r.report(ctx, &root, base, api.NetworkPhaseResolutionError, "ConfigurationValidation", name+": "+err.Error())
+		return r.report(ctx, &root, base, api.NetworkPhaseResolutionError, reasonConfigurationValidation, name+": "+err.Error())
 	}
 	// A fresh boundary check must not reuse the earlier admission observations.
 	captureDependencies := newDependencyCheck(r.Reader, &root)
 	if err := captureDependencies.validate(ctx, currentSpec.Source.Dependencies); err != nil {
-		return r.report(ctx, &root, base, api.NetworkPhaseResolutionError, "DependencyUnavailable", err.Error())
+		return r.report(ctx, &root, base, api.NetworkPhaseResolutionError, reasonDependencyUnavailable, err.Error())
 	}
 	for _, required := range currentSpec.Bootstrap.Requirements {
 		if err := captureDependencies.validate(ctx, required.Dependencies); err != nil {
-			return r.report(ctx, &root, base, api.NetworkPhaseResolutionError, "DependencyUnavailable", err.Error())
+			return r.report(ctx, &root, base, api.NetworkPhaseResolutionError, reasonDependencyUnavailable, err.Error())
 		}
 	}
 	// Recheck the current root revision immediately before the one-way create.
@@ -435,7 +436,7 @@ func (r *Reconciler) reconcileTopology(ctx context.Context, req ctrl.Request) (c
 	if current.UID != root.UID || current.ResourceVersion != root.ResourceVersion || current.DeletionTimestamp != nil {
 		return ctrl.Result{RequeueAfter: time.Millisecond}, nil
 	}
-	artifact := &api.StacksGenesis{ObjectMeta: metav1.ObjectMeta{Name: RuntimeName(string(root.UID), "", "StacksGenesis", root.Name, "genesis"), Namespace: root.Namespace, Finalizers: []string{ArtifactFinalizer}}, Spec: spec}
+	artifact := &api.StacksGenesis{ObjectMeta: metav1.ObjectMeta{Name: RuntimeName(string(root.UID), "", api.KindStacksGenesis, root.Name, "genesis"), Namespace: root.Namespace, Finalizers: []string{ArtifactFinalizer}}, Spec: spec}
 	if err := controllerutil.SetControllerReference(&root, artifact, r.Scheme, controllerutil.WithBlockOwnerDeletion(false)); err != nil {
 		return ctrl.Result{}, err
 	}
@@ -447,13 +448,13 @@ func (r *Reconciler) reconcileTopology(ctx context.Context, req ctrl.Request) (c
 			return ctrl.Result{}, err
 		}
 		if !ownedUID(observed, root.UID) || observed.DeletionTimestamp != nil || !equal(observed.Spec, spec) {
-			return r.report(ctx, &root, base, api.NetworkPhaseFailed, "BootstrapPolicyUnavailable", "Existing freeze artifact differs from available initial policy; recreate the network")
+			return r.report(ctx, &root, base, api.NetworkPhaseFailed, reasonBootstrapPolicyUnavailable, "Existing freeze artifact differs from available initial policy; recreate the network")
 		}
 		artifact = observed
 	}
-	root.Status.GenesisRef = ptrBinding(binding("StacksGenesis", artifact, Digest(artifact.Spec)))
+	root.Status.GenesisRef = ptrBinding(objectref.WithFingerprint(objectref.Genesis(artifact), Digest(artifact.Spec)))
 	root.Status.GenesisDigest = Digest(artifact.Spec.Chain)
-	return r.report(ctx, &root, base, api.NetworkPhaseInitializing, "GenesisCaptured", "Immutable genesis captured; admitted participants may converge toward declared operation")
+	return r.report(ctx, &root, base, api.NetworkPhaseInitializing, reasonGenesisCaptured, "Immutable genesis captured; admitted participants may converge toward declared operation")
 }
 
 // bitcoinBootstrapCompatible preserves network-wide initialization identity across instance replacement.
@@ -467,7 +468,7 @@ func bitcoinBootstrapCompatible(c *candidate, bootstrap api.Bootstrap) bool {
 		if required.BitcoinInitialization == nil {
 			continue
 		}
-		if wallet == nil || required.BitcoinPayoutWallet == nil || !equal(*required.BitcoinPayoutWallet, binding("BitcoinWallet", wallet, wallet.Status.Digest)) || !equal(required.BitcoinInitialization, policy.Initialization) {
+		if wallet == nil || required.BitcoinPayoutWallet == nil || !equal(*required.BitcoinPayoutWallet, objectref.WithFingerprint(objectref.BitcoinWallet(wallet), wallet.Status.Digest)) || !equal(required.BitcoinInitialization, policy.Initialization) {
 			return false
 		}
 		// Other initialization wallet identities must also remain pinned.
@@ -574,35 +575,35 @@ func (r *Reconciler) participantStatus(ctx context.Context, root *api.StacksNetw
 		p.Status.Admission = admission
 	}
 	state := metav1.ConditionTrue
-	if reason == "ResolutionError" || reason == "RequiresReplacement" || reason == "KindChanged" || reason == "DependencyUnavailable" || reason == "TopologyConflict" {
+	if reason == reasonResolutionError || reason == api.ReasonRequiresReplacement || reason == reasonKindChanged || reason == reasonDependencyUnavailable || reason == reasonTopologyConflict {
 		state = metav1.ConditionFalse
 	}
-	condition(&p.Status.Conditions, p.Generation, "Resolved", state, reason, message)
+	condition(&p.Status.Conditions, p.Generation, common.ConditionResolved, state, reason, message)
 	ready, eligibilityReason, eligibilityMessage := r.admissionReadiness(ctx, root, p, dependencies)
-	condition(&p.Status.Conditions, p.Generation, "AdmissionReady", ready, eligibilityReason, eligibilityMessage)
+	condition(&p.Status.Conditions, p.Generation, api.ConditionAdmissionReady, ready, eligibilityReason, eligibilityMessage)
 	deferred := metav1.ConditionFalse
-	if reason == "BootstrapPending" {
+	if reason == api.ReasonBootstrapPending {
 		deferred = metav1.ConditionTrue
 	}
-	condition(&p.Status.Conditions, p.Generation, "PolicyDeferred", deferred, reason, message)
+	condition(&p.Status.Conditions, p.Generation, api.ConditionPolicyDeferred, deferred, reason, message)
 	if !r.RuntimeKinds[p.Spec.Kind] {
-		condition(&p.Status.Conditions, p.Generation, "WorkloadReady", metav1.ConditionFalse, "RuntimeNotImplemented", "This participant kind has no installed runtime controller")
+		condition(&p.Status.Conditions, p.Generation, api.ConditionWorkloadReady, metav1.ConditionFalse, reasonRuntimeNotImplemented, "This participant kind has no installed runtime controller")
 	}
-	if equal(base.Status, p.Status) && participantstatus.Managed(p, participantstatus.AggregateManager) && !participantstatus.NeedsMigration(p) && (!r.RuntimeKinds[p.Spec.Kind] || !participantstatus.OwnsCondition(p, participantstatus.AggregateManager, "WorkloadReady")) {
+	if equal(base.Status, p.Status) && participantstatus.Managed(p, participantstatus.AggregateManager) && !participantstatus.NeedsMigration(p) && (!r.RuntimeKinds[p.Spec.Kind] || !participantstatus.OwnsCondition(p, participantstatus.AggregateManager, api.ConditionWorkloadReady)) {
 		return nil
 	}
 	owned := api.ParticipantStatus{Admission: p.Status.Admission}
 	for _, c := range p.Status.Conditions {
-		if c.Type == "Resolved" || c.Type == "PolicyDeferred" || c.Type == "AdmissionReady" {
+		if c.Type == common.ConditionResolved || c.Type == api.ConditionPolicyDeferred || c.Type == api.ConditionAdmissionReady {
 			owned.Conditions = append(owned.Conditions, c)
 		}
 	}
 	if !r.RuntimeKinds[p.Spec.Kind] {
-		prior := meta.FindStatusCondition(p.Status.Conditions, "WorkloadReady")
+		prior := meta.FindStatusCondition(p.Status.Conditions, api.ConditionWorkloadReady)
 		if prior != nil {
 			owned.Conditions = append(owned.Conditions, *prior)
 		}
-		condition(&owned.Conditions, p.Generation, "WorkloadReady", metav1.ConditionFalse, "RuntimeNotImplemented", "This participant kind has no installed runtime controller")
+		condition(&owned.Conditions, p.Generation, api.ConditionWorkloadReady, metav1.ConditionFalse, reasonRuntimeNotImplemented, "This participant kind has no installed runtime controller")
 	}
 	return participantstatus.Apply(ctx, r.Client, p, owned, participantstatus.AggregateManager)
 }

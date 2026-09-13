@@ -53,7 +53,7 @@ func (r *Runtime) Run(ctx context.Context) error {
 		default:
 		}
 	}
-	refs := append([]ReadBinding{{APIVersion: api.GroupVersion.String(), Resource: "stacksnetworks", Name: "network"}, {APIVersion: api.GroupVersion.String(), Resource: "stacksnetworkparticipants", Name: r.ParticipantName}}, profile.Reads...)
+	refs := append([]ReadBinding{{APIVersion: api.GroupVersion.String(), Resource: api.ResourceStacksNetwork, Name: "network"}, {APIVersion: api.GroupVersion.String(), Resource: api.ResourceStacksNetworkParticipant, Name: r.ParticipantName}}, profile.Reads...)
 	seen := map[ReadBinding]bool{}
 	var workers sync.WaitGroup
 	defer func() { cancel(); workers.Wait() }()
@@ -138,7 +138,7 @@ func namedWatchProjection(object *unstructured.Unstructured) map[string]any {
 	copy := object.DeepCopy()
 	unstructured.RemoveNestedField(copy.Object, "metadata", "resourceVersion")
 	unstructured.RemoveNestedField(copy.Object, "metadata", "managedFields")
-	if copy.GetAPIVersion() == api.GroupVersion.String() && copy.GetKind() == "StacksNetworkParticipant" {
+	if copy.GetAPIVersion() == api.GroupVersion.String() && copy.GetKind() == api.KindStacksNetworkParticipant {
 		unstructured.RemoveNestedField(copy.Object, "status", "execution")
 		unstructured.RemoveNestedField(copy.Object, "status", "runtime", "protocol")
 	}

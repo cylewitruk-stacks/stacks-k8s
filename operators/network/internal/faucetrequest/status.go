@@ -9,6 +9,7 @@ import (
 	"time"
 
 	stacks "github.com/cylewitruk-stacks/stacks-k8s/apis/network/stacks/v1alpha2"
+	api "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha2"
 	"github.com/cylewitruk-stacks/stacks-k8s/libs/stacks/identity"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -33,7 +34,7 @@ func ApplyStatus(ctx context.Context, c client.Client, request *stacks.StacksFau
 	if manager == ExecutionManager && (status.Admission != nil || status.Phase != "" || len(status.Conditions) != 0) || manager == AdmissionManager && status.Execution != nil {
 		return errors.New("request status writer exceeded field ownership")
 	}
-	patch := &stacks.StacksFaucetRequest{TypeMeta: metav1.TypeMeta{APIVersion: stacks.GroupVersion.String(), Kind: "StacksFaucetRequest"}, ObjectMeta: metav1.ObjectMeta{Namespace: request.Namespace, Name: request.Name, UID: request.UID, ResourceVersion: request.ResourceVersion}, Status: *status.DeepCopy()}
+	patch := &stacks.StacksFaucetRequest{TypeMeta: metav1.TypeMeta{APIVersion: stacks.GroupVersion.String(), Kind: stacks.KindStacksFaucetRequest}, ObjectMeta: metav1.ObjectMeta{Namespace: request.Namespace, Name: request.Name, UID: request.UID, ResourceVersion: request.ResourceVersion}, Status: *status.DeepCopy()}
 	if err := c.Status().Patch(ctx, patch, client.Apply, client.FieldOwner(manager), client.ForceOwnership); err != nil {
 		return err
 	}
@@ -71,7 +72,7 @@ func TerminalExecution(execution *stacks.FaucetExecution) bool {
 	case stacks.FaucetExecutionCompleted:
 		return !execution.NoSend && len(execution.TxID) == 64 && len(execution.InclusionBlockID) == 64
 	case stacks.FaucetExecutionRejected:
-		return execution.NoSend && execution.TxID == "" || !execution.NoSend && len(execution.TxID) == 64 && (len(execution.InclusionBlockID) == 64 || strings.HasPrefix(execution.Reason, "Rejected") && rpc.ValidationRejectionReason(strings.TrimPrefix(execution.Reason, "Rejected")))
+		return execution.NoSend && execution.TxID == "" || !execution.NoSend && len(execution.TxID) == 64 && (len(execution.InclusionBlockID) == 64 || strings.HasPrefix(execution.Reason, stacks.RejectionReasonPrefix) && rpc.ValidationRejectionReason(strings.TrimPrefix(execution.Reason, stacks.RejectionReasonPrefix)))
 	case stacks.FaucetExecutionExpired:
 		return execution.NoSend && execution.TxID == ""
 	}
@@ -82,7 +83,7 @@ func TerminalExecution(execution *stacks.FaucetExecution) bool {
 func ProjectPhase(request *stacks.StacksFaucetRequest, now time.Time) (stacks.FaucetPhase, string) {
 	a := request.Status.Admission
 	if a == nil {
-		return stacks.FaucetPending, "AdmissionPending"
+		return stacks.FaucetPending, reasonAdmissionPending
 	}
 	if a.Decision == stacks.FaucetDecisionRejected || a.Decision == stacks.FaucetDecisionExpired {
 		return stacks.FaucetPhase(a.Decision), a.Reason
@@ -98,7 +99,7 @@ func ProjectPhase(request *stacks.StacksFaucetRequest, now time.Time) (stacks.Fa
 	}
 	deadline, err := Deadline(request)
 	if err != nil || !now.Before(deadline) {
-		return stacks.FaucetInconclusive, "DeadlineOutcomeUnknown"
+		return stacks.FaucetInconclusive, api.ReasonDeadlineOutcomeUnknown
 	}
 	if MatchingExecution(request) && request.Status.Execution.Phase == stacks.FaucetExecutionSubmitted {
 		return stacks.FaucetSubmitted, request.Status.Execution.Reason
@@ -106,5 +107,5 @@ func ProjectPhase(request *stacks.StacksFaucetRequest, now time.Time) (stacks.Fa
 	if MatchingExecution(request) && request.Status.Execution.Phase == stacks.FaucetExecutionInconclusive {
 		return stacks.FaucetInconclusive, request.Status.Execution.Reason
 	}
-	return stacks.FaucetPending, "AwaitingWorkerEvidence"
+	return stacks.FaucetPending, reasonAwaitingWorkerEvidence
 }

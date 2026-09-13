@@ -250,7 +250,7 @@ func (c *Client) source(ctx context.Context, address, contract, tipQuery string)
 		return "", false, e
 	}
 	if code == http.StatusNotFound {
-		if tipQuery != "" && strings.TrimSpace(string(data)) != "No contract source data found" {
+		if tipQuery != "" && strings.TrimSpace(string(data)) != nativeSourceAbsent {
 			return "", false, errors.New("pinned contract source observation unavailable")
 		}
 		return "", false, nil
@@ -426,3 +426,6 @@ func hexUint128(s string) (clarity.Value, error) {
 	copy(bytes[17-len(decoded):], decoded)
 	return clarity.Decode(bytes)
 }
+
+// nativeSourceAbsent is the native tip-bound contract-source absence response.
+const nativeSourceAbsent = "No contract source data found"

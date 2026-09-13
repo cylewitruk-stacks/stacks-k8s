@@ -1,6 +1,7 @@
 package foundation
 
 import (
+	bitcoin "github.com/cylewitruk-stacks/stacks-k8s/apis/network/bitcoin/v1alpha2"
 	api "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha2"
 	"k8s.io/utils/ptr"
 )
@@ -17,7 +18,7 @@ func BootstrapPolicyCompatible(required api.BootstrapRequirement, policy api.Con
 			return false
 		}
 		for _, binding := range required.Dependencies {
-			if binding.Kind != "BitcoinWallet" {
+			if binding.Kind != bitcoin.KindBitcoinWallet {
 				continue
 			}
 			found := false

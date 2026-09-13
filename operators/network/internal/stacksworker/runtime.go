@@ -352,7 +352,7 @@ func (r *Runtime) Reconcile(ctx context.Context) (Result, error) {
 		status.Faucet = previous.Faucet.DeepCopy()
 	}
 	if id.Worker == nil {
-		status.Reason = "AwaitingDurableBinding"
+		status.Reason = reasonAwaitingDurableBinding
 		return Result{Exit: stoppedReason(root, p, id) != "", RequeueAfter: 5 * time.Second}, r.publish(ctx, p, &status)
 	}
 	r.activated = true
@@ -380,7 +380,7 @@ func (r *Runtime) Reconcile(ctx context.Context) (Result, error) {
 		}
 	}
 	if stoppedReason(root, p, id) != "" && id.Worker.Shutdown == nil {
-		status.Phase, status.Reason = api.WorkerPhaseBlocked, "AwaitingShutdownRecord"
+		status.Phase, status.Reason = api.WorkerPhaseBlocked, reasonAwaitingShutdownRecord
 		return Result{RequeueAfter: time.Second}, r.publish(ctx, p, &status)
 	}
 	if id.Worker.Shutdown != nil {
@@ -432,7 +432,7 @@ func (r *Runtime) Reconcile(ctx context.Context) (Result, error) {
 	}
 	// Persist this process identity before exposing an authorization callback to a role.
 	if p.Status.Execution == nil || p.Status.Execution.ProcessNonce != r.nonce {
-		status.Reason = "ProcessBound"
+		status.Reason = reasonProcessBound
 		if err := r.publish(ctx, p, &status); err != nil {
 			return Result{RequeueAfter: time.Second}, err
 		}
@@ -484,7 +484,7 @@ func (r *Runtime) Reconcile(ctx context.Context) (Result, error) {
 	}
 	delay := result.RequeueAfter
 	if err != nil {
-		status.Phase, status.Reason = api.WorkerPhaseUnknown, "RoleObservationUnavailable"
+		status.Phase, status.Reason = api.WorkerPhaseUnknown, reasonRoleObservationUnavailable
 		delay = time.Second
 	}
 	if delay <= 0 {

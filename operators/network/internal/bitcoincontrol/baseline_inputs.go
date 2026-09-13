@@ -10,6 +10,7 @@ import (
 	common "github.com/cylewitruk-stacks/stacks-k8s/apis/network/common/v1alpha2"
 	api "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha2"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/foundation"
+	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/objectref"
 	"k8s.io/apimachinery/pkg/api/equality"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
@@ -48,7 +49,7 @@ func baselineInputs(ctx context.Context, reader client.Reader, root *api.StacksN
 
 // resolveBaselineInputs keeps scheduler credential metadata checks separate from public dispatch inputs.
 func resolveBaselineInputs(ctx context.Context, reader client.Reader, root *api.StacksNetwork, initial *bitcoin.BitcoinInitialization, p *api.StacksNetworkParticipant, publicOnly bool) (bitcoin.BitcoinSchedulingStatus, error) {
-	out := bitcoin.BitcoinSchedulingStatus{Initialization: binding("BitcoinInitialization", initial)}
+	out := bitcoin.BitcoinSchedulingStatus{Initialization: objectref.BitcoinInitialization(initial)}
 	if !participantCurrent(root, p) || p.Spec.Kind != api.ParticipantBitcoinBlockProduction || p.Status.Admission.Configuration.BitcoinBlockProduction == nil {
 		return out, fmt.Errorf("admitted production identity unavailable")
 	}
@@ -62,11 +63,11 @@ func resolveBaselineInputs(ctx context.Context, reader client.Reader, root *api.
 	var payout *common.Binding
 	for i := range p.Status.Admission.Dependencies {
 		dep := p.Status.Admission.Dependencies[i]
-		if dep.Kind == "BitcoinWallet" && dep.Name == policy.PayoutWalletRef.Name {
+		if dep.Kind == bitcoin.KindBitcoinWallet && dep.Name == policy.PayoutWalletRef.Name {
 			copy := dep
 			payout = &copy
 		}
-		if dep.Kind == "BitcoinBlockSchedule" {
+		if dep.Kind == bitcoin.KindBitcoinBlockSchedule {
 			if out.ScheduleRef != nil {
 				return out, fmt.Errorf("ambiguous admitted schedule")
 			}
@@ -115,7 +116,7 @@ func resolveBaselineInputs(ctx context.Context, reader client.Reader, root *api.
 		}
 		var pin *common.Binding
 		for _, dep := range p.Status.Admission.Dependencies {
-			if dep.Kind == "StacksNetworkParticipant" && string(dep.UID) == uid && uid != "" {
+			if dep.Kind == api.KindStacksNetworkParticipant && string(dep.UID) == uid && uid != "" {
 				copy := dep
 				pin = &copy
 				break
@@ -130,7 +131,7 @@ func resolveBaselineInputs(ctx context.Context, reader client.Reader, root *api.
 	out.AdmissionDigest = foundation.Digest(struct {
 		Production common.Binding
 		Admission  *api.Admission
-	}{binding("StacksNetworkParticipant", p), p.Status.Admission})
+	}{objectref.Participant(p), p.Status.Admission})
 	out.Schedule = policy.Schedule.DeepCopy()
 	_, upper, err := cadenceBounds(out.Schedule)
 	if err != nil {

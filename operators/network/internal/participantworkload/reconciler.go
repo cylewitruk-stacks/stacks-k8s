@@ -11,6 +11,7 @@ import (
 	common "github.com/cylewitruk-stacks/stacks-k8s/apis/network/common/v1alpha2"
 	api "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha2"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/foundation"
+	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/objectref"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/participantstatus"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -85,14 +86,14 @@ func (r *Reconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 	}
 	if p.Spec.Kind == api.ParticipantStacksNode && state.Protocol != nil {
 		state.Protocol.Available = false
-		state.Protocol.Reason = "ActorUnavailable"
+		state.Protocol.Reason = reasonActorUnavailable
 	}
 	conditions := ownConditions(p.Status.Conditions)
 	finish := func(status metav1.ConditionStatus, reason, message string) (ctrl.Result, error) {
-		meta.SetStatusCondition(&conditions, metav1.Condition{Type: "WorkloadReady", Status: status, Reason: reason, Message: message, ObservedGeneration: p.Generation})
+		meta.SetStatusCondition(&conditions, metav1.Condition{Type: api.ConditionWorkloadReady, Status: status, Reason: reason, Message: message, ObservedGeneration: p.Generation})
 		out := api.ParticipantStatus{Runtime: &state, Conditions: conditions}
 		result := ctrl.Result{}
-		if p.Spec.Kind == api.ParticipantStacksNode && reason == "Ready" {
+		if p.Spec.Kind == api.ParticipantStacksNode && reason == reasonReady {
 			result.RequeueAfter = protocolPollInterval
 			if state.Protocol != nil && state.Protocol.Available {
 				due := time.Until(state.Protocol.ObservedAt.Add(protocolHeartbeatInterval))
@@ -101,7 +102,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 				}
 			}
 		}
-		if reason == "ControlUnavailable" || reason == "ConfigurationUnavailable" || reason == "RuntimeIdentityUnavailable" || reason == "WorkloadUnavailable" || reason == "Stopping" || reason == "TerminationUnknown" || reason == "Restarting" || reason == "DrainingControl" {
+		if reason == reasonControlUnavailable || reason == reasonConfigurationUnavailable || reason == reasonRuntimeIdentityUnavailable || reason == reasonWorkloadUnavailable || reason == api.ReasonStopping || reason == api.ReasonTerminationUnknown || reason == reasonRestarting || reason == reasonDrainingControl {
 			result.RequeueAfter = 5 * time.Second
 		}
 		if reflect.DeepEqual(p.Status.Runtime, out.Runtime) && reflect.DeepEqual(ownConditions(p.Status.Conditions), conditions) {
@@ -112,7 +113,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 	var root api.StacksNetwork
 	err := r.Reader.Get(ctx, client.ObjectKey{Namespace: p.Namespace, Name: "network"}, &root)
 	if err != nil && !apierrors.IsNotFound(err) {
-		return finish(metav1.ConditionUnknown, "ControlUnavailable", "Current network state could not be read")
+		return finish(metav1.ConditionUnknown, reasonControlUnavailable, "Current network state could not be read")
 	}
 	removing := p.DeletionTimestamp != nil || apierrors.IsNotFound(err) || root.UID != p.Spec.NetworkUID || root.DeletionTimestamp != nil || !selected(&root, &p)
 	stopping := removing || root.Spec.Operation == api.NetworkOperationStopped
@@ -131,24 +132,24 @@ func (r *Reconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 			reason, err = r.shutdown(ctx, &p, &state, false)
 		}
 		if err != nil {
-			return finish(metav1.ConditionUnknown, "TerminationUnknown", err.Error())
+			return finish(metav1.ConditionUnknown, api.ReasonTerminationUnknown, err.Error())
 		}
-		if reason == "DrainingControl" {
+		if reason == reasonDrainingControl {
 			return finish(metav1.ConditionFalse, reason, "Waiting for control executor drainage before actor shutdown")
 		}
-		if reason == "Terminated" && removing && controllerutil.ContainsFinalizer(&p, r.finalizer()) {
-			if _, err := finish(metav1.ConditionFalse, "Terminated", "Actor process termination confirmed"); err != nil {
+		if reason == api.ReasonTerminated && removing && controllerutil.ContainsFinalizer(&p, r.finalizer()) {
+			if _, err := finish(metav1.ConditionFalse, api.ReasonTerminated, "Actor process termination confirmed"); err != nil {
 				return ctrl.Result{}, err
 			}
 			base := p.DeepCopy()
 			controllerutil.RemoveFinalizer(&p, r.finalizer())
 			return ctrl.Result{}, r.Client.Patch(ctx, &p, client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{}))
 		}
-		if reason == "Terminated" {
+		if reason == api.ReasonTerminated {
 			if suspended && !stopping {
-				reason = "Suspended"
+				reason = reasonSuspended
 			} else {
-				reason = "Stopped"
+				reason = api.ReasonStopped
 			}
 		}
 		return finish(metav1.ConditionFalse, reason, "Actor shutdown retains process identity until termination is confirmed")
@@ -161,56 +162,56 @@ func (r *Reconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 		}
 	}
 	if err := r.authorized(ctx, &root, &p); err != nil {
-		return finish(metav1.ConditionFalse, "AdmissionUnavailable", err.Error())
+		return finish(metav1.ConditionFalse, api.ReasonAdmissionUnavailable, err.Error())
 	}
 	if root.Spec.Operation == api.NetworkOperationPaused && len(state.WorkloadRefs) == 0 {
 		var existing appsv1.StatefulSet
-		err := r.Reader.Get(ctx, client.ObjectKey{Namespace: p.Namespace, Name: Name(&p, "actor")}, &existing)
+		err := r.Reader.Get(ctx, client.ObjectKey{Namespace: p.Namespace, Name: Name(&p, actorPurpose)}, &existing)
 		if apierrors.IsNotFound(err) {
-			return finish(metav1.ConditionFalse, "StartupPaused", "Network pause holds actor activation")
+			return finish(metav1.ConditionFalse, reasonStartupPaused, "Network pause holds actor activation")
 		}
 		if err != nil || !owned(&existing, &p) {
-			return finish(metav1.ConditionUnknown, "RuntimeIdentityUnavailable", "Cannot establish whether actor activation already occurred")
+			return finish(metav1.ConditionUnknown, reasonRuntimeIdentityUnavailable, "Cannot establish whether actor activation already occurred")
 		}
-		state.WorkloadRefs = []common.Binding{*binding("StatefulSet", &existing)}
+		state.WorkloadRefs = []common.Binding{objectref.StatefulSet(&existing)}
 	}
-	if condition := meta.FindStatusCondition(conditions, "PlacementReady"); condition != nil && condition.Status == metav1.ConditionFalse && condition.Reason == "PlacementError" {
-		return finish(metav1.ConditionFalse, "RequiresReplacement", "Established placement failure requires a new participant name")
+	if condition := meta.FindStatusCondition(conditions, api.ConditionPlacementReady); condition != nil && condition.Status == metav1.ConditionFalse && condition.Reason == api.ReasonPlacementError {
+		return finish(metav1.ConditionFalse, api.ReasonRequiresReplacement, "Established placement failure requires a new participant name")
 	}
 	var ready bool
 	if p.Spec.Kind == api.ParticipantBitcoinNode {
 		ready, err = r.configuration(ctx, &root, &p, &state)
-		status, reason, message := metav1.ConditionUnknown, "ResolvingConfiguration", "Waiting for scoped native configuration agreement"
+		status, reason, message := metav1.ConditionUnknown, reasonResolvingConfiguration, "Waiting for scoped native configuration agreement"
 		if ready {
-			status, reason, message = metav1.ConditionTrue, "Verified", "Native syntax and required managed settings agree; Core startup validates semantic compatibility"
+			status, reason, message = metav1.ConditionTrue, reasonVerified, "Native syntax and required managed settings agree; Core startup validates semantic compatibility"
 			if cfg := p.Status.Admission.Configuration.BitcoinNode.Config; cfg != nil && ptr.Deref(cfg.Compatibility, common.CompatibilityManaged) == common.CompatibilityUnverified {
 				status, reason, message = metav1.ConditionFalse, common.CompatibilityUnverified, "Experimental custom actor is excluded from protocol prerequisites and mutation ingress"
 			}
 		}
-		meta.SetStatusCondition(&conditions, metav1.Condition{Type: "ConfigVerified", Status: status, Reason: reason, Message: message, ObservedGeneration: p.Generation})
+		meta.SetStatusCondition(&conditions, metav1.Condition{Type: api.ConditionConfigVerified, Status: status, Reason: reason, Message: message, ObservedGeneration: p.Generation})
 	} else {
 		for _, service := range Services(&p) {
 			if err := r.reconcileService(ctx, &p, service); err != nil {
-				return finish(metav1.ConditionFalse, "OwnershipConflict", err.Error())
+				return finish(metav1.ConditionFalse, api.ReasonOwnershipConflict, err.Error())
 			}
 		}
 		var verified bool
 		ready, verified, err = r.stacksConfiguration(ctx, &root, &p, &state)
-		status, reason, message := metav1.ConditionUnknown, "ResolvingConfiguration", "Waiting for scoped private configuration agreement"
+		status, reason, message := metav1.ConditionUnknown, reasonResolvingConfiguration, "Waiting for scoped private configuration agreement"
 		if ready {
 			if verified {
-				status, reason, message = metav1.ConditionTrue, "Verified", "Native configuration matches frozen genesis and admitted bindings"
+				status, reason, message = metav1.ConditionTrue, reasonVerified, "Native configuration matches frozen genesis and admitted bindings"
 			} else {
 				status, reason, message = metav1.ConditionFalse, common.CompatibilityUnverified, "Experimental custom actor is excluded from protocol prerequisites and mutation ingress"
 			}
 		}
-		meta.SetStatusCondition(&conditions, metav1.Condition{Type: "ConfigVerified", Status: status, Reason: reason, Message: message, ObservedGeneration: p.Generation})
+		meta.SetStatusCondition(&conditions, metav1.Condition{Type: api.ConditionConfigVerified, Status: status, Reason: reason, Message: message, ObservedGeneration: p.Generation})
 	}
 	if err != nil {
-		return finish(metav1.ConditionFalse, "ConfigurationUnavailable", err.Error())
+		return finish(metav1.ConditionFalse, reasonConfigurationUnavailable, err.Error())
 	}
 	if !ready {
-		return finish(metav1.ConditionFalse, "ResolvingConfiguration", "Waiting for scoped configuration resolver")
+		return finish(metav1.ConditionFalse, reasonResolvingConfiguration, "Waiting for scoped configuration resolver")
 	}
 	// Recheck current control and admission after resolver/resource operations.
 	var current api.StacksNetworkParticipant
@@ -225,91 +226,91 @@ func (r *Reconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 		return ctrl.Result{RequeueAfter: time.Millisecond}, nil
 	}
 	if err := r.authorized(ctx, &currentRoot, &current); err != nil {
-		return finish(metav1.ConditionFalse, "AdmissionUnavailable", err.Error())
+		return finish(metav1.ConditionFalse, api.ReasonAdmissionUnavailable, err.Error())
 	}
 	p = current
 	if p.Spec.Kind != api.ParticipantBitcoinNode {
 		captured := state
 		latest, err := r.stacksInput(ctx, &currentRoot, &p, &captured)
 		if err != nil {
-			return finish(metav1.ConditionFalse, "ConfigurationUnavailable", err.Error())
+			return finish(metav1.ConditionFalse, reasonConfigurationUnavailable, err.Error())
 		}
 		if digest(latest) != state.ConfigurationDigest {
 			return ctrl.Result{RequeueAfter: time.Millisecond}, nil
 		}
 		if err := r.stacksStartAuthorized(ctx, &currentRoot, &p, time.Now()); err != nil {
-			return finish(metav1.ConditionFalse, "PrepareBitcoinUnavailable", err.Error())
+			return finish(metav1.ConditionFalse, reasonPrepareBitcoinUnavailable, err.Error())
 		}
 	}
 	for _, service := range Services(&p) {
 		if err := r.reconcileService(ctx, &p, service); err != nil {
-			return finish(metav1.ConditionFalse, "OwnershipConflict", err.Error())
+			return finish(metav1.ConditionFalse, api.ReasonOwnershipConflict, err.Error())
 		}
 	}
 	workload, err := actorWorkload(&p, &state)
 	if err != nil {
-		return finish(metav1.ConditionFalse, "InvalidConfiguration", err.Error())
+		return finish(metav1.ConditionFalse, api.ReasonInvalidConfiguration, err.Error())
 	}
 	if err := r.reconcileStatefulSet(ctx, &p, workload); err != nil {
-		return finish(metav1.ConditionFalse, "WorkloadUnavailable", err.Error())
+		return finish(metav1.ConditionFalse, reasonWorkloadUnavailable, err.Error())
 	}
 	state.WorkloadRefs = []common.Binding{}
-	state.WorkloadRefs = append(state.WorkloadRefs, *binding("StatefulSet", workload))
+	state.WorkloadRefs = append(state.WorkloadRefs, objectref.StatefulSet(workload))
 	state.Endpoints = runtimeEndpoints(&p)
 	state.Terminated = false
 	pod, err := r.actorPod(ctx, &p, workload)
 	if apierrors.IsNotFound(err) {
-		return finish(metav1.ConditionFalse, "Pending", "Actor Pod has not been observed")
+		return finish(metav1.ConditionFalse, api.ReasonPending, "Actor Pod has not been observed")
 	}
 	if err != nil {
-		return finish(metav1.ConditionUnknown, "RuntimeIdentityUnavailable", err.Error())
+		return finish(metav1.ConditionUnknown, reasonRuntimeIdentityUnavailable, err.Error())
 	}
 	observePod(&state, pod)
 	if pod.DeletionTimestamp != nil {
 		if terminated(pod) {
 			state.Terminated = true
 			if !terminationRecorded(&p, pod) {
-				return finish(metav1.ConditionFalse, "Restarting", "Actor termination confirmed before replacement")
+				return finish(metav1.ConditionFalse, reasonRestarting, "Actor termination confirmed before replacement")
 			}
 			if err := r.releasePod(ctx, pod); err != nil {
 				return ctrl.Result{}, err
 			}
 		}
-		return finish(metav1.ConditionFalse, "Restarting", "Actor Pod replacement is in progress")
+		return finish(metav1.ConditionFalse, reasonRestarting, "Actor Pod replacement is in progress")
 	}
 	if err := r.retainPod(ctx, pod); err != nil {
 		return ctrl.Result{}, err
 	}
 	for _, condition := range pod.Status.Conditions {
 		if condition.Type == corev1.PodScheduled && condition.Status == corev1.ConditionFalse && condition.Reason == corev1.PodReasonUnschedulable {
-			meta.SetStatusCondition(&conditions, metav1.Condition{Type: "PlacementReady", Status: metav1.ConditionFalse, Reason: "PlacementError", Message: condition.Message, ObservedGeneration: p.Generation})
-			return finish(metav1.ConditionFalse, "PlacementError", condition.Message)
+			meta.SetStatusCondition(&conditions, metav1.Condition{Type: api.ConditionPlacementReady, Status: metav1.ConditionFalse, Reason: api.ReasonPlacementError, Message: condition.Message, ObservedGeneration: p.Generation})
+			return finish(metav1.ConditionFalse, api.ReasonPlacementError, condition.Message)
 		}
 	}
-	placement := metav1.Condition{Type: "PlacementReady", Status: metav1.ConditionUnknown, Reason: "Pending", Message: "Waiting for a scheduler decision", ObservedGeneration: p.Generation}
+	placement := metav1.Condition{Type: api.ConditionPlacementReady, Status: metav1.ConditionUnknown, Reason: api.ReasonPending, Message: "Waiting for a scheduler decision", ObservedGeneration: p.Generation}
 	for _, condition := range pod.Status.Conditions {
 		if condition.Type == corev1.PodScheduled && condition.Status == corev1.ConditionTrue {
 			placement.Status = metav1.ConditionTrue
-			placement.Reason = "Scheduled"
+			placement.Reason = api.ReasonScheduled
 			placement.Message = "Actor Pod scheduling confirmed"
 		}
 	}
 	meta.SetStatusCondition(&conditions, placement)
 	for _, status := range pod.Status.InitContainerStatuses {
 		if status.Name == "config-check" && ((status.State.Terminated != nil && status.State.Terminated.ExitCode != 0) || (status.State.Waiting != nil && status.LastTerminationState.Terminated != nil && status.LastTerminationState.Terminated.ExitCode != 0)) {
-			return finish(metav1.ConditionFalse, "InvalidConfiguration", "Selected actor image rejected its native configuration; private validation output is suppressed")
+			return finish(metav1.ConditionFalse, api.ReasonInvalidConfiguration, "Selected actor image rejected its native configuration; private validation output is suppressed")
 		}
 	}
 	if podReady(pod) && pod.Annotations[api.AnnotationPolicyDigest] == state.PolicyDigest && (p.Spec.Kind == api.ParticipantBitcoinNode || pod.Annotations[api.AnnotationConfigurationDigest] == state.ConfigurationDigest) {
 		if p.Spec.Kind == api.ParticipantStacksNode {
 			if err := r.observeStacksProtocol(ctx, &currentRoot, &p, pod, &state); err != nil && state.Protocol != nil {
 				state.Protocol.Available = false
-				state.Protocol.Reason = "ObservationUnavailable"
+				state.Protocol.Reason = api.ReasonObservationUnavailable
 			}
 		}
-		return finish(metav1.ConditionTrue, "Ready", "Native actor listener and admitted workload are ready; protocol progress is observed separately")
+		return finish(metav1.ConditionTrue, reasonReady, "Native actor listener and admitted workload are ready; protocol progress is observed separately")
 	}
-	return finish(metav1.ConditionFalse, "Pending", "Waiting for the admitted actor and RPC readiness probe")
+	return finish(metav1.ConditionFalse, api.ReasonPending, "Waiting for the admitted actor and RPC readiness probe")
 }
 
 // selected checks current membership and the durable single-use identity ledger.
@@ -331,7 +332,7 @@ func selected(root *api.StacksNetwork, p *api.StacksNetworkParticipant) bool {
 
 // authorized verifies current lifecycle, admission and published genesis identities.
 func (r *Reconciler) authorized(ctx context.Context, root *api.StacksNetwork, p *api.StacksNetworkParticipant) error {
-	if root.UID != p.Spec.NetworkUID || root.DeletionTimestamp != nil || root.Spec.Operation == api.NetworkOperationStopped || (root.Status.Phase == api.NetworkPhaseFailed || meta.IsStatusConditionTrue(root.Status.Conditions, "Failed")) || p.DeletionTimestamp != nil {
+	if root.UID != p.Spec.NetworkUID || root.DeletionTimestamp != nil || root.Spec.Operation == api.NetworkOperationStopped || (root.Status.Phase == api.NetworkPhaseFailed || meta.IsStatusConditionTrue(root.Status.Conditions, api.ConditionFailed)) || p.DeletionTimestamp != nil {
 		return fmt.Errorf("network lifecycle withdraws actor activation")
 	}
 	if err := foundation.ValidateParticipantAdmission(ctx, r.Reader, root, p); err != nil {
@@ -358,7 +359,7 @@ func (r *Reconciler) authorized(ctx context.Context, root *api.StacksNetwork, p 
 func ownConditions(conditions []metav1.Condition) []metav1.Condition {
 	var result []metav1.Condition
 	for _, condition := range conditions {
-		if condition.Type == "WorkloadReady" || condition.Type == "PlacementReady" || condition.Type == "ConfigVerified" {
+		if condition.Type == api.ConditionWorkloadReady || condition.Type == api.ConditionPlacementReady || condition.Type == api.ConditionConfigVerified {
 			result = append(result, condition)
 		}
 	}
@@ -376,12 +377,12 @@ func (r *Reconciler) SetupWithManager(manager ctrl.Manager) error {
 	participantChanges := predicate.Funcs{UpdateFunc: func(e event.UpdateEvent) bool {
 		old, oldOK := e.ObjectOld.(*api.StacksNetworkParticipant)
 		current, currentOK := e.ObjectNew.(*api.StacksNetworkParticipant)
-		return !oldOK || !currentOK || old.Generation != current.Generation || old.UID != current.UID || !reflect.DeepEqual(old.DeletionTimestamp, current.DeletionTimestamp) || !reflect.DeepEqual(old.Status.Admission, current.Status.Admission) || !reflect.DeepEqual(meta.FindStatusCondition(old.Status.Conditions, "Resolved"), meta.FindStatusCondition(current.Status.Conditions, "Resolved"))
+		return !oldOK || !currentOK || old.Generation != current.Generation || old.UID != current.UID || !reflect.DeepEqual(old.DeletionTimestamp, current.DeletionTimestamp) || !reflect.DeepEqual(old.Status.Admission, current.Status.Admission) || !reflect.DeepEqual(meta.FindStatusCondition(old.Status.Conditions, common.ConditionResolved), meta.FindStatusCondition(current.Status.Conditions, common.ConditionResolved))
 	}}
 	rootChanges := predicate.Funcs{UpdateFunc: func(e event.UpdateEvent) bool {
 		old, oldOK := e.ObjectOld.(*api.StacksNetwork)
 		current, currentOK := e.ObjectNew.(*api.StacksNetwork)
-		return !oldOK || !currentOK || old.Generation != current.Generation || old.UID != current.UID || !reflect.DeepEqual(old.DeletionTimestamp, current.DeletionTimestamp) || !reflect.DeepEqual(old.Status.GenesisRef, current.Status.GenesisRef) || old.Status.GenesisDigest != current.Status.GenesisDigest || (old.Status.Phase == api.NetworkPhaseFailed) != (current.Status.Phase == api.NetworkPhaseFailed) || !reflect.DeepEqual(old.Status.Identities, current.Status.Identities) || !reflect.DeepEqual(meta.FindStatusCondition(old.Status.Conditions, "Failed"), meta.FindStatusCondition(current.Status.Conditions, "Failed"))
+		return !oldOK || !currentOK || old.Generation != current.Generation || old.UID != current.UID || !reflect.DeepEqual(old.DeletionTimestamp, current.DeletionTimestamp) || !reflect.DeepEqual(old.Status.GenesisRef, current.Status.GenesisRef) || old.Status.GenesisDigest != current.Status.GenesisDigest || (old.Status.Phase == api.NetworkPhaseFailed) != (current.Status.Phase == api.NetworkPhaseFailed) || !reflect.DeepEqual(old.Status.Identities, current.Status.Identities) || !reflect.DeepEqual(meta.FindStatusCondition(old.Status.Conditions, api.ConditionFailed), meta.FindStatusCondition(current.Status.Conditions, api.ConditionFailed))
 	}}
 	rootMap := handler.EnqueueRequestsFromMapFunc(func(_ context.Context, object client.Object) []reconcile.Request {
 		root, ok := object.(*api.StacksNetwork)

@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	action "github.com/cylewitruk-stacks/stacks-k8s/apis/network/actions/v1alpha2"
+	common "github.com/cylewitruk-stacks/stacks-k8s/apis/network/common/v1alpha2"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -22,6 +23,11 @@ func TestActionViewKeepsConcreteIdentity(t *testing.T) {
 			}
 			if view.object != object || view.kind != kind || view.status == nil {
 				t.Fatalf("invalid view: %#v", view)
+			}
+			object.SetName("request")
+			object.SetUID("request-uid")
+			if ref := view.reference(); ref != (common.Binding{Kind: string(kind), Name: "request", UID: "request-uid"}) {
+				t.Fatalf("incorrect serialized reference: %#v", ref)
 			}
 			view.status.Phase = action.PhaseActive
 			switch object := object.(type) {

@@ -11,6 +11,7 @@ import (
 	common "github.com/cylewitruk-stacks/stacks-k8s/apis/network/common/v1alpha2"
 	stacks "github.com/cylewitruk-stacks/stacks-k8s/apis/network/stacks/v1alpha2"
 	api "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha2"
+	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/objectref"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/protocolcontracts"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
@@ -75,7 +76,7 @@ func compileGenesis(ctx context.Context, r client.Reader, root *api.StacksNetwor
 			return spec, fmt.Errorf("epoch schedule unavailable")
 		}
 		spec.Chain.Epochs = schedule.Spec.Epochs
-		spec.Source.Dependencies = append(spec.Source.Dependencies, binding("StacksEpochSchedule", &schedule, Digest(schedule.Spec)))
+		spec.Source.Dependencies = append(spec.Source.Dependencies, objectref.WithFingerprint(objectref.EpochSchedule(&schedule), Digest(schedule.Spec)))
 	}
 	if root.Spec.Genesis != nil && root.Spec.Genesis.PoX != nil {
 		spec.Chain.PoX = *root.Spec.Genesis.PoX
@@ -144,7 +145,7 @@ func compileGenesis(ctx context.Context, r client.Reader, root *api.StacksNetwor
 			continue
 		}
 		counts[c.instance.Spec.Kind]++
-		req := api.BootstrapRequirement{Kind: c.instance.Spec.Kind, Participant: binding("StacksNetworkParticipant", c.instance, ""), PolicyDigest: Digest(v), Dependencies: c.dependencies}
+		req := api.BootstrapRequirement{Kind: c.instance.Spec.Kind, Participant: objectref.Participant(c.instance), PolicyDigest: Digest(v), Dependencies: c.dependencies}
 		if v.StacksNode != nil {
 			req.MiningEnabled = ptr.To(v.StacksNode.Mining != nil && ptr.Deref(v.StacksNode.Mining.Enabled, false))
 		}
@@ -155,7 +156,7 @@ func compileGenesis(ctx context.Context, r client.Reader, root *api.StacksNetwor
 		sort.Strings(accountNames)
 		for _, name := range accountNames {
 			a := c.accounts[name]
-			req.Accounts = append(req.Accounts, api.PublicAccount{Binding: binding("StacksAccount", a, a.Status.Digest), Identity: *a.Status.Identity})
+			req.Accounts = append(req.Accounts, api.PublicAccount{Binding: objectref.WithFingerprint(objectref.Account(a), a.Status.Digest), Identity: *a.Status.Identity})
 		}
 		if v.StacksFaucet != nil {
 			f := v.StacksFaucet
@@ -232,7 +233,7 @@ func compileGenesis(ctx context.Context, r client.Reader, root *api.StacksNetwor
 		if v.BitcoinBlockProduction != nil {
 			production = c
 			wallet := c.wallets[v.BitcoinBlockProduction.PayoutWalletRef.Name]
-			req.BitcoinPayoutWallet = ptrBinding(binding("BitcoinWallet", wallet, wallet.Status.Digest))
+			req.BitcoinPayoutWallet = ptrBinding(objectref.WithFingerprint(objectref.BitcoinWallet(wallet), wallet.Status.Digest))
 			req.BitcoinInitialization = v.BitcoinBlockProduction.Initialization
 		}
 		spec.Bootstrap.Requirements = append(spec.Bootstrap.Requirements, req)
@@ -291,7 +292,7 @@ func compileGenesis(ctx context.Context, r client.Reader, root *api.StacksNetwor
 	sort.Strings(accountNames)
 	for _, name := range accountNames {
 		a := accounts[name]
-		spec.Source.Dependencies = append(spec.Source.Dependencies, binding("StacksAccount", a, a.Status.Digest))
+		spec.Source.Dependencies = append(spec.Source.Dependencies, objectref.WithFingerprint(objectref.Account(a), a.Status.Digest))
 	}
 	spec.Source.InputDigest = semanticInputDigest(spec, all)
 	data, err := json.Marshal(spec)

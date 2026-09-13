@@ -47,3 +47,6 @@ const (
 	// FaucetExpired is the Expired value of FaucetPhase.
 	FaucetExpired FaucetPhase = "Expired"
 )
+
+// RegistryInitializationExplicitTestRegistry selects the disposable registry initialization contract.
+const RegistryInitializationExplicitTestRegistry = "ExplicitTestRegistry"

@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	corev1 "k8s.io/api/core/v1"
 	"reflect"
 	"strings"
 	"time"
@@ -196,7 +197,7 @@ func Compose(root *api.StacksNetwork, entry api.Participant, source any) (api.Co
 		if entry.Kind == api.ParticipantBitcoinNode {
 			image = "bitcoin/bitcoin:31.1"
 		}
-		fill(out, map[string]any{"image": image, "imagePullPolicy": "IfNotPresent"})
+		fill(out, map[string]any{"image": image, "imagePullPolicy": string(corev1.PullIfNotPresent)})
 		storage, _ := out["storage"].(map[string]any)
 		if storage == nil {
 			storage = map[string]any{}
@@ -206,7 +207,7 @@ func Compose(root *api.StacksNetwork, entry api.Participant, source any) (api.Co
 			fill(storage, map[string]any{"size": "2Gi", "retainOnDelete": false})
 		}
 		if entry.Kind != api.ParticipantStacksSigner && out["peers"] == nil {
-			fill(out, map[string]any{"peers": map[string]any{"discovery": "Network"}})
+			fill(out, map[string]any{"peers": map[string]any{"discovery": common.DiscoveryNetwork}})
 		}
 	case api.ParticipantStacksStacker:
 		fill(out, map[string]any{"lockCycles": json.Number("6"), "renewWhenRemainingCycles": json.Number("3")})

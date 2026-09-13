@@ -6,6 +6,7 @@ import (
 	"time"
 
 	bitcoin "github.com/cylewitruk-stacks/stacks-k8s/apis/network/bitcoin/v1alpha2"
+	common "github.com/cylewitruk-stacks/stacks-k8s/apis/network/common/v1alpha2"
 	api "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha2"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/bitcoincontrol"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/foundation"
@@ -34,43 +35,43 @@ type Reconciler struct {
 func (r *Reconciler) Reconcile(ctx context.Context, root *api.StacksNetwork) (result ctrl.Result, reconcileErr error) {
 	// Completion describes immutable bootstrap history and remains valid when
 	// mutable membership or operation changes; it does not re-run the gates.
-	if initialized := meta.FindStatusCondition(root.Status.Conditions, "Initialized"); initialized != nil && initialized.Status == metav1.ConditionTrue {
+	if initialized := meta.FindStatusCondition(root.Status.Conditions, api.ConditionInitialized); initialized != nil && initialized.Status == metav1.ConditionTrue {
 		initialized.ObservedGeneration = root.Generation
 	}
 	defer func() {
 		if reconcileErr != nil {
-			observationUnavailable(root, "ObservationUnavailable", "Current runtime observations are unavailable")
+			observationUnavailable(root, api.ReasonObservationUnavailable, "Current runtime observations are unavailable")
 		}
 	}()
 	policy := foundation.ObservationPolicy()
 	root.Status.ObservationPolicy = &policy
-	failed := root.Status.Phase == api.NetworkPhaseFailed || meta.IsStatusConditionTrue(root.Status.Conditions, "Failed")
-	if failed && !meta.IsStatusConditionTrue(root.Status.Conditions, "Failed") {
-		set(root, "Failed", metav1.ConditionTrue, "ExperimentFailed", "A terminal network failure is latched; stop or recreate the network")
+	failed := root.Status.Phase == api.NetworkPhaseFailed || meta.IsStatusConditionTrue(root.Status.Conditions, api.ConditionFailed)
+	if failed && !meta.IsStatusConditionTrue(root.Status.Conditions, api.ConditionFailed) {
+		set(root, api.ConditionFailed, metav1.ConditionTrue, reasonExperimentFailed, "A terminal network failure is latched; stop or recreate the network")
 	}
 	var participants api.StacksNetworkParticipantList
 	if err := r.Client.List(ctx, &participants, client.InNamespace(root.Namespace), client.Limit(1001)); err != nil {
-		set(root, "Running", metav1.ConditionUnknown, "ObservationUnavailable", "Current participant observations are unavailable")
+		set(root, api.ConditionRunning, metav1.ConditionUnknown, api.ReasonObservationUnavailable, "Current participant observations are unavailable")
 		projectKnownOperation(root)
-		set(root, "Operational", metav1.ConditionUnknown, "ObservationUnavailable", "Current participant observations are unavailable")
+		set(root, api.ConditionOperational, metav1.ConditionUnknown, api.ReasonObservationUnavailable, "Current participant observations are unavailable")
 		return ctrl.Result{}, err
 	}
 	// Cached lists use a non-pagination marker in Continue. The extra item detects
 	// truncation without interpreting that marker as an API-server page token.
 	if len(participants.Items) > 1000 {
-		set(root, "Running", metav1.ConditionUnknown, "ObservationIncomplete", "Participant inventory is incomplete")
-		observationUnavailable(root, "ObservationIncomplete", "Participant inventory is incomplete")
+		set(root, api.ConditionRunning, metav1.ConditionUnknown, reasonObservationIncomplete, "Participant inventory is incomplete")
+		observationUnavailable(root, reasonObservationIncomplete, "Participant inventory is incomplete")
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 	workerPending, unstartedWorkers, err := r.projectWorkers(ctx, root, participants.Items)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	failed = failed || meta.IsStatusConditionTrue(root.Status.Conditions, "Failed")
+	failed = failed || meta.IsStatusConditionTrue(root.Status.Conditions, api.ConditionFailed)
 	if root.DeletionTimestamp != nil {
 		root.Status.Phase = api.NetworkPhaseDestroying
-		set(root, "Running", metav1.ConditionFalse, "Deleting", "Network disposal is in progress")
-		set(root, "Operational", metav1.ConditionFalse, "Deleting", "Network disposal is in progress")
+		set(root, api.ConditionRunning, metav1.ConditionFalse, reasonDeleting, "Network disposal is in progress")
+		set(root, api.ConditionOperational, metav1.ConditionFalse, reasonDeleting, "Network disposal is in progress")
 		return ctrl.Result{RequeueAfter: time.Second}, nil
 	}
 	activated, terminated := false, true
@@ -112,8 +113,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, root *api.StacksNetwork) (re
 		if terminated {
 			root.Status.Phase = api.NetworkPhaseStopped
 		}
-		set(root, "Running", metav1.ConditionFalse, string(root.Status.Phase), "Terminal shutdown requires acknowledgement from each activated workload")
-		set(root, "Operational", metav1.ConditionFalse, "Stopped", "Terminal shutdown is requested")
+		set(root, api.ConditionRunning, metav1.ConditionFalse, string(root.Status.Phase), "Terminal shutdown requires acknowledgement from each activated workload")
+		set(root, api.ConditionOperational, metav1.ConditionFalse, api.ReasonStopped, "Terminal shutdown is requested")
 		if !terminated || workerPending {
 			return ctrl.Result{RequeueAfter: time.Second}, nil
 		}
@@ -121,18 +122,18 @@ func (r *Reconciler) Reconcile(ctx context.Context, root *api.StacksNetwork) (re
 	}
 	if failed {
 		root.Status.Phase = api.NetworkPhaseFailed
-		set(root, "Running", metav1.ConditionFalse, "ExperimentFailed", "A terminal network failure is latched")
-		set(root, "Operational", metav1.ConditionFalse, "ExperimentFailed", "A terminal network failure is latched")
+		set(root, api.ConditionRunning, metav1.ConditionFalse, reasonExperimentFailed, "A terminal network failure is latched")
+		set(root, api.ConditionOperational, metav1.ConditionFalse, reasonExperimentFailed, "A terminal network failure is latched")
 		return ctrl.Result{}, nil
 	}
-	if !meta.IsStatusConditionTrue(root.Status.Conditions, "Initialized") {
-		set(root, "Initialized", metav1.ConditionFalse, "BootstrapPending", "The complete frozen protocol gates have not completed")
+	if !meta.IsStatusConditionTrue(root.Status.Conditions, api.ConditionInitialized) {
+		set(root, api.ConditionInitialized, metav1.ConditionFalse, api.ReasonBootstrapPending, "The complete frozen protocol gates have not completed")
 	}
-	set(root, "Running", metav1.ConditionFalse, "Initializing", "Full protocol initialization has not completed")
+	set(root, api.ConditionRunning, metav1.ConditionFalse, reasonInitializing, "Full protocol initialization has not completed")
 	projectKnownOperation(root)
-	set(root, "Operational", metav1.ConditionFalse, "Initializing", "Full protocol initialization has not completed")
+	set(root, api.ConditionOperational, metav1.ConditionFalse, reasonInitializing, "Full protocol initialization has not completed")
 	if root.Status.GenesisRef == nil {
-		if root.Spec.Operation == api.NetworkOperationPaused && meta.IsStatusConditionTrue(root.Status.Conditions, "Resolved") {
+		if root.Spec.Operation == api.NetworkOperationPaused && meta.IsStatusConditionTrue(root.Status.Conditions, common.ConditionResolved) {
 			root.Status.Phase = api.NetworkPhaseUninitialized
 		}
 		return ctrl.Result{}, nil
@@ -141,7 +142,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, root *api.StacksNetwork) (re
 	// Preserve successful independent allocations if a later allocation needs another pass.
 	root.Status.Bitcoin = &api.BitcoinRuntimeStatus{ExecutionRefs: refs, InitializationRef: initialization}
 	if err != nil {
-		set(root, "BitcoinPrepared", metav1.ConditionUnknown, "RecordsUnavailable", "Bitcoin execution records could not be validated")
+		set(root, api.ConditionBitcoinPrepared, metav1.ConditionUnknown, reasonRecordsUnavailable, "Bitcoin execution records could not be validated")
 		return ctrl.Result{}, err
 	}
 	root.Status.Phase = api.NetworkPhaseInitializing
@@ -151,19 +152,19 @@ func (r *Reconciler) Reconcile(ctx context.Context, root *api.StacksNetwork) (re
 		if activated {
 			root.Status.Phase = api.NetworkPhasePausing
 		}
-		set(root, "Running", metav1.ConditionFalse, "DesiredPause", "Network pause holds new managed activation and production")
+		set(root, api.ConditionRunning, metav1.ConditionFalse, api.ReasonDesiredPause, "Network pause holds new managed activation and production")
 	}
 	if initialization == nil {
 		return ctrl.Result{}, nil
 	}
 	var record bitcoin.BitcoinInitialization
 	if err := r.observations().Get(ctx, client.ObjectKey{Namespace: root.Namespace, Name: initialization.Name}, &record); err != nil {
-		set(root, "BitcoinPrepared", metav1.ConditionUnknown, "ObservationUnavailable", "Bitcoin preparation observation is unavailable")
+		set(root, api.ConditionBitcoinPrepared, metav1.ConditionUnknown, api.ReasonObservationUnavailable, "Bitcoin preparation observation is unavailable")
 		return ctrl.Result{}, err
 	}
 	if record.UID != initialization.UID || record.Spec.NetworkUID != root.UID || !metav1.IsControlledBy(&record, root) {
-		set(root, "BitcoinPrepared", metav1.ConditionUnknown, "IdentityUnavailable", "Bitcoin preparation identity differs from the captured binding")
-		observationUnavailable(root, "IdentityUnavailable", "Bitcoin preparation identity differs from the captured binding")
+		set(root, api.ConditionBitcoinPrepared, metav1.ConditionUnknown, api.ReasonIdentityUnavailable, "Bitcoin preparation identity differs from the captured binding")
+		observationUnavailable(root, api.ReasonIdentityUnavailable, "Bitcoin preparation identity differs from the captured binding")
 		return ctrl.Result{RequeueAfter: time.Second}, nil
 	}
 	if projectPreparation(root.DeepCopy(), &record) {
@@ -181,8 +182,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, root *api.StacksNetwork) (re
 		return ctrl.Result{}, err
 	}
 	if gateFailed {
-		set(root, "Running", metav1.ConditionFalse, "BootstrapFailed", "Frozen initialization requirements failed")
-		set(root, "Operational", metav1.ConditionFalse, "BootstrapFailed", "Frozen initialization requirements failed")
+		set(root, api.ConditionRunning, metav1.ConditionFalse, reasonBootstrapFailed, "Frozen initialization requirements failed")
+		set(root, api.ConditionOperational, metav1.ConditionFalse, reasonBootstrapFailed, "Frozen initialization requirements failed")
 		return ctrl.Result{}, nil
 	}
 	if root.Spec.Operation == api.NetworkOperationPaused && activated {
@@ -196,7 +197,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, root *api.StacksNetwork) (re
 	}
 
 	if err := r.projectOperation(ctx, root, participants.Items, time.Now()); err != nil {
-		set(root, "Operational", metav1.ConditionUnknown, "ObservationUnavailable", "Current protocol observations are unavailable")
+		set(root, api.ConditionOperational, metav1.ConditionUnknown, api.ReasonObservationUnavailable, "Current protocol observations are unavailable")
 		return ctrl.Result{}, err
 	}
 	if workerPending || root.Status.Initialization != nil && !root.Status.Initialization.Completed {
@@ -252,7 +253,7 @@ func cleanDrain(status bitcoin.BitcoinExecutionStatus) bool {
 		return false
 	}
 	switch d.Reason {
-	case "ParticipantRemoved", "NetworkStopped", "NetworkDeleting", "NetworkFailed":
+	case api.ReasonParticipantRemoved, api.ReasonNetworkStopped, api.ReasonNetworkDeleting, api.ReasonNetworkFailed:
 		return true
 	default:
 		return false
@@ -275,30 +276,30 @@ func (r *Reconciler) actorKind(kind api.ParticipantKind) bool {
 // projectPreparation keeps the first Bitcoin gate distinct from full network initialization.
 func projectPreparation(root *api.StacksNetwork, record *bitcoin.BitcoinInitialization) bool {
 	switch record.Status.Reason {
-	case "PrepareBitcoinObservationDeadline", "FrozenCeilingExceeded", "PreparedChainRegressed":
+	case api.ReasonPrepareBitcoinObservationDeadline, api.ReasonFrozenCeilingExceeded, api.ReasonPreparedChainRegressed:
 		root.Status.Phase = api.NetworkPhaseFailed
-		set(root, "Failed", metav1.ConditionTrue, record.Status.Reason, "Frozen Bitcoin preparation requirements cannot be satisfied; recreate the network")
-		set(root, "Running", metav1.ConditionFalse, record.Status.Reason, "Bitcoin initialization failed")
-		set(root, "Operational", metav1.ConditionFalse, record.Status.Reason, "Bitcoin initialization failed")
+		set(root, api.ConditionFailed, metav1.ConditionTrue, record.Status.Reason, "Frozen Bitcoin preparation requirements cannot be satisfied; recreate the network")
+		set(root, api.ConditionRunning, metav1.ConditionFalse, record.Status.Reason, "Bitcoin initialization failed")
+		set(root, api.ConditionOperational, metav1.ConditionFalse, record.Status.Reason, "Bitcoin initialization failed")
 		return true
 	}
 	prepared := metav1.ConditionFalse
-	reason, message := "Preparing", "Bitcoin wallets, maturity and initial cohort convergence are pending"
+	reason, message := reasonPreparing, "Bitcoin wallets, maturity and initial cohort convergence are pending"
 	if record.Status.PreparedAt != nil {
-		prepared, reason, message = metav1.ConditionTrue, "PrepareBitcoinComplete", "The first frozen Bitcoin gate completed; later protocol gates remain pending"
+		prepared, reason, message = metav1.ConditionTrue, reasonPrepareBitcoinComplete, "The first frozen Bitcoin gate completed; later protocol gates remain pending"
 	}
-	set(root, "BitcoinPrepared", prepared, reason, message)
+	set(root, api.ConditionBitcoinPrepared, prepared, reason, message)
 	return false
 }
 
 // projectKnownOperation preserves historical initialization independently of current protocol reads.
 func projectKnownOperation(root *api.StacksNetwork) {
-	if root.DeletionTimestamp != nil || root.Spec.Operation != api.NetworkOperationRunning || meta.IsStatusConditionTrue(root.Status.Conditions, "Failed") {
+	if root.DeletionTimestamp != nil || root.Spec.Operation != api.NetworkOperationRunning || meta.IsStatusConditionTrue(root.Status.Conditions, api.ConditionFailed) {
 		return
 	}
-	if meta.IsStatusConditionTrue(root.Status.Conditions, "Initialized") {
+	if meta.IsStatusConditionTrue(root.Status.Conditions, api.ConditionInitialized) {
 		root.Status.Phase = api.NetworkPhaseRunning
-		set(root, "Running", metav1.ConditionTrue, "Running", "Initialization is complete and running operation is requested")
+		set(root, api.ConditionRunning, metav1.ConditionTrue, api.ReasonRunning, "Initialization is complete and running operation is requested")
 	}
 }
 
@@ -307,26 +308,26 @@ func observationUnavailable(root *api.StacksNetwork, reason, message string) {
 	status := metav1.ConditionFalse
 	switch {
 	case root.DeletionTimestamp != nil:
-		reason, message = "Deleting", "Network disposal is in progress"
+		reason, message = reasonDeleting, "Network disposal is in progress"
 		root.Status.Phase = api.NetworkPhaseDestroying
 	case root.Spec.Operation == api.NetworkOperationStopped:
-		reason, message = "Stopped", "Terminal shutdown is requested"
-	case meta.IsStatusConditionTrue(root.Status.Conditions, "Failed"):
-		reason, message = "ExperimentFailed", "A terminal network failure is latched"
+		reason, message = api.ReasonStopped, "Terminal shutdown is requested"
+	case meta.IsStatusConditionTrue(root.Status.Conditions, api.ConditionFailed):
+		reason, message = reasonExperimentFailed, "A terminal network failure is latched"
 		root.Status.Phase = api.NetworkPhaseFailed
 	case root.Spec.Operation == api.NetworkOperationPaused:
-		reason, message = "DesiredPause", "Network pause holds managed production"
-	case !meta.IsStatusConditionTrue(root.Status.Conditions, "Initialized"):
-		reason, message = "Initializing", "Full protocol initialization has not completed"
+		reason, message = api.ReasonDesiredPause, "Network pause holds managed production"
+	case !meta.IsStatusConditionTrue(root.Status.Conditions, api.ConditionInitialized):
+		reason, message = reasonInitializing, "Full protocol initialization has not completed"
 	default:
 		status = metav1.ConditionUnknown
 	}
 	if status == metav1.ConditionFalse {
-		set(root, "Running", metav1.ConditionFalse, reason, message)
+		set(root, api.ConditionRunning, metav1.ConditionFalse, reason, message)
 	} else {
 		projectKnownOperation(root)
 	}
-	set(root, "Operational", status, reason, message)
+	set(root, api.ConditionOperational, status, reason, message)
 }
 
 // observations reads projection-only public facts from the informer cache when installed.

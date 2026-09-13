@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 
+	participantworkload "github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/participantworkload"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/participantworkload/stacksconfig"
 )
 
@@ -16,7 +17,7 @@ func publicInput(mode, inline, path string) (string, error) {
 		}
 		return inline, nil
 	}
-	if (mode != "resolve-bitcoin-config" && mode != "resolve-stacks-config" && mode != "validate-stacks-config") || inline != "" {
+	if (mode != participantworkload.ModeResolveBitcoinConfig && mode != participantworkload.ModeResolveStacksConfig && mode != participantworkload.ModeValidateStacksConfig) || inline != "" {
 		return "", fmt.Errorf("--input-file requires a configuration resolver and cannot accompany --input")
 	}
 	f, err := os.Open(path)

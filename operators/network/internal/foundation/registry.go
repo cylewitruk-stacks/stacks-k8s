@@ -8,7 +8,7 @@ import (
 
 // validateRegistryInitialization matches the pinned bootstrap wrapper's key-count and quorum bounds.
 func validateRegistryInitialization(in *stacks.RegistryInitialization) error {
-	if in == nil || in.Mode != "ExplicitTestRegistry" || len(in.SignerAccountRefs) < 2 || len(in.SignerAccountRefs) > 100 || int(in.Threshold) <= len(in.SignerAccountRefs)/2 || int(in.Threshold) > len(in.SignerAccountRefs) {
+	if in == nil || in.Mode != stacks.RegistryInitializationExplicitTestRegistry || len(in.SignerAccountRefs) < 2 || len(in.SignerAccountRefs) > 100 || int(in.Threshold) <= len(in.SignerAccountRefs)/2 || int(in.Threshold) > len(in.SignerAccountRefs) {
 		return fmt.Errorf("explicit registry requires at least two signers and a strict majority threshold")
 	}
 	return nil

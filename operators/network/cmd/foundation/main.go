@@ -38,7 +38,7 @@ func main() {
 	var actions actionOptions
 	flag.BoolVar(&actions.generation, "bitcoin-generation-enabled", false, "enable bounded Bitcoin block-generation actions")
 	flag.BoolVar(&actions.reorganization, "bitcoin-reorganization-enabled", false, "enable bounded Bitcoin reorganization actions")
-	mode := flag.String("mode", "controller", "controller, resolve-key, resolve-bitcoin-config, resolve-stacks-config, validate-stacks-config or bitcoin-control")
+	mode := flag.String("mode", foundation.ModeController, "controller, resolve-key, resolve-bitcoin-config, resolve-stacks-config, validate-stacks-config or bitcoin-control")
 	input := flag.String("input", "", "public resolver binding JSON")
 	inputFile := flag.String("input-file", "", "bounded public configuration resolver request file")
 	image := flag.String("resolver-image", "", "image used for scoped identity resolver Jobs")
@@ -66,7 +66,7 @@ func run(ctx context.Context, mode, input, image, health string, leader bool, en
 	if err != nil {
 		return err
 	}
-	if mode == "resolve-key" {
+	if mode == foundation.ModeResolveKey {
 		var binding foundation.KeyJobInput
 		if err := json.Unmarshal([]byte(input), &binding); err != nil {
 			return fmt.Errorf("invalid public resolver binding")
@@ -77,7 +77,7 @@ func run(ctx context.Context, mode, input, image, health string, leader bool, en
 		}
 		return foundation.RunKeyJob(ctx, c, binding)
 	}
-	if mode == "resolve-bitcoin-config" {
+	if mode == participantworkload.ModeResolveBitcoinConfig {
 		var binding participantworkload.BitcoinConfigInput
 		if err := json.Unmarshal([]byte(input), &binding); err != nil {
 			return fmt.Errorf("invalid public configuration binding")
@@ -88,7 +88,7 @@ func run(ctx context.Context, mode, input, image, health string, leader bool, en
 		}
 		return participantworkload.RunBitcoinConfigResolver(ctx, c, binding)
 	}
-	if mode == "resolve-stacks-config" || mode == "validate-stacks-config" {
+	if mode == participantworkload.ModeResolveStacksConfig || mode == participantworkload.ModeValidateStacksConfig {
 		var binding participantworkload.StacksConfigInput
 		if err := json.Unmarshal([]byte(input), &binding); err != nil {
 			return fmt.Errorf("invalid public Stacks configuration binding")
@@ -97,12 +97,12 @@ func run(ctx context.Context, mode, input, image, health string, leader bool, en
 		if err != nil {
 			return err
 		}
-		if mode == "validate-stacks-config" {
+		if mode == participantworkload.ModeValidateStacksConfig {
 			return participantworkload.RunStacksCandidateConfigResolver(ctx, c, binding)
 		}
 		return participantworkload.RunStacksConfigResolver(ctx, c, binding)
 	}
-	if mode == "bitcoin-control" {
+	if mode == bitcoincontrol.ModeBitcoinControl {
 		var binding bitcoincontrol.WorkerInput
 		if err := json.Unmarshal([]byte(input), &binding); err != nil {
 			return fmt.Errorf("invalid public control-worker binding")
@@ -113,7 +113,7 @@ func run(ctx context.Context, mode, input, image, health string, leader bool, en
 		}
 		return bitcoincontrol.RunWorker(ctx, c, c, binding)
 	}
-	if mode != "controller" || image == "" {
+	if mode != foundation.ModeController || image == "" {
 		return fmt.Errorf("controller requires --resolver-image")
 	}
 	manager, err := ctrl.NewManager(config, ctrl.Options{Cache: foundation.CacheOptions(), Scheme: scheme, LeaderElection: leader, LeaderElectionID: "stacks-network-operator.network.stacks.org", HealthProbeBindAddress: health, Metrics: metricsserver.Options{BindAddress: "0"}, Client: client.Options{Cache: &client.CacheOptions{DisableFor: []client.Object{&corev1.Secret{}, &corev1.ServiceAccount{}, &rbacv1.Role{}, &rbacv1.RoleBinding{}}}}})

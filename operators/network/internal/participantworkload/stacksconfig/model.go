@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	common "github.com/cylewitruk-stacks/stacks-k8s/apis/network/common/v1alpha2"
 	api "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha2"
 	"github.com/cylewitruk-stacks/stacks-k8s/libs/stacks/identity"
 	"github.com/pelletier/go-toml/v2"
@@ -218,7 +219,7 @@ func Node(p NodeParameters, secrets NodeSecrets) ([]byte, error) {
 	if len(secrets.PrivateKey) == 64 {
 		key = secrets.PrivateKey
 	}
-	if net.ParseIP(p.P2PAddress) == nil || p.RPCHost == "" || p.BitcoinHost == "" || secrets.RPCUsername != "actor" || secrets.RPCPassword == "" || secrets.EventToken == "" {
+	if net.ParseIP(p.P2PAddress) == nil || p.RPCHost == "" || p.BitcoinHost == "" || secrets.RPCUsername != common.BitcoinActorRPCUsername || secrets.RPCPassword == "" || secrets.EventToken == "" {
 		return nil, fmt.Errorf("incomplete managed node endpoints or credentials")
 	}
 	if len(p.Chain.Epochs) != 14 || p.Chain.PoX.PrepareLength < 1 || p.Chain.PoX.PrepareLength >= p.Chain.PoX.RewardCycleLength || p.Chain.Contracts.Deployer == "" {

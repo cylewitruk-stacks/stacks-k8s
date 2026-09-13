@@ -29,3 +29,23 @@ const (
 	// AnnotationConfigurationDigest identifies the network.stacks.org/configuration-digest metadata key.
 	AnnotationConfigurationDigest = "network.stacks.org/configuration-digest"
 )
+
+const (
+	// RoleActor marks consensus participants selected by the native Chaos profile.
+	RoleActor = "actor"
+	// RoleSupport marks control and initialization workloads excluded from actor faults.
+	RoleSupport = "support"
+	// ContainerBitcoin is the primary Core process container inspected for runtime identity.
+	ContainerBitcoin = "bitcoin"
+	// ContainerStacksNode is the primary Stacks node process container.
+	ContainerStacksNode = "stacks-node"
+	// ContainerStacksSigner is the primary consensus signer process container.
+	ContainerStacksSigner = "stacks-signer"
+)
+
+const (
+	// ManagedByNetworkOperator identifies generated resources in scoped informer selectors.
+	ManagedByNetworkOperator = "stacks-network-operator"
+	// NetworkLabelValue is the namespace-network marker; NetworkUID supplies incarnation identity.
+	NetworkLabelValue = "network"
+)

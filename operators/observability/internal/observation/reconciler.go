@@ -166,7 +166,7 @@ func pendingStatus(object *observationv1alpha1.NetworkObservation, now time.Time
 	status.Binding = nil
 	status.Actors = nil
 	status.CompletedAt = nil
-	meta.SetStatusCondition(&status.Conditions, condition(object.Generation, metav1.ConditionFalse, "TopologyNotReady", message, now))
+	meta.SetStatusCondition(&status.Conditions, condition(object.Generation, metav1.ConditionFalse, observationv1alpha1.ReasonTopologyNotReady, message, now))
 	return status
 }
 
@@ -179,7 +179,7 @@ func inconclusiveStatus(object *observationv1alpha1.NetworkObservation, now time
 	status.Actors = nil
 	completed := metav1.NewTime(now)
 	status.CompletedAt = &completed
-	meta.SetStatusCondition(&status.Conditions, condition(object.Generation, metav1.ConditionFalse, "IdentityNotEstablished", message, now))
+	meta.SetStatusCondition(&status.Conditions, condition(object.Generation, metav1.ConditionFalse, observationv1alpha1.ReasonIdentityNotEstablished, message, now))
 	return status
 }
 
@@ -192,7 +192,7 @@ func readyStatus(object *observationv1alpha1.NetworkObservation, snapshot topolo
 	status.Actors = snapshot.Actors
 	completed := metav1.NewTime(now)
 	status.CompletedAt = &completed
-	meta.SetStatusCondition(&status.Conditions, condition(object.Generation, metav1.ConditionTrue, "IdentityVerified", "Every admitted actor identity was verified through direct API reads", now))
+	meta.SetStatusCondition(&status.Conditions, condition(object.Generation, metav1.ConditionTrue, observationv1alpha1.ReasonIdentityVerified, "Every admitted actor identity was verified through direct API reads", now))
 	return status
 }
 
@@ -206,5 +206,5 @@ func initializeStatus(status *observationv1alpha1.NetworkObservationStatus, gene
 }
 
 func condition(generation int64, status metav1.ConditionStatus, reason, message string, now time.Time) metav1.Condition {
-	return metav1.Condition{Type: "Ready", Status: status, ObservedGeneration: generation, Reason: reason, Message: message, LastTransitionTime: metav1.NewTime(now)}
+	return metav1.Condition{Type: observationv1alpha1.ConditionReady, Status: status, ObservedGeneration: generation, Reason: reason, Message: message, LastTransitionTime: metav1.NewTime(now)}
 }

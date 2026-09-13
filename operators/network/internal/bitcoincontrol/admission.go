@@ -11,6 +11,7 @@ import (
 	common "github.com/cylewitruk-stacks/stacks-k8s/apis/network/common/v1alpha2"
 	api "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha2"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/foundation"
+	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/objectref"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -117,7 +118,7 @@ func (w *Worker) resolveActor(ctx context.Context, record *bitcoin.BitcoinExecut
 		return out, fmt.Errorf("actor Pod identity differs")
 	}
 	owner := metav1.GetControllerOf(&pod)
-	if owner == nil || owner.Kind != "StatefulSet" {
+	if owner == nil || owner.Kind != common.KindStatefulSet {
 		return out, fmt.Errorf("actor Pod owner unavailable")
 	}
 	var workload appsv1.StatefulSet
@@ -129,7 +130,7 @@ func (w *Worker) resolveActor(ctx context.Context, record *bitcoin.BitcoinExecut
 	}
 	process := false
 	for _, status := range pod.Status.ContainerStatuses {
-		if status.Name == "bitcoin" && status.ContainerID == runtime.ContainerID && status.State.Running != nil && status.Ready {
+		if status.Name == api.ContainerBitcoin && status.ContainerID == runtime.ContainerID && status.State.Running != nil && status.Ready {
 			process = true
 		}
 	}
@@ -138,7 +139,7 @@ func (w *Worker) resolveActor(ctx context.Context, record *bitcoin.BitcoinExecut
 	}
 	var endpoint api.RuntimeEndpoint
 	for _, candidate := range runtime.Endpoints {
-		if candidate.Name == "rpc" {
+		if candidate.Name == common.EndpointRPC {
 			endpoint = candidate
 		}
 	}
@@ -160,7 +161,7 @@ func (w *Worker) resolveActor(ctx context.Context, record *bitcoin.BitcoinExecut
 	}
 	portFound := false
 	for _, port := range service.Spec.Ports {
-		portFound = portFound || port.Name == "rpc" && port.Port == endpoint.Port
+		portFound = portFound || port.Name == common.EndpointRPC && port.Port == endpoint.Port
 	}
 	if !portFound {
 		return out, fmt.Errorf("RPC Service port differs")
@@ -173,13 +174,13 @@ func (w *Worker) resolveActor(ctx context.Context, record *bitcoin.BitcoinExecut
 	if init.UID != ref.UID || init.Spec.NetworkUID != root.UID || !metav1.IsControlledBy(init, root) || init.DeletionTimestamp != nil {
 		return out, fmt.Errorf("initialization record identity unavailable")
 	}
-	out = admitted{root: root, participant: p, initialization: init, pod: &pod, target: bitcoin.BitcoinTargetIdentity{Participant: binding("StacksNetworkParticipant", p), Pod: *runtime.PodRef, ContainerID: runtime.ContainerID, Endpoint: "http://" + net.JoinHostPort(pod.Status.PodIP, strconv.Itoa(int(endpoint.Port))), Configuration: *runtime.ConfigRef, Credentials: *runtime.RPCSecretRef, PolicyDigest: p.Status.Admission.PolicyDigest}}
+	out = admitted{root: root, participant: p, initialization: init, pod: &pod, target: bitcoin.BitcoinTargetIdentity{Participant: objectref.Participant(p), Pod: *runtime.PodRef, ContainerID: runtime.ContainerID, Endpoint: "http://" + net.JoinHostPort(pod.Status.PodIP, strconv.Itoa(int(endpoint.Port))), Configuration: *runtime.ConfigRef, Credentials: *runtime.RPCSecretRef, PolicyDigest: p.Status.Admission.PolicyDigest}}
 	return out, nil
 }
 
 // authorizeOffer verifies current selection and the frozen ceiling independently of freshness snapshots.
 func (w *Worker) authorizeOffer(ctx context.Context, a admitted, offer *bitcoin.BitcoinBlockOffer) error {
-	if offer == nil || offer.Number < 1 || offer.ExpectedHeight >= offer.Ceiling || !w.Now().Before(offer.ExpiresAt.Time) || offer.Initialization != binding("BitcoinInitialization", a.initialization) || offer.Production != productionBinding(a.initialization) || !equality.Semantic.DeepEqual(a.initialization.Status.Offer, offer) {
+	if offer == nil || offer.Number < 1 || offer.ExpectedHeight >= offer.Ceiling || !w.Now().Before(offer.ExpiresAt.Time) || offer.Initialization != objectref.BitcoinInitialization(a.initialization) || offer.Production != productionBinding(a.initialization) || !equality.Semantic.DeepEqual(a.initialization.Status.Offer, offer) {
 		return fmt.Errorf("generation opportunity is not currently authorized")
 	}
 	if err := w.authorizeTimingOverride(ctx, a, offer); err != nil {
@@ -228,7 +229,7 @@ func failed(root *api.StacksNetwork) bool {
 		return true
 	}
 	for _, condition := range root.Status.Conditions {
-		if condition.Type == "Failed" && condition.Status == metav1.ConditionTrue {
+		if condition.Type == api.ConditionFailed && condition.Status == metav1.ConditionTrue {
 			return true
 		}
 	}

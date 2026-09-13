@@ -23,7 +23,7 @@ func PendingWorkerAllocation(root *api.StacksNetwork, p *api.StacksNetworkPartic
 		return false
 	}
 	owner := metav1.GetControllerOf(p)
-	if owner == nil || owner.APIVersion != api.GroupVersion.String() || owner.Kind != "StacksNetwork" || owner.Name != root.Name || owner.UID != root.UID || p.Name != ParticipantName(string(root.UID), p.Spec.ParticipantName) {
+	if owner == nil || owner.APIVersion != api.GroupVersion.String() || owner.Kind != api.KindStacksNetwork || owner.Name != root.Name || owner.UID != root.UID || p.Name != ParticipantName(string(root.UID), p.Spec.ParticipantName) {
 		return false
 	}
 	if findIdentity(root.Status.Identities, p.Spec.ParticipantName) != nil || p.Status.Admission != nil || p.Status.Execution != nil {

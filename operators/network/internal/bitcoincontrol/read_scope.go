@@ -8,20 +8,21 @@ import (
 	common "github.com/cylewitruk-stacks/stacks-k8s/apis/network/common/v1alpha2"
 	stacks "github.com/cylewitruk-stacks/stacks-k8s/apis/network/stacks/v1alpha2"
 	api "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha2"
+	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/objectref"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // publicReadScope bounds worker reads to admitted public dependencies, excluding signing Secrets.
 func publicReadScope(ctx context.Context, reader client.Reader, p *api.StacksNetworkParticipant, initial *bitcoin.BitcoinInitialization) ([]common.Binding, error) {
-	queue := []common.Binding{initial.Spec.PayoutWallet.Wallet, binding("StacksNetworkParticipant", p), productionBinding(initial)}
+	queue := []common.Binding{initial.Spec.PayoutWallet.Wallet, objectref.Participant(p), productionBinding(initial)}
 	out := []common.Binding{}
 	seen := map[string]bool{}
 	for len(queue) > 0 {
 		ref := queue[0]
 		queue = queue[1:]
 		key := ref.Kind + "/" + ref.Name
-		if seen[key] || ref.Kind == "Secret" || ref.Name == "" {
+		if seen[key] || ref.Kind == common.KindSecret || ref.Name == "" {
 			continue
 		}
 		seen[key] = true
@@ -30,13 +31,13 @@ func publicReadScope(ctx context.Context, reader client.Reader, p *api.StacksNet
 		}
 		var object client.Object
 		switch ref.Kind {
-		case "StacksNetworkParticipant":
+		case api.KindStacksNetworkParticipant:
 			object = &api.StacksNetworkParticipant{}
-		case "BitcoinWallet":
+		case bitcoin.KindBitcoinWallet:
 			object = &bitcoin.BitcoinWallet{}
-		case "StacksAccount":
+		case stacks.KindStacksAccount:
 			object = &stacks.StacksAccount{}
-		case string(api.ParticipantBitcoinNode), string(api.ParticipantBitcoinBlockProduction), "BitcoinBlockSchedule":
+		case string(api.ParticipantBitcoinNode), string(api.ParticipantBitcoinBlockProduction), bitcoin.KindBitcoinBlockSchedule:
 			out = append(out, ref)
 			continue
 		default:
@@ -60,7 +61,7 @@ func publicReadScope(ctx context.Context, reader client.Reader, p *api.StacksNet
 					queue = append(queue, common.Binding{Kind: string(current.Spec.Kind), Name: source.Name, UID: source.UID})
 				}
 				for _, dep := range current.Status.Admission.Dependencies {
-					if current.Spec.Kind == api.ParticipantBitcoinBlockProduction && dep.Kind != "BitcoinBlockSchedule" && dep != initial.Spec.PayoutWallet.Wallet {
+					if current.Spec.Kind == api.ParticipantBitcoinBlockProduction && dep.Kind != bitcoin.KindBitcoinBlockSchedule && dep != initial.Spec.PayoutWallet.Wallet {
 						continue
 					}
 					queue = append(queue, dep)

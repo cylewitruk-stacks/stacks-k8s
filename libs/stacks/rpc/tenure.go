@@ -24,7 +24,7 @@ func (c *Client) NakamotoTip(ctx context.Context, view ChainView) (bool, error) 
 	if len(wire.Header) != 1 {
 		return false, errors.New("native header family unavailable")
 	}
-	if raw, ok := wire.Header["Epoch2"]; ok {
+	if raw, ok := wire.Header[headerKindEpoch2]; ok {
 		var legacy map[string]json.RawMessage
 		if json.Unmarshal(raw, &legacy) != nil || len(legacy) == 0 {
 			return false, errors.New("invalid legacy header")
@@ -35,8 +35,16 @@ func (c *Client) NakamotoTip(ctx context.Context, view ChainView) (bool, error) 
 		Height    *uint64 `json:"chain_length"`
 		Consensus string  `json:"consensus_hash"`
 	}
-	if json.Unmarshal(wire.Header["Nakamoto"], &header) != nil || header.Height == nil || *header.Height != view.StacksHeight || header.Consensus != view.ConsensusHash {
+	if json.Unmarshal(wire.Header[headerKindNakamoto], &header) != nil || header.Height == nil || *header.Height != view.StacksHeight || header.Consensus != view.ConsensusHash {
 		return false, errors.New("native Nakamoto header differs from canonical tip")
 	}
 	return true, nil
 }
+
+// Native header discriminators select incompatible RPC response shapes.
+const (
+	// headerKindEpoch2 selects a legacy anchored block header.
+	headerKindEpoch2 = "Epoch2"
+	// headerKindNakamoto selects a Nakamoto tenure header.
+	headerKindNakamoto = "Nakamoto"
+)

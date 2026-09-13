@@ -82,22 +82,22 @@ func (r *ContractRole) validInputs(in ContractInputs) bool {
 func (r *ContractRole) Step(ctx context.Context, snapshot stacksworker.Snapshot) (stacksworker.RoleResult, error) {
 	r.current = nil
 	if r.failed {
-		return r.result("ContractOperationFailed"), nil
+		return r.result(reasonContractOperationFailed), nil
 	}
 	if r.goal != nil {
 		return r.result(r.observeGoal(ctx)), nil
 	}
 	if r.Resolve == nil || snapshot.Participant == nil || snapshot.Participant.Status.Admission == nil {
-		return r.result("PolicyUnavailable"), nil
+		return r.result(reasonPolicyUnavailable), nil
 	}
 	in, resolved, err := r.inputs.resolve(ctx, snapshot, r.applied, r.Resolve, cloneContractInputs)
 	if err != nil {
-		return r.result("DependenciesUnavailable"), nil
+		return r.result(reasonDependenciesUnavailable), nil
 	}
 	snapshot = resolved
 	if !r.validInputs(in) {
 		r.inputs.invalidate(snapshot, r.applied)
-		return r.result("InvalidContractPolicy"), nil
+		return r.result(reasonInvalidContractPolicy), nil
 	}
 	r.inputs.remember(snapshot, in, cloneContractInputs)
 	r.applied = snapshot.Participant.Status.Admission.PolicyDigest
@@ -106,11 +106,11 @@ func (r *ContractRole) Step(ctx context.Context, snapshot stacksworker.Snapshot)
 		if errors.Is(err, contractConflict) {
 			r.failed = true
 		}
-		return r.result("ContractObservationUnavailable"), nil
+		return r.result(api.ReasonContractObservationUnavailable), nil
 	}
 	r.current = state.observation
 	if !state.nakamoto {
-		return r.result("AwaitingClarity3"), nil
+		return r.result(reasonAwaitingClarity3), nil
 	}
 	if snapshot.Paused {
 		return r.result(reasonPaused), nil
@@ -121,10 +121,10 @@ func (r *ContractRole) Step(ctx context.Context, snapshot stacksworker.Snapshot)
 		}
 	}
 	if state.observation != nil {
-		return r.result("ContractSetObserved"), nil
+		return r.result(reasonContractSetObserved), nil
 	}
 	if !state.registryEmpty {
-		return r.result("RegistryObservationUnavailable"), nil
+		return r.result(reasonRegistryObservationUnavailable), nil
 	}
 	return r.offer(ctx, snapshot, in, api.PostconditionRegistryInitialization, protocolcontracts.Source{})
 }
@@ -157,7 +157,7 @@ func (r *ContractRole) offer(ctx context.Context, s stacksworker.Snapshot, in Co
 func (r *ContractRole) observeGoal(ctx context.Context) string {
 	goal := r.goal
 	reason, _ := r.stream.Observe(ctx, r.now())
-	if reason == "ExecutionRejected" {
+	if reason == reasonExecutionRejected {
 		r.failed = true
 		return reason
 	}
@@ -166,11 +166,11 @@ func (r *ContractRole) observeGoal(ctx context.Context) string {
 		if errors.Is(err, contractConflict) {
 			r.failed = true
 		}
-		return "ContractObservationUnavailable"
+		return api.ReasonContractObservationUnavailable
 	}
 	r.current = state.observation
 	if goal.kind == api.PostconditionContractDeployment && !state.sources[goal.name] || goal.kind == api.PostconditionRegistryInitialization && state.observation == nil {
-		return "AwaitingContractPostcondition"
+		return reasonAwaitingContractPostcondition
 	}
 	if r.stream.Pending() != 0 {
 		proof := struct {
@@ -189,7 +189,7 @@ func (r *ContractRole) observeGoal(ctx context.Context) string {
 	}
 	r.goal = nil
 	if reason == reasonIdle {
-		return "ContractPostconditionObserved"
+		return reasonContractPostconditionObserved
 	}
 	return reason
 }

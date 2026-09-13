@@ -101,7 +101,7 @@ func currentActorReady(p *api.StacksNetworkParticipant) bool {
 	if state == nil || state.Terminated || state.ObservedGeneration != p.Generation || state.PodRef == nil || state.ContainerID == "" || p.Status.Admission == nil || state.PolicyDigest != p.Status.Admission.PolicyDigest {
 		return false
 	}
-	for _, kind := range []string{"ConfigVerified", "WorkloadReady"} {
+	for _, kind := range []string{api.ConditionConfigVerified, api.ConditionWorkloadReady} {
 		c := meta.FindStatusCondition(p.Status.Conditions, kind)
 		if c == nil || c.Status != metav1.ConditionTrue || c.ObservedGeneration != p.Generation {
 			return false
