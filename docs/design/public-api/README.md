@@ -20,6 +20,7 @@ require compatible images and cluster placement.
 | [Implementation notes](implementation-notes.md) | Protocol module boundaries, attribution/qualification and exact generated-name formulas. |
 | [Thirty-actor walkthrough](walkthrough.md) | Initial startup, late participation, live changes and fresh repetition. |
 | [Baseline](examples/30-actors.yaml), [late participants](examples/late-participant.yaml), [optional capabilities](examples/optional.yaml) | Complete example inputs and explicitly scoped requests. |
+| [Qualification backlog](qualification-backlog.md) | Delivery status and remaining bounded acceptance work. |
 | [Review ledger](review-ledger.md) / [Fable prompt](fable-prompt.md) | Review boundary, findings, verification and handoff. |
 
 ## Product contract

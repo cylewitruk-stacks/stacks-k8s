@@ -61,9 +61,12 @@ outcomes. A live result does not establish arbitrary custom-image compatibility,
 all cadence/resource combinations or recovery from every fault. Unit/envtest
 results do not prove kubelet, storage, GC or protocol behavior.
 The [local qualification record](../network-operator/public-api-qualification.md)
-includes successful full-cohort initialization, renewal, native faults and fresh-network
-reuse. Late historical catch-up remains unreliable on the tested native Core profile;
-its missing-anchor failures are recorded without a root-cause or recovery claim.
+includes full-cohort initialization, renewal, native faults and fresh-network reuse
+on their recorded images. The bootstrap correction also passed initialization and
+one fresh-storage late join after PoX-5 activation. Earlier missing-anchor and
+enrollment failures remain without a causal diagnosis or reliable-repeat claim.
+Iteration 2 implementation is delivered; the [qualification backlog](public-api/qualification-backlog.md)
+tracks remaining acceptance work without treating the delivery as full qualification.
 
 The roadmap retains broader instrumented/adversarial actors, protocol actions,
 observation and release qualification. There is no scenario engine, reducer,
