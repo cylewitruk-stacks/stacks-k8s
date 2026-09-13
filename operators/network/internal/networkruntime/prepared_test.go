@@ -14,7 +14,19 @@ import (
 )
 
 func TestPreparedSetRequiresExactCurrentCohortAndNativeAgreement(t *testing.T) {
-	for _, mode := range []string{"valid", "missing-node", "missing-signer", "old-pod", "stale", "unavailable", "different-weights", "extra-key", "wrong-cycle", "compatible-roll", "mining-changed"} {
+	for _, mode := range []string{
+		"valid",
+		"missing-node",
+		"missing-signer",
+		"old-pod",
+		"stale",
+		"unavailable",
+		"different-weights",
+		"extra-key",
+		"wrong-cycle",
+		"compatible-roll",
+		"mining-changed",
+	} {
 		t.Run(mode, func(t *testing.T) {
 			root, g := gateFixture()
 			now := time.Now()
@@ -30,16 +42,54 @@ func TestPreparedSetRequiresExactCurrentCohortAndNativeAgreement(t *testing.T) {
 					p.Spec.Kind = "StacksSigner"
 				}
 				p.Status.Admission = &api.Admission{PolicyDigest: name}
-				p.Status.Runtime = &api.ParticipantRuntimeStatus{ObservedGeneration: p.Generation, PolicyDigest: name, PodRef: &common.Binding{UID: types.UID("pod-" + name)}, ContainerID: "process", ConfigurationDigest: "config"}
-				p.Status.Conditions = []metav1.Condition{{Type: "WorkloadReady", Status: metav1.ConditionTrue, ObservedGeneration: p.Generation}, {Type: "ConfigVerified", Status: metav1.ConditionTrue, ObservedGeneration: p.Generation}}
-				req := api.BootstrapRequirement{Kind: p.Spec.Kind, Participant: common.Binding{UID: p.UID}, PolicyDigest: name}
+				p.Status.Runtime = &api.ParticipantRuntimeStatus{
+					ObservedGeneration:  p.Generation,
+					PolicyDigest:        name,
+					PodRef:              &common.Binding{UID: types.UID("pod-" + name)},
+					ContainerID:         "process",
+					ConfigurationDigest: "config",
+				}
+				p.Status.Conditions = []metav1.Condition{
+					{Type: "WorkloadReady", Status: metav1.ConditionTrue, ObservedGeneration: p.Generation},
+					{Type: "ConfigVerified", Status: metav1.ConditionTrue, ObservedGeneration: p.Generation},
+				}
+				req := api.BootstrapRequirement{
+					Kind:         p.Spec.Kind,
+					Participant:  common.Binding{UID: p.UID},
+					PolicyDigest: name,
+				}
 				if name == "signer" {
-					p.Status.Admission.Configuration.StacksSigner = &stacks.StacksSignerSpec{AccountRef: &common.NameRef{Name: "consensus"}}
-					req.Accounts = []api.PublicAccount{{Binding: common.Binding{Name: "consensus"}, Identity: common.PublicIdentity{PublicKey: pub}}}
+					p.Status.Admission.Configuration.StacksSigner = &stacks.StacksSignerSpec{
+						AccountRef: &common.NameRef{Name: "consensus"},
+					}
+					req.Accounts = []api.PublicAccount{
+						{Binding: common.Binding{Name: "consensus"}, Identity: common.PublicIdentity{PublicKey: pub}},
+					}
 				} else {
-					p.Status.Admission.Configuration.StacksNode = &stacks.StacksNodeSpec{Mining: &stacks.Mining{Enabled: ptr.To(true)}}
+					p.Status.Admission.Configuration.StacksNode = &stacks.StacksNodeSpec{
+						Mining: &stacks.Mining{Enabled: ptr.To(true)},
+					}
 					req.MiningEnabled = ptr.To(true)
-					p.Status.Runtime.Protocol = &api.StacksProtocolObservation{Available: true, FullySynced: true, NetworkID: 0x80000000, GenesisUID: g.UID, PodUID: p.Status.Runtime.PodRef.UID, ContainerID: "process", ConfigurationDigest: "config", ObservedAt: metav1.NewTime(now), PreparedSet: &api.PreparedSignerSetObservation{Cycle: 12, Available: true, Version: 1, Threshold: "100", ObservedAt: metav1.NewTime(now), Signers: []api.PreparedSignerObservation{{PublicKey: pub, Weight: 2, StackedAmount: "200"}}}}
+					p.Status.Runtime.Protocol = &api.StacksProtocolObservation{
+						Available:           true,
+						FullySynced:         true,
+						NetworkID:           0x80000000,
+						GenesisUID:          g.UID,
+						PodUID:              p.Status.Runtime.PodRef.UID,
+						ContainerID:         "process",
+						ConfigurationDigest: "config",
+						ObservedAt:          metav1.NewTime(now),
+						PreparedSet: &api.PreparedSignerSetObservation{
+							Cycle:      12,
+							Available:  true,
+							Version:    1,
+							Threshold:  "100",
+							ObservedAt: metav1.NewTime(now),
+							Signers: []api.PreparedSignerObservation{
+								{PublicKey: pub, Weight: 2, StackedAmount: "200"},
+							},
+						},
+					}
 				}
 				g.Spec.Bootstrap.Requirements = append(g.Spec.Bootstrap.Requirements, req)
 				root.Spec.Participants = append(root.Spec.Participants, api.Participant{Name: name, Kind: p.Spec.Kind})
@@ -60,7 +110,14 @@ func TestPreparedSetRequiresExactCurrentCohortAndNativeAgreement(t *testing.T) {
 			case "different-weights":
 				observation.PreparedSet.Signers[0].Weight = 3
 			case "extra-key":
-				observation.PreparedSet.Signers = append(observation.PreparedSet.Signers, api.PreparedSignerObservation{PublicKey: "03" + strings.Repeat("b", 64), Weight: 1, StackedAmount: "100"})
+				observation.PreparedSet.Signers = append(
+					observation.PreparedSet.Signers,
+					api.PreparedSignerObservation{
+						PublicKey:     "03" + strings.Repeat("b", 64),
+						Weight:        1,
+						StackedAmount: "100",
+					},
+				)
 			case "compatible-roll":
 				participants[0].Status.Admission.Configuration.StacksNode.Image = ptr.To("updated-image")
 				participants[0].Status.Admission.PolicyDigest = "updated"
@@ -71,7 +128,13 @@ func TestPreparedSetRequiresExactCurrentCohortAndNativeAgreement(t *testing.T) {
 				observation.PreparedSet.Cycle = 11
 			}
 			gate := api.Gate{Name: "PrepareNakamoto", TargetCycle: g.Spec.Bootstrap.Gates[1].TargetCycle}
-			if got := preparedCohortSatisfied(root, g, participants, gate, now); got != (mode == "valid" || mode == "compatible-roll") {
+			if got := preparedCohortSatisfied(
+				root,
+				g,
+				participants,
+				gate,
+				now,
+			); got != (mode == "valid" || mode == "compatible-roll") {
 				t.Fatalf("prepared accepted=%v", got)
 			}
 		})

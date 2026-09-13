@@ -11,11 +11,23 @@ import (
 )
 
 func TestNativeRejectionSettlesOnlyAllowlistedAttempts(t *testing.T) {
-	for _, reason := range []string{"BadNonce", "FeeTooLow", "ConflictingNonceInMempool", "NotEnoughFunds", "ServerFailureDatabase", "ServerFailureOther", "unknown"} {
+	for _, reason := range []string{
+		"BadNonce",
+		"FeeTooLow",
+		"ConflictingNonceInMempool",
+		"NotEnoughFunds",
+		"ServerFailureDatabase",
+		"ServerFailureOther",
+		"unknown",
+	} {
 		t.Run(reason, func(t *testing.T) {
 			node := nodeFixture()
 			tx, _ := buildFixture(node.account.Nonce)
-			node.submitErr = rpc.ClassifySubmissionRejection(400, []byte(fmt.Sprintf(`{"txid":%q,"error":"transaction rejected","reason":%q}`, tx.TxID, reason)), tx.TxID)
+			node.submitErr = rpc.ClassifySubmissionRejection(
+				400,
+				[]byte(fmt.Sprintf(`{"txid":%q,"error":"transaction rejected","reason":%q}`, tx.TxID, reason)),
+				tx.TxID,
+			)
 			stream := NonceStream{Address: "sender"}
 			ctx := context.Background()
 			now := time.Unix(500, 0)
@@ -25,18 +37,33 @@ func TestNativeRejectionSettlesOnlyAllowlistedAttempts(t *testing.T) {
 			}
 			definite := rpc.ValidationRejectionReason(reason)
 			if definite {
-				if got != "Rejected"+reason || stream.Pending() != 0 || stream.Facts().Rejected != 1 || stream.Facts().Uncertain != 0 {
+				if got != "Rejected"+reason || stream.Pending() != 0 || stream.Facts().Rejected != 1 ||
+					stream.Facts().Uncertain != 0 {
 					t.Fatalf("refusal: %s %+v", got, stream.Facts())
 				}
 				for range 3 {
-					_, _ = stream.Offer(ctx, fixedClock(now.Add(4*time.Second)), node, big.NewInt(1), permit, buildFixture)
+					_, _ = stream.Offer(
+						ctx,
+						fixedClock(now.Add(4*time.Second)),
+						node,
+						big.NewInt(1),
+						permit,
+						buildFixture,
+					)
 					_, _ = stream.Observe(ctx, now)
 				}
 				if node.sends != 1 || node.reads != 0 {
 					t.Fatal("cooldown sent or polled settled refusal")
 				}
 				node.account.Nonce++
-				got, _ = stream.Offer(ctx, fixedClock(now.Add(5*time.Second)), node, big.NewInt(1), permit, buildFixture)
+				got, _ = stream.Offer(
+					ctx,
+					fixedClock(now.Add(5*time.Second)),
+					node,
+					big.NewInt(1),
+					permit,
+					buildFixture,
+				)
 				if got != "NonceMismatch" || node.sends != 1 {
 					t.Fatal("shared writer silently resynchronized nonce")
 				}
@@ -47,12 +74,20 @@ func TestNativeRejectionSettlesOnlyAllowlistedAttempts(t *testing.T) {
 				if node.sends != 1 {
 					t.Fatal("new attempt skipped authorization")
 				}
-				got, _ = stream.Offer(ctx, fixedClock(now.Add(5*time.Second)), node, big.NewInt(1), permit, buildFixture)
+				got, _ = stream.Offer(
+					ctx,
+					fixedClock(now.Add(5*time.Second)),
+					node,
+					big.NewInt(1),
+					permit,
+					buildFixture,
+				)
 				if got != "Accepted" || node.sends != 2 || stream.Pending() != 1 || stream.Facts().Rejected != 1 {
 					t.Fatal("new authorized attempt missing or rejection evidence lost")
 				}
 			} else {
-				if got != "SubmissionUncertain" || stream.Pending() != 1 || stream.Facts().Rejected != 0 || stream.Facts().Uncertain != 1 {
+				if got != "SubmissionUncertain" || stream.Pending() != 1 || stream.Facts().Rejected != 0 ||
+					stream.Facts().Uncertain != 1 {
 					t.Fatalf("server error freed pending: %+v", stream.Facts())
 				}
 				_, _ = stream.Offer(ctx, fixedClock(now.Add(time.Hour)), node, big.NewInt(1), permit, buildFixture)
@@ -75,7 +110,11 @@ func fixedClock(now time.Time) func() time.Time { return func() time.Time { retu
 func TestRejectionBackoffStartsWhenDelayedSubmissionReturns(t *testing.T) {
 	node := nodeFixture()
 	tx, _ := buildFixture(node.account.Nonce)
-	node.submitErr = rpc.ClassifySubmissionRejection(400, []byte(fmt.Sprintf(`{"txid":%q,"error":"transaction rejected","reason":"FeeTooLow"}`, tx.TxID)), tx.TxID)
+	node.submitErr = rpc.ClassifySubmissionRejection(
+		400,
+		[]byte(fmt.Sprintf(`{"txid":%q,"error":"transaction rejected","reason":"FeeTooLow"}`, tx.TxID)),
+		tx.TxID,
+	)
 	now := time.Unix(500, 0)
 	node.onSubmit = func() { now = now.Add(10 * time.Second) }
 	stream := NonceStream{Address: "sender"}

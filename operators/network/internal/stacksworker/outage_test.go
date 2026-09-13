@@ -22,7 +22,12 @@ type outageClient struct {
 	participantOnly   bool
 }
 
-func (c *outageClient) Get(ctx context.Context, key client.ObjectKey, object client.Object, opts ...client.GetOption) error {
+func (c *outageClient) Get(
+	ctx context.Context,
+	key client.ObjectKey,
+	object client.Object,
+	opts ...client.GetOption,
+) error {
 	if c.readErr != nil {
 		if _, ok := object.(*api.StacksNetworkParticipant); !c.participantOnly || ok {
 			return c.readErr
@@ -30,6 +35,7 @@ func (c *outageClient) Get(ctx context.Context, key client.ObjectKey, object cli
 	}
 	return c.Client.Get(ctx, key, object, opts...)
 }
+
 func (c *outageClient) Status() client.SubResourceWriter {
 	return &outageWriter{SubResourceWriter: c.Client.Status(), parent: c}
 }
@@ -40,7 +46,12 @@ type outageWriter struct {
 	parent *outageClient
 }
 
-func (w *outageWriter) Patch(ctx context.Context, o client.Object, p client.Patch, opts ...client.SubResourcePatchOption) error {
+func (w *outageWriter) Patch(
+	ctx context.Context,
+	o client.Object,
+	p client.Patch,
+	opts ...client.SubResourcePatchOption,
+) error {
 	if w.parent.patchErr != nil {
 		return w.parent.patchErr
 	}
@@ -68,8 +79,22 @@ func (r *baselineRole) Step(ctx context.Context, s Snapshot) (RoleResult, error)
 	if r.first.IsZero() {
 		r.first = metav1.NewTime(time.Unix(100, 0))
 	}
-	return RoleResult{AppliedPolicyDigest: r.applied, Reason: "Observed", Transactions: &api.TransactionExecutionStatus{Offered: uint64(r.sends), Accepted: uint64(r.sends), Included: uint64(r.sends), LastInclusion: &api.TransactionInclusion{TxID: "original", ObservedAt: r.first}}, RequeueAfter: time.Second}, nil
+	return RoleResult{
+		AppliedPolicyDigest: r.applied,
+		Reason:              "Observed",
+		Transactions: &api.TransactionExecutionStatus{
+			// #nosec G115 -- Small deterministic fixture counters/values are bounded by the test setup.
+			Offered: uint64(r.sends),
+			// #nosec G115 -- Small deterministic fixture counters/values are bounded by the test setup.
+			Accepted: uint64(r.sends),
+			// #nosec G115 -- Small deterministic fixture counters/values are bounded by the test setup.
+			Included:      uint64(r.sends),
+			LastInclusion: &api.TransactionInclusion{TxID: "original", ObservedAt: r.first},
+		},
+		RequeueAfter: time.Second,
+	}, nil
 }
+
 func (r *baselineRole) Drain(context.Context, Snapshot) (DrainResult, error) {
 	return DrainResult{Done: true, Settled: true}, nil
 }
@@ -81,7 +106,18 @@ func baselineFixture(t *testing.T) (*Runtime, *outageClient, *baselineRole) {
 	ProjectSession(root, p, pod, nil, time.Now())
 	c := &outageClient{Client: &statusClient{Client: fakeClient(t, root, p, pod)}}
 	role := &baselineRole{}
-	r := &Runtime{Client: c, Namespace: p.Namespace, ParticipantName: p.Name, NetworkUID: root.UID, ParticipantUID: p.UID, PodName: pod.Name, PodUID: pod.UID, Profile: profile, Role: role, Prerequisites: func(context.Context, Snapshot) error { return nil }}
+	r := &Runtime{
+		Client:          c,
+		Namespace:       p.Namespace,
+		ParticipantName: p.Name,
+		NetworkUID:      root.UID,
+		ParticipantUID:  p.UID,
+		PodName:         pod.Name,
+		PodUID:          pod.UID,
+		Profile:         profile,
+		Role:            role,
+		Prerequisites:   func(context.Context, Snapshot) error { return nil },
+	}
 	if _, err := r.Reconcile(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -90,18 +126,32 @@ func baselineFixture(t *testing.T) (*Runtime, *outageClient, *baselineRole) {
 	}
 	return r, c, role
 }
+
 func TestTransientClassificationDoesNotHideDefiniteDenial(t *testing.T) {
-	for _, err := range []error{context.DeadlineExceeded, io.EOF, apierrors.NewServiceUnavailable("offline"), apierrors.NewTimeoutError("offline", 1)} {
+	for _, err := range []error{
+		context.DeadlineExceeded,
+		io.EOF,
+		apierrors.NewServiceUnavailable("offline"),
+		apierrors.NewTimeoutError("offline", 1),
+	} {
 		if !TransientAPIError(err) {
 			t.Fatalf("availability error rejected: %v", err)
 		}
 	}
-	for _, err := range []error{nil, context.Canceled, errors.New("invalid identity"), apierrors.NewForbidden(schema.GroupResource{Resource: "pods"}, "p", errors.New("denied")), apierrors.NewUnauthorized("denied"), apierrors.NewNotFound(schema.GroupResource{Resource: "pods"}, "p")} {
+	for _, err := range []error{
+		nil,
+		context.Canceled,
+		errors.New("invalid identity"),
+		apierrors.NewForbidden(schema.GroupResource{Resource: "pods"}, "p", errors.New("denied")),
+		apierrors.NewUnauthorized("denied"),
+		apierrors.NewNotFound(schema.GroupResource{Resource: "pods"}, "p"),
+	} {
 		if TransientAPIError(err) {
 			t.Fatalf("definite denial cached: %v", err)
 		}
 	}
 }
+
 func TestSurvivingBaselineCoalescesAPIOutageWithoutLosingOriginalProgress(t *testing.T) {
 	r, c, role := baselineFixture(t)
 	ctx := context.Background()
@@ -129,7 +179,8 @@ func TestSurvivingBaselineCoalescesAPIOutageWithoutLosingOriginalProgress(t *tes
 	if err := c.Get(ctx, client.ObjectKey{Namespace: r.Namespace, Name: r.ParticipantName}, &p); err != nil {
 		t.Fatal(err)
 	}
-	if p.Status.Execution.Transactions.Included != 4 || !p.Status.Execution.Transactions.LastInclusion.ObservedAt.Equal(&original) {
+	if p.Status.Execution.Transactions.Included != 4 ||
+		!p.Status.Execution.Transactions.LastInclusion.ObservedAt.Equal(&original) {
 		t.Fatal("coalescing regressed counters or freshened original inclusion")
 	}
 	if _, err := r.Reconcile(ctx); err != nil {
@@ -139,6 +190,7 @@ func TestSurvivingBaselineCoalescesAPIOutageWithoutLosingOriginalProgress(t *tes
 		t.Fatal("recovery baseline stalled")
 	}
 }
+
 func TestPartialPauseObservationPermanentlyHoldsCachedSendsUntilLiveValidation(t *testing.T) {
 	r, c, role := baselineFixture(t)
 	ctx := context.Background()
@@ -149,7 +201,7 @@ func TestPartialPauseObservationPermanentlyHoldsCachedSendsUntilLiveValidation(t
 	}
 	root.Spec.Participants[0].Control = &api.Control{Paused: ptr.To(true)}
 	root.Generation++
-	if err := c.Client.Update(ctx, &root); err != nil {
+	if err := c.Update(ctx, &root); err != nil {
 		t.Fatal(err)
 	}
 	c.readErr = apierrors.NewServiceUnavailable("participant unavailable")
@@ -169,8 +221,13 @@ func TestPartialPauseObservationPermanentlyHoldsCachedSendsUntilLiveValidation(t
 		t.Fatal("paused live worker sent")
 	}
 }
+
 func TestDefiniteReadDenialCannotBecomeCachedAuthorityOnLaterOutage(t *testing.T) {
-	for _, denial := range []error{apierrors.NewUnauthorized("revoked"), apierrors.NewNotFound(schema.GroupResource{Resource: "pods"}, "worker"), errors.New("UID changed")} {
+	for _, denial := range []error{
+		apierrors.NewUnauthorized("revoked"),
+		apierrors.NewNotFound(schema.GroupResource{Resource: "pods"}, "worker"),
+		errors.New("UID changed"),
+	} {
 		r, c, role := baselineFixture(t)
 		c.readErr = denial
 		_, _ = r.Reconcile(context.Background())
@@ -182,9 +239,21 @@ func TestDefiniteReadDenialCannotBecomeCachedAuthorityOnLaterOutage(t *testing.T
 		}
 	}
 }
+
 func TestColdProcessAndFaucetNeverReceiveCachedBaselineAuthority(t *testing.T) {
 	r, c, role := baselineFixture(t)
-	cold := &Runtime{Client: c, Namespace: r.Namespace, ParticipantName: r.ParticipantName, NetworkUID: r.NetworkUID, ParticipantUID: r.ParticipantUID, PodName: r.PodName, PodUID: r.PodUID, Profile: r.Profile, Role: &baselineRole{}, Prerequisites: r.Prerequisites}
+	cold := &Runtime{
+		Client:          c,
+		Namespace:       r.Namespace,
+		ParticipantName: r.ParticipantName,
+		NetworkUID:      r.NetworkUID,
+		ParticipantUID:  r.ParticipantUID,
+		PodName:         r.PodName,
+		PodUID:          r.PodUID,
+		Profile:         r.Profile,
+		Role:            &baselineRole{},
+		Prerequisites:   r.Prerequisites,
+	}
 	c.readErr = apierrors.NewServiceUnavailable("offline")
 	c.patchErr = c.readErr
 	if _, err := cold.Reconcile(context.Background()); err == nil || cold.appliedSnapshot != nil {
@@ -196,9 +265,11 @@ func TestColdProcessAndFaucetNeverReceiveCachedBaselineAuthority(t *testing.T) {
 		t.Fatal("request worker used baseline cache")
 	}
 }
+
 func TestCounterRegressionIsRejected(t *testing.T) {
 	previous := &api.TransactionExecutionStatus{Offered: 3, Included: 2}
-	if executionCountersAdvance(previous, &api.TransactionExecutionStatus{Offered: 2, Included: 2}) || executionCountersAdvance(previous, nil) {
+	if executionCountersAdvance(previous, &api.TransactionExecutionStatus{Offered: 2, Included: 2}) ||
+		executionCountersAdvance(previous, nil) {
 		t.Fatal("regressing summary accepted")
 	}
 }

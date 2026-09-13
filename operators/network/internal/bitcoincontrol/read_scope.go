@@ -14,7 +14,12 @@ import (
 )
 
 // publicReadScope bounds worker reads to admitted public dependencies, excluding signing Secrets.
-func publicReadScope(ctx context.Context, reader client.Reader, p *api.StacksNetworkParticipant, initial *bitcoin.BitcoinInitialization) ([]common.Binding, error) {
+func publicReadScope(
+	ctx context.Context,
+	reader client.Reader,
+	p *api.StacksNetworkParticipant,
+	initial *bitcoin.BitcoinInitialization,
+) ([]common.Binding, error) {
 	queue := []common.Binding{initial.Spec.PayoutWallet.Wallet, objectref.Participant(p), productionBinding(initial)}
 	out := []common.Binding{}
 	seen := map[string]bool{}
@@ -37,7 +42,9 @@ func publicReadScope(ctx context.Context, reader client.Reader, p *api.StacksNet
 			object = &bitcoin.BitcoinWallet{}
 		case stacks.KindStacksAccount:
 			object = &stacks.StacksAccount{}
-		case string(api.ParticipantBitcoinNode), string(api.ParticipantBitcoinBlockProduction), bitcoin.KindBitcoinBlockSchedule:
+		case string(api.ParticipantBitcoinNode),
+			string(api.ParticipantBitcoinBlockProduction),
+			bitcoin.KindBitcoinBlockSchedule:
 			out = append(out, ref)
 			continue
 		default:
@@ -58,10 +65,15 @@ func publicReadScope(ctx context.Context, reader client.Reader, p *api.StacksNet
 		case *api.StacksNetworkParticipant:
 			if current.Status.Admission != nil {
 				if source := current.Status.Admission.Source; source.Name != "" {
-					queue = append(queue, common.Binding{Kind: string(current.Spec.Kind), Name: source.Name, UID: source.UID})
+					queue = append(
+						queue,
+						common.Binding{Kind: string(current.Spec.Kind), Name: source.Name, UID: source.UID},
+					)
 				}
 				for _, dep := range current.Status.Admission.Dependencies {
-					if current.Spec.Kind == api.ParticipantBitcoinBlockProduction && dep.Kind != bitcoin.KindBitcoinBlockSchedule && dep != initial.Spec.PayoutWallet.Wallet {
+					if current.Spec.Kind == api.ParticipantBitcoinBlockProduction &&
+						dep.Kind != bitcoin.KindBitcoinBlockSchedule &&
+						dep != initial.Spec.PayoutWallet.Wallet {
 						continue
 					}
 					queue = append(queue, dep)

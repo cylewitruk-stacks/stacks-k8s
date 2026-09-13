@@ -34,7 +34,8 @@ func TestDueNeverRoundsEarlier(t *testing.T) {
 	anchor := time.Unix(1000, 123456789)
 	for _, delay := range []time.Duration{0, time.Second, 24 * time.Hour} {
 		got := Due(anchor, delay)
-		if got.Before(anchor.Add(delay)) || got.Sub(anchor.Add(delay)) >= time.Microsecond || got.Nanosecond()%1000 != 0 {
+		if got.Before(anchor.Add(delay)) || got.Sub(anchor.Add(delay)) >= time.Microsecond ||
+			got.Nanosecond()%1000 != 0 {
 			t.Fatal(got)
 		}
 	}

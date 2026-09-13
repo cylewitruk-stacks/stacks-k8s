@@ -4,9 +4,10 @@ package faucetrequest
 import (
 	"context"
 	"errors"
-	"github.com/cylewitruk-stacks/stacks-k8s/libs/stacks/rpc"
 	"strings"
 	"time"
+
+	"github.com/cylewitruk-stacks/stacks-k8s/libs/stacks/rpc"
 
 	stacks "github.com/cylewitruk-stacks/stacks-k8s/apis/network/stacks/v1alpha2"
 	api "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha2"
@@ -27,15 +28,34 @@ const (
 )
 
 // ApplyStatus uses minimal SSA fields and UID/revision preconditions; it cannot adopt replacements.
-func ApplyStatus(ctx context.Context, c client.Client, request *stacks.StacksFaucetRequest, status stacks.FaucetRequestStatus, manager string) error {
-	if request.UID == "" || request.ResourceVersion == "" || manager != AdmissionManager && manager != ExecutionManager {
+func ApplyStatus(
+	ctx context.Context,
+	c client.Client,
+	request *stacks.StacksFaucetRequest,
+	status stacks.FaucetRequestStatus,
+	manager string,
+) error {
+	if request.UID == "" || request.ResourceVersion == "" ||
+		manager != AdmissionManager && manager != ExecutionManager {
 		return errors.New("request status requires exact persisted identity and field manager")
 	}
-	if manager == ExecutionManager && (status.Admission != nil || status.Phase != "" || len(status.Conditions) != 0) || manager == AdmissionManager && status.Execution != nil {
+	if manager == ExecutionManager && (status.Admission != nil || status.Phase != "" || len(status.Conditions) != 0) ||
+		manager == AdmissionManager && status.Execution != nil {
 		return errors.New("request status writer exceeded field ownership")
 	}
-	patch := &stacks.StacksFaucetRequest{TypeMeta: metav1.TypeMeta{APIVersion: stacks.GroupVersion.String(), Kind: stacks.KindStacksFaucetRequest}, ObjectMeta: metav1.ObjectMeta{Namespace: request.Namespace, Name: request.Name, UID: request.UID, ResourceVersion: request.ResourceVersion}, Status: *status.DeepCopy()}
-	if err := c.Status().Patch(ctx, patch, client.Apply, client.FieldOwner(manager), client.ForceOwnership); err != nil {
+	patch := &stacks.StacksFaucetRequest{
+		TypeMeta: metav1.TypeMeta{APIVersion: stacks.GroupVersion.String(), Kind: stacks.KindStacksFaucetRequest},
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace:       request.Namespace,
+			Name:            request.Name,
+			UID:             request.UID,
+			ResourceVersion: request.ResourceVersion,
+		},
+		Status: *status.DeepCopy(),
+	}
+	if err := c.Status().
+		//nolint:staticcheck // Typed minimal SSA preserves the response; generated apply configurations are not available.
+		Patch(ctx, patch, client.Apply, client.FieldOwner(manager), client.ForceOwnership); err != nil {
 		return err
 	}
 	*request = *patch
@@ -60,7 +80,13 @@ func ValidAddress(address string) bool {
 // MatchingExecution rejects evidence belonging to another admission or worker incarnation.
 func MatchingExecution(request *stacks.StacksFaucetRequest) bool {
 	a, e := request.Status.Admission, request.Status.Execution
-	return a != nil && a.Decision == stacks.FaucetDecisionAdmitted && a.Faucet != nil && a.Worker != nil && e != nil && e.NetworkUID == a.NetworkUID && e.FaucetUID == a.Faucet.UID && e.WorkerUID == a.Worker.UID && e.ProcessNonce != "" && e.Destination == a.Destination && e.AmountMicroSTX == a.AmountMicroSTX
+	return a != nil && a.Decision == stacks.FaucetDecisionAdmitted && a.Faucet != nil && a.Worker != nil && e != nil &&
+		e.NetworkUID == a.NetworkUID &&
+		e.FaucetUID == a.Faucet.UID &&
+		e.WorkerUID == a.Worker.UID &&
+		e.ProcessNonce != "" &&
+		e.Destination == a.Destination &&
+		e.AmountMicroSTX == a.AmountMicroSTX
 }
 
 // TerminalExecution requires no-send, classified native refusal, or exact inclusion evidence.
@@ -68,11 +94,22 @@ func TerminalExecution(execution *stacks.FaucetExecution) bool {
 	if execution == nil {
 		return false
 	}
+	//nolint:exhaustive // Only settled outcomes are terminal; submitted and uncertain outcomes remain pending.
 	switch execution.Phase {
 	case stacks.FaucetExecutionCompleted:
 		return !execution.NoSend && len(execution.TxID) == 64 && len(execution.InclusionBlockID) == 64
 	case stacks.FaucetExecutionRejected:
-		return execution.NoSend && execution.TxID == "" || !execution.NoSend && len(execution.TxID) == 64 && (len(execution.InclusionBlockID) == 64 || strings.HasPrefix(execution.Reason, stacks.RejectionReasonPrefix) && rpc.ValidationRejectionReason(strings.TrimPrefix(execution.Reason, stacks.RejectionReasonPrefix)))
+		return execution.NoSend && execution.TxID == "" ||
+			!execution.NoSend && len(execution.TxID) == 64 &&
+				(len(execution.InclusionBlockID) == 64 ||
+					strings.HasPrefix(
+						execution.Reason,
+						stacks.RejectionReasonPrefix,
+					) &&
+						rpc.ValidationRejectionReason(strings.TrimPrefix(
+							execution.Reason,
+							stacks.RejectionReasonPrefix,
+						)))
 	case stacks.FaucetExecutionExpired:
 		return execution.NoSend && execution.TxID == ""
 	}

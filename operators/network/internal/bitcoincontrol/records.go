@@ -25,7 +25,13 @@ import (
 
 // EnsureRecords creates network-owned infrastructure and returns actual bindings.
 // Only the aggregate caller persists these bindings in root status before activation.
-func EnsureRecords(ctx context.Context, c client.Client, reader client.Reader, scheme *runtime.Scheme, root *api.StacksNetwork) ([]common.Binding, *common.Binding, error) {
+func EnsureRecords(
+	ctx context.Context,
+	c client.Client,
+	reader client.Reader,
+	scheme *runtime.Scheme,
+	root *api.StacksNetwork,
+) ([]common.Binding, *common.Binding, error) {
 	refs := []common.Binding{}
 	var initRef *common.Binding
 	if root.Status.Bitcoin != nil {
@@ -37,13 +43,23 @@ func EnsureRecords(ctx context.Context, c client.Client, reader client.Reader, s
 	}
 	for _, ref := range refs {
 		var record bitcoin.BitcoinExecution
-		if e := c.Get(ctx, client.ObjectKey{Namespace: root.Namespace, Name: ref.Name}, &record); e != nil || record.UID != ref.UID || !metav1.IsControlledBy(&record, root) {
+		if e := c.Get(
+			ctx,
+			client.ObjectKey{Namespace: root.Namespace, Name: ref.Name},
+			&record,
+		); e != nil || record.UID != ref.UID ||
+			!metav1.IsControlledBy(&record, root) {
 			return refs, initRef, fmt.Errorf("pinned Bitcoin execution record unavailable")
 		}
 	}
 	if initRef != nil {
 		var record bitcoin.BitcoinInitialization
-		if e := c.Get(ctx, client.ObjectKey{Namespace: root.Namespace, Name: initRef.Name}, &record); e != nil || record.UID != initRef.UID || !metav1.IsControlledBy(&record, root) {
+		if e := c.Get(
+			ctx,
+			client.ObjectKey{Namespace: root.Namespace, Name: initRef.Name},
+			&record,
+		); e != nil || record.UID != initRef.UID ||
+			!metav1.IsControlledBy(&record, root) {
 			return refs, initRef, fmt.Errorf("pinned Bitcoin initialization unavailable")
 		}
 	}
@@ -63,18 +79,37 @@ func EnsureRecords(ctx context.Context, c client.Client, reader client.Reader, s
 		if p.Spec.Kind != api.ParticipantBitcoinNode || p.Spec.NetworkUID != root.UID || p.DeletionTimestamp != nil {
 			continue
 		}
-		name := naming.RuntimeName(string(root.UID), string(p.UID), string(api.ParticipantBitcoinNode), p.Spec.ParticipantName, "execution")
+		name := naming.RuntimeName(
+			string(root.UID),
+			string(p.UID),
+			string(api.ParticipantBitcoinNode),
+			p.Spec.ParticipantName,
+			"execution",
+		)
 		if hasBinding(refs, name, "") {
 			continue
 		}
 		uid := p.UID
-		if e := reader.Get(ctx, client.ObjectKeyFromObject(p), p); e != nil || p.UID != uid || p.DeletionTimestamp != nil {
+		if e := reader.Get(
+			ctx,
+			client.ObjectKeyFromObject(p),
+			p,
+		); e != nil || p.UID != uid ||
+			p.DeletionTimestamp != nil {
 			continue
 		}
 		if e := foundation.ValidateParticipantAdmission(ctx, reader, root, p); e != nil {
 			continue
 		}
-		record := &bitcoin.BitcoinExecution{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: root.Namespace, Labels: labels(p, api.RoleSupport), Finalizers: []string{foundation.ArtifactFinalizer}}, Spec: bitcoin.BitcoinExecutionSpec{NetworkUID: root.UID, Participant: objectref.Participant(p)}}
+		record := &bitcoin.BitcoinExecution{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:       name,
+				Namespace:  root.Namespace,
+				Labels:     labels(p, api.RoleSupport),
+				Finalizers: []string{foundation.ArtifactFinalizer},
+			},
+			Spec: bitcoin.BitcoinExecutionSpec{NetworkUID: root.UID, Participant: objectref.Participant(p)},
+		}
 		if e := controllerutil.SetControllerReference(root, record, scheme); e != nil {
 			return refs, initRef, e
 		}
@@ -89,7 +124,8 @@ func EnsureRecords(ctx context.Context, c client.Client, reader client.Reader, s
 			if e != nil {
 				return refs, initRef, e
 			}
-			if !metav1.IsControlledBy(current, root) || !equality.Semantic.DeepEqual(current.Spec, record.Spec) || current.DeletionTimestamp != nil {
+			if !metav1.IsControlledBy(current, root) || !equality.Semantic.DeepEqual(current.Spec, record.Spec) ||
+				current.DeletionTimestamp != nil {
 				return refs, initRef, fmt.Errorf("execution record ownership differs")
 			}
 			record = current
@@ -101,10 +137,15 @@ func EnsureRecords(ctx context.Context, c client.Client, reader client.Reader, s
 		return refs, initRef, nil
 	}
 	genesis := &api.StacksGenesis{}
-	if e := reader.Get(ctx, client.ObjectKey{Namespace: root.Namespace, Name: root.Status.GenesisRef.Name}, genesis); e != nil {
+	if e := reader.Get(
+		ctx,
+		client.ObjectKey{Namespace: root.Namespace, Name: root.Status.GenesisRef.Name},
+		genesis,
+	); e != nil {
 		return refs, nil, e
 	}
-	if genesis.UID != root.Status.GenesisRef.UID || genesis.Spec.Source.NetworkUID != root.UID || !metav1.IsControlledBy(genesis, root) {
+	if genesis.UID != root.Status.GenesisRef.UID || genesis.Spec.Source.NetworkUID != root.UID ||
+		!metav1.IsControlledBy(genesis, root) {
 		return refs, nil, fmt.Errorf("frozen genesis identity unavailable")
 	}
 	spec, e := freezeInitialization(ctx, reader, root, genesis, participants.Items)
@@ -112,7 +153,14 @@ func EnsureRecords(ctx context.Context, c client.Client, reader client.Reader, s
 		return refs, nil, e
 	}
 	name := naming.RuntimeName(string(root.UID), "", bitcoin.KindBitcoinInitialization, "network", "initialization")
-	record := &bitcoin.BitcoinInitialization{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: root.Namespace, Finalizers: []string{foundation.ArtifactFinalizer}}, Spec: spec}
+	record := &bitcoin.BitcoinInitialization{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       name,
+			Namespace:  root.Namespace,
+			Finalizers: []string{foundation.ArtifactFinalizer},
+		},
+		Spec: spec,
+	}
 	if e = controllerutil.SetControllerReference(root, record, scheme); e != nil {
 		return refs, nil, e
 	}
@@ -126,7 +174,8 @@ func EnsureRecords(ctx context.Context, c client.Client, reader client.Reader, s
 		if e != nil {
 			return refs, nil, e
 		}
-		if !metav1.IsControlledBy(current, root) || !equality.Semantic.DeepEqual(current.Spec, spec) || current.DeletionTimestamp != nil {
+		if !metav1.IsControlledBy(current, root) || !equality.Semantic.DeepEqual(current.Spec, spec) ||
+			current.DeletionTimestamp != nil {
 			return refs, nil, fmt.Errorf("initialization record ownership differs")
 		}
 		record = current
@@ -136,7 +185,13 @@ func EnsureRecords(ctx context.Context, c client.Client, reader client.Reader, s
 }
 
 // freezeInitialization preserves the full captured Bitcoin cohort without weakening genesis.
-func freezeInitialization(ctx context.Context, reader client.Reader, root *api.StacksNetwork, genesis *api.StacksGenesis, participants []api.StacksNetworkParticipant) (bitcoin.BitcoinInitializationSpec, error) {
+func freezeInitialization(
+	ctx context.Context,
+	reader client.Reader,
+	root *api.StacksNetwork,
+	genesis *api.StacksGenesis,
+	participants []api.StacksNetworkParticipant,
+) (bitcoin.BitcoinInitializationSpec, error) {
 	spec := bitcoin.BitcoinInitializationSpec{NetworkUID: root.UID, Genesis: objectref.Genesis(genesis)}
 	spec.Genesis.Fingerprint = foundation.Digest(genesis.Spec)
 	if len(genesis.Spec.Bootstrap.Gates) == 0 || genesis.Spec.Bootstrap.Gates[0].Name != api.GatePrepareBitcoin {
@@ -214,10 +269,14 @@ func freezeInitialization(ctx context.Context, reader client.Reader, root *api.S
 		}
 		spec.MinerWallets = append(spec.MinerWallets, wallet)
 	}
-	if len(spec.MinerWallets) == 0 || 100+int64(len(spec.MinerWallets))*int64(spec.MatureOutputsPerMiner) > spec.MinimumHeight {
+	if len(spec.MinerWallets) == 0 ||
+		100+int64(len(spec.MinerWallets))*int64(spec.MatureOutputsPerMiner) > spec.MinimumHeight {
 		return spec, fmt.Errorf("frozen miner maturity requirement cannot fit first gate")
 	}
-	sort.Slice(spec.MinerWallets, func(i, j int) bool { return spec.MinerWallets[i].Wallet.Name < spec.MinerWallets[j].Wallet.Name })
+	sort.Slice(
+		spec.MinerWallets,
+		func(i, j int) bool { return spec.MinerWallets[i].Wallet.Name < spec.MinerWallets[j].Wallet.Name },
+	)
 	return spec, nil
 }
 
@@ -234,7 +293,12 @@ func publicWallet(w *bitcoin.BitcoinWallet) (bitcoin.FrozenBitcoinWallet, error)
 	if name == "" || len(name) > 253 {
 		return bitcoin.FrozenBitcoinWallet{}, fmt.Errorf("invalid local wallet name")
 	}
-	return bitcoin.FrozenBitcoinWallet{Wallet: objectref.WithFingerprint(objectref.BitcoinWallet(w), w.Status.Digest), Name: name, Address: address, Descriptor: w.Status.Descriptor}, nil
+	return bitcoin.FrozenBitcoinWallet{
+		Wallet:     objectref.WithFingerprint(objectref.BitcoinWallet(w), w.Status.Digest),
+		Name:       name,
+		Address:    address,
+		Descriptor: w.Status.Descriptor,
+	}, nil
 }
 
 // hasBinding checks a retained name and, when supplied, its exact UID.
@@ -249,5 +313,13 @@ func hasBinding(refs []common.Binding, name string, uid types.UID) bool {
 
 // labels matches the public participant runtime identity contract.
 func labels(p *api.StacksNetworkParticipant, role string) map[string]string {
-	return map[string]string{api.LabelManagedBy: api.ManagedByNetworkOperator, api.LabelNetwork: api.NetworkLabelValue, api.LabelNetworkUID: string(p.Spec.NetworkUID), api.LabelParticipant: p.Spec.ParticipantName, api.LabelParticipantUID: string(p.UID), api.LabelParticipantKind: string(p.Spec.Kind), api.LabelRole: role}
+	return map[string]string{
+		api.LabelManagedBy:       api.ManagedByNetworkOperator,
+		api.LabelNetwork:         api.NetworkLabelValue,
+		api.LabelNetworkUID:      string(p.Spec.NetworkUID),
+		api.LabelParticipant:     p.Spec.ParticipantName,
+		api.LabelParticipantUID:  string(p.UID),
+		api.LabelParticipantKind: string(p.Spec.Kind),
+		api.LabelRole:            role,
+	}
 }

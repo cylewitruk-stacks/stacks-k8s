@@ -27,13 +27,23 @@ func verifyCandidateNativeAPI(t *testing.T, ctx context.Context, c client.Client
 	if err := c.Create(ctx, p); err != nil {
 		t.Fatal(err)
 	}
-	if err := participantstatus.Apply(ctx, c, p, api.ParticipantStatus{Admission: admission}, participantstatus.AggregateManager); err != nil {
+	if err := participantstatus.Apply(
+		ctx,
+		c,
+		p,
+		api.ParticipantStatus{Admission: admission},
+		participantstatus.AggregateManager,
+	); err != nil {
 		t.Fatal(err)
 	}
 	if err := c.Get(ctx, client.ObjectKeyFromObject(p), p); err != nil {
 		t.Fatal(err)
 	}
-	secret := &corev1.Secret{ObjectMeta: objectMeta(p, "candidate-config", "support"), Immutable: ptr.To(true), Data: map[string][]byte{"config.toml": []byte("private rendered configuration")}}
+	secret := &corev1.Secret{
+		ObjectMeta: objectMeta(p, "candidate-config", "support"),
+		Immutable:  ptr.To(true),
+		Data:       map[string][]byte{"config.toml": []byte("private rendered configuration")},
+	}
 	if err := c.Create(ctx, secret); err != nil {
 		t.Fatal(err)
 	}
@@ -44,14 +54,33 @@ func verifyCandidateNativeAPI(t *testing.T, ctx context.Context, c client.Client
 		t.Fatalf("create native validation: ready=%v err=%v", ready, err)
 	}
 	var jobs batchv1.JobList
-	if err := c.List(ctx, &jobs, client.InNamespace(p.Namespace), client.MatchingLabels{"network.stacks.org/participant-uid": string(p.UID)}); err != nil || len(jobs.Items) != 1 {
+	if err := c.List(
+		ctx,
+		&jobs,
+		client.InNamespace(p.Namespace),
+		client.MatchingLabels{"network.stacks.org/participant-uid": string(p.UID)},
+	); err != nil ||
+		len(jobs.Items) != 1 {
 		t.Fatalf("native Jobs: count=%d err=%v", len(jobs.Items), err)
 	}
 	job := &jobs.Items[0]
 	// Envtest has no kubelet; this asserts API observation semantics, not native binary behavior.
 	job.Status.StartTime = ptr.To(metav1.Now())
 	job.Status.CompletionTime = ptr.To(metav1.Now())
-	job.Status.Conditions = []batchv1.JobCondition{{Type: batchv1.JobSuccessCriteriaMet, Status: corev1.ConditionTrue, Reason: "ValidationObserved", LastTransitionTime: metav1.Now()}, {Type: batchv1.JobComplete, Status: corev1.ConditionTrue, Reason: "ValidationObserved", LastTransitionTime: metav1.Now()}}
+	job.Status.Conditions = []batchv1.JobCondition{
+		{
+			Type:               batchv1.JobSuccessCriteriaMet,
+			Status:             corev1.ConditionTrue,
+			Reason:             "ValidationObserved",
+			LastTransitionTime: metav1.Now(),
+		},
+		{
+			Type:               batchv1.JobComplete,
+			Status:             corev1.ConditionTrue,
+			Reason:             "ValidationObserved",
+			LastTransitionTime: metav1.Now(),
+		},
+	}
 	if err := c.Status().Update(ctx, job); err != nil {
 		t.Fatal(err)
 	}

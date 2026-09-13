@@ -34,7 +34,12 @@ type observedRootReader struct {
 	reads atomic.Int64
 }
 
-func (r *observedRootReader) Get(ctx context.Context, key client.ObjectKey, object client.Object, opts ...client.GetOption) error {
+func (r *observedRootReader) Get(
+	ctx context.Context,
+	key client.ObjectKey,
+	object client.Object,
+	opts ...client.GetOption,
+) error {
 	if _, ok := object.(*api.StacksNetwork); ok {
 		r.reads.Add(1)
 	}
@@ -42,7 +47,15 @@ func (r *observedRootReader) Get(ctx context.Context, key client.ObjectKey, obje
 }
 
 // verifyInstalledPolicyRelease exercises only installed informer routing after its initial queue drains.
-func verifyInstalledPolicyRelease(t *testing.T, ctx context.Context, c client.Client, cfg *rest.Config, scheme *runtime.Scheme, root *api.StacksNetwork, stacker *stacks.StacksStacker) {
+func verifyInstalledPolicyRelease(
+	t *testing.T,
+	ctx context.Context,
+	c client.Client,
+	cfg *rest.Config,
+	scheme *runtime.Scheme,
+	root *api.StacksNetwork,
+	stacker *stacks.StacksStacker,
+) {
 	t.Helper()
 	must := func(err error) {
 		t.Helper()
@@ -52,10 +65,30 @@ func verifyInstalledPolicyRelease(t *testing.T, ctx context.Context, c client.Cl
 	}
 	options := foundation.CacheOptions()
 	options.DefaultNamespaces = map[string]cache.Config{root.Namespace: {}}
-	manager, err := ctrl.NewManager(cfg, ctrl.Options{Scheme: scheme, Cache: options, Metrics: metricsserver.Options{BindAddress: "0"}, HealthProbeBindAddress: "0", Controller: controllerconfig.Controller{SkipNameValidation: ptr.To(true)}, Client: client.Options{Cache: &client.CacheOptions{DisableFor: []client.Object{&corev1.Secret{}, &corev1.ServiceAccount{}, &rbacv1.Role{}, &rbacv1.RoleBinding{}}}}})
+	manager, err := ctrl.NewManager(
+		cfg,
+		ctrl.Options{
+			Scheme:                 scheme,
+			Cache:                  options,
+			Metrics:                metricsserver.Options{BindAddress: "0"},
+			HealthProbeBindAddress: "0",
+			Controller:             controllerconfig.Controller{SkipNameValidation: ptr.To(true)},
+			Client: client.Options{
+				Cache: &client.CacheOptions{
+					DisableFor: []client.Object{
+						&corev1.Secret{},
+						&corev1.ServiceAccount{},
+						&rbacv1.Role{},
+						&rbacv1.RoleBinding{},
+					},
+				},
+			},
+		},
+	)
 	must(err)
 	reader := &observedRootReader{Reader: manager.GetAPIReader()}
 	controller := &foundation.Reconciler{Client: manager.GetClient(), Reader: reader, Scheme: scheme}
+	//nolint:contextcheck // Manager setup registers lifetime indexes before the manager starts serving requests.
 	must(controller.SetupWithManager(manager))
 	running, cancel := context.WithCancel(ctx)
 	done := make(chan error, 1)
@@ -77,14 +110,20 @@ func verifyInstalledPolicyRelease(t *testing.T, ctx context.Context, c client.Cl
 	// A second amount edit is observed while the final affected gate remains incomplete.
 	stacker.Spec.AmountMicroSTX = ptr.To(common.Amount("999999999999998"))
 	must(c.Update(ctx, stacker))
-	key := client.ObjectKey{Namespace: root.Namespace, Name: foundation.ParticipantName(string(root.UID), "stacker-01")}
+	key := client.ObjectKey{
+		Namespace: root.Namespace,
+		Name:      foundation.ParticipantName(string(root.UID), "stacker-01"),
+	}
 	awaitPolicy(t, ctx, func() bool {
 		p := &api.StacksNetworkParticipant{}
 		if c.Get(ctx, key, p) != nil {
 			return false
 		}
 		condition := meta.FindStatusCondition(p.Status.Conditions, "Resolved")
-		return condition != nil && condition.Reason == "BootstrapPending" && p.Spec.Configuration.StacksStacker != nil && p.Spec.Configuration.StacksStacker.AmountMicroSTX != nil && *p.Spec.Configuration.StacksStacker.AmountMicroSTX == *stacker.Spec.AmountMicroSTX
+		return condition != nil && condition.Reason == "BootstrapPending" &&
+			p.Spec.Configuration.StacksStacker != nil &&
+			p.Spec.Configuration.StacksStacker.AmountMicroSTX != nil &&
+			*p.Spec.Configuration.StacksStacker.AmountMicroSTX == *stacker.Spec.AmountMicroSTX
 	})
 	// BootstrapPending is a settled topology result, with no scheduled topology retry.
 	// Require all initial/source events to drain before the sole gate status mutation.
@@ -113,7 +152,9 @@ func verifyInstalledPolicyRelease(t *testing.T, ctx context.Context, c client.Cl
 			return false
 		}
 		condition := meta.FindStatusCondition(p.Status.Conditions, "Resolved")
-		return condition != nil && condition.Reason == "Admitted" && p.Status.Admission != nil && *p.Status.Admission.Configuration.StacksStacker.AmountMicroSTX == *stacker.Spec.AmountMicroSTX && !meta.IsStatusConditionTrue(p.Status.Conditions, "PolicyDeferred")
+		return condition != nil && condition.Reason == "Admitted" && p.Status.Admission != nil &&
+			*p.Status.Admission.Configuration.StacksStacker.AmountMicroSTX == *stacker.Spec.AmountMicroSTX &&
+			!meta.IsStatusConditionTrue(p.Status.Conditions, "PolicyDeferred")
 	})
 	must(c.Get(ctx, client.ObjectKeyFromObject(root), root))
 	if root.Generation != generation || !root.Status.Initialization.Completed {
@@ -123,7 +164,13 @@ func verifyInstalledPolicyRelease(t *testing.T, ctx context.Context, c client.Cl
 }
 
 // verifyInstalledBoundPlacement requires a real admitted worker pin to survive rejected placement and live controls.
-func verifyInstalledBoundPlacement(t *testing.T, ctx context.Context, c client.Client, root *api.StacksNetwork, stacker *stacks.StacksStacker) {
+func verifyInstalledBoundPlacement(
+	t *testing.T,
+	ctx context.Context,
+	c client.Client,
+	root *api.StacksNetwork,
+	stacker *stacks.StacksStacker,
+) {
 	t.Helper()
 	must := func(err error) {
 		t.Helper()
@@ -134,11 +181,29 @@ func verifyInstalledBoundPlacement(t *testing.T, ctx context.Context, c client.C
 	p := participant(t, ctx, c, root, "stacker-01")
 	prior := p.Status.Admission.DeepCopy()
 	participantUID := p.UID
-	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: foundation.RuntimeName(string(p.Spec.NetworkUID), string(p.UID), string(p.Spec.Kind), p.Spec.ParticipantName, "worker"), Namespace: root.Namespace}, Spec: corev1.PodSpec{RestartPolicy: corev1.RestartPolicyNever, Containers: []corev1.Container{{Name: "worker", Image: "worker:test"}}}}
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: foundation.RuntimeName(
+				string(p.Spec.NetworkUID),
+				string(p.UID),
+				string(p.Spec.Kind),
+				p.Spec.ParticipantName,
+				"worker",
+			),
+			Namespace: root.Namespace,
+		},
+		Spec: corev1.PodSpec{
+			RestartPolicy: corev1.RestartPolicyNever,
+			Containers:    []corev1.Container{{Name: "worker", Image: "worker:test"}},
+		},
+	}
 	must(controllerutil.SetControllerReference(p, pod, c.Scheme()))
 	must(c.Create(ctx, pod))
 	must(c.Get(ctx, client.ObjectKeyFromObject(root), root))
-	session := &api.WorkerSession{Pod: api.WorkerPodBinding{Kind: "Pod", Name: pod.Name, UID: pod.UID}, ProfileDigest: foundation.Digest("installed-placement-profile")}
+	session := &api.WorkerSession{
+		Pod:           api.WorkerPodBinding{Kind: "Pod", Name: pod.Name, UID: pod.UID},
+		ProfileDigest: foundation.Digest("installed-placement-profile"),
+	}
 	found := false
 	for i := range root.Status.Identities {
 		if root.Status.Identities[i].UID == p.UID {
@@ -166,7 +231,8 @@ func verifyInstalledBoundPlacement(t *testing.T, ctx context.Context, c client.C
 			return false
 		}
 		condition := meta.FindStatusCondition(p.Status.Conditions, "Resolved")
-		return condition != nil && condition.Reason == "RequiresReplacement" && p.Spec.Control != nil && ptr.Deref(p.Spec.Control.Paused, false)
+		return condition != nil && condition.Reason == "RequiresReplacement" && p.Spec.Control != nil &&
+			ptr.Deref(p.Spec.Control.Paused, false)
 	})
 	if p.UID != participantUID || !reflect.DeepEqual(p.Status.Admission, prior) {
 		t.Fatal("placement rejection changed the whole prior admission")
@@ -203,7 +269,11 @@ func verifyInstalledBoundPlacement(t *testing.T, ctx context.Context, c client.C
 		}
 	}
 	must(c.Update(ctx, root))
-	awaitPolicy(t, ctx, func() bool { return c.Get(ctx, client.ObjectKeyFromObject(p), p) == nil && p.Spec.Control == nil })
+	awaitPolicy(
+		t,
+		ctx,
+		func() bool { return c.Get(ctx, client.ObjectKeyFromObject(p), p) == nil && p.Spec.Control == nil },
+	)
 	must(c.Get(ctx, client.ObjectKeyFromObject(root), root))
 }
 

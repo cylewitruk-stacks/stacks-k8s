@@ -11,7 +11,15 @@ import (
 // TestNetworkRepeatRejectsRetainedRuntime prevents declaration reuse from disguising data reuse.
 func TestNetworkRepeatRejectsRetainedRuntime(t *testing.T) {
 	epoch := func(prefix string) networkEpoch {
-		return networkEpoch{Root: types.UID(prefix + "root"), Genesis: types.UID(prefix + "genesis"), Chain: "chain", Participants: map[string]types.UID{"node": types.UID(prefix + "participant")}, Pods: map[types.UID]bool{types.UID(prefix + "pod"): true}, Claims: map[types.UID]bool{types.UID(prefix + "claim"): true}, Volumes: map[string]bool{prefix + "volume": true}}
+		return networkEpoch{
+			Root:         types.UID(prefix + "root"),
+			Genesis:      types.UID(prefix + "genesis"),
+			Chain:        "chain",
+			Participants: map[string]types.UID{"node": types.UID(prefix + "participant")},
+			Pods:         map[types.UID]bool{types.UID(prefix + "pod"): true},
+			Claims:       map[types.UID]bool{types.UID(prefix + "claim"): true},
+			Volumes:      map[string]bool{prefix + "volume": true},
+		}
 	}
 	old := epoch("old-")
 	if err := independentNetworkEpoch(old, epoch("new-")); err != nil {

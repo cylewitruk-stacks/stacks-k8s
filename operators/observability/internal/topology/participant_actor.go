@@ -16,15 +16,28 @@ import (
 )
 
 // observeActor verifies the admission-to-process owner and configuration chain.
-func observeActor(ctx context.Context, reads *directRead, p *api.StacksNetworkParticipant) (observation.ObservedActorIdentity, error) {
+func observeActor(
+	ctx context.Context,
+	reads *directRead,
+	p *api.StacksNetworkParticipant,
+) (observation.ObservedActorIdentity, error) {
 	state := p.Status.Runtime
-	if state == nil || state.ObservedGeneration != p.Generation || state.Terminated || state.PodRef == nil || state.ContainerID == "" || state.ConfigRef == nil || len(state.WorkloadRefs) != 1 {
-		return observation.ObservedActorIdentity{}, &NotReadyError{Reason: "actor runtime identity is incomplete or stopped"}
+	if state == nil || state.ObservedGeneration != p.Generation || state.Terminated || state.PodRef == nil ||
+		state.ContainerID == "" ||
+		state.ConfigRef == nil ||
+		len(state.WorkloadRefs) != 1 {
+		return observation.ObservedActorIdentity{}, &NotReadyError{
+			Reason: "actor runtime identity is incomplete or stopped",
+		}
 	}
 	invalid := func(reason string) (observation.ObservedActorIdentity, error) {
 		return observation.ObservedActorIdentity{}, &InconclusiveError{Reason: reason}
 	}
-	if state.PolicyDigest != p.Status.Admission.PolicyDigest || !validBinding(state.PodRef, common.KindPod) || !validBinding(state.ConfigRef, common.KindSecret) || !validBinding(&state.WorkloadRefs[0], common.KindStatefulSet) || immutableImageID(state.ConfigRef.Fingerprint) != state.ConfigRef.Fingerprint || state.ConfigRef.Fingerprint == "" {
+	if state.PolicyDigest != p.Status.Admission.PolicyDigest || !validBinding(state.PodRef, common.KindPod) ||
+		!validBinding(state.ConfigRef, common.KindSecret) ||
+		!validBinding(&state.WorkloadRefs[0], common.KindStatefulSet) ||
+		immutableImageID(state.ConfigRef.Fingerprint) != state.ConfigRef.Fingerprint ||
+		state.ConfigRef.Fingerprint == "" {
 		return invalid("actor runtime policy or configuration binding differs")
 	}
 	fields, role, err := admittedActor(p)
@@ -32,26 +45,47 @@ func observeActor(ctx context.Context, reads *directRead, p *api.StacksNetworkPa
 		return invalid(err.Error())
 	}
 	workload := &appsv1.StatefulSet{}
-	if err := reads.get(ctx, client.ObjectKey{Namespace: p.Namespace, Name: state.WorkloadRefs[0].Name}, workload); err != nil {
+	if err := reads.get(
+		ctx,
+		client.ObjectKey{Namespace: p.Namespace, Name: state.WorkloadRefs[0].Name},
+		workload,
+	); err != nil {
 		return observation.ObservedActorIdentity{}, err
 	}
-	if workload.UID != state.WorkloadRefs[0].UID || !exactOwner(workload, api.GroupVersion.String(), api.KindStacksNetworkParticipant, p.Name, p.UID) || workload.DeletionTimestamp != nil {
+	if workload.UID != state.WorkloadRefs[0].UID ||
+		!exactOwner(workload, api.GroupVersion.String(), api.KindStacksNetworkParticipant, p.Name, p.UID) ||
+		workload.DeletionTimestamp != nil {
 		return invalid("StatefulSet identity differs")
 	}
-	if workload.Spec.Replicas == nil || *workload.Spec.Replicas != 1 || workload.Status.ObservedGeneration != workload.Generation || workload.Status.ReadyReplicas != 1 || workload.Status.CurrentRevision == "" || workload.Status.CurrentRevision != workload.Status.UpdateRevision {
+	if workload.Spec.Replicas == nil || *workload.Spec.Replicas != 1 ||
+		workload.Status.ObservedGeneration != workload.Generation ||
+		workload.Status.ReadyReplicas != 1 ||
+		workload.Status.CurrentRevision == "" ||
+		workload.Status.CurrentRevision != workload.Status.UpdateRevision {
 		return observation.ObservedActorIdentity{}, &NotReadyError{Reason: "actor StatefulSet is not converged"}
 	}
 	pod := &corev1.Pod{}
-	if err := reads.get(ctx, client.ObjectKey{Namespace: p.Namespace, Name: state.PodRef.Name}, pod); err != nil {
+	if err := reads.get(ctx, client.ObjectKey{
+		Namespace: p.Namespace,
+		Name:      state.PodRef.Name,
+	}, pod); err != nil {
 		return observation.ObservedActorIdentity{}, err
 	}
-	if pod.UID != state.PodRef.UID || !exactOwner(pod, "apps/v1", common.KindStatefulSet, workload.Name, workload.UID) || pod.DeletionTimestamp != nil {
+	if pod.UID != state.PodRef.UID ||
+		!exactOwner(pod, "apps/v1", common.KindStatefulSet, workload.Name, workload.UID) ||
+		pod.DeletionTimestamp != nil {
 		return invalid("Pod identity differs")
 	}
 	if !podReady(pod) {
 		return observation.ObservedActorIdentity{}, &NotReadyError{Reason: "actor Pod is not ready"}
 	}
-	expectedLabels := map[string]string{api.LabelNetworkUID: string(p.Spec.NetworkUID), api.LabelParticipant: p.Spec.ParticipantName, api.LabelParticipantUID: string(p.UID), api.LabelParticipantKind: string(p.Spec.Kind), api.LabelRole: api.RoleActor}
+	expectedLabels := map[string]string{
+		api.LabelNetworkUID:      string(p.Spec.NetworkUID),
+		api.LabelParticipant:     p.Spec.ParticipantName,
+		api.LabelParticipantUID:  string(p.UID),
+		api.LabelParticipantKind: string(p.Spec.Kind),
+		api.LabelRole:            api.RoleActor,
+	}
 	for _, labels := range []map[string]string{pod.Labels, workload.Labels, workload.Spec.Template.Labels} {
 		for key, value := range expectedLabels {
 			if labels[key] != value {
@@ -79,7 +113,8 @@ func observeActor(ctx context.Context, reads *directRead, p *api.StacksNetworkPa
 		if annotations[policyAnnotation] != state.PolicyDigest {
 			return invalid("actor Pod admitted policy annotation differs")
 		}
-		if p.Spec.Kind != api.ParticipantBitcoinNode && (state.ConfigurationDigest == "" || annotations[configurationAnnotation] != state.ConfigurationDigest) {
+		if p.Spec.Kind != api.ParticipantBitcoinNode &&
+			(state.ConfigurationDigest == "" || annotations[configurationAnnotation] != state.ConfigurationDigest) {
 			return invalid("actor Pod public configuration annotation differs")
 		}
 	}
@@ -95,7 +130,9 @@ func observeActor(ctx context.Context, reads *directRead, p *api.StacksNetworkPa
 			current = &pod.Status.ContainerStatuses[i]
 		}
 	}
-	if current == nil || !current.Ready || current.State.Running == nil || current.ContainerID != state.ContainerID || immutableImageID(current.ImageID) == "" || current.ImageID != state.ImageID {
+	if current == nil || !current.Ready || current.State.Running == nil || current.ContainerID != state.ContainerID ||
+		immutableImageID(current.ImageID) == "" ||
+		current.ImageID != state.ImageID {
 		return invalid("actor container process or immutable image differs")
 	}
 	services, err := observeServices(ctx, reads, p, pod, expectedLabels)
@@ -107,16 +144,29 @@ func observeActor(ctx context.Context, reads *directRead, p *api.StacksNetworkPa
 		return observation.ObservedActorIdentity{}, err
 	}
 	return observation.ObservedActorIdentity{
-		Kind: string(p.Spec.Kind), Name: p.Spec.ParticipantName, Role: role,
-		ResourceName: p.Name, ResourceUID: p.UID,
-		ServiceName: services[len(services)-1].Name, Services: services,
-		StatefulSetName: workload.Name, StatefulSetUID: workload.UID, ControllerRevision: workload.Status.CurrentRevision,
-		PodName: pod.Name, PodUID: pod.UID, ContainerID: current.ContainerID,
-		RequestedImage: *fields.Image, RuntimeImageID: immutableImageID(current.ImageID),
-		ConfigDigest: state.ConfigurationDigest, SpecDigest: state.PolicyDigest,
-		ConfigurationName: state.ConfigRef.Name, ConfigurationUID: state.ConfigRef.UID,
-		ConfigurationFingerprint: state.ConfigRef.Fingerprint, ConfigurationEvidence: "controller-reported",
-		ConfigurationReportUID: reportUID, EvidenceClass: "orchestrator-observed",
+		Kind:                     string(p.Spec.Kind),
+		Name:                     p.Spec.ParticipantName,
+		Role:                     role,
+		ResourceName:             p.Name,
+		ResourceUID:              p.UID,
+		ServiceName:              services[len(services)-1].Name,
+		Services:                 services,
+		StatefulSetName:          workload.Name,
+		StatefulSetUID:           workload.UID,
+		ControllerRevision:       workload.Status.CurrentRevision,
+		PodName:                  pod.Name,
+		PodUID:                   pod.UID,
+		ContainerID:              current.ContainerID,
+		RequestedImage:           *fields.Image,
+		RuntimeImageID:           immutableImageID(current.ImageID),
+		ConfigDigest:             state.ConfigurationDigest,
+		SpecDigest:               state.PolicyDigest,
+		ConfigurationName:        state.ConfigRef.Name,
+		ConfigurationUID:         state.ConfigRef.UID,
+		ConfigurationFingerprint: state.ConfigRef.Fingerprint,
+		ConfigurationEvidence:    "controller-reported",
+		ConfigurationReportUID:   reportUID,
+		EvidenceClass:            "orchestrator-observed",
 	}, nil
 }
 
@@ -125,6 +175,7 @@ func admittedActor(p *api.StacksNetworkParticipant) (*common.ActorFields, string
 	c := p.Status.Admission.Configuration
 	var fields *common.ActorFields
 	role := ""
+	//nolint:exhaustive // Only actor kinds have this workload property; capabilities use separate workloads.
 	switch p.Spec.Kind {
 	case api.ParticipantBitcoinNode:
 		if c.BitcoinNode != nil {
@@ -180,12 +231,20 @@ func verifyActorSpec(spec *corev1.PodSpec, containerName, image, configuration s
 }
 
 // observeServices verifies every native endpoint against the selected actor Pod.
-func observeServices(ctx context.Context, reads *directRead, p *api.StacksNetworkParticipant, pod *corev1.Pod, expectedLabels map[string]string) ([]observation.ObservedServiceIdentity, error) {
+func observeServices(
+	ctx context.Context,
+	reads *directRead,
+	p *api.StacksNetworkParticipant,
+	pod *corev1.Pod,
+	expectedLabels map[string]string,
+) ([]observation.ObservedServiceIdentity, error) {
 	services := []observation.ObservedServiceIdentity{}
 	ports := map[string]int32{common.EndpointP2P: 18444, common.EndpointRPC: 18443}
-	if p.Spec.Kind == api.ParticipantStacksNode {
+	//nolint:exhaustive // Only actor kinds have this workload property; capabilities use separate workloads.
+	switch p.Spec.Kind {
+	case api.ParticipantStacksNode:
 		ports = map[string]int32{common.EndpointP2P: 20444, common.EndpointRPC: 20443}
-	} else if p.Spec.Kind == api.ParticipantStacksSigner {
+	case api.ParticipantStacksSigner:
 		ports = map[string]int32{common.EndpointEvents: 30000}
 	}
 	if len(p.Status.Runtime.Endpoints) != len(ports) {
@@ -195,7 +254,9 @@ func observeServices(ctx context.Context, reads *directRead, p *api.StacksNetwor
 	for _, endpoint := range p.Status.Runtime.Endpoints {
 		suffix := "." + p.Namespace + ".svc"
 		name := strings.TrimSuffix(endpoint.Host, suffix)
-		if !strings.HasSuffix(endpoint.Host, suffix) || strings.Contains(name, ".") || name == "" || ports[endpoint.Name] != endpoint.Port || seen[endpoint.Name] {
+		if !strings.HasSuffix(endpoint.Host, suffix) || strings.Contains(name, ".") || name == "" ||
+			ports[endpoint.Name] != endpoint.Port ||
+			seen[endpoint.Name] {
 			return nil, &InconclusiveError{Reason: "actor endpoint identity differs"}
 		}
 		seen[endpoint.Name] = true
@@ -203,7 +264,9 @@ func observeServices(ctx context.Context, reads *directRead, p *api.StacksNetwor
 		if err := reads.get(ctx, client.ObjectKey{Namespace: p.Namespace, Name: name}, service); err != nil {
 			return nil, err
 		}
-		if service.UID == "" || service.DeletionTimestamp != nil || !exactOwner(service, api.GroupVersion.String(), api.KindStacksNetworkParticipant, p.Name, p.UID) || len(service.Spec.Ports) != 1 {
+		if service.UID == "" || service.DeletionTimestamp != nil ||
+			!exactOwner(service, api.GroupVersion.String(), api.KindStacksNetworkParticipant, p.Name, p.UID) ||
+			len(service.Spec.Ports) != 1 {
 			return nil, &InconclusiveError{Reason: "actor Service identity differs"}
 		}
 		for key, value := range expectedLabels {
@@ -217,7 +280,11 @@ func observeServices(ctx context.Context, reads *directRead, p *api.StacksNetwor
 			}
 		}
 		port := service.Spec.Ports[0]
-		if port.Name != endpoint.Name || port.Port != endpoint.Port || (port.Protocol != "" && port.Protocol != corev1.ProtocolTCP) || (port.TargetPort != intstr.FromInt32(0) && port.TargetPort != intstr.FromInt32(endpoint.Port) && port.TargetPort != intstr.FromString(endpoint.Name)) {
+		if port.Name != endpoint.Name || port.Port != endpoint.Port ||
+			(port.Protocol != "" && port.Protocol != corev1.ProtocolTCP) ||
+			(port.TargetPort != intstr.FromInt32(0) &&
+				port.TargetPort != intstr.FromInt32(endpoint.Port) &&
+				port.TargetPort != intstr.FromString(endpoint.Name)) {
 			return nil, &InconclusiveError{Reason: "actor Service port differs"}
 		}
 		if port.TargetPort.Type == intstr.String {
@@ -233,7 +300,15 @@ func observeServices(ctx context.Context, reads *directRead, p *api.StacksNetwor
 				return nil, &InconclusiveError{Reason: "named Service port does not select the native port"}
 			}
 		}
-		services = append(services, observation.ObservedServiceIdentity{Name: name, UID: service.UID, Protocol: endpoint.Name, Port: endpoint.Port})
+		services = append(
+			services,
+			observation.ObservedServiceIdentity{
+				Name:     name,
+				UID:      service.UID,
+				Protocol: endpoint.Name,
+				Port:     endpoint.Port,
+			},
+		)
 	}
 	sort.Slice(services, func(i, j int) bool { return services[i].Protocol < services[j].Protocol })
 	return services, nil

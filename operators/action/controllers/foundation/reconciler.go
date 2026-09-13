@@ -46,7 +46,11 @@ func (r *Reconciler) SetupWithManager(m ctrl.Manager) error {
 	if err != nil {
 		return err
 	}
-	return ctrl.NewControllerManagedBy(m).Named("action-foundation-" + gvk.Kind).For(object).WithOptions(controller.Options{MaxConcurrentReconciles: r.Concurrency}).Complete(r)
+	return ctrl.NewControllerManagedBy(m).
+		Named("action-foundation-" + gvk.Kind).
+		For(object).
+		WithOptions(controller.Options{MaxConcurrentReconciles: r.Concurrency}).
+		Complete(r)
 }
 
 // object returns the fixed request kind and its common status subtree.
@@ -85,9 +89,15 @@ func (r *Reconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 	}
 	before := object.DeepCopyObject().(client.Object)
 	uid, target, timeout := desired(object)
-	if !controllerutil.ContainsFinalizer(object, action.CleanupFinalizer) && object.GetDeletionTimestamp() == nil && !action.IsTerminalPhase(status.Phase) {
+	if !controllerutil.ContainsFinalizer(object, action.CleanupFinalizer) && object.GetDeletionTimestamp() == nil &&
+		!action.IsTerminalPhase(status.Phase) {
 		controllerutil.AddFinalizer(object, action.CleanupFinalizer)
-		return ctrl.Result{RequeueAfter: time.Second}, r.Client.Patch(ctx, object, client.MergeFromWithOptions(before, client.MergeFromWithOptimisticLock{}))
+		patchErr := r.Client.Patch(
+			ctx,
+			object,
+			client.MergeFromWithOptions(before, client.MergeFromWithOptimisticLock{}),
+		)
+		return ctrl.Result{RequeueAfter: time.Second}, patchErr
 	}
 	expiry := object.GetCreationTimestamp().Add(timeout)
 	status.ExpiresAt = &metav1.Time{Time: expiry}
@@ -102,7 +112,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 		return ctrl.Result{}, rootErr
 	}
 	gone := apierrors.IsNotFound(rootErr) || root.UID != uid || root.DeletionTimestamp != nil
-	bound := record != nil && record.Status.Action != nil && record.Status.Action.Request.UID == object.GetUID() && record.Status.Action.Request.Kind == gvk.Kind && record.Status.Action.Request.Name == object.GetName()
+	bound := record != nil && record.Status.Action != nil && record.Status.Action.Request.UID == object.GetUID() &&
+		record.Status.Action.Request.Kind == gvk.Kind &&
+		record.Status.Action.Request.Name == object.GetName()
 	if bound {
 		state := record.Status.Action
 		copyEvidence(object, status, record, state)
@@ -112,27 +124,37 @@ func (r *Reconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 			project(status, state, record, now, object.GetDeletionTimestamp())
 		}
 	} else if !action.IsTerminalPhase(status.Phase) {
-		if status.AdmittedAt != nil {
+		switch {
+		case status.AdmittedAt != nil:
 			finish(status, action.PhaseInconclusive, action.ReasonExecutionUnavailable, now)
-		} else if object.GetDeletionTimestamp() != nil || !now.Before(expiry) {
+		case object.GetDeletionTimestamp() != nil || !now.Before(expiry):
 			if available {
 				finish(status, action.PhaseFailed, action.ReasonNoDispatch, now)
 			} else {
 				finish(status, action.PhaseInconclusive, action.ReasonAdmissionUnavailable, now)
 			}
-		} else {
+		default:
 			status.Phase = action.PhasePending
 		}
 	}
 	condition(status, action.ConditionAdmitted, status.AdmittedAt != nil, action.ReasonAdmissionObserved, now)
-	if !action.IsTerminalPhase(status.Phase) || meta.FindStatusCondition(status.Conditions, action.ConditionProgressing) == nil {
+	if !action.IsTerminalPhase(status.Phase) ||
+		meta.FindStatusCondition(status.Conditions, action.ConditionProgressing) == nil {
 		condition(status, action.ConditionProgressing, !action.IsTerminalPhase(status.Phase), string(status.Phase), now)
 	}
-	condition(status, action.ConditionEffectObserved, status.Phase == action.PhaseCompleted, action.ReasonReceiptEvidence, now)
+	condition(
+		status,
+		action.ConditionEffectObserved,
+		status.Phase == action.PhaseCompleted,
+		action.ReasonReceiptEvidence,
+		now,
+	)
 	clean := !bound && available
 	if bound {
 		s := record.Status.Action
-		clean = record.Status.Armed == nil && (s.Reorganization == nil || !s.InvalidationAcknowledged || s.CleanupAcknowledged) && !s.CleanupUnsafe
+		clean = record.Status.Armed == nil &&
+			(s.Reorganization == nil || !s.InvalidationAcknowledged || s.CleanupAcknowledged) &&
+			!s.CleanupUnsafe
 	}
 	condition(status, action.ConditionCleanupComplete, clean, action.ReasonCleanupEvidence, now)
 	if !equality.Semantic.DeepEqual(statusOf(before), statusOf(object)) {
@@ -154,15 +176,28 @@ func (r *Reconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 		case *action.BitcoinReorganization:
 			p.Status = object.(*action.BitcoinReorganization).Status
 		}
-		if err := r.Client.Status().Patch(ctx, payload, client.Apply, client.FieldOwner("stacks-action-foundation-"+gvk.Kind), client.ForceOwnership); err != nil {
+		if err := r.Client.Status().
+			Patch(
+				ctx,
+				payload,
+				//nolint:staticcheck // Typed SSA needs the response; no generated apply configurations.
+				client.Apply,
+				client.FieldOwner("stacks-action-foundation-"+gvk.Kind),
+				client.ForceOwnership,
+			); err != nil {
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{RequeueAfter: time.Second}, nil
 	}
-	if action.IsTerminalPhase(status.Phase) && (gone || !bound && available) && controllerutil.ContainsFinalizer(object, action.CleanupFinalizer) {
+	if action.IsTerminalPhase(status.Phase) && (gone || !bound && available) &&
+		controllerutil.ContainsFinalizer(object, action.CleanupFinalizer) {
 		previous := object.DeepCopyObject().(client.Object)
 		controllerutil.RemoveFinalizer(object, action.CleanupFinalizer)
-		return ctrl.Result{}, r.Client.Patch(ctx, object, client.MergeFromWithOptions(previous, client.MergeFromWithOptimisticLock{}))
+		return ctrl.Result{}, r.Client.Patch(
+			ctx,
+			object,
+			client.MergeFromWithOptions(previous, client.MergeFromWithOptimisticLock{}),
+		)
 	}
 	if action.IsTerminalPhase(status.Phase) && (gone || !bound && available) {
 		return ctrl.Result{}, nil
@@ -193,10 +228,20 @@ func statusOf(object client.Object) any {
 }
 
 // execution locates only root-pinned execution identities; missing admitted records never prove no send.
-func (r *Reconciler) execution(ctx context.Context, object client.Object, status *action.BitcoinBlockGenerationStatus, uid types.UID, target string) (*bitcoin.BitcoinExecution, bool, error) {
+func (r *Reconciler) execution(
+	ctx context.Context,
+	object client.Object,
+	status *action.BitcoinBlockGenerationStatus,
+	uid types.UID,
+	target string,
+) (*bitcoin.BitcoinExecution, bool, error) {
 	if status.AdmittedExecution != nil {
 		record := &bitcoin.BitcoinExecution{}
-		err := r.Reader.Get(ctx, client.ObjectKey{Namespace: object.GetNamespace(), Name: status.AdmittedExecution.Name}, record)
+		err := r.Reader.Get(
+			ctx,
+			client.ObjectKey{Namespace: object.GetNamespace(), Name: status.AdmittedExecution.Name},
+			record,
+		)
 		if apierrors.IsNotFound(err) {
 			return nil, false, nil
 		}
@@ -227,7 +272,11 @@ func (r *Reconciler) execution(ctx context.Context, object client.Object, status
 	}
 	for _, ref := range root.Status.Bitcoin.ExecutionRefs {
 		record := &bitcoin.BitcoinExecution{}
-		if err := r.Reader.Get(ctx, client.ObjectKey{Namespace: object.GetNamespace(), Name: ref.Name}, record); err != nil {
+		if err := r.Reader.Get(
+			ctx,
+			client.ObjectKey{Namespace: object.GetNamespace(), Name: ref.Name},
+			record,
+		); err != nil {
 			if apierrors.IsNotFound(err) {
 				return nil, false, nil
 			}
@@ -240,7 +289,11 @@ func (r *Reconciler) execution(ctx context.Context, object client.Object, status
 			return record, true, nil
 		}
 		p := &api.StacksNetworkParticipant{}
-		if err := r.Reader.Get(ctx, client.ObjectKey{Namespace: object.GetNamespace(), Name: record.Spec.Participant.Name}, p); err != nil {
+		if err := r.Reader.Get(
+			ctx,
+			client.ObjectKey{Namespace: object.GetNamespace(), Name: record.Spec.Participant.Name},
+			p,
+		); err != nil {
 			if apierrors.IsNotFound(err) {
 				continue
 			}
@@ -254,14 +307,27 @@ func (r *Reconciler) execution(ctx context.Context, object client.Object, status
 }
 
 // copyEvidence preserves attribution independently of a frozen outcome.
-func copyEvidence(object client.Object, status *action.BitcoinBlockGenerationStatus, record *bitcoin.BitcoinExecution, s *bitcoin.BitcoinActionReservation) {
-	status.AdmittedExecution = &common.Binding{Kind: bitcoin.KindBitcoinExecution, Name: record.Name, UID: record.UID}
+func copyEvidence(
+	object client.Object,
+	status *action.BitcoinBlockGenerationStatus,
+	record *bitcoin.BitcoinExecution,
+	s *bitcoin.BitcoinActionReservation,
+) {
+	status.AdmittedExecution = &common.Binding{
+		Kind: bitcoin.KindBitcoinExecution,
+		Name: record.Name,
+		UID:  record.UID,
+	}
 	status.AdmittedAt = s.AdmittedAt.DeepCopy()
 	status.StartedAt = s.StartedAt.DeepCopy()
 	status.ExpiresAt = s.ExpiresAt.DeepCopy()
 	status.AdmittedNetwork = &s.Network
 	status.AdmittedTarget = &s.Target
-	status.AdmittedPolicy = &action.PolicyIdentity{UID: string(record.UID), Generation: record.Generation, Digest: s.Runtime.PolicyDigest}
+	status.AdmittedPolicy = &action.PolicyIdentity{
+		UID:        string(record.UID),
+		Generation: record.Generation,
+		Digest:     s.Runtime.PolicyDigest,
+	}
 	status.CorrelationID = s.CorrelationID
 	status.BlocksGenerated = s.BlocksGenerated
 	status.LastBlockHash = s.LastBlockHash
@@ -278,7 +344,13 @@ func copyEvidence(object client.Object, status *action.BitcoinBlockGenerationSta
 }
 
 // project freezes outcomes while allowing later receipts and compensation evidence to be copied.
-func project(status *action.BitcoinBlockGenerationStatus, s *bitcoin.BitcoinActionReservation, record *bitcoin.BitcoinExecution, now time.Time, deleted *metav1.Time) {
+func project(
+	status *action.BitcoinBlockGenerationStatus,
+	s *bitcoin.BitcoinActionReservation,
+	record *bitcoin.BitcoinExecution,
+	now time.Time,
+	deleted *metav1.Time,
+) {
 	if action.IsTerminalPhase(status.Phase) {
 		return
 	}
@@ -286,20 +358,28 @@ func project(status *action.BitcoinBlockGenerationStatus, s *bitcoin.BitcoinActi
 		finish(status, action.PhaseInconclusive, action.ReasonEffectUncertain, now)
 		return
 	}
-	complete := s.Generation != nil && s.BlocksGenerated == s.Generation.Count || s.Reorganization != nil && s.FinalChain != nil && s.CleanupAcknowledged
-	if complete && record.Status.Armed == nil && s.StopReason == "" && (s.Reorganization != nil || s.LastCompletedAt != nil && !s.LastCompletedAt.After(s.ExpiresAt.Time) && (deleted == nil || !s.LastCompletedAt.After(deleted.Time))) {
+	complete := s.Generation != nil && s.BlocksGenerated == s.Generation.Count ||
+		s.Reorganization != nil && s.FinalChain != nil && s.CleanupAcknowledged
+	if complete && record.Status.Armed == nil && s.StopReason == "" &&
+		(s.Reorganization != nil ||
+			s.LastCompletedAt != nil &&
+				!s.LastCompletedAt.After(s.ExpiresAt.Time) &&
+				(deleted == nil ||
+					!s.LastCompletedAt.After(deleted.Time))) {
 		finish(status, action.PhaseCompleted, action.ReasonReceiptsComplete, now)
 		return
 	}
 	if (!now.Before(s.ExpiresAt.Time) || deleted != nil) && record.Status.Armed != nil {
-		if s.Reorganization != nil && record.Status.Armed.Method == bitcoin.RPCReconsiderBlock && now.Before(s.ExpiresAt.Add(30*time.Second)) {
+		if s.Reorganization != nil && record.Status.Armed.Method == bitcoin.RPCReconsiderBlock &&
+			now.Before(s.ExpiresAt.Add(30*time.Second)) {
 			status.Phase = action.PhaseRecovering
 			return
 		}
 		finish(status, action.PhaseInconclusive, action.ReasonEffectUncertain, now)
 		return
 	}
-	if s.Reorganization != nil && s.InvalidationAcknowledged && !s.CleanupAcknowledged && !now.Before(s.ExpiresAt.Add(30*time.Second)) {
+	if s.Reorganization != nil && s.InvalidationAcknowledged && !s.CleanupAcknowledged &&
+		!now.Before(s.ExpiresAt.Add(30*time.Second)) {
 		finish(status, action.PhaseInconclusive, action.ReasonCleanupDeadlineExceeded, now)
 		return
 	}
@@ -340,5 +420,15 @@ func condition(s *action.BitcoinBlockGenerationStatus, kind string, value bool, 
 	if reason == "" {
 		reason = action.ReasonPending
 	}
-	meta.SetStatusCondition(&s.Conditions, metav1.Condition{Type: kind, Status: status, ObservedGeneration: s.ObservedGeneration, Reason: reason, Message: reason, LastTransitionTime: metav1.NewTime(now)})
+	meta.SetStatusCondition(
+		&s.Conditions,
+		metav1.Condition{
+			Type:               kind,
+			Status:             status,
+			ObservedGeneration: s.ObservedGeneration,
+			Reason:             reason,
+			Message:            reason,
+			LastTransitionTime: metav1.NewTime(now),
+		},
+	)
 }

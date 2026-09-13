@@ -46,6 +46,7 @@ func (c *candidate) account(ctx context.Context, r client.Reader, ref *common.Na
 	c.dependencies = append(c.dependencies, objectref.WithFingerprint(objectref.Account(&a), a.Status.Digest))
 	return nil
 }
+
 func (c *candidate) wallet(ctx context.Context, r client.Reader, ref *common.NameRef) error {
 	if ref == nil {
 		return fmt.Errorf("required wallet reference is missing")
@@ -64,6 +65,7 @@ func (c *candidate) wallet(ctx context.Context, r client.Reader, ref *common.Nam
 	c.dependencies = append(c.dependencies, objectref.WithFingerprint(objectref.BitcoinWallet(&w), w.Status.Digest))
 	return nil
 }
+
 func (c *candidate) participant(all map[string]*candidate, ref *common.NameRef, kind api.ParticipantKind) error {
 	if ref == nil {
 		return fmt.Errorf("required %s participant reference missing", kind)
@@ -78,6 +80,7 @@ func (c *candidate) participant(all map[string]*candidate, ref *common.NameRef, 
 	c.dependencies = append(c.dependencies, objectref.Participant(other.instance))
 	return nil
 }
+
 func positive(v *common.Amount) error {
 	if v == nil {
 		return fmt.Errorf("amount is required")
@@ -88,6 +91,7 @@ func positive(v *common.Amount) error {
 	}
 	return nil
 }
+
 func (c *candidate) validate(ctx context.Context, r client.Reader, all map[string]*candidate) error {
 	c.accounts = map[string]*stacks.StacksAccount{}
 	c.wallets = map[string]*bitcoin.BitcoinWallet{}
@@ -150,11 +154,12 @@ func (c *candidate) validate(ctx context.Context, r client.Reader, all map[strin
 			_, err := duration(*v.Interval)
 			errs = append(errs, err)
 		}
-		if v.Recipient == nil {
+		switch {
+		case v.Recipient == nil:
 			errs = append(errs, fmt.Errorf("recipient missing"))
-		} else if v.Recipient.AccountRef != nil {
+		case v.Recipient.AccountRef != nil:
 			account(v.Recipient.AccountRef, false)
-		} else if v.Recipient.Address == nil {
+		case v.Recipient.Address == nil:
 			errs = append(errs, fmt.Errorf("recipient missing"))
 		}
 	case c.configuration.StacksContractSet != nil:
@@ -188,12 +193,20 @@ func (c *candidate) validate(ctx context.Context, r client.Reader, all map[strin
 			errs = append(errs, fmt.Errorf("schedule sources conflict"))
 		} else if v.ScheduleRef != nil {
 			var schedule bitcoin.BitcoinBlockSchedule
-			if err := r.Get(ctx, types.NamespacedName{Namespace: c.instance.Namespace, Name: v.ScheduleRef.Name}, &schedule); err != nil || schedule.DeletionTimestamp != nil {
+			if err := r.Get(
+				ctx,
+				types.NamespacedName{Namespace: c.instance.Namespace, Name: v.ScheduleRef.Name},
+				&schedule,
+			); err != nil ||
+				schedule.DeletionTimestamp != nil {
 				errs = append(errs, fmt.Errorf("schedule unavailable"))
 			} else {
 				v.Schedule = &schedule.Spec
 				v.ScheduleRef = nil
-				c.dependencies = append(c.dependencies, objectref.WithFingerprint(objectref.BitcoinBlockSchedule(&schedule), Digest(schedule.Spec)))
+				c.dependencies = append(
+					c.dependencies,
+					objectref.WithFingerprint(objectref.BitcoinBlockSchedule(&schedule), Digest(schedule.Spec)),
+				)
 			}
 		}
 		if v.Schedule == nil {
@@ -202,7 +215,7 @@ func (c *candidate) validate(ctx context.Context, r client.Reader, all map[strin
 			errs = append(errs, validateSchedule(*v.Schedule))
 		}
 		if v.Initialization == nil {
-			errs = append(errs, fmt.Errorf("Bitcoin initialization missing"))
+			errs = append(errs, fmt.Errorf("missing Bitcoin initialization"))
 		} else {
 			participant(&v.Initialization.TargetNodeRef, api.ParticipantBitcoinNode)
 			for _, ref := range ptr.Deref(v.Initialization.MinerWalletRefs, nil) {
@@ -238,15 +251,22 @@ func (c *candidate) validate(ctx context.Context, r client.Reader, all map[strin
 			for _, ref := range cfg.ServiceRefs {
 				target := all[ref.Name]
 				if target == nil || string(target.instance.Spec.Kind) != ref.Kind {
-					errs = append(errs, fmt.Errorf("Service alias %s selects an unavailable participant", ref.Alias))
+					errs = append(errs, fmt.Errorf("service alias %s selects an unavailable participant", ref.Alias))
 					continue
 				}
 				c.dependencies = append(c.dependencies, objectref.Participant(target.instance))
 			}
 		}
 		if cfg := fields.Config; cfg != nil && cfg.SecretRef != nil {
-			metadata := &metav1.PartialObjectMetadata{TypeMeta: metav1.TypeMeta{APIVersion: corev1.SchemeGroupVersion.String(), Kind: common.KindSecret}}
-			if err := r.Get(ctx, types.NamespacedName{Namespace: c.instance.Namespace, Name: cfg.SecretRef.Name}, metadata); err != nil || metadata.DeletionTimestamp != nil {
+			metadata := &metav1.PartialObjectMetadata{
+				TypeMeta: metav1.TypeMeta{APIVersion: corev1.SchemeGroupVersion.String(), Kind: common.KindSecret},
+			}
+			if err := r.Get(
+				ctx,
+				types.NamespacedName{Namespace: c.instance.Namespace, Name: cfg.SecretRef.Name},
+				metadata,
+			); err != nil ||
+				metadata.DeletionTimestamp != nil {
 				errs = append(errs, fmt.Errorf("configuration Secret metadata unavailable"))
 			} else {
 				ref, err := objectref.SecretMetadata(metadata)

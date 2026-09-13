@@ -5,6 +5,7 @@ package foundation
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"os"
 	"os/exec"
@@ -31,7 +32,16 @@ import (
 func TestActionAPIAdmissionAndReceiptOwnership(t *testing.T) {
 	ctx := context.Background()
 	base := filepath.Join("..", "..", "..", "..", "charts")
-	env := &envtest.Environment{CRDDirectoryPaths: []string{filepath.Join(base, "stacks-network-operator", "crds"), filepath.Join(base, "stacks-action-operator", "crds")}, ErrorIfCRDPathMissing: true, DownloadBinaryAssets: true, DownloadBinaryAssetsVersion: "1.37.0", BinaryAssetsDirectory: filepath.Join(os.TempDir(), "stacks-network-operator-envtest")}
+	env := &envtest.Environment{
+		CRDDirectoryPaths: []string{
+			filepath.Join(base, "stacks-network-operator", "crds"),
+			filepath.Join(base, "stacks-action-operator", "crds"),
+		},
+		ErrorIfCRDPathMissing:       true,
+		DownloadBinaryAssets:        true,
+		DownloadBinaryAssetsVersion: "1.37.0",
+		BinaryAssetsDirectory:       filepath.Join(os.TempDir(), "stacks-network-operator-envtest"),
+	}
 	config, err := env.Start()
 	if err != nil {
 		t.Fatal(err)
@@ -42,7 +52,12 @@ func TestActionAPIAdmissionAndReceiptOwnership(t *testing.T) {
 		}
 	})
 	scheme := runtime.NewScheme()
-	for _, add := range []func(*runtime.Scheme) error{corev1.AddToScheme, api.AddToScheme, bitcoin.AddToScheme, action.AddToScheme} {
+	for _, add := range []func(*runtime.Scheme) error{
+		corev1.AddToScheme,
+		api.AddToScheme,
+		bitcoin.AddToScheme,
+		action.AddToScheme,
+	} {
 		if err := add(scheme); err != nil {
 			t.Fatal(err)
 		}
@@ -58,13 +73,29 @@ func TestActionAPIAdmissionAndReceiptOwnership(t *testing.T) {
 		}
 	}
 	must(c.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "actions"}}))
-	rendered, err := exec.Command("helm", "template", "action", filepath.Join(base, "stacks-action-operator"), "--namespace", "actions", "--kube-version", "1.37.0", "--set", "bitcoinReorganization.enabled=true").Output()
+	// #nosec G204 -- Fixed executable and separate arguments from the test harness; no shell evaluation.
+	rendered, err := exec.CommandContext(t.Context(),
+		"helm",
+		"template",
+		"action",
+		filepath.Join(
+			base,
+			"stacks-action-operator",
+		),
+		"--namespace",
+		"actions",
+		"--kube-version",
+		"1.37.0",
+		"--set",
+		"bitcoinReorganization.enabled=true",
+	).
+		Output()
 	must(err)
 	decoder := yaml.NewYAMLOrJSONDecoder(bytes.NewReader(rendered), 4096)
 	for {
 		object := &unstructured.Unstructured{}
 		err := decoder.Decode(object)
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		must(err)
@@ -74,7 +105,13 @@ func TestActionAPIAdmissionAndReceiptOwnership(t *testing.T) {
 			must(c.Create(ctx, object))
 		}
 	}
-	user, err := env.AddUser(envtest.User{Name: "system:serviceaccount:actions:action", Groups: []string{"system:serviceaccounts", "system:serviceaccounts:actions"}}, config)
+	user, err := env.AddUser(
+		envtest.User{
+			Name:   "system:serviceaccount:actions:action",
+			Groups: []string{"system:serviceaccounts", "system:serviceaccounts:actions"},
+		},
+		config,
+	)
 	must(err)
 	restricted, err := client.New(user.Config(), client.Options{Scheme: scheme})
 	must(err)
@@ -83,13 +120,21 @@ func TestActionAPIAdmissionAndReceiptOwnership(t *testing.T) {
 		t.Fatalf("action controller received Secret authority: %v", denied)
 	}
 
-	root := &api.StacksNetwork{ObjectMeta: metav1.ObjectMeta{Name: "network", Namespace: "actions"}, Spec: api.StacksNetworkSpec{Operation: "Running"}}
+	root := &api.StacksNetwork{
+		ObjectMeta: metav1.ObjectMeta{Name: "network", Namespace: "actions"},
+		Spec:       api.StacksNetworkSpec{Operation: "Running"},
+	}
 	must(c.Create(ctx, root))
 	participant := common.Binding{Kind: "StacksNetworkParticipant", Name: "node", UID: "node-uid"}
-	record := &bitcoin.BitcoinExecution{ObjectMeta: metav1.ObjectMeta{Name: "execution", Namespace: root.Namespace}, Spec: bitcoin.BitcoinExecutionSpec{NetworkUID: root.UID, Participant: participant}}
+	record := &bitcoin.BitcoinExecution{
+		ObjectMeta: metav1.ObjectMeta{Name: "execution", Namespace: root.Namespace},
+		Spec:       bitcoin.BitcoinExecutionSpec{NetworkUID: root.UID, Participant: participant},
+	}
 	must(controllerutil.SetControllerReference(root, record, scheme))
 	must(c.Create(ctx, record))
-	root.Status.Bitcoin = &api.BitcoinRuntimeStatus{ExecutionRefs: []common.Binding{{Kind: "BitcoinExecution", Name: record.Name, UID: record.UID}}}
+	root.Status.Bitcoin = &api.BitcoinRuntimeStatus{
+		ExecutionRefs: []common.Binding{{Kind: "BitcoinExecution", Name: record.Name, UID: record.UID}},
+	}
 	must(c.Status().Update(ctx, root))
 	for _, kind := range []string{"BitcoinBlockGeneration", "BitcoinReorganization"} {
 		t.Run(kind, func(t *testing.T) {
@@ -102,8 +147,26 @@ func TestActionAPIAdmissionAndReceiptOwnership(t *testing.T) {
 			must(err)
 			object.SetName("request")
 			object.SetNamespace(root.Namespace)
-			generation := action.BitcoinBlockGenerationSpec{NetworkUID: root.UID, BitcoinNodeRef: action.LocalReference{Name: "bitcoin"}, Count: 1, Address: "mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn", Cadence: action.GenerationCadence{Mode: "Immediate"}, Timeout: metav1.Duration{Duration: time.Minute}}
-			reorg := action.BitcoinReorganizationSpec{NetworkUID: root.UID, BitcoinNodeRef: generation.BitcoinNodeRef, Depth: 1, Address: generation.Address, Timeout: generation.Timeout, BoundaryPolicy: action.ReorganizationBoundaryPolicy{AllowEpochBoundaryCrossing: true, AllowPreparePhaseBoundaryCrossing: true, AllowRewardCycleBoundaryCrossing: true}}
+			generation := action.BitcoinBlockGenerationSpec{
+				NetworkUID:     root.UID,
+				BitcoinNodeRef: action.LocalReference{Name: "bitcoin"},
+				Count:          1,
+				Address:        "mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn",
+				Cadence:        action.GenerationCadence{Mode: "Immediate"},
+				Timeout:        metav1.Duration{Duration: time.Minute},
+			}
+			reorg := action.BitcoinReorganizationSpec{
+				NetworkUID:     root.UID,
+				BitcoinNodeRef: generation.BitcoinNodeRef,
+				Depth:          1,
+				Address:        generation.Address,
+				Timeout:        generation.Timeout,
+				BoundaryPolicy: action.ReorganizationBoundaryPolicy{
+					AllowEpochBoundaryCrossing:        true,
+					AllowPreparePhaseBoundaryCrossing: true,
+					AllowRewardCycleBoundaryCrossing:  true,
+				},
+			}
 			switch o := object.(type) {
 			case *action.BitcoinBlockGeneration:
 				o.Spec = generation
@@ -143,7 +206,18 @@ func TestActionAPIAdmissionAndReceiptOwnership(t *testing.T) {
 			}
 			must(c.Get(ctx, client.ObjectKeyFromObject(record), record))
 			now := metav1.NewTime(time.Now().UTC().Truncate(time.Second))
-			state := &bitcoin.BitcoinActionReservation{Request: common.Binding{Kind: kind, Name: object.GetName(), UID: object.GetUID()}, Network: action.NetworkIdentity{Name: root.Name, UID: string(root.UID), ObservedGeneration: root.Generation}, AdmittedAt: now, ExpiresAt: metav1.NewTime(object.GetCreationTimestamp().Add(time.Minute)), Runtime: bitcoin.BitcoinTargetIdentity{Participant: participant}, Target: action.TargetIdentity{UID: string(participant.UID)}}
+			state := &bitcoin.BitcoinActionReservation{
+				Request: common.Binding{Kind: kind, Name: object.GetName(), UID: object.GetUID()},
+				Network: action.NetworkIdentity{
+					Name:               root.Name,
+					UID:                string(root.UID),
+					ObservedGeneration: root.Generation,
+				},
+				AdmittedAt: now,
+				ExpiresAt:  metav1.NewTime(object.GetCreationTimestamp().Add(time.Minute)),
+				Runtime:    bitcoin.BitcoinTargetIdentity{Participant: participant},
+				Target:     action.TargetIdentity{UID: string(participant.UID)},
+			}
 			if kind == "BitcoinBlockGeneration" {
 				state.Generation = &generation
 			} else {
@@ -155,7 +229,8 @@ func TestActionAPIAdmissionAndReceiptOwnership(t *testing.T) {
 			_, err = r.Reconcile(ctx, req)
 			must(err)
 			must(c.Get(ctx, req.NamespacedName, object))
-			if status.Phase != "Admitted" || status.AdmittedExecution == nil || status.AdmittedExecution.UID != record.UID {
+			if status.Phase != "Admitted" || status.AdmittedExecution == nil ||
+				status.AdmittedExecution.UID != record.UID {
 				t.Fatalf("exact record not admitted: %+v", status)
 			}
 			managed := false

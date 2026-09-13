@@ -20,9 +20,17 @@ func bitcoinCustomFixture(t *testing.T) (client.Client, BitcoinConfigInput, *cor
 	p := participantFixture()
 	config := &corev1.Secret{ObjectMeta: objectMeta(p, "config", "support")}
 	config.UID = "config-uid"
-	control := &corev1.Secret{ObjectMeta: objectMeta(p, "control", "support"), Immutable: ptr.To(true), Data: map[string][]byte{"username": []byte("control"), "password": []byte(strings.Repeat("a", 64))}}
+	control := &corev1.Secret{
+		ObjectMeta: objectMeta(p, "control", "support"),
+		Immutable:  ptr.To(true),
+		Data:       map[string][]byte{"username": []byte("control"), "password": []byte(strings.Repeat("a", 64))},
+	}
 	control.UID = "control-uid"
-	actor := &corev1.Secret{ObjectMeta: objectMeta(p, "rpc", "support"), Immutable: ptr.To(true), Data: map[string][]byte{"username": []byte("actor"), "password": []byte(strings.Repeat("b", 64))}}
+	actor := &corev1.Secret{
+		ObjectMeta: objectMeta(p, "rpc", "support"),
+		Immutable:  ptr.To(true),
+		Data:       map[string][]byte{"username": []byte("actor"), "password": []byte(strings.Repeat("b", 64))},
+	}
 	actor.UID = "actor-uid"
 	report := &corev1.ConfigMap{ObjectMeta: objectMeta(p, "report", "support")}
 	report.UID = "report-uid"
@@ -30,13 +38,35 @@ func bitcoinCustomFixture(t *testing.T) (client.Client, BitcoinConfigInput, *cor
 	if err != nil {
 		t.Fatal(err)
 	}
-	custom := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "custom", Namespace: p.Namespace, UID: "custom-uid"}, Immutable: ptr.To(true), Data: map[string][]byte{"bitcoin.conf": []byte(rendered + "debug=private-canary\n")}}
-	in := BitcoinConfigInput{Namespace: p.Namespace, ParticipantUID: p.UID, PolicyDigest: "policy", Config: *binding("Secret", config), ControlCredentials: *binding("Secret", control), ActorCredentials: *binding("Secret", actor), Report: *binding("ConfigMap", report), Customization: &common.Config{SecretRef: &common.SecretKeyRef{Name: custom.Name, Key: "bitcoin.conf"}}, Custom: &PrivateInput{Binding: *binding("Secret", custom), Key: "bitcoin.conf"}}
+	custom := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "custom", Namespace: p.Namespace, UID: "custom-uid"},
+		Immutable:  ptr.To(true),
+		Data:       map[string][]byte{"bitcoin.conf": []byte(rendered + "debug=private-canary\n")},
+	}
+	in := BitcoinConfigInput{
+		Namespace:          p.Namespace,
+		ParticipantUID:     p.UID,
+		PolicyDigest:       "policy",
+		Config:             *binding("Secret", config),
+		ControlCredentials: *binding("Secret", control),
+		ActorCredentials:   *binding("Secret", actor),
+		Report:             *binding("ConfigMap", report),
+		Customization:      &common.Config{SecretRef: &common.SecretKeyRef{Name: custom.Name, Key: "bitcoin.conf"}},
+		Custom:             &PrivateInput{Binding: *binding("Secret", custom), Key: "bitcoin.conf"},
+	}
 	return testClient(t, config, control, actor, report, custom), in, custom
 }
 
 func TestBitcoinPrivateConfigurationExactSourceAndReport(t *testing.T) {
-	for _, mode := range []string{"valid", "replacement", "mutable", "key-missing", "mismatch", "divergent", "unverified"} {
+	for _, mode := range []string{
+		"valid",
+		"replacement",
+		"mutable",
+		"key-missing",
+		"mismatch",
+		"divergent",
+		"unverified",
+	} {
 		t.Run(mode, func(t *testing.T) {
 			c, in, custom := bitcoinCustomFixture(t)
 			switch mode {
@@ -63,7 +93,12 @@ func TestBitcoinPrivateConfigurationExactSourceAndReport(t *testing.T) {
 					t.Fatalf("invalid source: %v", err)
 				}
 				var report corev1.ConfigMap
-				if getErr := c.Get(context.Background(), client.ObjectKey{Namespace: in.Namespace, Name: in.Report.Name}, &report); getErr != nil || report.Data["report.json"] != "" {
+				if getErr := c.Get(
+					context.Background(),
+					client.ObjectKey{Namespace: in.Namespace, Name: in.Report.Name},
+					&report,
+				); getErr != nil ||
+					report.Data["report.json"] != "" {
 					t.Fatalf("invalid source published agreement: %v", getErr)
 				}
 				return
@@ -72,14 +107,19 @@ func TestBitcoinPrivateConfigurationExactSourceAndReport(t *testing.T) {
 				t.Fatal(err)
 			}
 			var report corev1.ConfigMap
-			if err := c.Get(context.Background(), client.ObjectKey{Namespace: in.Namespace, Name: in.Report.Name}, &report); err != nil {
+			if err := c.Get(
+				context.Background(),
+				client.ObjectKey{Namespace: in.Namespace, Name: in.Report.Name},
+				&report,
+			); err != nil {
 				t.Fatal(err)
 			}
 			var result BitcoinConfigReport
 			if err := json.Unmarshal([]byte(report.Data["report.json"]), &result); err != nil {
 				t.Fatal(err)
 			}
-			if result.Verified != (mode == "valid") || result.InputDigest != digest(in) || strings.Contains(report.Data["report.json"], "private-canary") {
+			if result.Verified != (mode == "valid") || result.InputDigest != digest(in) ||
+				strings.Contains(report.Data["report.json"], "private-canary") {
 				t.Fatal("incorrect public agreement report")
 			}
 			if err := RunBitcoinConfigResolver(context.Background(), c, in); err != nil {
@@ -121,7 +161,12 @@ func TestBitcoinCustomResolverPermissions(t *testing.T) {
 // metadataOnlyReader makes an operator-side private data read fail the test.
 type metadataOnlyReader struct{ client.Reader }
 
-func (r metadataOnlyReader) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+func (r metadataOnlyReader) Get(
+	ctx context.Context,
+	key client.ObjectKey,
+	obj client.Object,
+	opts ...client.GetOption,
+) error {
 	if _, ok := obj.(*corev1.Secret); ok {
 		return fmt.Errorf("operator attempted private Secret read")
 	}

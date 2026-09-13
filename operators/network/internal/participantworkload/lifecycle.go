@@ -18,7 +18,11 @@ import (
 )
 
 // reconcileService preserves allocated networking while converging owned selectors.
-func (r *Reconciler) reconcileService(ctx context.Context, p *api.StacksNetworkParticipant, desired *corev1.Service) error {
+func (r *Reconciler) reconcileService(
+	ctx context.Context,
+	p *api.StacksNetworkParticipant,
+	desired *corev1.Service,
+) error {
 	var current corev1.Service
 	err := r.Reader.Get(ctx, client.ObjectKeyFromObject(desired), &current)
 	if apierrors.IsNotFound(err) {
@@ -28,7 +32,7 @@ func (r *Reconciler) reconcileService(ctx context.Context, p *api.StacksNetworkP
 		return err
 	}
 	if !owned(&current, p) || current.DeletionTimestamp != nil {
-		return fmt.Errorf("Service ownership unavailable")
+		return fmt.Errorf("service ownership unavailable")
 	}
 	base := current.DeepCopy()
 	current.Labels = desired.Labels
@@ -42,7 +46,11 @@ func (r *Reconciler) reconcileService(ctx context.Context, p *api.StacksNetworkP
 }
 
 // reconcileStatefulSet updates only owned workload fields and expands existing claims.
-func (r *Reconciler) reconcileStatefulSet(ctx context.Context, p *api.StacksNetworkParticipant, desired *appsv1.StatefulSet) error {
+func (r *Reconciler) reconcileStatefulSet(
+	ctx context.Context,
+	p *api.StacksNetworkParticipant,
+	desired *appsv1.StatefulSet,
+) error {
 	var current appsv1.StatefulSet
 	err := r.Reader.Get(ctx, client.ObjectKeyFromObject(desired), &current)
 	if apierrors.IsNotFound(err) {
@@ -74,8 +82,13 @@ func (r *Reconciler) reconcileStatefulSet(ctx context.Context, p *api.StacksNetw
 			return fmt.Errorf("storage shrink is unsupported")
 		}
 		var pvc corev1.PersistentVolumeClaim
-		if err := r.Reader.Get(ctx, client.ObjectKey{Namespace: p.Namespace, Name: "data-" + current.Name + "-0"}, &pvc); err == nil {
-			if pvc.Labels[api.LabelParticipantUID] != string(p.UID) || pvc.Labels[api.LabelNetworkUID] != string(p.Spec.NetworkUID) {
+		if err := r.Reader.Get(
+			ctx,
+			client.ObjectKey{Namespace: p.Namespace, Name: "data-" + current.Name + "-0"},
+			&pvc,
+		); err == nil {
+			if pvc.Labels[api.LabelParticipantUID] != string(p.UID) ||
+				pvc.Labels[api.LabelNetworkUID] != string(p.Spec.NetworkUID) {
 				return fmt.Errorf("PVC identity is foreign")
 			}
 			if owner := metav1.GetControllerOf(&pvc); owner != nil && owner.UID != current.UID {
@@ -88,11 +101,17 @@ func (r *Reconciler) reconcileStatefulSet(ctx context.Context, p *api.StacksNetw
 			if want.Cmp(actual) > 0 {
 				base := pvc.DeepCopy()
 				pvc.Spec.Resources.Requests[corev1.ResourceStorage] = want
-				if err := r.Client.Patch(ctx, &pvc, client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{})); err != nil {
+				if err := r.Client.Patch(
+					ctx,
+					&pvc,
+					client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{}),
+				); err != nil {
 					return err
 				}
 			}
-		} else if !apierrors.IsNotFound(err) {
+		} else if !apierrors.IsNotFound(
+			err,
+		) {
 			return err
 		}
 	}
@@ -101,7 +120,11 @@ func (r *Reconciler) reconcileStatefulSet(ctx context.Context, p *api.StacksNetw
 	current.Spec.Template = desired.Spec.Template
 	current.Spec.PersistentVolumeClaimRetentionPolicy = desired.Spec.PersistentVolumeClaimRetentionPolicy
 	if !reflect.DeepEqual(base.Spec, current.Spec) {
-		if err := r.Client.Patch(ctx, &current, client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{})); err != nil {
+		if err := r.Client.Patch(
+			ctx,
+			&current,
+			client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{}),
+		); err != nil {
 			return err
 		}
 	}
@@ -110,13 +133,23 @@ func (r *Reconciler) reconcileStatefulSet(ctx context.Context, p *api.StacksNetw
 }
 
 // actorPod reads the current Pod and verifies its workload and participant binding.
-func (r *Reconciler) actorPod(ctx context.Context, p *api.StacksNetworkParticipant, workload *appsv1.StatefulSet) (*corev1.Pod, error) {
+func (r *Reconciler) actorPod(
+	ctx context.Context,
+	p *api.StacksNetworkParticipant,
+	workload *appsv1.StatefulSet,
+) (*corev1.Pod, error) {
 	var pod corev1.Pod
-	if err := r.Reader.Get(ctx, client.ObjectKey{Namespace: p.Namespace, Name: workload.Name + "-0"}, &pod); err != nil {
+	if err := r.Reader.Get(
+		ctx,
+		client.ObjectKey{Namespace: p.Namespace, Name: workload.Name + "-0"},
+		&pod,
+	); err != nil {
 		return nil, err
 	}
 	owner := metav1.GetControllerOf(&pod)
-	if owner == nil || owner.Kind != common.KindStatefulSet || owner.UID != workload.UID || pod.Labels[api.LabelParticipantUID] != string(p.UID) || pod.Labels[api.LabelNetworkUID] != string(p.Spec.NetworkUID) {
+	if owner == nil || owner.Kind != common.KindStatefulSet || owner.UID != workload.UID ||
+		pod.Labels[api.LabelParticipantUID] != string(p.UID) ||
+		pod.Labels[api.LabelNetworkUID] != string(p.Spec.NetworkUID) {
 		return nil, fmt.Errorf("actor Pod identity is foreign")
 	}
 	return &pod, nil
@@ -174,7 +207,8 @@ func podReady(pod *corev1.Pod) bool {
 
 // terminated distinguishes kubelet terminal evidence from missing or unknown processes.
 func terminated(pod *corev1.Pod) bool {
-	if pod.DeletionTimestamp != nil && pod.Spec.NodeName == "" && len(pod.Status.ContainerStatuses) == 0 && len(pod.Status.InitContainerStatuses) == 0 {
+	if pod.DeletionTimestamp != nil && pod.Spec.NodeName == "" && len(pod.Status.ContainerStatuses) == 0 &&
+		len(pod.Status.InitContainerStatuses) == 0 {
 		return true
 	}
 	if pod.Status.Phase != corev1.PodSucceeded && pod.Status.Phase != corev1.PodFailed {
@@ -186,7 +220,8 @@ func terminated(pod *corev1.Pod) bool {
 	for _, declared := range pod.Spec.Containers {
 		confirmed := false
 		for _, status := range pod.Status.ContainerStatuses {
-			if status.Name == declared.Name && status.State.Terminated != nil && status.State.Terminated.Reason != common.ReasonContainerStatusUnknown {
+			if status.Name == declared.Name && status.State.Terminated != nil &&
+				status.State.Terminated.Reason != common.ReasonContainerStatusUnknown {
 				confirmed = true
 			}
 		}
@@ -204,7 +239,12 @@ func terminated(pod *corev1.Pod) bool {
 }
 
 // stopActor preserves the RPC process until the executor acknowledges terminal drainage.
-func (r *Reconciler) stopActor(ctx context.Context, p *api.StacksNetworkParticipant, state *api.ParticipantRuntimeStatus, removing bool) (string, error) {
+func (r *Reconciler) stopActor(
+	ctx context.Context,
+	p *api.StacksNetworkParticipant,
+	state *api.ParticipantRuntimeStatus,
+	removing bool,
+) (string, error) {
 	// A previously confirmed, absent process cannot need a second drain. Its
 	// execution record may already have been garbage-collected during root deletion.
 	if state.Terminated {
@@ -230,12 +270,21 @@ func (r *Reconciler) stopActor(ctx context.Context, p *api.StacksNetworkParticip
 }
 
 // shutdown scales down and confirms process termination before disposal.
-func (r *Reconciler) shutdown(ctx context.Context, p *api.StacksNetworkParticipant, state *api.ParticipantRuntimeStatus, removing bool) (string, error) {
+func (r *Reconciler) shutdown(
+	ctx context.Context,
+	p *api.StacksNetworkParticipant,
+	state *api.ParticipantRuntimeStatus,
+	removing bool,
+) (string, error) {
 	var workload appsv1.StatefulSet
 	err := r.Reader.Get(ctx, client.ObjectKey{Namespace: p.Namespace, Name: Name(p, actorPurpose)}, &workload)
 	if apierrors.IsNotFound(err) {
 		var remaining corev1.Pod
-		podErr := r.Reader.Get(ctx, client.ObjectKey{Namespace: p.Namespace, Name: Name(p, actorPurpose) + "-0"}, &remaining)
+		podErr := r.Reader.Get(
+			ctx,
+			client.ObjectKey{Namespace: p.Namespace, Name: Name(p, actorPurpose) + "-0"},
+			&remaining,
+		)
 		if podErr == nil {
 			if state.PodRef == nil || state.PodRef.UID != remaining.UID || !terminated(&remaining) {
 				return api.ReasonTerminationUnknown, nil
@@ -271,7 +320,11 @@ func (r *Reconciler) shutdown(ctx context.Context, p *api.StacksNetworkParticipa
 			if ptr.Deref(workload.Spec.Replicas, 1) != 0 {
 				base := workload.DeepCopy()
 				workload.Spec.Replicas = ptr.To[int32](0)
-				if err := r.Client.Patch(ctx, &workload, client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{})); err != nil {
+				if err := r.Client.Patch(
+					ctx,
+					&workload,
+					client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{}),
+				); err != nil {
 					return api.ReasonTerminationUnknown, err
 				}
 			}
@@ -288,7 +341,11 @@ func (r *Reconciler) shutdown(ctx context.Context, p *api.StacksNetworkParticipa
 	if ptr.Deref(workload.Spec.Replicas, 1) != 0 {
 		base := workload.DeepCopy()
 		workload.Spec.Replicas = ptr.To[int32](0)
-		if err := r.Client.Patch(ctx, &workload, client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{})); err != nil {
+		if err := r.Client.Patch(
+			ctx,
+			&workload,
+			client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{}),
+		); err != nil {
 			return api.ReasonStopping, err
 		}
 		return api.ReasonStopping, nil
@@ -317,7 +374,12 @@ func (r *Reconciler) shutdown(ctx context.Context, p *api.StacksNetworkParticipa
 	}
 	if removing && workload.DeletionTimestamp == nil {
 		uid := workload.UID
-		if err := r.Client.Delete(ctx, &workload, &client.DeleteOptions{Preconditions: &metav1.Preconditions{UID: &uid}}); err != nil && !apierrors.IsNotFound(err) {
+		if err := r.Client.Delete(
+			ctx,
+			&workload,
+			&client.DeleteOptions{Preconditions: &metav1.Preconditions{UID: &uid}},
+		); err != nil &&
+			!apierrors.IsNotFound(err) {
 			return api.ReasonStopping, err
 		}
 	}
@@ -327,5 +389,6 @@ func (r *Reconciler) shutdown(ctx context.Context, p *api.StacksNetworkParticipa
 // terminationRecorded requires durable evidence before deleting its source Pod.
 func terminationRecorded(p *api.StacksNetworkParticipant, pod *corev1.Pod) bool {
 	runtime := p.Status.Runtime
-	return runtime != nil && runtime.Terminated && runtime.PodRef != nil && runtime.PodRef.UID == pod.UID && runtime.PodRef.Name == pod.Name
+	return runtime != nil && runtime.Terminated && runtime.PodRef != nil && runtime.PodRef.UID == pod.UID &&
+		runtime.PodRef.Name == pod.Name
 }

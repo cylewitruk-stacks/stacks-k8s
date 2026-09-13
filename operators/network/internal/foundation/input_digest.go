@@ -57,9 +57,15 @@ func semanticInputDigest(spec api.StacksGenesisSpec, all map[string]*candidate) 
 	bindings := func(inputs []common.Binding) []semanticBinding {
 		result := make([]semanticBinding, 0, len(inputs))
 		for _, b := range inputs {
-			result = append(result, semanticBinding{Kind: b.Kind, Name: logicalName(b.Kind, b.Name), Fingerprint: b.Fingerprint})
+			result = append(
+				result,
+				semanticBinding{Kind: b.Kind, Name: logicalName(b.Kind, b.Name), Fingerprint: b.Fingerprint},
+			)
 		}
-		sort.Slice(result, func(i, j int) bool { return result[i].Kind+"/"+result[i].Name < result[j].Kind+"/"+result[j].Name })
+		sort.Slice(
+			result,
+			func(i, j int) bool { return result[i].Kind+"/"+result[i].Name < result[j].Kind+"/"+result[j].Name },
+		)
 		return result
 	}
 	// Only account references can contain generated names in compiled configuration.
@@ -100,7 +106,16 @@ func semanticInputDigest(spec api.StacksGenesisSpec, all map[string]*candidate) 
 		c := all[name]
 		configuration, _ := objectMap(c.configuration)
 		normalize(configuration)
-		participants = append(participants, semanticParticipant{Name: name, Kind: c.instance.Spec.Kind, Definition: c.source.Name, Configuration: configuration, Dependencies: bindings(c.dependencies)})
+		participants = append(
+			participants,
+			semanticParticipant{
+				Name:          name,
+				Kind:          c.instance.Spec.Kind,
+				Definition:    c.source.Name,
+				Configuration: configuration,
+				Dependencies:  bindings(c.dependencies),
+			},
+		)
 	}
 	return Digest(struct {
 		Chain        api.Chain             `json:"chain"`

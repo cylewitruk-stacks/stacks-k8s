@@ -57,7 +57,10 @@ func TestBootstrapReceiptSurvivesReplacedSelection(t *testing.T) {
 				f.reconcile(t, scheduler)
 			}
 			initial = f.readInitial(t)
-			if initial.Status.LastAccountedOffer != 1 || len(initial.Status.Funded) != 1 || initial.Status.Funded[0].Outputs != 1 || f.rpc.count() != 1 || !generationAccounted(initial, f.readRecord(t)) {
+			if initial.Status.LastAccountedOffer != 1 || len(initial.Status.Funded) != 1 ||
+				initial.Status.Funded[0].Outputs != 1 ||
+				f.rpc.count() != 1 ||
+				!generationAccounted(initial, f.readRecord(t)) {
 				t.Fatalf("retained receipt not accounted exactly once: %+v", initial.Status)
 			}
 			if f.readRecord(t).Status.LastReceipt.Request.ID != receipt.Request.ID {
@@ -79,20 +82,33 @@ func TestBootstrapReceiptSurvivesReplacedSelection(t *testing.T) {
 // Foreign or incomplete receipt evidence cannot advance funding or the cursor.
 func TestBootstrapReceiptIdentityAndFunding(t *testing.T) {
 	for name, change := range map[string]func(*bitcoin.BitcoinExecution){
-		"foreign-initialization": func(e *bitcoin.BitcoinExecution) { e.Status.LastReceipt.Request.Offer.Initialization.UID = "other" },
-		"foreign-target":         func(e *bitcoin.BitcoinExecution) { e.Status.LastReceipt.Request.Target.Participant.UID = "other" },
-		"missing-production":     func(e *bitcoin.BitcoinExecution) { e.Status.LastReceipt.Request.Offer.Production.UID = "" },
-		"foreign-wallet":         func(e *bitcoin.BitcoinExecution) { e.Status.LastReceipt.Request.Offer.Wallet.UID = "other" },
-		"wrong-address":          func(e *bitcoin.BitcoinExecution) { e.Status.LastReceipt.Request.Offer.Address = "other" },
-		"baseline":               func(e *bitcoin.BitcoinExecution) { e.Status.LastReceipt.Request.Offer.Mode = "Baseline" },
-		"uncompleted":            func(e *bitcoin.BitcoinExecution) { e.Status.CompletedOffer++ },
-		"no-receipt":             func(e *bitcoin.BitcoinExecution) { e.Status.LastReceipt = nil },
+		"foreign-initialization": func(e *bitcoin.BitcoinExecution) {
+			e.Status.LastReceipt.Request.Offer.Initialization.UID = "other"
+		},
+		"foreign-target": func(e *bitcoin.BitcoinExecution) {
+			e.Status.LastReceipt.Request.Target.Participant.UID = "other"
+		},
+		"missing-production": func(e *bitcoin.BitcoinExecution) {
+			e.Status.LastReceipt.Request.Offer.Production.UID = ""
+		},
+		"foreign-wallet": func(e *bitcoin.BitcoinExecution) {
+			e.Status.LastReceipt.Request.Offer.Wallet.UID = "other"
+		},
+		"wrong-address": func(e *bitcoin.BitcoinExecution) {
+			e.Status.LastReceipt.Request.Offer.Address = "other"
+		},
+		"baseline": func(e *bitcoin.BitcoinExecution) {
+			e.Status.LastReceipt.Request.Offer.Mode = "Baseline"
+		},
+		"uncompleted": func(e *bitcoin.BitcoinExecution) { e.Status.CompletedOffer++ },
+		"no-receipt":  func(e *bitcoin.BitcoinExecution) { e.Status.LastReceipt = nil },
 	} {
 		t.Run(name, func(t *testing.T) {
 			f := bootstrapReceiptFixture(t)
 			initial, execution := f.readInitial(t), f.readRecord(t)
 			change(execution)
-			if accountBootstrapReceipt(f.root, initial, execution) || initial.Status.LastAccountedOffer != 0 || len(initial.Status.Funded) != 0 {
+			if accountBootstrapReceipt(f.root, initial, execution) || initial.Status.LastAccountedOffer != 0 ||
+				len(initial.Status.Funded) != 0 {
 				t.Fatal("invalid evidence counted")
 			}
 		})
@@ -111,19 +127,35 @@ func TestBootstrapReceiptAccountingWriteLoss(t *testing.T) {
 			}
 			s := f.schedulerFor()
 			lost := false
-			s.Client = interceptor.NewClient(f.c.(client.WithWatch), interceptor.Funcs{SubResourceUpdate: func(ctx context.Context, c client.Client, sub string, obj client.Object, opts ...client.SubResourceUpdateOption) error {
-				if state, ok := obj.(*bitcoin.BitcoinInitialization); ok && !lost && state.Status.LastAccountedOffer == 1 {
-					lost = true
-					if committed {
-						if err := c.SubResource(sub).Update(ctx, obj, opts...); err != nil {
-							return err
+			s.Client = interceptor.NewClient(
+				f.c.(client.WithWatch),
+				interceptor.Funcs{
+					SubResourceUpdate: func(
+						ctx context.Context,
+						c client.Client,
+						sub string,
+						obj client.Object,
+						opts ...client.SubResourceUpdateOption,
+					) error {
+						if state, ok := obj.(*bitcoin.BitcoinInitialization); ok && !lost &&
+							state.Status.LastAccountedOffer == 1 {
+							lost = true
+							if committed {
+								if err := c.SubResource(sub).Update(ctx, obj, opts...); err != nil {
+									return err
+								}
+							}
+							return errors.New("accounting write response lost")
 						}
-					}
-					return errors.New("accounting write response lost")
-				}
-				return c.SubResource(sub).Update(ctx, obj, opts...)
-			}})
-			if _, err := s.Reconcile(t.Context(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(initial)}); err == nil || !lost {
+						return c.SubResource(sub).Update(ctx, obj, opts...)
+					},
+				},
+			)
+			if _, err := s.Reconcile(
+				t.Context(),
+				ctrl.Request{NamespacedName: client.ObjectKeyFromObject(initial)},
+			); err == nil ||
+				!lost {
 				t.Fatal("write loss not exercised")
 			}
 			if generationAccounted(f.readInitial(t), f.readRecord(t)) != committed {
@@ -134,7 +166,8 @@ func TestBootstrapReceiptAccountingWriteLoss(t *testing.T) {
 				f.reconcile(t, s)
 			}
 			state := f.readInitial(t).Status
-			if state.LastAccountedOffer != 1 || len(state.Funded) != 1 || state.Funded[0].Outputs != 1 || f.rpc.count() != 1 {
+			if state.LastAccountedOffer != 1 || len(state.Funded) != 1 || state.Funded[0].Outputs != 1 ||
+				f.rpc.count() != 1 {
 				t.Fatal("recovery lost or duplicated receipt", state)
 			}
 		})
@@ -151,7 +184,11 @@ func TestBaselineTransitionAccountsFinalBootstrapReceipt(t *testing.T) {
 	for range 2 {
 		s.accountBaselineReceipts(t.Context(), f.root, initial)
 	}
-	if initial.Status.LastAccountedOffer != 1 || initial.Status.Baseline.Sequence != 1 || initial.Status.Baseline.Scheduling.Acknowledged != 0 || len(initial.Status.Funded) != 1 || initial.Status.Funded[0].Outputs != 1 || !generationAccounted(initial, f.readRecord(t)) {
+	if initial.Status.LastAccountedOffer != 1 || initial.Status.Baseline.Sequence != 1 ||
+		initial.Status.Baseline.Scheduling.Acknowledged != 0 ||
+		len(initial.Status.Funded) != 1 ||
+		initial.Status.Funded[0].Outputs != 1 ||
+		!generationAccounted(initial, f.readRecord(t)) {
 		t.Fatal("transition lost or recategorized bootstrap receipt", initial.Status)
 	}
 }
@@ -214,7 +251,8 @@ func TestReplacementBootstrapProducerReceiptSurvivesFurtherReplacement(t *testin
 		f.reconcile(t, s)
 	}
 	initial := f.readInitial(t)
-	if !generationAccounted(initial, f.readRecord(t)) || len(initial.Status.Funded) != 1 || initial.Status.Funded[0].Outputs != 1 {
+	if !generationAccounted(initial, f.readRecord(t)) || len(initial.Status.Funded) != 1 ||
+		initial.Status.Funded[0].Outputs != 1 {
 		t.Fatal("retired replacement receipt lost", initial.Status)
 	}
 	for range 3 {

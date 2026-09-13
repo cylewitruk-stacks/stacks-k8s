@@ -24,7 +24,9 @@ func renewalCohort(s snapshot) (map[types.UID]renewalEvidence, bool) {
 	if s.Status.ObservationPolicy == nil {
 		return nil, false
 	}
-	freshness := time.Duration(3*s.Status.ObservationPolicy.PollIntervalSeconds+s.Status.ObservationPolicy.RPCAllowanceSeconds) * time.Second
+	freshness := time.Duration(
+		3*s.Status.ObservationPolicy.PollIntervalSeconds+s.Status.ObservationPolicy.RPCAllowanceSeconds,
+	) * time.Second
 	fresh := func(at metav1.Time) bool { return !at.IsZero() && !at.After(s.At) && s.At.Sub(at.Time) <= freshness }
 	out := map[types.UID]renewalEvidence{}
 	for _, p := range s.Participants {
@@ -32,16 +34,37 @@ func renewalCohort(s snapshot) (map[types.UID]renewalEvidence, bool) {
 			continue
 		}
 		e := p.Status.Execution
-		if p.Identity.UID == "" || e == nil || e.Phase != "Active" || e.Pending != 0 || e.ObservedGeneration != p.Identity.Generation || e.NetworkGeneration != s.Root.Generation || !fresh(e.ObservedAt) || e.PoX5 == nil || e.Transactions == nil || p.Status.Admission == nil || e.AppliedPolicyDigest != p.Status.Admission.PolicyDigest {
+		if p.Identity.UID == "" || e == nil || e.Phase != "Active" || e.Pending != 0 ||
+			e.ObservedGeneration != p.Identity.Generation ||
+			e.NetworkGeneration != s.Root.Generation ||
+			!fresh(e.ObservedAt) ||
+			e.PoX5 == nil ||
+			e.Transactions == nil ||
+			p.Status.Admission == nil ||
+			e.AppliedPolicyDigest != p.Status.Admission.PolicyDigest {
 			return nil, false
 		}
 		observed := e.PoX5
-		if !fresh(observed.ObservedAt) || !observed.TargetCycleMatched || observed.Holder == "" || observed.Manager == "" || observed.SignerPublicKey == "" || observed.ManagerSourceDigest == "" || observed.AmountMicroSTX == "" || observed.AmountMicroSTX != observed.DelegatedAmountMicroSTX || observed.FirstCycle >= observed.EndCycleExclusive || observed.TargetCycle < observed.FirstCycle || observed.TargetCycle >= observed.EndCycleExclusive || observed.UnlockHeight <= observed.BurnHeight || observed.StacksTip == "" {
+		if !fresh(observed.ObservedAt) || !observed.TargetCycleMatched || observed.Holder == "" ||
+			observed.Manager == "" ||
+			observed.SignerPublicKey == "" ||
+			observed.ManagerSourceDigest == "" ||
+			observed.AmountMicroSTX == "" ||
+			observed.AmountMicroSTX != observed.DelegatedAmountMicroSTX ||
+			observed.FirstCycle >= observed.EndCycleExclusive ||
+			observed.TargetCycle < observed.FirstCycle ||
+			observed.TargetCycle >= observed.EndCycleExclusive ||
+			observed.UnlockHeight <= observed.BurnHeight ||
+			observed.StacksTip == "" {
 			return nil, false
 		}
 		bound := false
 		for _, id := range s.Status.Identities {
-			if id.UID == p.Identity.UID && !id.Removing && id.Worker != nil && id.Worker.Shutdown == nil && id.Worker.Disposal == nil && id.Worker.Pod.UID == e.PodUID && id.Worker.ProfileDigest == e.ProfileDigest && e.ProcessNonce != "" {
+			if id.UID == p.Identity.UID && !id.Removing && id.Worker != nil && id.Worker.Shutdown == nil &&
+				id.Worker.Disposal == nil &&
+				id.Worker.Pod.UID == e.PodUID &&
+				id.Worker.ProfileDigest == e.ProfileDigest &&
+				e.ProcessNonce != "" {
 				bound = true
 				break
 			}
@@ -49,7 +72,12 @@ func renewalCohort(s snapshot) (map[types.UID]renewalEvidence, bool) {
 		if !bound {
 			return nil, false
 		}
-		out[p.Identity.UID] = renewalEvidence{Participant: p.Identity, Worker: workerIdentity{UID: e.PodUID, ProcessNonce: e.ProcessNonce}, Observation: *observed, Transactions: *e.Transactions.DeepCopy()}
+		out[p.Identity.UID] = renewalEvidence{
+			Participant:  p.Identity,
+			Worker:       workerIdentity{UID: e.PodUID, ProcessNonce: e.ProcessNonce},
+			Observation:  *observed,
+			Transactions: *e.Transactions.DeepCopy(),
+		}
 	}
 	return out, len(out) > 0
 }
@@ -65,10 +93,20 @@ func renewalAdvanced(before, after map[types.UID]renewalEvidence) bool {
 			return false
 		}
 		a, b := old.Observation, next.Observation
-		if a.Holder != b.Holder || a.Manager != b.Manager || a.ManagerSourceDigest != b.ManagerSourceDigest || a.SignerPublicKey != b.SignerPublicKey || a.AmountMicroSTX != b.AmountMicroSTX || a.FirstCycle != b.FirstCycle || b.EndCycleExclusive <= a.EndCycleExclusive || b.UnlockHeight <= a.UnlockHeight || b.BurnHeight <= a.BurnHeight || !b.ObservedAt.After(a.ObservedAt.Time) || b.StacksTip == a.StacksTip {
+		if a.Holder != b.Holder || a.Manager != b.Manager || a.ManagerSourceDigest != b.ManagerSourceDigest ||
+			a.SignerPublicKey != b.SignerPublicKey ||
+			a.AmountMicroSTX != b.AmountMicroSTX ||
+			a.FirstCycle != b.FirstCycle ||
+			b.EndCycleExclusive <= a.EndCycleExclusive ||
+			b.UnlockHeight <= a.UnlockHeight ||
+			b.BurnHeight <= a.BurnHeight ||
+			!b.ObservedAt.After(a.ObservedAt.Time) ||
+			b.StacksTip == a.StacksTip {
 			return false
 		}
-		if next.Transactions.Offered <= old.Transactions.Offered || (next.Transactions.Included <= old.Transactions.Included && next.Transactions.PostconditionObserved <= old.Transactions.PostconditionObserved) {
+		if next.Transactions.Offered <= old.Transactions.Offered ||
+			(next.Transactions.Included <= old.Transactions.Included &&
+				next.Transactions.PostconditionObserved <= old.Transactions.PostconditionObserved) {
 			return false
 		}
 	}

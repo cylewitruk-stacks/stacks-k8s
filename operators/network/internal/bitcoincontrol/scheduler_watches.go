@@ -28,7 +28,10 @@ func schedulerEvents() predicate.Predicate {
 			return false
 		}
 		same := equality.Semantic.DeepEqual
-		if a.GetUID() != b.GetUID() || a.GetGeneration() != b.GetGeneration() || !same(a.GetDeletionTimestamp(), b.GetDeletionTimestamp()) || !same(a.GetOwnerReferences(), b.GetOwnerReferences()) || !same(a.GetFinalizers(), b.GetFinalizers()) {
+		if a.GetUID() != b.GetUID() || a.GetGeneration() != b.GetGeneration() ||
+			!same(a.GetDeletionTimestamp(), b.GetDeletionTimestamp()) ||
+			!same(a.GetOwnerReferences(), b.GetOwnerReferences()) ||
+			!same(a.GetFinalizers(), b.GetFinalizers()) {
 			return true
 		}
 		switch old := a.(type) {
@@ -39,13 +42,19 @@ func schedulerEvents() predicate.Predicate {
 			return false // This controller publishes status and explicitly schedules its next continuation.
 		case *api.StacksNetwork:
 			current, ok := b.(*api.StacksNetwork)
-			return !ok || !same(old.Status.Bitcoin, current.Status.Bitcoin) || !same(old.Status.Initialization, current.Status.Initialization) || failed(old) != failed(current)
+			return !ok || !same(old.Status.Bitcoin, current.Status.Bitcoin) ||
+				!same(old.Status.Initialization, current.Status.Initialization) ||
+				failed(old) != failed(current)
 		case *api.StacksNetworkParticipant:
 			current, ok := b.(*api.StacksNetworkParticipant)
-			if ok && current.Spec.Kind != api.ParticipantBitcoinNode && current.Spec.Kind != api.ParticipantBitcoinBlockProduction {
+			if ok && current.Spec.Kind != api.ParticipantBitcoinNode &&
+				current.Spec.Kind != api.ParticipantBitcoinBlockProduction {
 				return false // Protocol gates are observed by the bounded continuation timer.
 			}
-			return !ok || !same(old.Status.Admission, current.Status.Admission) || !same(old.Status.Runtime, current.Status.Runtime) || !same(old.Status.BitcoinControl, current.Status.BitcoinControl) || !same(old.Status.Conditions, current.Status.Conditions)
+			return !ok || !same(old.Status.Admission, current.Status.Admission) ||
+				!same(old.Status.Runtime, current.Status.Runtime) ||
+				!same(old.Status.BitcoinControl, current.Status.BitcoinControl) ||
+				!same(old.Status.Conditions, current.Status.Conditions)
 		}
 		return true
 	}}

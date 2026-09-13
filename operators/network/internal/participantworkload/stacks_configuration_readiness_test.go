@@ -22,25 +22,43 @@ func TestStacksResolverWaitsForCompleteBitcoinPublication(t *testing.T) {
 			base, root, p, btc := stacksInputFixture(t)
 			_ = batchv1.AddToScheme(base.Scheme())
 			_ = rbacv1.AddToScheme(base.Scheme())
-			c := interceptor.NewClient(base.(client.WithWatch), interceptor.Funcs{Create: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.CreateOption) error {
-				if obj.GetUID() == "" {
-					obj.SetUID(types.UID(obj.GetName() + "-uid"))
-				}
-				return c.Create(ctx, obj, opts...)
-			}})
+			c := interceptor.NewClient(
+				base.(client.WithWatch),
+				interceptor.Funcs{
+					Create: func(
+						ctx context.Context,
+						c client.WithWatch,
+						obj client.Object,
+						opts ...client.CreateOption,
+					) error {
+						if obj.GetUID() == "" {
+							obj.SetUID(types.UID(obj.GetName() + "-uid"))
+						}
+						return c.Create(ctx, obj, opts...)
+					},
+				},
+			)
 			r := &Reconciler{Client: c, Reader: metadataOnlyReader{c}, ResolverImage: "resolver:test"}
 			btcState := api.ParticipantRuntimeStatus{ActorRPCSecretRef: btc.Status.Runtime.ActorRPCSecretRef.DeepCopy()}
 			btc.Status.Runtime = &btcState
 			if candidate {
 				root.Status.GenesisRef = nil
-				r.candidateConfiguration = &foundation.CandidateConfiguration{Root: root, Participants: map[string]*api.StacksNetworkParticipant{p.Spec.ParticipantName: p, btc.Spec.ParticipantName: btc}}
+				r.candidateConfiguration = &foundation.CandidateConfiguration{
+					Root: root,
+					Participants: map[string]*api.StacksNetworkParticipant{
+						p.Spec.ParticipantName:   p,
+						btc.Spec.ParticipantName: btc,
+					},
+				}
 			}
 			publish := func() {
 				t.Helper()
 				btc.Status.Runtime = btcState.DeepCopy()
 				actual := btc.DeepCopy()
 				if candidate {
-					actual.Status.Runtime = &api.ParticipantRuntimeStatus{ActorRPCSecretRef: btcState.ActorRPCSecretRef.DeepCopy()}
+					actual.Status.Runtime = &api.ParticipantRuntimeStatus{
+						ActorRPCSecretRef: btcState.ActorRPCSecretRef.DeepCopy(),
+					}
 				}
 				if err := c.Status().Update(t.Context(), actual); err != nil {
 					t.Fatal(err)
@@ -50,7 +68,11 @@ func TestStacksResolverWaitsForCompleteBitcoinPublication(t *testing.T) {
 			countJobs := func() int {
 				t.Helper()
 				var jobs batchv1.JobList
-				if err := c.List(t.Context(), &jobs, client.MatchingLabels{"network.stacks.org/participant-uid": string(p.UID)}); err != nil {
+				if err := c.List(
+					t.Context(),
+					&jobs,
+					client.MatchingLabels{"network.stacks.org/participant-uid": string(p.UID)},
+				); err != nil {
 					t.Fatal(err)
 				}
 				return len(jobs.Items)
@@ -69,7 +91,12 @@ func TestStacksResolverWaitsForCompleteBitcoinPublication(t *testing.T) {
 				t.Fatal("unfinished Bitcoin configuration launched a dependent resolver")
 			}
 			var reports corev1.ConfigMapList
-			if err := c.List(t.Context(), &reports, client.MatchingLabels{"network.stacks.org/participant-uid": string(btc.UID)}); err != nil || len(reports.Items) != 1 {
+			if err := c.List(
+				t.Context(),
+				&reports,
+				client.MatchingLabels{"network.stacks.org/participant-uid": string(btc.UID)},
+			); err != nil ||
+				len(reports.Items) != 1 {
 				t.Fatalf("Bitcoin report: %v count=%d", err, len(reports.Items))
 			}
 			var input BitcoinConfigInput
@@ -102,8 +129,19 @@ func TestStacksResolverWaitsForCompleteBitcoinPublication(t *testing.T) {
 			}
 			btcState = complete
 			publish()
-			if ready, _, err := r.stacksConfiguration(t.Context(), root, p, &state); err != nil || ready || countJobs() != 1 {
-				t.Fatalf("completed Bitcoin publication did not launch resolver: ready=%v err=%v jobs=%d", ready, err, countJobs())
+			if ready, _, err := r.stacksConfiguration(
+				t.Context(),
+				root,
+				p,
+				&state,
+			); err != nil || ready ||
+				countJobs() != 1 {
+				t.Fatalf(
+					"completed Bitcoin publication did not launch resolver: ready=%v err=%v jobs=%d",
+					ready,
+					err,
+					countJobs(),
+				)
 			}
 			var workloads appsv1.StatefulSetList
 			if err := c.List(t.Context(), &workloads); err != nil || len(workloads.Items) != 0 {

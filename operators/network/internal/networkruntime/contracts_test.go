@@ -14,7 +14,22 @@ import (
 )
 
 func TestContractGateRequiresEveryFrozenSourceAndRegistryIdentity(t *testing.T) {
-	for _, mode := range []string{"valid", "worker", "missing", "stale", "incomplete", "bundle", "source", "deployer", "keys", "aggregate", "threshold", "principal", "account", "policy"} {
+	for _, mode := range []string{
+		"valid",
+		"worker",
+		"missing",
+		"stale",
+		"incomplete",
+		"bundle",
+		"source",
+		"deployer",
+		"keys",
+		"aggregate",
+		"threshold",
+		"principal",
+		"account",
+		"policy",
+	} {
 		t.Run(mode, func(t *testing.T) {
 			now := time.Now()
 			root, g, participants := cohortFixture(now)
@@ -26,10 +41,19 @@ func TestContractGateRequiresEveryFrozenSourceAndRegistryIdentity(t *testing.T) 
 			aggregate := "02" + strings.Repeat("c", 64)
 			requirement := g.Spec.Bootstrap.Requirements[0]
 			requirement.Kind = p.Spec.Kind
-			requirement.RegistryInitialization = &stacks.RegistryInitialization{Mode: "ExplicitTestRegistry", SignerAccountRefs: []common.NameRef{{Name: "a"}, {Name: "b"}}, AggregateKeyAccountRef: common.NameRef{Name: "aggregate"}, Threshold: 2}
+			requirement.RegistryInitialization = &stacks.RegistryInitialization{
+				Mode:                   "ExplicitTestRegistry",
+				SignerAccountRefs:      []common.NameRef{{Name: "a"}, {Name: "b"}},
+				AggregateKeyAccountRef: common.NameRef{Name: "aggregate"},
+				Threshold:              2,
+			}
 			p.Status.Admission.Configuration.StacksContractSet.Initialization = requirement.RegistryInitialization.DeepCopy()
 			p.Status.Admission.Configuration.StacksContractSet.Initialization = requirement.RegistryInitialization.DeepCopy()
-			requirement.Accounts = []api.PublicAccount{{Binding: common.Binding{Name: "a"}, Identity: common.PublicIdentity{PublicKey: keys[0]}}, {Binding: common.Binding{Name: "b"}, Identity: common.PublicIdentity{PublicKey: keys[1]}}, {Binding: common.Binding{Name: "aggregate"}, Identity: common.PublicIdentity{PublicKey: aggregate}}}
+			requirement.Accounts = []api.PublicAccount{
+				{Binding: common.Binding{Name: "a"}, Identity: common.PublicIdentity{PublicKey: keys[0]}},
+				{Binding: common.Binding{Name: "b"}, Identity: common.PublicIdentity{PublicKey: keys[1]}},
+				{Binding: common.Binding{Name: "aggregate"}, Identity: common.PublicIdentity{PublicKey: aggregate}},
+			}
 			g.Spec.Bootstrap.Requirements = []api.BootstrapRequirement{requirement}
 			g.Spec.Chain.Contracts.Deployer = "ST000000000000000000002AMW42H"
 			g.Spec.Chain.Contracts.Bundle = "sbtc-regtest-v1"
@@ -38,7 +62,17 @@ func TestContractGateRequiresEveryFrozenSourceAndRegistryIdentity(t *testing.T) 
 			if err != nil {
 				t.Fatal(err)
 			}
-			o := &api.ContractSetObservation{Deployer: g.Spec.Chain.Contracts.Deployer, Bundle: g.Spec.Chain.Contracts.Bundle, SourceDigest: foundation.Digest(g.Spec.Chain.Contracts.SourceHashes), SignerPublicKeys: keys, AggregatePublicKey: aggregate, Threshold: 2, SignerPrincipal: principal, Complete: true, ObservedAt: metav1.NewTime(now)}
+			o := &api.ContractSetObservation{
+				Deployer:           g.Spec.Chain.Contracts.Deployer,
+				Bundle:             g.Spec.Chain.Contracts.Bundle,
+				SourceDigest:       foundation.Digest(g.Spec.Chain.Contracts.SourceHashes),
+				SignerPublicKeys:   keys,
+				AggregatePublicKey: aggregate,
+				Threshold:          2,
+				SignerPrincipal:    principal,
+				Complete:           true,
+				ObservedAt:         metav1.NewTime(now),
+			}
 			p.Status.Execution.Contracts = o
 			switch mode {
 			case "worker":

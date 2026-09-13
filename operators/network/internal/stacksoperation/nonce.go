@@ -74,7 +74,12 @@ func (s *NonceStream) Observe(ctx context.Context, now time.Time) (string, error
 		return reasonCounterExhausted, errors.New("transaction counter exhausted")
 	}
 	s.facts.Included++
-	s.facts.LastInclusion = &api.TransactionInclusion{TxID: p.transaction.TxID, BlockID: inclusion.BlockID, Success: inclusion.Success, ObservedAt: metav1.NewTime(now)}
+	s.facts.LastInclusion = &api.TransactionInclusion{
+		TxID:       p.transaction.TxID,
+		BlockID:    inclusion.BlockID,
+		Success:    inclusion.Success,
+		ObservedAt: metav1.NewTime(now),
+	}
 	s.exhausted = p.nonce == math.MaxUint64
 	if !s.exhausted {
 		s.next = p.nonce + 1
@@ -89,7 +94,14 @@ func (s *NonceStream) Observe(ctx context.Context, now time.Time) (string, error
 // Offer initializes from canonical account state and submits one explicitly authorized transaction.
 // Amount includes all required unlocked funds; Build receives the locally expected nonce.
 // Clock is sampled again after a refusal so submission latency cannot consume its backoff.
-func (s *NonceStream) Offer(ctx context.Context, clock func() time.Time, node Node, amount *big.Int, authorize func(context.Context) error, build func(uint64) (transaction.Transaction, error)) (string, error) {
+func (s *NonceStream) Offer(
+	ctx context.Context,
+	clock func() time.Time,
+	node Node,
+	amount *big.Int,
+	authorize func(context.Context) error,
+	build func(uint64) (transaction.Transaction, error),
+) (string, error) {
 	if s.pending != nil {
 		return reasonAwaitingInclusion, nil
 	}
@@ -135,7 +147,11 @@ func (s *NonceStream) Offer(ctx context.Context, clock func() time.Time, node No
 		return reasonAuthorizationUnavailable, err
 	}
 	// Record before the only send: connection loss cannot create an implicit retry path.
-	s.pending = &pendingSubmission{node: node, transaction: transaction.Transaction{Bytes: append([]byte(nil), tx.Bytes...), TxID: tx.TxID}, nonce: s.next}
+	s.pending = &pendingSubmission{
+		node:        node,
+		transaction: transaction.Transaction{Bytes: append([]byte(nil), tx.Bytes...), TxID: tx.TxID},
+		nonce:       s.next,
+	}
 	s.facts.Offered++
 	s.facts.LastTxID = tx.TxID
 	s.rejectionReason = ""
@@ -160,17 +176,30 @@ func (s *NonceStream) Offer(ctx context.Context, clock func() time.Time, node No
 // SettleObserved advances only the exact pending nonce after caller-verified canonical state.
 // The caller must bracket the desired-state and account reads at one stable canonical tip.
 // This does not attribute the state to our TxID or increment Included/LastInclusion.
-func (s *NonceStream) SettleObserved(txid string, nextNonce uint64, observation api.TransactionPostcondition) (string, error) {
+func (s *NonceStream) SettleObserved(
+	txid string,
+	nextNonce uint64,
+	observation api.TransactionPostcondition,
+) (string, error) {
 	if s.pending == nil || s.pending.transaction.TxID != txid || observation.TxID != txid {
 		return reasonObservationMismatch, errors.New("postcondition does not match pending transaction")
 	}
 	if s.pending.nonce == math.MaxUint64 || nextNonce != s.pending.nonce+1 {
 		return reasonNonceMismatch, nil
 	}
-	if observation.Kind != api.PostconditionPoX4Enrollment && observation.Kind != api.PostconditionPoX4Extension && observation.Kind != api.PostconditionContractDeployment && observation.Kind != api.PostconditionRegistryInitialization && observation.Kind != api.PostconditionManagerDeployment && observation.Kind != api.PostconditionSignerRegistration && observation.Kind != api.PostconditionPoX5Enrollment && observation.Kind != api.PostconditionPoX5Extension {
+	if observation.Kind != api.PostconditionPoX4Enrollment && observation.Kind != api.PostconditionPoX4Extension &&
+		observation.Kind != api.PostconditionContractDeployment &&
+		observation.Kind != api.PostconditionRegistryInitialization &&
+		observation.Kind != api.PostconditionManagerDeployment &&
+		observation.Kind != api.PostconditionSignerRegistration &&
+		observation.Kind != api.PostconditionPoX5Enrollment &&
+		observation.Kind != api.PostconditionPoX5Extension {
 		return reasonObservationMismatch, errors.New("unsupported postcondition")
 	}
-	if !strings.HasPrefix(observation.StateDigest, "sha256:") || !canonicalHash(strings.TrimPrefix(observation.StateDigest, "sha256:")) || !canonicalHash(observation.StacksTip) || observation.ObservedAt.IsZero() {
+	if !strings.HasPrefix(observation.StateDigest, "sha256:") ||
+		!canonicalHash(strings.TrimPrefix(observation.StateDigest, "sha256:")) ||
+		!canonicalHash(observation.StacksTip) ||
+		observation.ObservedAt.IsZero() {
 		return reasonObservationMismatch, errors.New("incomplete postcondition evidence")
 	}
 	if s.facts.PostconditionObserved == math.MaxUint64 {

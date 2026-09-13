@@ -39,9 +39,17 @@ func (h *harness) captureStorageInventory(ctx context.Context) (storageInventory
 // freshStorage rejects old claims/volumes, clones, snapshots and mismatched bindings.
 func freshStorage(before storageInventory, claim *corev1.PersistentVolumeClaim, volume *corev1.PersistentVolume) bool {
 	return claim.UID != "" && volume.UID != "" && !before.claims[claim.UID] && !before.volumes[volume.UID] &&
-		claim.DeletionTimestamp == nil && volume.DeletionTimestamp == nil && claim.Spec.DataSource == nil && claim.Spec.DataSourceRef == nil &&
-		claim.Status.Phase == corev1.ClaimBound && volume.Status.Phase == corev1.VolumeBound && claim.Spec.VolumeName == volume.Name &&
-		volume.Spec.ClaimRef != nil && volume.Spec.ClaimRef.UID == claim.UID && volume.Spec.ClaimRef.Name == claim.Name && volume.Spec.ClaimRef.Namespace == claim.Namespace
+		claim.DeletionTimestamp == nil &&
+		volume.DeletionTimestamp == nil &&
+		claim.Spec.DataSource == nil &&
+		claim.Spec.DataSourceRef == nil &&
+		claim.Status.Phase == corev1.ClaimBound &&
+		volume.Status.Phase == corev1.VolumeBound &&
+		claim.Spec.VolumeName == volume.Name &&
+		volume.Spec.ClaimRef != nil &&
+		volume.Spec.ClaimRef.UID == claim.UID &&
+		volume.Spec.ClaimRef.Name == claim.Name &&
+		volume.Spec.ClaimRef.Namespace == claim.Namespace
 }
 
 // followerOnCohortTip requires a fresh PoX-5 observation matching an independently running cohort node.
@@ -55,7 +63,9 @@ func followerOnCohortTip(s snapshot, name string, minimum uint64) bool {
 			continue
 		}
 		peer, current := readyFollower(s, p.Name, minimum)
-		if current && peer.Identity.UID != follower.Identity.UID && peer.Status.Runtime.PodRef.UID != follower.Status.Runtime.PodRef.UID && peer.Status.Runtime.Protocol.IndexBlockID == follower.Status.Runtime.Protocol.IndexBlockID {
+		if current && peer.Identity.UID != follower.Identity.UID &&
+			peer.Status.Runtime.PodRef.UID != follower.Status.Runtime.PodRef.UID &&
+			peer.Status.Runtime.Protocol.IndexBlockID == follower.Status.Runtime.Protocol.IndexBlockID {
 			return true
 		}
 	}
@@ -63,9 +73,20 @@ func followerOnCohortTip(s snapshot, name string, minimum uint64) bool {
 }
 
 // qualifyFreshFollower proves new storage, post-join progress and convergence without process replacement.
-func (h *harness) qualifyFreshFollower(ctx context.Context, joined snapshot, name string, original actorEpoch, guard actorGuard, before storageInventory) (snapshot, error) {
+func (h *harness) qualifyFreshFollower(
+	ctx context.Context,
+	joined snapshot,
+	name string,
+	original actorEpoch,
+	guard actorGuard,
+	before storageInventory,
+) (snapshot, error) {
 	var claim corev1.PersistentVolumeClaim
-	if err := h.c.Get(ctx, client.ObjectKey{Namespace: h.config.namespace, Name: original.Storage.Claim.Name}, &claim); err != nil {
+	if err := h.c.Get(
+		ctx,
+		client.ObjectKey{Namespace: h.config.namespace, Name: original.Storage.Claim.Name},
+		&claim,
+	); err != nil {
 		return joined, err
 	}
 	var volume corev1.PersistentVolume
@@ -75,23 +96,34 @@ func (h *harness) qualifyFreshFollower(ctx context.Context, joined snapshot, nam
 	if claim.UID != original.Storage.Claim.UID || !freshStorage(before, &claim, &volume) {
 		return joined, fmt.Errorf("fresh follower did not receive newly provisioned storage without a data source")
 	}
-	if err := h.event("fresh-follower-storage", map[string]any{"claim": objectIdentity(&claim), "volume": objectIdentity(&volume), "dataSource": "none"}); err != nil {
+	if err := h.event(
+		"fresh-follower-storage",
+		map[string]any{"claim": objectIdentity(&claim), "volume": objectIdentity(&volume), "dataSource": "none"},
+	); err != nil {
 		return joined, err
 	}
 	if _, err := h.awaitProgress(ctx, "fresh-follower-network-progress", joined); err != nil {
 		return joined, err
 	}
-	return h.wait(ctx, "fresh-follower-canonical-progress", h.config.progressTimeout, true, func(s snapshot) (bool, error) {
-		p, ready := readyFollower(s, name, original.Height)
-		if !ready {
-			return false, nil
-		}
-		if p.Identity.UID != original.Participant.UID || p.Status.Runtime.PodRef.UID != original.Runtime.PodRef.UID || p.Status.Runtime.ContainerID != original.Runtime.ContainerID {
-			return false, fmt.Errorf("fresh follower replaced its process during catch-up qualification")
-		}
-		if err := h.checkActorGuard(ctx, guard, s); err != nil {
-			return false, err
-		}
-		return followerOnCohortTip(s, name, original.Height), nil
-	})
+	return h.wait(
+		ctx,
+		"fresh-follower-canonical-progress",
+		h.config.progressTimeout,
+		true,
+		func(s snapshot) (bool, error) {
+			p, ready := readyFollower(s, name, original.Height)
+			if !ready {
+				return false, nil
+			}
+			if p.Identity.UID != original.Participant.UID ||
+				p.Status.Runtime.PodRef.UID != original.Runtime.PodRef.UID ||
+				p.Status.Runtime.ContainerID != original.Runtime.ContainerID {
+				return false, fmt.Errorf("fresh follower replaced its process during catch-up qualification")
+			}
+			if err := h.checkActorGuard(ctx, guard, s); err != nil {
+				return false, err
+			}
+			return followerOnCohortTip(s, name, original.Height), nil
+		},
+	)
 }

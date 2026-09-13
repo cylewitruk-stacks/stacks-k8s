@@ -22,19 +22,91 @@ func publicFixture(t *testing.T) (PublicInputs, stacksworker.Snapshot, *api.Stac
 	root := &api.StacksNetwork{ObjectMeta: metav1.ObjectMeta{Name: "network", Namespace: "test", UID: "root"}}
 	root.Spec.Participants = []api.Participant{{Name: "node", Kind: "StacksNode"}}
 	root.Status.Identities = []api.InstanceIdentity{{Name: "node", UID: "node-uid"}}
-	owner := []metav1.OwnerReference{{APIVersion: api.GroupVersion.String(), Kind: "StacksNetwork", Name: root.Name, UID: root.UID, Controller: ptr.To(true)}}
-	genesis := &api.StacksGenesis{ObjectMeta: metav1.ObjectMeta{Name: "genesis", Namespace: root.Namespace, UID: "genesis-uid", OwnerReferences: owner}}
+	owner := []metav1.OwnerReference{
+		{
+			APIVersion: api.GroupVersion.String(),
+			Kind:       "StacksNetwork",
+			Name:       root.Name,
+			UID:        root.UID,
+			Controller: ptr.To(true),
+		},
+	}
+	genesis := &api.StacksGenesis{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "genesis",
+			Namespace:       root.Namespace,
+			UID:             "genesis-uid",
+			OwnerReferences: owner,
+		},
+	}
 	genesis.Spec.Chain.Epochs = []api.Epoch{{Name: "3.0", StartHeight: 231}}
 	root.Status.GenesisRef = &common.Binding{Name: genesis.Name, UID: genesis.UID}
 	root.Status.GenesisDigest = foundation.Digest(genesis.Spec.Chain)
 	address := "ST000000000000000000002AMW42H"
-	account := &stacks.StacksAccount{ObjectMeta: metav1.ObjectMeta{Name: "sender", Namespace: root.Namespace, UID: "account", Generation: 1}, Status: common.ResolutionStatus{ObservedGeneration: 1, Digest: "fingerprint", Identity: &common.PublicIdentity{Address: address}, Conditions: []metav1.Condition{{Type: "Resolved", Status: metav1.ConditionTrue}}}}
-	target := &api.StacksNetworkParticipant{ObjectMeta: metav1.ObjectMeta{Name: "target", Namespace: root.Namespace, UID: "node-uid", Generation: 1, OwnerReferences: owner}, Spec: api.StacksNetworkParticipantSpec{NetworkUID: root.UID, ParticipantName: "node", Kind: "StacksNode"}, Status: api.ParticipantStatus{Admission: &api.Admission{PolicyDigest: "target-policy"}, Runtime: &api.ParticipantRuntimeStatus{ObservedGeneration: 1, PolicyDigest: "target-policy", PodRef: &common.Binding{UID: "pod"}, ContainerID: "process", PodIP: "10.0.0.10", ConfigurationDigest: "config", Endpoints: []api.RuntimeEndpoint{{Name: "rpc", Host: "node.test.svc", Port: 20443}}}, Conditions: []metav1.Condition{{Type: "ConfigVerified", Status: metav1.ConditionTrue, ObservedGeneration: 1}, {Type: "WorkloadReady", Status: metav1.ConditionTrue, ObservedGeneration: 1}}}}
-	p := &api.StacksNetworkParticipant{ObjectMeta: metav1.ObjectMeta{Name: "traffic", Namespace: root.Namespace}, Status: api.ParticipantStatus{Admission: &api.Admission{Dependencies: []common.Binding{{Kind: "StacksAccount", Name: account.Name, UID: account.UID, Fingerprint: account.Status.Digest}, {Kind: "StacksNetworkParticipant", Name: target.Name, UID: target.UID}}, Configuration: api.Configuration{StacksTransactionProduction: &stacks.StacksTransactionProductionSpec{AccountRef: &common.NameRef{Name: account.Name}, TargetNodeRef: &common.NameRef{Name: "node"}, Recipient: &stacks.Recipient{Address: &address}, AmountMicroSTX: ptr.To(common.Amount("1")), FeeMicroSTX: ptr.To(common.Amount("3000")), Interval: ptr.To(common.Duration("5s"))}}}}}
+	account := &stacks.StacksAccount{
+		ObjectMeta: metav1.ObjectMeta{Name: "sender", Namespace: root.Namespace, UID: "account", Generation: 1},
+		Status: common.ResolutionStatus{
+			ObservedGeneration: 1,
+			Digest:             "fingerprint",
+			Identity:           &common.PublicIdentity{Address: address},
+			Conditions:         []metav1.Condition{{Type: "Resolved", Status: metav1.ConditionTrue}},
+		},
+	}
+	target := &api.StacksNetworkParticipant{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "target",
+			Namespace:       root.Namespace,
+			UID:             "node-uid",
+			Generation:      1,
+			OwnerReferences: owner,
+		},
+		Spec: api.StacksNetworkParticipantSpec{NetworkUID: root.UID, ParticipantName: "node", Kind: "StacksNode"},
+		Status: api.ParticipantStatus{
+			Admission: &api.Admission{PolicyDigest: "target-policy"},
+			Runtime: &api.ParticipantRuntimeStatus{
+				ObservedGeneration:  1,
+				PolicyDigest:        "target-policy",
+				PodRef:              &common.Binding{UID: "pod"},
+				ContainerID:         "process",
+				PodIP:               "10.0.0.10",
+				ConfigurationDigest: "config",
+				Endpoints:           []api.RuntimeEndpoint{{Name: "rpc", Host: "node.test.svc", Port: 20443}},
+			},
+			Conditions: []metav1.Condition{
+				{Type: "ConfigVerified", Status: metav1.ConditionTrue, ObservedGeneration: 1},
+				{Type: "WorkloadReady", Status: metav1.ConditionTrue, ObservedGeneration: 1},
+			},
+		},
+	}
+	p := &api.StacksNetworkParticipant{
+		ObjectMeta: metav1.ObjectMeta{Name: "traffic", Namespace: root.Namespace},
+		Status: api.ParticipantStatus{
+			Admission: &api.Admission{
+				Dependencies: []common.Binding{
+					{Kind: "StacksAccount", Name: account.Name, UID: account.UID, Fingerprint: account.Status.Digest},
+					{Kind: "StacksNetworkParticipant", Name: target.Name, UID: target.UID},
+				},
+				Configuration: api.Configuration{
+					StacksTransactionProduction: &stacks.StacksTransactionProductionSpec{
+						AccountRef:     &common.NameRef{Name: account.Name},
+						TargetNodeRef:  &common.NameRef{Name: "node"},
+						Recipient:      &stacks.Recipient{Address: &address},
+						AmountMicroSTX: ptr.To(common.Amount("1")),
+						FeeMicroSTX:    ptr.To(common.Amount("3000")),
+						Interval:       ptr.To(common.Duration("5s")),
+					},
+				},
+			},
+		},
+	}
 	scheme := runtime.NewScheme()
 	_ = api.AddToScheme(scheme)
 	_ = stacks.AddToScheme(scheme)
-	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(genesis, account, target).WithStatusSubresource(target).Build()
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(genesis, account, target).
+		WithStatusSubresource(target).
+		Build()
 	return PublicInputs{Reader: c, Sender: address}, stacksworker.Snapshot{Network: root, Participant: p}, target
 }
 

@@ -39,7 +39,10 @@ type faucetSelection struct {
 }
 
 // selectedFaucet requires a unique selected faucet with its exact allocated participant and worker.
-func selectedFaucet(root *api.StacksNetwork, participants []participantEvidence) (participantEvidence, *api.WorkerSession, error) {
+func selectedFaucet(
+	root *api.StacksNetwork,
+	participants []participantEvidence,
+) (participantEvidence, *api.WorkerSession, error) {
 	var name string
 	for _, entry := range root.Spec.Participants {
 		if entry.Kind == "StacksFaucet" {
@@ -69,7 +72,16 @@ func (h *harness) faucetInputs(ctx context.Context, s snapshot) (faucetSelection
 	if err := h.c.Get(ctx, client.ObjectKey{Namespace: h.config.namespace, Name: "network"}, &root); err != nil {
 		return selection, err
 	}
-	if root.UID != h.rootUID || root.DeletionTimestamp != nil || root.Spec.Operation != "Running" || !condition(snapshot{Root: objectIdentity(&root), Status: root.Status}, "Initialized", metav1.ConditionTrue) || !condition(snapshot{Root: objectIdentity(&root), Status: root.Status}, "Operational", metav1.ConditionTrue) || s.Root.Generation != root.Generation {
+	if root.UID != h.rootUID || root.DeletionTimestamp != nil || root.Spec.Operation != "Running" ||
+		!condition(snapshot{
+			Root:   objectIdentity(&root),
+			Status: root.Status,
+		}, "Initialized", metav1.ConditionTrue) ||
+		!condition(snapshot{
+			Root:   objectIdentity(&root),
+			Status: root.Status,
+		}, "Operational", metav1.ConditionTrue) ||
+		s.Root.Generation != root.Generation {
 		return selection, fmt.Errorf("faucet qualification requires current initialized operation")
 	}
 	found, worker, err := selectedFaucet(&root, s.Participants)
@@ -77,14 +89,25 @@ func (h *harness) faucetInputs(ctx context.Context, s snapshot) (faucetSelection
 		return selection, err
 	}
 	var p api.StacksNetworkParticipant
-	if err := h.c.Get(ctx, client.ObjectKey{Namespace: root.Namespace, Name: found.Identity.Name}, &p); err != nil {
+	if err := h.c.Get(ctx, client.ObjectKey{
+		Namespace: root.Namespace,
+		Name:      found.Identity.Name,
+	}, &p); err != nil {
 		return selection, err
 	}
-	if p.UID != found.Identity.UID || p.DeletionTimestamp != nil || !metav1.IsControlledBy(&p, &root) || p.Spec.NetworkUID != root.UID || p.Spec.ParticipantName != found.Name || p.Spec.Kind != "StacksFaucet" || p.Status.Admission == nil || p.Status.Admission.Configuration.StacksFaucet == nil {
+	if p.UID != found.Identity.UID || p.DeletionTimestamp != nil || !metav1.IsControlledBy(&p, &root) ||
+		p.Spec.NetworkUID != root.UID ||
+		p.Spec.ParticipantName != found.Name ||
+		p.Spec.Kind != "StacksFaucet" ||
+		p.Status.Admission == nil ||
+		p.Status.Admission.Configuration.StacksFaucet == nil {
 		return selection, fmt.Errorf("faucet participant changed")
 	}
 	execution := p.Status.Execution
-	if execution == nil || execution.PodUID != worker.Pod.UID || execution.ProfileDigest != worker.ProfileDigest || execution.ProcessNonce == "" || execution.Pending != 0 || execution.Phase != "Active" {
+	if execution == nil || execution.PodUID != worker.Pod.UID || execution.ProfileDigest != worker.ProfileDigest ||
+		execution.ProcessNonce == "" ||
+		execution.Pending != 0 ||
+		execution.Phase != "Active" {
 		return selection, fmt.Errorf("faucet worker is not an idle active process")
 	}
 	var pod corev1.Pod
@@ -101,14 +124,21 @@ func (h *harness) faucetInputs(ctx context.Context, s snapshot) (faucetSelection
 		}
 	}
 	var recipient stacks.StacksAccount
-	if err := h.c.Get(ctx, client.ObjectKey{Namespace: p.Namespace, Name: "traffic-recipient"}, &recipient); err != nil {
+	if err := h.c.Get(
+		ctx,
+		client.ObjectKey{Namespace: p.Namespace, Name: "traffic-recipient"},
+		&recipient,
+	); err != nil {
 		return selection, err
 	}
-	if originalUID == "" || recipient.UID != originalUID || recipient.DeletionTimestamp != nil || recipient.Status.Identity == nil || recipient.Status.Digest == "" {
+	if originalUID == "" || recipient.UID != originalUID || recipient.DeletionTimestamp != nil ||
+		recipient.Status.Identity == nil ||
+		recipient.Status.Digest == "" {
 		return selection, fmt.Errorf("declared public faucet recipient changed or unresolved")
 	}
 	resolved := meta.FindStatusCondition(recipient.Status.Conditions, "Resolved")
-	if resolved == nil || resolved.Status != metav1.ConditionTrue || resolved.ObservedGeneration != recipient.Generation {
+	if resolved == nil || resolved.Status != metav1.ConditionTrue ||
+		resolved.ObservedGeneration != recipient.Generation {
 		return selection, fmt.Errorf("public faucet recipient resolution is not current")
 	}
 	if version, _, err := stacksidentity.DecodeAddress(recipient.Status.Identity.Address); err != nil || version != 26 {
@@ -128,10 +158,20 @@ func (h *harness) faucetInputs(ctx context.Context, s snapshot) (faucetSelection
 	}
 	for _, binding := range p.Status.Admission.Dependencies {
 		if binding.Kind == "StacksAccount" && binding.Name == policy.AccountRef.Name {
-			source = stacks.FaucetBinding{Kind: binding.Kind, Name: binding.Name, UID: binding.UID, Fingerprint: binding.Fingerprint}
+			source = stacks.FaucetBinding{
+				Kind:        binding.Kind,
+				Name:        binding.Name,
+				UID:         binding.UID,
+				Fingerprint: binding.Fingerprint,
+			}
 		}
 		if binding.Kind == "StacksNetworkParticipant" && binding.UID == targetUID {
-			target = stacks.FaucetBinding{Kind: binding.Kind, Name: binding.Name, UID: binding.UID, Fingerprint: binding.Fingerprint}
+			target = stacks.FaucetBinding{
+				Kind:        binding.Kind,
+				Name:        binding.Name,
+				UID:         binding.UID,
+				Fingerprint: binding.Fingerprint,
+			}
 		}
 	}
 	if source.UID == "" || target.UID == "" {
@@ -143,7 +183,23 @@ func (h *harness) faucetInputs(ctx context.Context, s snapshot) (faucetSelection
 			return selection, fmt.Errorf("faucet request maximum is below qualification amount")
 		}
 	}
-	selection = faucetSelection{source: source, target: target, participant: objectIdentity(&p), worker: objectIdentity(&pod), logicalName: p.Spec.ParticipantName, processNonce: execution.ProcessNonce, profileDigest: worker.ProfileDigest, destination: stacks.FaucetBinding{Kind: "StacksAccount", Name: recipient.Name, UID: recipient.UID, Fingerprint: recipient.Status.Digest}, address: recipient.Status.Identity.Address, amount: common.Amount(strconv.FormatUint(amount, 10))}
+	selection = faucetSelection{
+		source:        source,
+		target:        target,
+		participant:   objectIdentity(&p),
+		worker:        objectIdentity(&pod),
+		logicalName:   p.Spec.ParticipantName,
+		processNonce:  execution.ProcessNonce,
+		profileDigest: worker.ProfileDigest,
+		destination: stacks.FaucetBinding{
+			Kind:        "StacksAccount",
+			Name:        recipient.Name,
+			UID:         recipient.UID,
+			Fingerprint: recipient.Status.Digest,
+		},
+		address: recipient.Status.Identity.Address,
+		amount:  common.Amount(strconv.FormatUint(amount, 10)),
+	}
 	if execution.Transactions != nil {
 		selection.offered = execution.Transactions.Offered
 		selection.included = execution.Transactions.Included
@@ -154,20 +210,45 @@ func (h *harness) faucetInputs(ctx context.Context, s snapshot) (faucetSelection
 			return selection, fmt.Errorf("faucet already has active requests")
 		}
 	}
-	if selection.offered > math.MaxUint64-2 || selection.included > math.MaxUint64-2 || selection.completed > math.MaxUint64-2 {
+	if selection.offered > math.MaxUint64-2 || selection.included > math.MaxUint64-2 ||
+		selection.completed > math.MaxUint64-2 {
 		return selection, fmt.Errorf("faucet counters cannot represent two requests")
 	}
 	return selection, nil
 }
 
 // faucetRequest builds only public API fields; generated identity is assigned by the server.
-func faucetRequest(namespace string, networkUID types.UID, selection faucetSelection, timeout time.Duration) *stacks.StacksFaucetRequest {
-	return &stacks.StacksFaucetRequest{TypeMeta: metav1.TypeMeta{APIVersion: stacks.GroupVersion.String(), Kind: "StacksFaucetRequest"}, ObjectMeta: metav1.ObjectMeta{Namespace: namespace, GenerateName: "qualification-faucet-"}, Spec: stacks.StacksFaucetRequestSpec{NetworkUID: networkUID, FaucetRef: common.NameRef{Name: selection.logicalName}, Destination: stacks.Recipient{AccountRef: &common.NameRef{Name: selection.destination.Name}}, AmountMicroSTX: selection.amount, Timeout: common.Duration(timeout.String())}}
+func faucetRequest(
+	namespace string,
+	networkUID types.UID,
+	selection faucetSelection,
+	timeout time.Duration,
+) *stacks.StacksFaucetRequest {
+	return &stacks.StacksFaucetRequest{
+		TypeMeta:   metav1.TypeMeta{APIVersion: stacks.GroupVersion.String(), Kind: "StacksFaucetRequest"},
+		ObjectMeta: metav1.ObjectMeta{Namespace: namespace, GenerateName: "qualification-faucet-"},
+		Spec: stacks.StacksFaucetRequestSpec{
+			NetworkUID:     networkUID,
+			FaucetRef:      common.NameRef{Name: selection.logicalName},
+			Destination:    stacks.Recipient{AccountRef: &common.NameRef{Name: selection.destination.Name}},
+			AmountMicroSTX: selection.amount,
+			Timeout:        common.Duration(timeout.String()),
+		},
+	}
 }
 
 // includedRequest checks native worker evidence rather than trusting the controller's phase projection.
-func includedRequest(request *stacks.StacksFaucetRequest, expectedUID types.UID, networkUID types.UID, s faucetSelection) (bool, error) {
-	if request.UID != expectedUID || request.DeletionTimestamp != nil || request.Spec.NetworkUID != networkUID || request.Spec.FaucetRef.Name != s.logicalName || request.Spec.AmountMicroSTX != s.amount || request.Spec.Destination.AccountRef == nil || request.Spec.Destination.AccountRef.Name != s.destination.Name {
+func includedRequest(
+	request *stacks.StacksFaucetRequest,
+	expectedUID types.UID,
+	networkUID types.UID,
+	s faucetSelection,
+) (bool, error) {
+	if request.UID != expectedUID || request.DeletionTimestamp != nil || request.Spec.NetworkUID != networkUID ||
+		request.Spec.FaucetRef.Name != s.logicalName ||
+		request.Spec.AmountMicroSTX != s.amount ||
+		request.Spec.Destination.AccountRef == nil ||
+		request.Spec.Destination.AccountRef.Name != s.destination.Name {
 		return false, fmt.Errorf("qualification request identity changed")
 	}
 	a := request.Status.Admission
@@ -175,7 +256,23 @@ func includedRequest(request *stacks.StacksFaucetRequest, expectedUID types.UID,
 		if a.Decision == "Rejected" || a.Decision == "Expired" {
 			return false, fmt.Errorf("faucet admission %s: %s", a.Decision, a.Reason)
 		}
-		if a.Decision == "Admitted" && (a.NetworkUID != networkUID || a.Faucet == nil || a.Faucet.UID != s.participant.UID || a.Faucet.Name != s.participant.Name || a.Worker == nil || a.Worker.UID != s.worker.UID || a.Worker.Name != s.worker.Name || a.ProfileDigest != s.profileDigest || a.SourceAccount == nil || *a.SourceAccount != s.source || a.Target == nil || *a.Target != s.target || a.DestinationAccount == nil || *a.DestinationAccount != s.destination || a.Destination != s.address || a.AmountMicroSTX != s.amount) {
+		if a.Decision == "Admitted" &&
+			(a.NetworkUID != networkUID ||
+				a.Faucet == nil ||
+				a.Faucet.UID != s.participant.UID ||
+				a.Faucet.Name != s.participant.Name ||
+				a.Worker == nil ||
+				a.Worker.UID != s.worker.UID ||
+				a.Worker.Name != s.worker.Name ||
+				a.ProfileDigest != s.profileDigest ||
+				a.SourceAccount == nil ||
+				*a.SourceAccount != s.source ||
+				a.Target == nil ||
+				*a.Target != s.target ||
+				a.DestinationAccount == nil ||
+				*a.DestinationAccount != s.destination ||
+				a.Destination != s.address ||
+				a.AmountMicroSTX != s.amount) {
 			return false, fmt.Errorf("faucet admission differs from selected public identities")
 		}
 	}
@@ -183,7 +280,11 @@ func includedRequest(request *stacks.StacksFaucetRequest, expectedUID types.UID,
 	if e == nil {
 		return false, nil
 	}
-	if a == nil || a.Decision != "Admitted" || e.NetworkUID != networkUID || e.FaucetUID != s.participant.UID || e.WorkerUID != s.worker.UID || e.ProcessNonce != s.processNonce || e.Destination != s.address || e.AmountMicroSTX != s.amount {
+	if a == nil || a.Decision != "Admitted" || e.NetworkUID != networkUID || e.FaucetUID != s.participant.UID ||
+		e.WorkerUID != s.worker.UID ||
+		e.ProcessNonce != s.processNonce ||
+		e.Destination != s.address ||
+		e.AmountMicroSTX != s.amount {
 		return false, fmt.Errorf("faucet execution identity changed")
 	}
 	if e.Phase == "Rejected" || e.Phase == "Expired" || e.Phase == "Inconclusive" {
@@ -196,7 +297,10 @@ func includedRequest(request *stacks.StacksFaucetRequest, expectedUID types.UID,
 		decoded, err := hex.DecodeString(value)
 		return err == nil && len(decoded) == 32 && len(value) == 64 && value == strings.ToLower(value)
 	}
-	if e.Reason != "Included" || e.NoSend || !validHash(e.TxID) || !validHash(e.InclusionBlockID) || e.ObservedAt.IsZero() || e.ObservedAt.Before(&request.CreationTimestamp) || e.ObservedAt.After(time.Now()) {
+	if e.Reason != "Included" || e.NoSend || !validHash(e.TxID) || !validHash(e.InclusionBlockID) ||
+		e.ObservedAt.IsZero() ||
+		e.ObservedAt.Before(&request.CreationTimestamp) ||
+		e.ObservedAt.After(time.Now()) {
 		return false, fmt.Errorf("faucet completion lacks exact native inclusion")
 	}
 	return true, nil
@@ -208,7 +312,7 @@ func (h *harness) recordFaucet(stage string, requests []*stacks.StacksFaucetRequ
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(h.evidence, stage+"-requests.json"), data, 0600)
+	return os.WriteFile(filepath.Join(h.evidence, stage+"-requests.json"), data, 0o600)
 }
 
 // faucetCounters observes the same process and exactly two successful original sends.
@@ -216,16 +320,23 @@ func faucetCounters(s snapshot, selection faucetSelection) (*api.WorkerExecution
 	for _, p := range s.Participants {
 		if p.Identity.UID == selection.participant.UID {
 			e := p.Status.Execution
-			if e == nil || e.PodUID != selection.worker.UID || e.ProcessNonce != selection.processNonce || e.ProfileDigest != selection.profileDigest {
+			if e == nil || e.PodUID != selection.worker.UID || e.ProcessNonce != selection.processNonce ||
+				e.ProfileDigest != selection.profileDigest {
 				return nil, false, fmt.Errorf("faucet process identity changed")
 			}
 			if e.Transactions == nil || e.Faucet == nil {
 				return e, false, nil
 			}
-			if e.Transactions.Offered > selection.offered+2 || e.Transactions.Included > selection.included+2 || e.Faucet.Completed > selection.completed+2 {
+			if e.Transactions.Offered > selection.offered+2 || e.Transactions.Included > selection.included+2 ||
+				e.Faucet.Completed > selection.completed+2 {
 				return e, false, fmt.Errorf("faucet observed more than two qualification sends")
 			}
-			return e, e.Transactions.Offered == selection.offered+2 && e.Transactions.Included == selection.included+2 && e.Faucet.Completed == selection.completed+2 && e.Pending == 0 && e.Faucet.Active == 0 && e.Faucet.Orphaned == 0, nil
+			return e, e.Transactions.Offered == selection.offered+2 &&
+				e.Transactions.Included == selection.included+2 &&
+				e.Faucet.Completed == selection.completed+2 &&
+				e.Pending == 0 &&
+				e.Faucet.Active == 0 &&
+				e.Faucet.Orphaned == 0, nil
 		}
 	}
 	return nil, false, fmt.Errorf("selected faucet participant disappeared")
@@ -300,14 +411,19 @@ func (h *harness) qualifyFaucet(ctx context.Context, before snapshot) (snapshot,
 			request.Annotations = map[string]string{}
 		}
 		request.Annotations["network.stacks.org/qualification-reobserve"] = "true"
-		if err := h.c.Patch(ctx, request, client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{})); err != nil {
+		if err := h.c.Patch(
+			ctx,
+			request,
+			client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{}),
+		); err != nil {
 			return completed, err
 		}
 		var current stacks.StacksFaucetRequest
 		if err := h.c.Get(ctx, client.ObjectKeyFromObject(request), &current); err != nil {
 			return completed, err
 		}
-		if current.UID != original.UID || !reflect.DeepEqual(current.Status.Admission, original.Status.Admission) || !reflect.DeepEqual(current.Status.Execution, original.Status.Execution) {
+		if current.UID != original.UID || !reflect.DeepEqual(current.Status.Admission, original.Status.Admission) ||
+			!reflect.DeepEqual(current.Status.Execution, original.Status.Execution) {
 			return completed, fmt.Errorf("reobservation changed retained faucet outcome")
 		}
 	}
@@ -333,6 +449,7 @@ func (h *harness) qualifyFaucet(ctx context.Context, before snapshot) (snapshot,
 		if err != nil || !ready {
 			return false, err
 		}
-		return !s.At.Before(observeAfter) && !e.ObservedAt.Before(&metav1.Time{Time: observeAfter}) && !e.ObservedAt.After(s.At), nil
+		return !s.At.Before(observeAfter) && !e.ObservedAt.Before(&metav1.Time{Time: observeAfter}) &&
+			!e.ObservedAt.After(s.At), nil
 	})
 }

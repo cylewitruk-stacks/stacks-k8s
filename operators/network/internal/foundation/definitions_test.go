@@ -31,7 +31,8 @@ func TestDefinitionPrototypeIsolation(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if next == first || next == prototype || next.GetName() != "" || len(next.GetLabels()) != 0 || next.GetResolutionStatus().Digest != "" {
+			if next == first || next == prototype || next.GetName() != "" || len(next.GetLabels()) != 0 ||
+				next.GetResolutionStatus().Digest != "" {
 				t.Fatalf("prototype reused or contaminated: %#v", next)
 			}
 		})
@@ -40,7 +41,13 @@ func TestDefinitionPrototypeIsolation(t *testing.T) {
 
 // TestDefinitionPrototypeRejectsUnsupportedResources preserves the registration allowlist.
 func TestDefinitionPrototypeRejectsUnsupportedResources(t *testing.T) {
-	for _, prototype := range []client.Object{nil, (*stacks.StacksNode)(nil), &corev1.Pod{}, &stacks.StacksAccount{}, &api.StacksNetworkParticipant{}} {
+	for _, prototype := range []client.Object{
+		nil,
+		(*stacks.StacksNode)(nil),
+		&corev1.Pod{},
+		&stacks.StacksAccount{},
+		&api.StacksNetworkParticipant{},
+	} {
 		r := &DefinitionReconciler{Prototype: prototype}
 		if object, err := r.object(); err == nil || object != nil {
 			t.Fatalf("accepted %T: %T, %v", prototype, object, err)

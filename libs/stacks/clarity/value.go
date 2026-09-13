@@ -4,6 +4,7 @@ package clarity
 import (
 	"encoding/binary"
 	"errors"
+	"math"
 	"math/big"
 	"regexp"
 	"sort"
@@ -91,11 +92,16 @@ func ValidName(s string) bool { return len(s) > 0 && len(s) <= 128 && namePatter
 
 // ValidContractName checks contract identifiers (maximum 128 bytes).
 func ValidContractName(s string) bool {
-	if len(s) == 0 || len(s) > 128 || !((s[0] >= 'A' && s[0] <= 'Z') || (s[0] >= 'a' && s[0] <= 'z')) {
+	if len(s) == 0 || len(s) > 128 {
+		return false
+	}
+	startsWithLetter := s[0] >= 'A' && s[0] <= 'Z' || s[0] >= 'a' && s[0] <= 'z'
+	if !startsWithLetter {
 		return false
 	}
 	for _, c := range []byte(s) {
-		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '-' || c == '_') {
+		valid := c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '-' || c == '_'
+		if !valid {
 			return false
 		}
 	}
@@ -116,15 +122,16 @@ func EncodeWithLimits(v Value, l Limits) ([]byte, error) {
 // encode appends a validated value while enforcing the total output budget.
 func encode(b []byte, v Value, l Limits, depth int) ([]byte, error) {
 	if depth > l.MaxDepth || len(b) >= l.MaxBytes {
-		return nil, errors.New("Clarity resource limit")
+		return nil, errors.New("exceeded Clarity resource limit")
 	}
 	b = append(b, byte(v.Type))
 	var err error
 	appendData := func(data []byte) {
-		if len(data) > l.MaxBytes-len(b)-4 {
-			err = errors.New("Clarity byte limit")
+		if uint64(len(data)) > math.MaxUint32 || len(data) > l.MaxBytes-len(b)-4 {
+			err = errors.New("exceeded Clarity byte limit")
 			return
 		}
+		// #nosec G115 -- The explicit MaxUint32 length guard above bounds this wire conversion.
 		b = binary.BigEndian.AppendUint32(b, uint32(len(data)))
 		b = append(b, data...)
 	}
@@ -167,7 +174,8 @@ func encode(b []byte, v Value, l Limits, depth int) ([]byte, error) {
 	case True, False, None:
 	case StandardPrincipal, ContractPrincipal:
 		parts := strings.Split(v.Text, ".")
-		if len(parts) != 1 && len(parts) != 2 || v.Type == StandardPrincipal && len(parts) != 1 || v.Type == ContractPrincipal && len(parts) != 2 {
+		if len(parts) != 1 && len(parts) != 2 || v.Type == StandardPrincipal && len(parts) != 1 ||
+			v.Type == ContractPrincipal && len(parts) != 2 {
 			return nil, errors.New("invalid principal")
 		}
 		version, hash, e := identity.DecodeAddress(parts[0])
@@ -180,6 +188,7 @@ func encode(b []byte, v Value, l Limits, depth int) ([]byte, error) {
 			if !ValidContractName(parts[1]) {
 				return nil, errors.New("invalid contract name")
 			}
+			// #nosec G115 -- ValidName/ValidContractName enforce a maximum of 128 bytes before conversion.
 			b = append(b, byte(len(parts[1])))
 			b = append(b, parts[1]...)
 		}
@@ -189,9 +198,10 @@ func encode(b []byte, v Value, l Limits, depth int) ([]byte, error) {
 		}
 		b, err = encode(b, v.Items[0], l, depth+1)
 	case List:
-		if len(v.Items) > l.MaxBytes {
+		if uint64(len(v.Items)) > math.MaxUint32 || len(v.Items) > l.MaxBytes {
 			return nil, errors.New("list too large")
 		}
+		// #nosec G115 -- The explicit MaxUint32 length guard above bounds this wire conversion.
 		b = binary.BigEndian.AppendUint32(b, uint32(len(v.Items)))
 		for _, child := range v.Items {
 			b, err = encode(b, child, l, depth+1)
@@ -200,7 +210,7 @@ func encode(b []byte, v Value, l Limits, depth int) ([]byte, error) {
 			}
 		}
 	case Tuple:
-		if len(v.Fields) > l.MaxBytes/3 {
+		if uint64(len(v.Fields)) > math.MaxUint32 || len(v.Fields) > l.MaxBytes/3 {
 			return nil, errors.New("tuple too large")
 		}
 		names := make([]string, 0, len(v.Fields))
@@ -211,8 +221,10 @@ func encode(b []byte, v Value, l Limits, depth int) ([]byte, error) {
 			names = append(names, k)
 		}
 		sort.Strings(names)
+		// #nosec G115 -- The explicit MaxUint32 length guard above bounds this wire conversion.
 		b = binary.BigEndian.AppendUint32(b, uint32(len(names)))
 		for _, k := range names {
+			// #nosec G115 -- ValidName/ValidContractName enforce a maximum of 128 bytes before conversion.
 			b = append(b, byte(len(k)))
 			b = append(b, k...)
 			b, err = encode(b, v.Fields[k], l, depth+1)
@@ -227,7 +239,7 @@ func encode(b []byte, v Value, l Limits, depth int) ([]byte, error) {
 		return nil, err
 	}
 	if len(b) > l.MaxBytes {
-		return nil, errors.New("Clarity byte limit")
+		return nil, errors.New("exceeded Clarity byte limit")
 	}
 	return b, nil
 }

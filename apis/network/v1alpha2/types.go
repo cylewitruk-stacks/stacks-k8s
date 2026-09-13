@@ -15,7 +15,17 @@ var GroupVersion = schema.GroupVersion{Group: "network.stacks.org", Version: "v1
 
 // AddToScheme registers root, participant and genesis resource kinds.
 func AddToScheme(s *runtime.Scheme) error {
-	s.AddKnownTypes(GroupVersion, &StacksNetwork{}, &StacksNetworkList{}, &StacksNetworkParticipant{}, &StacksNetworkParticipantList{}, &StacksGenesis{}, &StacksGenesisList{}, &StacksEpochSchedule{}, &StacksEpochScheduleList{})
+	s.AddKnownTypes(
+		GroupVersion,
+		&StacksNetwork{},
+		&StacksNetworkList{},
+		&StacksNetworkParticipant{},
+		&StacksNetworkParticipantList{},
+		&StacksGenesis{},
+		&StacksGenesisList{},
+		&StacksEpochSchedule{},
+		&StacksEpochScheduleList{},
+	)
 	metav1.AddToGroupVersion(s, GroupVersion)
 	return nil
 }

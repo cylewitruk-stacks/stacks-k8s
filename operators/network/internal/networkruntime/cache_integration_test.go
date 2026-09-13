@@ -23,7 +23,15 @@ import (
 
 // TestCachedInventoryContinuationDoesNotBlockBootstrap exercises the real manager client.
 func TestCachedInventoryContinuationDoesNotBlockBootstrap(t *testing.T) {
-	environment := &envtest.Environment{CRDDirectoryPaths: []string{filepath.Join("..", "..", "..", "..", "charts", "stacks-network-operator", "crds")}, ErrorIfCRDPathMissing: true, DownloadBinaryAssets: true, DownloadBinaryAssetsVersion: "1.37.0", BinaryAssetsDirectory: filepath.Join(os.TempDir(), "stacks-network-operator-envtest")}
+	environment := &envtest.Environment{
+		CRDDirectoryPaths: []string{
+			filepath.Join("..", "..", "..", "..", "charts", "stacks-network-operator", "crds"),
+		},
+		ErrorIfCRDPathMissing:       true,
+		DownloadBinaryAssets:        true,
+		DownloadBinaryAssetsVersion: "1.37.0",
+		BinaryAssetsDirectory:       filepath.Join(os.TempDir(), "stacks-network-operator-envtest"),
+	}
 	config, err := environment.Start()
 	if err != nil {
 		t.Fatal(err)
@@ -49,11 +57,22 @@ func TestCachedInventoryContinuationDoesNotBlockBootstrap(t *testing.T) {
 	if err := direct.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}); err != nil {
 		t.Fatal(err)
 	}
-	root := &api.StacksNetwork{ObjectMeta: metav1.ObjectMeta{Name: "network", Namespace: namespace}, Spec: api.StacksNetworkSpec{Operation: "Running"}}
+	root := &api.StacksNetwork{
+		ObjectMeta: metav1.ObjectMeta{Name: "network", Namespace: namespace},
+		Spec:       api.StacksNetworkSpec{Operation: "Running"},
+	}
 	if err := direct.Create(ctx, root); err != nil {
 		t.Fatal(err)
 	}
-	manager, err := ctrl.NewManager(config, ctrl.Options{Scheme: scheme, Metrics: metricsserver.Options{BindAddress: "0"}, HealthProbeBindAddress: "0", Cache: cache.Options{DefaultNamespaces: map[string]cache.Config{namespace: {}}}})
+	manager, err := ctrl.NewManager(
+		config,
+		ctrl.Options{
+			Scheme:                 scheme,
+			Metrics:                metricsserver.Options{BindAddress: "0"},
+			HealthProbeBindAddress: "0",
+			Cache:                  cache.Options{DefaultNamespaces: map[string]cache.Config{namespace: {}}},
+		},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +100,11 @@ func TestCachedInventoryContinuationDoesNotBlockBootstrap(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(cached.Items) != 0 || cached.Continue != "continue-not-supported" {
-		t.Fatalf("fixture did not exercise limited cache sentinel: count=%d continue=%q", len(cached.Items), cached.Continue)
+		t.Fatalf(
+			"fixture did not exercise limited cache sentinel: count=%d continue=%q",
+			len(cached.Items),
+			cached.Continue,
+		)
 	}
 	var live api.StacksNetworkParticipantList
 	if err := direct.List(ctx, &live, client.InNamespace(namespace), client.Limit(1001)); err != nil {
@@ -127,7 +150,10 @@ func TestCachedInventoryContinuationDoesNotBlockBootstrap(t *testing.T) {
 		t.Fatal(err)
 	}
 	current := meta.FindStatusCondition(root.Status.Conditions, "Initialized")
-	if current == nil || current.Status != metav1.ConditionTrue || current.ObservedGeneration != root.Generation || current.Reason != completed.Reason || current.Message != completed.Message || !current.LastTransitionTime.Equal(&completed.LastTransitionTime) {
+	if current == nil || current.Status != metav1.ConditionTrue || current.ObservedGeneration != root.Generation ||
+		current.Reason != completed.Reason ||
+		current.Message != completed.Message ||
+		!current.LastTransitionTime.Equal(&completed.LastTransitionTime) {
 		t.Fatalf("operation edit lost or made bootstrap completion stale: %+v", current)
 	}
 }

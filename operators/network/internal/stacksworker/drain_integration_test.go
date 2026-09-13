@@ -26,7 +26,15 @@ import (
 )
 
 func TestStacksActorAPIWaitsForRootWorkerDisposition(t *testing.T) {
-	environment := &envtest.Environment{CRDDirectoryPaths: []string{filepath.Join("..", "..", "..", "..", "charts", "stacks-network-operator", "crds")}, ErrorIfCRDPathMissing: true, DownloadBinaryAssets: true, DownloadBinaryAssetsVersion: "1.37.0", BinaryAssetsDirectory: filepath.Join(os.TempDir(), "stacks-network-operator-envtest")}
+	environment := &envtest.Environment{
+		CRDDirectoryPaths: []string{
+			filepath.Join("..", "..", "..", "..", "charts", "stacks-network-operator", "crds"),
+		},
+		ErrorIfCRDPathMissing:       true,
+		DownloadBinaryAssets:        true,
+		DownloadBinaryAssetsVersion: "1.37.0",
+		BinaryAssetsDirectory:       filepath.Join(os.TempDir(), "stacks-network-operator-envtest"),
+	}
 	config, err := environment.Start()
 	if err != nil {
 		t.Fatal(err)
@@ -74,7 +82,10 @@ func TestStacksActorAPIWaitsForRootWorkerDisposition(t *testing.T) {
 				if kind == "StacksSigner" {
 					configuration = api.Configuration{StacksSigner: &stacks.StacksSignerSpec{}}
 				}
-				root.Spec.Participants = append(root.Spec.Participants, api.Participant{Name: "actor", Kind: kind, Definition: api.Definition{Inline: &configuration}})
+				root.Spec.Participants = append(
+					root.Spec.Participants,
+					api.Participant{Name: "actor", Kind: kind, Definition: api.Definition{Inline: &configuration}},
+				)
 				must(c.Create(ctx, root))
 				worker.UID = ""
 				worker.ResourceVersion = ""
@@ -90,13 +101,49 @@ func TestStacksActorAPIWaitsForRootWorkerDisposition(t *testing.T) {
 				must(c.Create(ctx, pod))
 				pod.Status.Phase = corev1.PodRunning
 				must(c.Status().Update(ctx, pod))
-				actor := &api.StacksNetworkParticipant{ObjectMeta: metav1.ObjectMeta{Name: "actor", Namespace: name, Finalizers: []string{"network.stacks.org/" + strings.ToLower(string(kind)) + "-workload"}}, Spec: api.StacksNetworkParticipantSpec{NetworkUID: root.UID, ParticipantName: "actor", Kind: kind, Configuration: configuration}}
+				actor := &api.StacksNetworkParticipant{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:       "actor",
+						Namespace:  name,
+						Finalizers: []string{"network.stacks.org/" + strings.ToLower(string(kind)) + "-workload"},
+					},
+					Spec: api.StacksNetworkParticipantSpec{
+						NetworkUID:      root.UID,
+						ParticipantName: "actor",
+						Kind:            kind,
+						Configuration:   configuration,
+					},
+				}
 				must(controllerutil.SetControllerReference(root, actor, scheme))
 				must(c.Create(ctx, actor))
-				root.Status.Identities = []api.InstanceIdentity{{Name: worker.Spec.ParticipantName, UID: worker.UID, Worker: &api.WorkerSession{Pod: podBinding(pod), ProfileDigest: profile.Digest()}}, {Name: "actor", UID: actor.UID}}
+				root.Status.Identities = []api.InstanceIdentity{
+					{
+						Name:   worker.Spec.ParticipantName,
+						UID:    worker.UID,
+						Worker: &api.WorkerSession{Pod: podBinding(pod), ProfileDigest: profile.Digest()},
+					},
+					{Name: "actor", UID: actor.UID},
+				}
 				must(c.Status().Update(ctx, root))
 				labels := participantworkload.Labels(actor, "actor")
-				workload := &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: participantworkload.Name(actor, "actor"), Namespace: name, Labels: labels}, Spec: appsv1.StatefulSetSpec{Replicas: ptr.To[int32](1), ServiceName: "actor", Selector: &metav1.LabelSelector{MatchLabels: labels}, Template: corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: labels}, Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "actor", Image: "actor:test"}}}}}}
+				workload := &appsv1.StatefulSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      participantworkload.Name(actor, "actor"),
+						Namespace: name,
+						Labels:    labels,
+					},
+					Spec: appsv1.StatefulSetSpec{
+						Replicas:    ptr.To[int32](1),
+						ServiceName: "actor",
+						Selector:    &metav1.LabelSelector{MatchLabels: labels},
+						Template: corev1.PodTemplateSpec{
+							ObjectMeta: metav1.ObjectMeta{Labels: labels},
+							Spec: corev1.PodSpec{
+								Containers: []corev1.Container{{Name: "actor", Image: "actor:test"}},
+							},
+						},
+					},
+				}
 				must(controllerutil.SetControllerReference(actor, workload, scheme))
 				must(c.Create(ctx, workload))
 				if deleting {
@@ -107,9 +154,14 @@ func TestStacksActorAPIWaitsForRootWorkerDisposition(t *testing.T) {
 					root.Spec.Operation = "Stopped"
 					must(c.Update(ctx, root))
 				}
-				domain := participantworkload.Reconciler{Client: c, Reader: c, Kind: kind, BeforeStop: func(ctx context.Context, p *api.StacksNetworkParticipant) (bool, error) {
-					return CheckActorStop(ctx, c, p)
-				}}
+				domain := participantworkload.Reconciler{
+					Client: c,
+					Reader: c,
+					Kind:   kind,
+					BeforeStop: func(ctx context.Context, p *api.StacksNetworkParticipant) (bool, error) {
+						return CheckActorStop(ctx, c, p)
+					},
+				}
 				request := ctrl.Request{NamespacedName: client.ObjectKeyFromObject(actor)}
 				_, err = domain.Reconcile(ctx, request)
 				must(err)
@@ -131,7 +183,9 @@ func TestStacksActorAPIWaitsForRootWorkerDisposition(t *testing.T) {
 				}
 				// The existing aggregate timeout dispositions uncertainty without pretending the worker exited.
 				fact = ProjectSession(root, worker, pod, nil, now.Add(ShutdownBound))
-				if !fact.Changed || root.Status.Identities[0].Worker.Disposal == nil || root.Status.Identities[0].Worker.Disposal.Outcome != "Unsettled" || root.Status.Identities[0].Worker.Disposal.Terminated {
+				if !fact.Changed || root.Status.Identities[0].Worker.Disposal == nil ||
+					root.Status.Identities[0].Worker.Disposal.Outcome != "Unsettled" ||
+					root.Status.Identities[0].Worker.Disposal.Terminated {
 					t.Fatal("bounded worker disposition differs")
 				}
 				must(c.Status().Update(ctx, root))

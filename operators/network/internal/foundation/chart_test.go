@@ -2,6 +2,7 @@ package foundation
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"os/exec"
 	"path/filepath"
@@ -18,7 +19,18 @@ import (
 
 func TestFoundationChart(t *testing.T) {
 	chart := filepath.Join("..", "..", "..", "..", "charts", "stacks-network-operator")
-	out, err := exec.Command("helm", "template", "foundation", chart, "--namespace", "foundation-system", "--kube-version", "1.37.0").CombinedOutput()
+	// #nosec G204 -- Fixed executable and separate arguments from the test harness; no shell evaluation.
+	out, err := exec.CommandContext(t.Context(),
+		"helm",
+		"template",
+		"foundation",
+		chart,
+		"--namespace",
+		"foundation-system",
+		"--kube-version",
+		"1.37.0",
+	).
+		CombinedOutput()
 	if err != nil {
 		t.Fatalf("render: %v %s", err, out)
 	}
@@ -28,7 +40,7 @@ func TestFoundationChart(t *testing.T) {
 	for {
 		var obj unstructured.Unstructured
 		err := decoder.Decode(&obj)
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
@@ -80,12 +92,35 @@ func TestFoundationChart(t *testing.T) {
 	add("network.stacks.org", "stacksnetworkparticipants", "create,delete,get,list,patch,watch")
 	add("network.stacks.org", "stacksgeneses", "create,get,list,patch,watch")
 	add("network.stacks.org", "stacksepochschedules", "get,list,watch")
-	add("network.stacks.org", "stacksnetworks/status,stacksnetworkparticipants/status,stacksepochschedules/status", "get,patch")
-	add("bitcoin.stacks.org", "bitcoinnodes,bitcoinwallets,bitcoinblockschedules,bitcoinblockproductions", "get,list,watch")
-	add("bitcoin.stacks.org", "bitcoinnodes/status,bitcoinwallets/status,bitcoinblockschedules/status,bitcoinblockproductions/status", "get,patch")
-	add("stacks.stacks.org", "stacksaccounts,stacksnodes,stackssigners,stacksstackers,stacksfaucets,stackscontractsets,stackstransactionproductions", "get,list,watch")
+	add(
+		"network.stacks.org",
+		"stacksnetworks/status,stacksnetworkparticipants/status,stacksepochschedules/status",
+		"get,patch",
+	)
+	add(
+		"bitcoin.stacks.org",
+		"bitcoinnodes,bitcoinwallets,bitcoinblockschedules,bitcoinblockproductions",
+		"get,list,watch",
+	)
+	add(
+		"bitcoin.stacks.org",
+		"bitcoinnodes/status,bitcoinwallets/status,bitcoinblockschedules/status,bitcoinblockproductions/status",
+		"get,patch",
+	)
+	add(
+		"stacks.stacks.org",
+		"stacksaccounts,stacksnodes,stackssigners,stacksstackers,stacksfaucets,"+
+			"stackscontractsets,stackstransactionproductions",
+		"get,list,watch",
+	)
 	add("stacks.stacks.org", "stacksaccounts", "create")
-	add("stacks.stacks.org", "stacksaccounts/status,stacksnodes/status,stackssigners/status,stacksstackers/status,stacksfaucets/status,stackscontractsets/status,stackstransactionproductions/status", "get,patch")
+	add(
+		"stacks.stacks.org",
+		"stacksaccounts/status,stacksnodes/status,stackssigners/status,stacksstackers/"+
+			"status,stacksfaucets/status,stackscontractsets/status,"+
+			"stackstransactionproductions/status",
+		"get,patch",
+	)
 	add("", "secrets", "create,get,list,patch,watch")
 	add("", "configmaps", "create,get,list,watch")
 	add("", "serviceaccounts", "create,get,list,patch,watch")
@@ -116,9 +151,23 @@ func TestFoundationChart(t *testing.T) {
 		t.Fatalf("deployment count %d", deployments)
 	}
 }
+
 func TestKeyJobRulesAreNameScoped(t *testing.T) {
 	in := KeyJobInput{CredentialsRef: common.SecretKeyRef{Name: "key", Key: "privateKey"}, ReportName: "report"}
-	want := []rbacv1.PolicyRule{{APIGroups: []string{""}, Resources: []string{"secrets"}, ResourceNames: []string{"key"}, Verbs: []string{"get"}}, {APIGroups: []string{""}, Resources: []string{"configmaps"}, ResourceNames: []string{"report"}, Verbs: []string{"get", "patch"}}}
+	want := []rbacv1.PolicyRule{
+		{
+			APIGroups:     []string{""},
+			Resources:     []string{"secrets"},
+			ResourceNames: []string{"key"},
+			Verbs:         []string{"get"},
+		},
+		{
+			APIGroups:     []string{""},
+			Resources:     []string{"configmaps"},
+			ResourceNames: []string{"report"},
+			Verbs:         []string{"get", "patch"},
+		},
+	}
 	if !reflect.DeepEqual(KeyJobRules(in), want) {
 		t.Fatal("import resolver grants excess authority")
 	}

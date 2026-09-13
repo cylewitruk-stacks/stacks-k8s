@@ -30,7 +30,10 @@ func (r *OverrideReconciler) SetupWithManager(m ctrl.Manager) error {
 	if r.Now == nil {
 		r.Now = time.Now
 	}
-	return ctrl.NewControllerManagedBy(m).Named("bitcoin-schedule-override-v1alpha2").For(&bitcoin.BitcoinBlockScheduleOverride{}).Complete(r)
+	return ctrl.NewControllerManagedBy(m).
+		Named("bitcoin-schedule-override-v1alpha2").
+		For(&bitcoin.BitcoinBlockScheduleOverride{}).
+		Complete(r)
 }
 
 // Reconcile retains activation until the scheduler has withdrawn it, even after deletion.
@@ -49,13 +52,17 @@ func (r *OverrideReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	if rootCurrent && root.Status.Bitcoin != nil && root.Status.Bitcoin.InitializationRef != nil {
 		ref := root.Status.Bitcoin.InitializationRef
 		var initial bitcoin.BitcoinInitialization
-		if err := r.Reader.Get(ctx, client.ObjectKey{Namespace: root.Namespace, Name: ref.Name}, &initial); err != nil {
+		if err := r.Reader.Get(ctx, client.ObjectKey{
+			Namespace: root.Namespace,
+			Name:      ref.Name,
+		}, &initial); err != nil {
 			return ctrl.Result{}, err
 		}
 		if initial.UID != ref.UID || initial.Spec.NetworkUID != root.UID || !metav1.IsControlledBy(&initial, root) {
 			return ctrl.Result{RequeueAfter: time.Second}, nil
 		}
-		if candidate := initial.Status.Override; candidate != nil && candidate.Override == objectref.BitcoinScheduleOverride(request) {
+		if candidate := initial.Status.Override; candidate != nil &&
+			candidate.Override == objectref.BitcoinScheduleOverride(request) {
 			active = candidate.DeepCopy()
 		}
 	}
@@ -98,25 +105,52 @@ func (r *OverrideReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		if finalizer {
 			before := request.DeepCopy()
 			controllerutil.RemoveFinalizer(request, OverrideFinalizer)
-			return ctrl.Result{}, r.Client.Patch(ctx, request, client.MergeFromWithOptions(before, client.MergeFromWithOptimisticLock{}))
+			return ctrl.Result{}, r.Client.Patch(
+				ctx,
+				request,
+				client.MergeFromWithOptions(before, client.MergeFromWithOptimisticLock{}),
+			)
 		}
 		return ctrl.Result{}, nil
 	}
 	if !finalizer && request.DeletionTimestamp == nil {
 		before := request.DeepCopy()
 		controllerutil.AddFinalizer(request, OverrideFinalizer)
-		return ctrl.Result{RequeueAfter: time.Millisecond}, r.Client.Patch(ctx, request, client.MergeFromWithOptions(before, client.MergeFromWithOptimisticLock{}))
+		patchErr := r.Client.Patch(
+			ctx,
+			request,
+			client.MergeFromWithOptions(before, client.MergeFromWithOptimisticLock{}),
+		)
+		return ctrl.Result{RequeueAfter: time.Millisecond}, patchErr
 	}
 	return ctrl.Result{RequeueAfter: time.Second}, nil
 }
 
 // applyStatus publishes only request lifecycle fields with identity and resource-version guards.
-func (r *OverrideReconciler) applyStatus(ctx context.Context, request *bitcoin.BitcoinBlockScheduleOverride, status bitcoin.BitcoinBlockScheduleOverrideStatus) error {
+func (r *OverrideReconciler) applyStatus(
+	ctx context.Context,
+	request *bitcoin.BitcoinBlockScheduleOverride,
+	status bitcoin.BitcoinBlockScheduleOverrideStatus,
+) error {
 	if equality.Semantic.DeepEqual(request.Status, status) {
 		return nil
 	}
-	patch := &bitcoin.BitcoinBlockScheduleOverride{TypeMeta: metav1.TypeMeta{APIVersion: bitcoin.GroupVersion.String(), Kind: bitcoin.KindBitcoinBlockScheduleOverride}, ObjectMeta: metav1.ObjectMeta{Name: request.Name, Namespace: request.Namespace, UID: request.UID, ResourceVersion: request.ResourceVersion}, Status: status}
-	if err := r.Client.Status().Patch(ctx, patch, client.Apply, client.FieldOwner(OverrideFieldManager), client.ForceOwnership); err != nil {
+	patch := &bitcoin.BitcoinBlockScheduleOverride{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: bitcoin.GroupVersion.String(),
+			Kind:       bitcoin.KindBitcoinBlockScheduleOverride,
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            request.Name,
+			Namespace:       request.Namespace,
+			UID:             request.UID,
+			ResourceVersion: request.ResourceVersion,
+		},
+		Status: status,
+	}
+	if err := r.Client.Status().
+		//nolint:staticcheck // Typed minimal SSA preserves the response; generated apply configurations are not available.
+		Patch(ctx, patch, client.Apply, client.FieldOwner(OverrideFieldManager), client.ForceOwnership); err != nil {
 		return err
 	}
 	*request = *patch

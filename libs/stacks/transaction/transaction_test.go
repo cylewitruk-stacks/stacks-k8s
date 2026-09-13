@@ -8,9 +8,20 @@ import (
 )
 
 func TestInvalidSigningInputs(t *testing.T) {
-	o := Options{Version: Testnet, ChainID: 0x80000000, PostConditionMode: Deny, PrivateKey: strings.Repeat("0", 63) + "101"}
+	o := Options{
+		Version:           Testnet,
+		ChainID:           0x80000000,
+		PostConditionMode: Deny,
+		PrivateKey:        strings.Repeat("0", 63) + "101",
+	}
 	address := "ST000000000000000000002AMW42H"
-	for _, key := range []string{"", strings.Repeat("0", 64), strings.Repeat("f", 64), strings.Repeat("1", 64) + "02", "secret"} {
+	for _, key := range []string{
+		"",
+		strings.Repeat("0", 64),
+		strings.Repeat("f", 64),
+		strings.Repeat("1", 64) + "02",
+		"secret",
+	} {
 		bad := o
 		bad.PrivateKey = key
 		if _, e := Transfer(bad, address, 1, ""); e == nil {

@@ -21,35 +21,68 @@ import (
 func overrideFixture(t *testing.T) (*testFixture, *Scheduler, *OverrideReconciler) {
 	t.Helper()
 	f := baselineFixture(t)
-	f.c = interceptor.NewClient(f.c.(client.WithWatch), interceptor.Funcs{SubResourcePatch: func(ctx context.Context, c client.Client, sub string, obj client.Object, patch client.Patch, opts ...client.SubResourcePatchOption) error {
-		request, ok := obj.(*bitcoin.BitcoinBlockScheduleOverride)
-		if !ok {
-			return c.SubResource(sub).Patch(ctx, obj, patch, opts...)
-		}
-		current := &bitcoin.BitcoinBlockScheduleOverride{}
-		if err := c.Get(ctx, client.ObjectKeyFromObject(request), current); err != nil {
-			return err
-		}
-		current.Status = request.Status
-		if err := c.Update(ctx, current); err != nil {
-			return err
-		}
-		*request = *current
-		return nil
-	}})
+	f.c = interceptor.NewClient(
+		f.c.(client.WithWatch),
+		interceptor.Funcs{
+			SubResourcePatch: func(
+				ctx context.Context,
+				c client.Client,
+				sub string,
+				obj client.Object,
+				patch client.Patch,
+				opts ...client.SubResourcePatchOption,
+			) error {
+				request, ok := obj.(*bitcoin.BitcoinBlockScheduleOverride)
+				if !ok {
+					return c.SubResource(sub).Patch(ctx, obj, patch, opts...)
+				}
+				current := &bitcoin.BitcoinBlockScheduleOverride{}
+				if err := c.Get(ctx, client.ObjectKeyFromObject(request), current); err != nil {
+					return err
+				}
+				current.Status = request.Status
+				if err := c.Update(ctx, current); err != nil {
+					return err
+				}
+				*request = *current
+				return nil
+			},
+		},
+	)
 	f.worker.Client = f.c
 	f.worker.Reader = f.c
-	return f, f.schedulerFor(), &OverrideReconciler{Client: f.c, Reader: f.c, Now: func() time.Time { return f.now }}
+	return f, f.schedulerFor(), &OverrideReconciler{
+		Client: f.c,
+		Reader: f.c,
+		Now:    func() time.Time { return f.now },
+	}
 }
 
 // newOverride fixes a public request to this test's current production incarnation.
 func newOverride(f *testFixture, name, interval, duration string) *bitcoin.BitcoinBlockScheduleOverride {
-	return &bitcoin.BitcoinBlockScheduleOverride{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: f.root.Namespace, CreationTimestamp: metav1.NewTime(f.now)}, Spec: bitcoin.BitcoinBlockScheduleOverrideSpec{NetworkUID: f.root.UID, ProductionRef: common.NameRef{Name: "production"}, Schedule: &bitcoin.BitcoinBlockScheduleSpec{Cadence: bitcoin.Cadence{Mode: "Fixed", Interval: ptr.To(common.Duration(interval))}}, Duration: common.Duration(duration)}}
+	return &bitcoin.BitcoinBlockScheduleOverride{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              name,
+			Namespace:         f.root.Namespace,
+			CreationTimestamp: metav1.NewTime(f.now),
+		},
+		Spec: bitcoin.BitcoinBlockScheduleOverrideSpec{
+			NetworkUID:    f.root.UID,
+			ProductionRef: common.NameRef{Name: "production"},
+			Schedule: &bitcoin.BitcoinBlockScheduleSpec{
+				Cadence: bitcoin.Cadence{Mode: "Fixed", Interval: ptr.To(common.Duration(interval))},
+			},
+			Duration: common.Duration(duration),
+		},
+	}
 }
 
 func reconcileOverrideRequest(t *testing.T, r *OverrideReconciler, request *bitcoin.BitcoinBlockScheduleOverride) {
 	t.Helper()
-	if _, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(request)}); err != nil {
+	if _, err := r.Reconcile(
+		context.Background(),
+		ctrl.Request{NamespacedName: client.ObjectKeyFromObject(request)},
+	); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -91,15 +124,31 @@ func TestOverrideLostActivationPublicationAndPauseResumeLatestBaseline(t *testin
 	}
 	reconcileOverrideRequest(t, r, request)
 	lost := false
-	s.Client = interceptor.NewClient(f.c.(client.WithWatch), interceptor.Funcs{SubResourceUpdate: func(ctx context.Context, c client.Client, sub string, obj client.Object, opts ...client.SubResourceUpdateOption) error {
-		err := c.SubResource(sub).Update(ctx, obj, opts...)
-		if initial, ok := obj.(*bitcoin.BitcoinInitialization); ok && !lost && err == nil && initial.Status.Override != nil {
-			lost = true
-			return errors.New("activation response lost")
-		}
-		return err
-	}})
-	if _, err := s.Reconcile(ctx, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(f.initial)}); err == nil || !lost {
+	s.Client = interceptor.NewClient(
+		f.c.(client.WithWatch),
+		interceptor.Funcs{
+			SubResourceUpdate: func(
+				ctx context.Context,
+				c client.Client,
+				sub string,
+				obj client.Object,
+				opts ...client.SubResourceUpdateOption,
+			) error {
+				err := c.SubResource(sub).Update(ctx, obj, opts...)
+				if initial, ok := obj.(*bitcoin.BitcoinInitialization); ok && !lost && err == nil &&
+					initial.Status.Override != nil {
+					lost = true
+					return errors.New("activation response lost")
+				}
+				return err
+			},
+		},
+	)
+	if _, err := s.Reconcile(
+		ctx,
+		ctrl.Request{NamespacedName: client.ObjectKeyFromObject(f.initial)},
+	); err == nil ||
+		!lost {
 		t.Fatal("lost activation boundary not exercised")
 	}
 	original := f.readInitial(t).Status.Override.DeepCopy()
@@ -107,13 +156,18 @@ func TestOverrideLostActivationPublicationAndPauseResumeLatestBaseline(t *testin
 	for range 2 {
 		f.reconcile(t, s)
 	}
-	if got := f.readInitial(t).Status; got.NextOpportunityAt == nil || !got.NextOpportunityAt.Time.Equal(f.now.Add(20*time.Second)) || !got.Override.StartedAt.Equal(&original.StartedAt) {
+	if got := f.readInitial(
+		t,
+	).Status; got.NextOpportunityAt == nil || !got.NextOpportunityAt.Time.Equal(f.now.Add(20*time.Second)) ||
+		!got.Override.StartedAt.Equal(&original.StartedAt) {
 		t.Fatal("lost activation restarted duration or ignored cadence", got)
 	}
 	if err := f.c.Get(ctx, client.ObjectKeyFromObject(f.production), f.production); err != nil {
 		t.Fatal(err)
 	}
-	f.production.Status.Admission.Configuration.BitcoinBlockProduction.Schedule.Cadence.Interval = ptr.To(common.Duration("3s"))
+	f.production.Status.Admission.Configuration.BitcoinBlockProduction.Schedule.Cadence.Interval = ptr.To(
+		common.Duration("3s"),
+	)
 	f.production.Status.Admission.PolicyDigest = foundation.Digest(f.production.Status.Admission.Configuration)
 	if err := f.c.Status().Update(ctx, f.production); err != nil {
 		t.Fatal(err)
@@ -133,7 +187,8 @@ func TestOverrideLostActivationPublicationAndPauseResumeLatestBaseline(t *testin
 	if err := f.c.Get(ctx, client.ObjectKeyFromObject(request), request); err != nil {
 		t.Fatal(err)
 	}
-	if request.Status.Phase != "Completed" || f.readInitial(t).Status.Override != nil || !request.Status.Admission.StartedAt.Equal(&original.StartedAt) {
+	if request.Status.Phase != "Completed" || f.readInitial(t).Status.Override != nil ||
+		!request.Status.Admission.StartedAt.Equal(&original.StartedAt) {
 		t.Fatal("pause extended active wall-clock expiry", request.Status)
 	}
 	f.root.Spec.Operation = "Running"
@@ -143,7 +198,10 @@ func TestOverrideLostActivationPublicationAndPauseResumeLatestBaseline(t *testin
 	for range 2 {
 		f.reconcile(t, s)
 	}
-	if got := f.readInitial(t).Status; got.NextOpportunityAt == nil || !got.NextOpportunityAt.Time.Equal(f.now.Add(3*time.Second)) || got.Baseline.Scheduling.Override != nil {
+	if got := f.readInitial(
+		t,
+	).Status; got.NextOpportunityAt == nil || !got.NextOpportunityAt.Time.Equal(f.now.Add(3*time.Second)) ||
+		got.Baseline.Scheduling.Override != nil {
 		t.Fatal("override restored stale baseline or caught up", got)
 	}
 }
@@ -201,7 +259,11 @@ func TestOverrideExpiryOutcomeSurvivesSchedulerFirstOrdering(t *testing.T) {
 		t.Fatal("expiry evidence withdrawn before terminal publication")
 	}
 	initial := f.readInitial(t)
-	if err := f.worker.authorizeTimingOverride(ctx, admitted{root: f.root, initialization: initial}, &bitcoin.BitcoinBlockOffer{Production: active.Production, Override: &active.Override}); err == nil {
+	if err := f.worker.authorizeTimingOverride(
+		ctx,
+		admitted{root: f.root, initialization: initial},
+		&bitcoin.BitcoinBlockOffer{Production: active.Production, Override: &active.Override},
+	); err == nil {
 		t.Fatal("retained expiry evidence authorized dispatch")
 	}
 	reconcileOverrideRequest(t, r, request)
@@ -210,7 +272,10 @@ func TestOverrideExpiryOutcomeSurvivesSchedulerFirstOrdering(t *testing.T) {
 	if err := f.c.Get(ctx, client.ObjectKeyFromObject(request), request); err != nil {
 		t.Fatal(err)
 	}
-	if request.Status.Phase != "Completed" || request.Status.Reason != "DurationElapsed" || request.Status.Admission == nil || !request.Status.Admission.StartedAt.Equal(&active.StartedAt) || f.readInitial(t).Status.Override != nil {
+	if request.Status.Phase != "Completed" || request.Status.Reason != "DurationElapsed" ||
+		request.Status.Admission == nil ||
+		!request.Status.Admission.StartedAt.Equal(&active.StartedAt) ||
+		f.readInitial(t).Status.Override != nil {
 		t.Fatalf("expiry lost or reclassified: %+v", request.Status)
 	}
 }

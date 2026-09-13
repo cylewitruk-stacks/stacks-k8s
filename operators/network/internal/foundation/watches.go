@@ -43,7 +43,20 @@ func (r inputReference) key() string { return r.kind + "/" + r.name }
 
 // publicInputs contains the reusable kinds admitted by the foundation.
 func publicInputs() []client.Object {
-	return []client.Object{&bitcoin.BitcoinNode{}, &bitcoin.BitcoinWallet{}, &bitcoin.BitcoinBlockProduction{}, &bitcoin.BitcoinBlockSchedule{}, &stacks.StacksAccount{}, &stacks.StacksNode{}, &stacks.StacksSigner{}, &stacks.StacksStacker{}, &stacks.StacksFaucet{}, &stacks.StacksContractSet{}, &stacks.StacksTransactionProduction{}, &api.StacksEpochSchedule{}}
+	return []client.Object{
+		&bitcoin.BitcoinNode{},
+		&bitcoin.BitcoinWallet{},
+		&bitcoin.BitcoinBlockProduction{},
+		&bitcoin.BitcoinBlockSchedule{},
+		&stacks.StacksAccount{},
+		&stacks.StacksNode{},
+		&stacks.StacksSigner{},
+		&stacks.StacksStacker{},
+		&stacks.StacksFaucet{},
+		&stacks.StacksContractSet{},
+		&stacks.StacksTransactionProduction{},
+		&api.StacksEpochSchedule{},
+	}
 }
 
 // inputReferences extracts direct public dependencies without cache or Secret reads.
@@ -68,11 +81,11 @@ func inputReferences(obj client.Object) []string {
 		if value == nil {
 			return
 		}
-		copy := value.DeepCopy()
+		snapshot := value.DeepCopy()
 		if owner != nil {
-			defaultAccount(copy, owner)
+			defaultAccount(snapshot, owner)
 		}
-		configurationInputs(copy, add)
+		configurationInputs(snapshot, add)
 	}
 	switch v := obj.(type) {
 	case *api.StacksNetwork:
@@ -225,16 +238,32 @@ func admissionEvents() predicate.Predicate {
 		if a == nil || b == nil {
 			return false
 		}
-		if a.GetUID() != b.GetUID() || a.GetGeneration() != b.GetGeneration() || !equal(a.GetDeletionTimestamp(), b.GetDeletionTimestamp()) || !equal(a.GetOwnerReferences(), b.GetOwnerReferences()) || !equal(a.GetFinalizers(), b.GetFinalizers()) {
+		if a.GetUID() != b.GetUID() || a.GetGeneration() != b.GetGeneration() ||
+			!equal(a.GetDeletionTimestamp(), b.GetDeletionTimestamp()) ||
+			!equal(a.GetOwnerReferences(), b.GetOwnerReferences()) ||
+			!equal(a.GetFinalizers(), b.GetFinalizers()) {
 			return true
 		}
 		switch old := a.(type) {
 		case *api.StacksNetworkParticipant:
 			current, ok := b.(*api.StacksNetworkParticipant)
-			return !ok || !equal(old.Spec, current.Spec) || !equal(old.Status.Admission, current.Status.Admission) || !equal(admissionConditions(old.Status.Conditions), admissionConditions(current.Status.Conditions))
+			return !ok || !equal(old.Spec, current.Spec) || !equal(old.Status.Admission, current.Status.Admission) ||
+				!equal(admissionConditions(old.Status.Conditions), admissionConditions(current.Status.Conditions))
 		case *api.StacksNetwork:
 			current, ok := b.(*api.StacksNetwork)
-			return !ok || !equal(old.Spec, current.Spec) || !equal(old.Status.Identities, current.Status.Identities) || !equal(old.Status.GenesisRef, current.Status.GenesisRef) || !equal(gateCompletion(old.Status.Initialization), gateCompletion(current.Status.Initialization)) || (old.Status.Phase != current.Status.Phase && (old.Status.Phase == api.NetworkPhaseFailed || current.Status.Phase == api.NetworkPhaseFailed)) || meta.IsStatusConditionTrue(old.Status.Conditions, api.ConditionFailed) != meta.IsStatusConditionTrue(current.Status.Conditions, api.ConditionFailed)
+			return !ok || !equal(old.Spec, current.Spec) || !equal(old.Status.Identities, current.Status.Identities) ||
+				!equal(old.Status.GenesisRef, current.Status.GenesisRef) ||
+				!equal(gateCompletion(old.Status.Initialization), gateCompletion(current.Status.Initialization)) ||
+				(old.Status.Phase != current.Status.Phase &&
+					(old.Status.Phase == api.NetworkPhaseFailed ||
+						current.Status.Phase == api.NetworkPhaseFailed)) ||
+				meta.IsStatusConditionTrue(
+					old.Status.Conditions,
+					api.ConditionFailed,
+				) != meta.IsStatusConditionTrue(
+					current.Status.Conditions,
+					api.ConditionFailed,
+				)
 		case *api.StacksGenesis:
 			current, ok := b.(*api.StacksGenesis)
 			return !ok || !equal(old.Spec, current.Spec)
@@ -247,7 +276,11 @@ func admissionEvents() predicate.Predicate {
 			oldSpec, oldErr := sourceSpec(a)
 			newSpec, newErr := sourceSpec(b)
 			oldStatus, newStatus := old.GetResolutionStatus().DeepCopy(), current.GetResolutionStatus().DeepCopy()
-			oldStatus.Conditions, newStatus.Conditions = admissionConditions(oldStatus.Conditions), admissionConditions(newStatus.Conditions)
+			oldStatus.Conditions, newStatus.Conditions = admissionConditions(
+				oldStatus.Conditions,
+			), admissionConditions(
+				newStatus.Conditions,
+			)
 			return oldErr != nil || newErr != nil || !equal(oldSpec, newSpec) || !equal(oldStatus, newStatus)
 		}
 		// Metadata-only Secret watches cannot inspect payload/immutable transitions.
@@ -259,7 +292,9 @@ func admissionEvents() predicate.Predicate {
 func admissionConditions(conditions []metav1.Condition) []metav1.Condition {
 	var result []metav1.Condition
 	for _, condition := range conditions {
-		if condition.Type == api.ConditionAdmissionReady || condition.Type == common.ConditionResolved || condition.Type == api.ConditionPolicyDeferred || condition.Type == api.ConditionConfigVerified {
+		if condition.Type == api.ConditionAdmissionReady || condition.Type == common.ConditionResolved ||
+			condition.Type == api.ConditionPolicyDeferred ||
+			condition.Type == api.ConditionConfigVerified {
 			condition.LastTransitionTime = metav1.Time{}
 			result = append(result, condition)
 		}
@@ -269,7 +304,12 @@ func admissionConditions(conditions []metav1.Condition) []metav1.Condition {
 }
 
 // indexedInputs lists only immediate consumers of an input through the cache index.
-func indexedInputs(ctx context.Context, c client.Client, object client.Object, namespace, key string) ([]client.Object, error) {
+func indexedInputs(
+	ctx context.Context,
+	c client.Client,
+	object client.Object,
+	namespace, key string,
+) ([]client.Object, error) {
 	gvk, err := apiutil.GVKForObject(object, c.Scheme())
 	if err != nil {
 		return nil, err
@@ -280,7 +320,12 @@ func indexedInputs(ctx context.Context, c client.Client, object client.Object, n
 		return nil, err
 	}
 	list := value.(client.ObjectList)
-	if err := c.List(ctx, list, client.InNamespace(namespace), client.MatchingFields{inputDependencyIndex: key}); err != nil {
+	if err := c.List(
+		ctx,
+		list,
+		client.InNamespace(namespace),
+		client.MatchingFields{inputDependencyIndex: key},
+	); err != nil {
 		return nil, err
 	}
 	var result []client.Object
@@ -295,9 +340,23 @@ func indexedInputs(ctx context.Context, c client.Client, object client.Object, n
 func intermediateInputs(kind string) []client.Object {
 	switch kind {
 	case common.KindSecret:
-		return []client.Object{&stacks.StacksAccount{}, &bitcoin.BitcoinWallet{}, &bitcoin.BitcoinNode{}, &stacks.StacksNode{}, &stacks.StacksSigner{}}
+		return []client.Object{
+			&stacks.StacksAccount{},
+			&bitcoin.BitcoinWallet{},
+			&bitcoin.BitcoinNode{},
+			&stacks.StacksNode{},
+			&stacks.StacksSigner{},
+		}
 	case stacks.KindStacksAccount:
-		return []client.Object{&bitcoin.BitcoinWallet{}, &stacks.StacksNode{}, &stacks.StacksSigner{}, &stacks.StacksStacker{}, &stacks.StacksFaucet{}, &stacks.StacksContractSet{}, &stacks.StacksTransactionProduction{}}
+		return []client.Object{
+			&bitcoin.BitcoinWallet{},
+			&stacks.StacksNode{},
+			&stacks.StacksSigner{},
+			&stacks.StacksStacker{},
+			&stacks.StacksFaucet{},
+			&stacks.StacksContractSet{},
+			&stacks.StacksTransactionProduction{},
+		}
 	case bitcoin.KindBitcoinWallet:
 		return []client.Object{&bitcoin.BitcoinNode{}, &stacks.StacksNode{}, &bitcoin.BitcoinBlockProduction{}}
 	case bitcoin.KindBitcoinBlockSchedule:
@@ -325,7 +384,9 @@ func enqueueInputRoots(c client.Client) handler.MapFunc {
 				continue
 			}
 			seen[key] = true
-			consumers := append([]client.Object{&api.StacksNetwork{}, &api.StacksNetworkParticipant{}}, intermediateInputs(gvk.Kind)...)
+			consumers := append(
+				[]client.Object{&api.StacksNetwork{}, &api.StacksNetworkParticipant{}},
+				intermediateInputs(gvk.Kind)...)
 			for _, kind := range consumers {
 				objects, err := indexedInputs(ctx, c, kind, obj.GetNamespace(), key)
 				if err != nil {
@@ -350,15 +411,23 @@ func enqueueInputRoots(c client.Client) handler.MapFunc {
 
 // inputWatchError preserves a repair notification when a cache index lookup fails.
 func inputWatchError(ctx context.Context, obj client.Object, err error) []reconcile.Request {
-	ctrl.LoggerFrom(ctx).Error(err, "Unable to route public input notification", "input", client.ObjectKeyFromObject(obj))
-	return []reconcile.Request{{NamespacedName: client.ObjectKey{Namespace: obj.GetNamespace(), Name: "network"}}}
+	ctrl.LoggerFrom(ctx).
+		Error(err, "Unable to route public input notification", "input", client.ObjectKeyFromObject(obj))
+	return []reconcile.Request{{NamespacedName: client.ObjectKey{
+		Namespace: obj.GetNamespace(),
+		Name:      "network",
+	}}}
 }
 
 // setupWatches registers public input indexes before starting any foundation controller.
 func (r *Reconciler) setupWatches(m ctrl.Manager) error {
 	inputs := publicInputs()
-	for _, object := range append([]client.Object{&api.StacksNetwork{}, &api.StacksNetworkParticipant{}}, inputs...) {
-		if err := m.GetFieldIndexer().IndexField(context.Background(), object, inputDependencyIndex, inputReferences); err != nil {
+	for _, object := range append([]client.Object{
+		&api.StacksNetwork{},
+		&api.StacksNetworkParticipant{},
+	}, inputs...) {
+		if err := m.GetFieldIndexer().
+			IndexField(context.Background(), object, inputDependencyIndex, inputReferences); err != nil {
 			return fmt.Errorf("index foundation inputs for %T: %w", object, err)
 		}
 	}
@@ -378,7 +447,12 @@ func (r *Reconciler) setupWatches(m ctrl.Manager) error {
 	b = b.WatchesMetadata(&corev1.Secret{}, enqueue, filter)
 	if includeRuntime {
 		observe := runtimeNotifications(r.Client)
-		for _, object := range []client.Object{&api.StacksNetwork{}, &api.StacksNetworkParticipant{}, &bitcoin.BitcoinExecution{}, &bitcoin.BitcoinInitialization{}} {
+		for _, object := range []client.Object{
+			&api.StacksNetwork{},
+			&api.StacksNetworkParticipant{},
+			&bitcoin.BitcoinExecution{},
+			&bitcoin.BitcoinInitialization{},
+		} {
 			b = b.Watches(object, observe, builder.WithPredicates(runtimeEvents()))
 		}
 	}
@@ -393,7 +467,13 @@ func enqueueIdentityInputs(c client.Client, source client.Object) handler.MapFun
 			ctrl.LoggerFrom(ctx).Error(err, "Identify resolver input")
 			return nil
 		}
-		objects, err := indexedInputs(ctx, c, source, input.GetNamespace(), (inputReference{gvk.Kind, input.GetName()}).key())
+		objects, err := indexedInputs(
+			ctx,
+			c,
+			source,
+			input.GetNamespace(),
+			(inputReference{gvk.Kind, input.GetName()}).key(),
+		)
 		if err != nil {
 			ctrl.LoggerFrom(ctx).Error(err, "List identity input consumers")
 			return nil
@@ -414,7 +494,12 @@ func (r *IdentityReconciler) setupIdentityWatches(m ctrl.Manager) error {
 	}
 	enqueue := handler.EnqueueRequestsFromMapFunc(enqueueIdentityInputs(r.Client, r.object()))
 	filter := builder.WithPredicates(admissionEvents())
-	b := ctrl.NewControllerManagedBy(m).Named(name).For(r.object(), filter).Owns(&corev1.ConfigMap{}).Owns(&batchv1.Job{}).WatchesMetadata(&corev1.Secret{}, enqueue, filter)
+	b := ctrl.NewControllerManagedBy(m).
+		Named(name).
+		For(r.object(), filter).
+		Owns(&corev1.ConfigMap{}).
+		Owns(&batchv1.Job{}).
+		WatchesMetadata(&corev1.Secret{}, enqueue, filter)
 	if r.Wallet {
 		b = b.Watches(&stacks.StacksAccount{}, enqueue, filter)
 	}
@@ -447,10 +532,18 @@ func runtimeRequests(c client.Client) handler.TypedMapFunc[client.Object, networ
 			ctrl.LoggerFrom(ctx).Error(err, "Identify runtime notification")
 			return nil
 		}
-		roots, err := indexedInputs(ctx, c, &api.StacksNetwork{}, obj.GetNamespace(), (inputReference{gvk.Kind, obj.GetName()}).key())
+		roots, err := indexedInputs(
+			ctx,
+			c,
+			&api.StacksNetwork{},
+			obj.GetNamespace(),
+			(inputReference{gvk.Kind, obj.GetName()}).key(),
+		)
 		if err != nil {
 			ctrl.LoggerFrom(ctx).Error(err, "Route runtime notification")
-			return []networkRequest{{key: client.ObjectKey{Namespace: obj.GetNamespace(), Name: "network"}, runtimeOnly: true}}
+			return []networkRequest{
+				{key: client.ObjectKey{Namespace: obj.GetNamespace(), Name: "network"}, runtimeOnly: true},
+			}
 		}
 		var result []networkRequest
 		for _, root := range roots {
@@ -458,8 +551,15 @@ func runtimeRequests(c client.Client) handler.TypedMapFunc[client.Object, networ
 		}
 		if len(result) == 0 {
 			owner := metav1.GetControllerOf(obj)
-			if owner != nil && owner.APIVersion == api.GroupVersion.String() && owner.Kind == api.KindStacksNetwork && owner.Name == "network" {
-				result = append(result, networkRequest{key: client.ObjectKey{Namespace: obj.GetNamespace(), Name: owner.Name}, runtimeOnly: true})
+			if owner != nil && owner.APIVersion == api.GroupVersion.String() && owner.Kind == api.KindStacksNetwork &&
+				owner.Name == "network" {
+				result = append(
+					result,
+					networkRequest{
+						key:         client.ObjectKey{Namespace: obj.GetNamespace(), Name: owner.Name},
+						runtimeOnly: true,
+					},
+				)
 			}
 		}
 		return result
@@ -473,13 +573,19 @@ func runtimeEvents() predicate.Predicate {
 		if a == nil || b == nil {
 			return false
 		}
-		if a.GetUID() != b.GetUID() || a.GetGeneration() != b.GetGeneration() || !equal(a.GetDeletionTimestamp(), b.GetDeletionTimestamp()) || !equal(a.GetOwnerReferences(), b.GetOwnerReferences()) || !equal(a.GetFinalizers(), b.GetFinalizers()) {
+		if a.GetUID() != b.GetUID() || a.GetGeneration() != b.GetGeneration() ||
+			!equal(a.GetDeletionTimestamp(), b.GetDeletionTimestamp()) ||
+			!equal(a.GetOwnerReferences(), b.GetOwnerReferences()) ||
+			!equal(a.GetFinalizers(), b.GetFinalizers()) {
 			return true
 		}
 		switch old := a.(type) {
 		case *api.StacksNetworkParticipant:
 			current, ok := b.(*api.StacksNetworkParticipant)
-			return !ok || !equal(old.Status.Runtime, current.Status.Runtime) || !equal(old.Status.BitcoinControl, current.Status.BitcoinControl) || !equal(old.Status.Execution, current.Status.Execution) || !equal(runtimeConditions(old.Status.Conditions), runtimeConditions(current.Status.Conditions))
+			return !ok || !equal(old.Status.Runtime, current.Status.Runtime) ||
+				!equal(old.Status.BitcoinControl, current.Status.BitcoinControl) ||
+				!equal(old.Status.Execution, current.Status.Execution) ||
+				!equal(runtimeConditions(old.Status.Conditions), runtimeConditions(current.Status.Conditions))
 		case *api.StacksNetwork:
 			current, ok := b.(*api.StacksNetwork)
 			return !ok || !equal(old.Status.Bitcoin, current.Status.Bitcoin)
@@ -498,7 +604,8 @@ func runtimeEvents() predicate.Predicate {
 func runtimeConditions(conditions []metav1.Condition) []metav1.Condition {
 	var result []metav1.Condition
 	for _, condition := range conditions {
-		if condition.Type != common.ConditionResolved && condition.Type != api.ConditionPolicyDeferred && condition.Type != api.ConditionConfigVerified {
+		if condition.Type != common.ConditionResolved && condition.Type != api.ConditionPolicyDeferred &&
+			condition.Type != api.ConditionConfigVerified {
 			condition.LastTransitionTime = metav1.Time{}
 			result = append(result, condition)
 		}
@@ -516,7 +623,13 @@ func gateCompletion(state *api.InitializationStatus) *gateCompletionState {
 	for i, gate := range state.Gates {
 		completed[i] = gate.CompletedAt != nil
 	}
-	return &gateCompletionState{string(state.GenesisUID), state.GenesisDigest, state.GateIndex, state.Completed, completed}
+	return &gateCompletionState{
+		string(state.GenesisUID),
+		state.GenesisDigest,
+		state.GateIndex,
+		state.Completed,
+		completed,
+	}
 }
 
 // gateCompletionState contains only admission-relevant initialization transitions.

@@ -45,7 +45,8 @@ func customization(configuration api.Configuration) *common.Config {
 // unverified excludes intentionally divergent actors from managed prerequisites.
 func unverified(configuration api.Configuration) bool {
 	config := customization(configuration)
-	return config != nil && ptr.Deref(config.Compatibility, common.CompatibilityManaged) == common.CompatibilityUnverified
+	return config != nil &&
+		ptr.Deref(config.Compatibility, common.CompatibilityManaged) == common.CompatibilityUnverified
 }
 
 // validateCustomization checks each actor's native public override paths.
@@ -60,20 +61,39 @@ func validateCustomization(kind api.ParticipantKind, config *common.Config) erro
 }
 
 // candidateConfiguration snapshots exact public inputs without publishing candidate admission.
-func candidateConfiguration(root *api.StacksNetwork, genesis api.StacksGenesisSpec, all map[string]*candidate) CandidateConfiguration {
-	in := CandidateConfiguration{Root: root.DeepCopy(), Genesis: *genesis.DeepCopy(), Participants: map[string]*api.StacksNetworkParticipant{}}
+func candidateConfiguration(
+	root *api.StacksNetwork,
+	genesis api.StacksGenesisSpec,
+	all map[string]*candidate,
+) CandidateConfiguration {
+	in := CandidateConfiguration{
+		Root:         root.DeepCopy(),
+		Genesis:      *genesis.DeepCopy(),
+		Participants: map[string]*api.StacksNetworkParticipant{},
+	}
 	for name, c := range all {
 		p := c.instance.DeepCopy()
 		p.Spec.Configuration = c.configuration
 		p.Spec.Source = c.source
-		p.Status.Admission = &api.Admission{Source: c.source, Configuration: c.configuration, PolicyDigest: Digest(c.configuration), Dependencies: c.dependencies}
+		p.Status.Admission = &api.Admission{
+			Source:        c.source,
+			Configuration: c.configuration,
+			PolicyDigest:  Digest(c.configuration),
+			Dependencies:  c.dependencies,
+		}
 		in.Participants[name] = p
 	}
 	return in
 }
 
 // configurationResults validates customized candidates independently of their admitted predecessors.
-func (r *Reconciler) configurationResults(ctx context.Context, root *api.StacksNetwork, all map[string]*candidate, frozen *api.StacksGenesis, complete bool) map[string]error {
+func (r *Reconciler) configurationResults(
+	ctx context.Context,
+	root *api.StacksNetwork,
+	all map[string]*candidate,
+	frozen *api.StacksGenesis,
+	complete bool,
+) map[string]error {
 	results := map[string]error{}
 	names := []string{}
 	for name, c := range all {
@@ -87,13 +107,14 @@ func (r *Reconciler) configurationResults(ctx context.Context, root *api.StacksN
 	sort.Strings(names)
 	var genesis api.StacksGenesisSpec
 	var err error
-	if !complete {
+	switch {
+	case !complete:
 		err = fmt.Errorf("complete public candidate inputs are required for configuration validation")
-	} else if r.Configurations == nil {
+	case r.Configurations == nil:
 		err = fmt.Errorf("native configuration validation is unavailable")
-	} else if frozen != nil {
+	case frozen != nil:
 		genesis = frozen.Spec
-	} else {
+	default:
 		genesis, err = compileGenesis(ctx, r.Reader, root, all)
 	}
 	if err != nil {

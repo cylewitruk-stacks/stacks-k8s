@@ -58,6 +58,7 @@ func uint64Value(t *testing.T, s string) uint64 {
 	}
 	return n
 }
+
 func TestStacksJSOracle(t *testing.T) {
 	raw, e := os.ReadFile("../../contracts/stacks-protocol-v1/vectors.json")
 	if e != nil {
@@ -87,7 +88,8 @@ func TestStacksJSOracle(t *testing.T) {
 	if e = json.Unmarshal(raw, &fixture); e != nil {
 		t.Fatal(e)
 	}
-	if fixture.Oracle != "Stacks.js 7.6.0" || len(fixture.Clarity) != 23 || len(fixture.Transactions) != 36 || len(fixture.Signatures) != 24 {
+	if fixture.Oracle != "Stacks.js 7.6.0" || len(fixture.Clarity) != 23 || len(fixture.Transactions) != 36 ||
+		len(fixture.Signatures) != 24 {
 		t.Fatal("incomplete pinned oracle")
 	}
 	for i, v := range fixture.Clarity {
@@ -112,7 +114,14 @@ func TestStacksJSOracle(t *testing.T) {
 	for i, v := range fixture.Transactions {
 		t.Run("transaction/"+strconv.Itoa(i), func(t *testing.T) {
 			in := v.Input
-			o := transaction.Options{Version: in.Version, ChainID: in.ChainID, Nonce: uint64Value(t, in.Nonce), Fee: uint64Value(t, in.Fee), PostConditionMode: in.PostConditionMode, PrivateKey: in.PrivateKey}
+			o := transaction.Options{
+				Version:           in.Version,
+				ChainID:           in.ChainID,
+				Nonce:             uint64Value(t, in.Nonce),
+				Fee:               uint64Value(t, in.Fee),
+				PostConditionMode: in.PostConditionMode,
+				PrivateKey:        in.PrivateKey,
+			}
 			var tx transaction.Transaction
 			var e error
 			switch in.Operation {
@@ -153,7 +162,14 @@ func TestStacksJSOracle(t *testing.T) {
 				if pe != nil {
 					t.Fatal(pe)
 				}
-				message := clarity.Value{Type: clarity.Tuple, Fields: map[string]clarity.Value{"signer-manager": principal, "topic": {Type: clarity.ASCII, Text: "grant-authorization"}, "auth-id": auth}}
+				message := clarity.Value{
+					Type: clarity.Tuple,
+					Fields: map[string]clarity.Value{
+						"signer-manager": principal,
+						"topic":          {Type: clarity.ASCII, Text: "grant-authorization"},
+						"auth-id":        auth,
+					},
+				}
 				digest, de := signing.StructuredDigest(signing.Domain("pox-5-signer", "1.0.0", 0x80000000), message)
 				if de != nil || hex.EncodeToString(digest[:]) != v.Digest {
 					t.Fatal("SDK structured digest mismatch")
@@ -167,7 +183,18 @@ func TestStacksJSOracle(t *testing.T) {
 				if he != nil {
 					t.Fatal(he)
 				}
-				sig, e = signing.PoX(v.PrivateKey, signing.PoXAuthorization{Address: signing.PoXAddress{Version: v.PoxVersion, HashBytes: hash}, RewardCycle: v.RewardCycle, Topic: v.Topic, Period: v.Period, MaxAmount: amount, AuthID: auth, ChainID: 0x80000000})
+				sig, e = signing.PoX(
+					v.PrivateKey,
+					signing.PoXAuthorization{
+						Address:     signing.PoXAddress{Version: v.PoxVersion, HashBytes: hash},
+						RewardCycle: v.RewardCycle,
+						Topic:       v.Topic,
+						Period:      v.Period,
+						MaxAmount:   amount,
+						AuthID:      auth,
+						ChainID:     0x80000000,
+					},
+				)
 			}
 			if e != nil {
 				t.Fatal(e)
@@ -212,7 +239,12 @@ func TestPoXCallOracle(t *testing.T) {
 					t.Fatal(e)
 				}
 			}
-			signer := signing.SignerArguments{Signature: signature, PublicKey: v.SignerKey, MaxAmount: amount, AuthID: auth}
+			signer := signing.SignerArguments{
+				Signature: signature,
+				PublicKey: v.SignerKey,
+				MaxAmount: amount,
+				AuthID:    auth,
+			}
 			var args []clarity.Value
 			function := "stack-stx"
 			if v.Operation == "enroll" {
@@ -233,7 +265,20 @@ func TestPoXCallOracle(t *testing.T) {
 					t.Fatalf("PoX argument %d differs: %v", j, e)
 				}
 			}
-			tx, e := transaction.Call(transaction.Options{Version: transaction.Testnet, ChainID: 0x80000000, PrivateKey: v.PrivateKey, Nonce: uint64Value(t, v.Nonce), Fee: uint64Value(t, v.Fee), PostConditionMode: transaction.Deny}, "ST000000000000000000002AMW42H", "pox-4", function, args)
+			tx, e := transaction.Call(
+				transaction.Options{
+					Version:           transaction.Testnet,
+					ChainID:           0x80000000,
+					PrivateKey:        v.PrivateKey,
+					Nonce:             uint64Value(t, v.Nonce),
+					Fee:               uint64Value(t, v.Fee),
+					PostConditionMode: transaction.Deny,
+				},
+				"ST000000000000000000002AMW42H",
+				"pox-4",
+				function,
+				args,
+			)
 			if e != nil {
 				t.Fatal(e)
 			}

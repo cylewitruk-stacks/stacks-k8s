@@ -47,7 +47,9 @@ type StackerRole struct {
 
 // NewStackerRole verifies all three mounted identities before creating any nonce stream.
 // Identical holder and administrator addresses share one stream, including pending PoX-4 work.
-func NewStackerRole(holderKey, holder, signerKey, signerPublic, administratorKey, administrator string) (*StackerRole, error) {
+func NewStackerRole(
+	holderKey, holder, signerKey, signerPublic, administratorKey, administrator string,
+) (*StackerRole, error) {
 	legacy, err := NewPoX4Role(holderKey, holder, signerKey, signerPublic)
 	if err != nil {
 		return nil, err
@@ -89,7 +91,8 @@ func (r *StackerRole) Step(ctx context.Context, snapshot stacksworker.Snapshot) 
 		if r.legacy.goal != nil && r.legacy.stream.Pending() == 0 && !r.legacy.failed {
 			pox, e := r.legacy.goal.input.Node.PoX(ctx)
 			inclusion := r.legacy.stream.facts.LastInclusion
-			if e == nil && pox.Contract == PoX5Contract && inclusion != nil && inclusion.Success && inclusion.TxID == r.legacy.stream.facts.LastTxID {
+			if e == nil && pox.Contract == PoX5Contract && inclusion != nil && inclusion.Success &&
+				inclusion.TxID == r.legacy.stream.facts.LastTxID {
 				r.legacy.goal = nil
 				result = r.legacy.result(reasonPoX4InclusionObservedAtTransition)
 			}
@@ -104,16 +107,27 @@ func (r *StackerRole) Step(ctx context.Context, snapshot stacksworker.Snapshot) 
 	}
 	input, snapshot, err := r.inputs(ctx, snapshot)
 	if err != nil {
+		//nolint:nilerr // Publish the reason and retry without failing the worker session.
 		return r.result(reasonDependenciesUnavailable), nil
 	}
-	if input.Node == nil || input.Holder != r.legacy.stream.Address || input.Administrator != r.administrator.Address || input.SignerPublicKey != r.legacy.signerPublic || input.Amount == nil || input.Amount.Sign() <= 0 || input.Amount.BitLen() > 128 || input.LockCycles < 2 || input.LockCycles > 12 || input.RenewWhenRemainingCycles < 1 || input.RenewWhenRemainingCycles >= input.LockCycles || input.Epoch4Height == 0 {
+	if input.Node == nil || input.Holder != r.legacy.stream.Address || input.Administrator != r.administrator.Address ||
+		input.SignerPublicKey != r.legacy.signerPublic ||
+		input.Amount == nil ||
+		input.Amount.Sign() <= 0 ||
+		input.Amount.BitLen() > 128 ||
+		input.LockCycles < 2 ||
+		input.LockCycles > 12 ||
+		input.RenewWhenRemainingCycles < 1 ||
+		input.RenewWhenRemainingCycles >= input.LockCycles ||
+		input.Epoch4Height == 0 {
 		r.cached = nil
 		return r.result(reasonInvalidPolicy), nil
 	}
-	copy := clonePoX5Inputs(input)
-	r.cached, r.cachedDigest = &copy, snapshot.Participant.Status.Admission.PolicyDigest
+	clonedInput := clonePoX5Inputs(input)
+	r.cached, r.cachedDigest = &clonedInput, snapshot.Participant.Status.Admission.PolicyDigest
 	pox, err := input.Node.PoX(ctx)
 	if err != nil {
+		//nolint:nilerr // Missing observation holds the policy; it does not fail the worker.
 		return r.result(reasonPoXObservationUnavailable), nil
 	}
 	if pox.Contract == PoX4Contract && !r.transitioned {
@@ -133,6 +147,7 @@ func (r *StackerRole) Step(ctx context.Context, snapshot stacksworker.Snapshot) 
 	}
 	state, err := observePoX5(ctx, input, target, r.now())
 	if err != nil {
+		//nolint:nilerr // Missing observation holds the policy; it does not fail the worker.
 		return r.result(reasonPoXObservationUnavailable), nil
 	}
 	r.current = state.observation
@@ -163,7 +178,8 @@ func (r *StackerRole) Step(ctx context.Context, snapshot stacksworker.Snapshot) 
 			return r.result(reasonInvalidPoXCycle), nil
 		}
 		first := state.pox.RewardCycle + 1
-		if input.InitialCohort && !r.initialDone && (first > input.TargetCycle || first+input.LockCycles <= input.TargetCycle) {
+		if input.InitialCohort && !r.initialDone &&
+			(first > input.TargetCycle || first+input.LockCycles <= input.TargetCycle) {
 			r.failed = true
 			return r.result(reasonBootstrapWindowMissed), nil
 		}
@@ -173,7 +189,16 @@ func (r *StackerRole) Step(ctx context.Context, snapshot stacksworker.Snapshot) 
 		if r.initialDone || !input.InitialCohort {
 			target = first
 		}
-		return r.offer(ctx, snapshot, input, state, api.PostconditionPoX5Enrollment, first, first+input.LockCycles, target)
+		return r.offer(
+			ctx,
+			snapshot,
+			input,
+			state,
+			api.PostconditionPoX5Enrollment,
+			first,
+			first+input.LockCycles,
+			target,
+		)
 	}
 	if state.amount.Cmp(input.Amount) != 0 {
 		return r.result(reasonAwaitingUnlockForAmountChange), nil
@@ -200,7 +225,14 @@ func (r *StackerRole) Step(ctx context.Context, snapshot stacksworker.Snapshot) 
 }
 
 // offer constructs a single explicit manager or direct-stake operation.
-func (r *StackerRole) offer(ctx context.Context, snapshot stacksworker.Snapshot, input PoX5Inputs, state pox5State, kind api.PostconditionKind, first, end, target uint64) (stacksworker.RoleResult, error) {
+func (r *StackerRole) offer(
+	ctx context.Context,
+	snapshot stacksworker.Snapshot,
+	input PoX5Inputs,
+	state pox5State,
+	kind api.PostconditionKind,
+	first, end, target uint64,
+) (stacksworker.RoleResult, error) {
 	admin := kind == api.PostconditionManagerDeployment || kind == api.PostconditionSignerRegistration
 	stream, key := &r.legacy.stream, r.legacy.holderKey
 	if admin {
@@ -210,41 +242,84 @@ func (r *StackerRole) offer(ctx context.Context, snapshot stacksworker.Snapshot,
 	if kind == api.PostconditionPoX5Enrollment {
 		required.Add(required, input.Amount)
 	}
-	reason, _ := stream.Offer(ctx, r.now, input.Node, required, snapshot.Authorize, func(nonce uint64) (transaction.Transaction, error) {
-		options := transaction.Options{Version: transaction.Testnet, ChainID: 0x80000000, Nonce: nonce, Fee: PoX4Fee, PostConditionMode: transaction.Deny, PrivateKey: key}
-		if kind == api.PostconditionManagerDeployment {
-			source, err := protocolcontracts.DirectManager(input.Holder)
+	reason, _ := stream.Offer(
+		ctx,
+		r.now,
+		input.Node,
+		required,
+		snapshot.Authorize,
+		func(nonce uint64) (transaction.Transaction, error) {
+			options := transaction.Options{
+				Version:           transaction.Testnet,
+				ChainID:           0x80000000,
+				Nonce:             nonce,
+				Fee:               PoX4Fee,
+				PostConditionMode: transaction.Deny,
+				PrivateKey:        key,
+			}
+			if kind == api.PostconditionManagerDeployment {
+				source, err := protocolcontracts.DirectManager(input.Holder)
+				if err != nil {
+					return transaction.Transaction{}, err
+				}
+				return transaction.Deploy(options, "direct-signer", source, 6)
+			}
+			manager, err := clarity.Principal(input.manager())
 			if err != nil {
 				return transaction.Transaction{}, err
 			}
-			return transaction.Deploy(options, "direct-signer", source, 6)
-		}
-		manager, err := clarity.Principal(input.manager())
-		if err != nil {
-			return transaction.Transaction{}, err
-		}
-		if kind == api.PostconditionSignerRegistration {
-			sig, err := signing.SignerGrant(r.legacy.signerKey, input.manager(), clarity.Uint(nonce), 0x80000000)
-			if err != nil {
-				return transaction.Transaction{}, err
+			if kind == api.PostconditionSignerRegistration {
+				sig, err := signing.SignerGrant(r.legacy.signerKey, input.manager(), clarity.Uint(nonce), 0x80000000)
+				if err != nil {
+					return transaction.Transaction{}, err
+				}
+				public, err := hex.DecodeString(input.SignerPublicKey)
+				if err != nil {
+					return transaction.Transaction{}, err
+				}
+				return transaction.Call(
+					options,
+					input.Administrator,
+					"direct-signer",
+					"register-self",
+					[]clarity.Value{
+						manager,
+						{Type: clarity.Buffer, Bytes: public},
+						clarity.Uint(nonce),
+						{Type: clarity.Buffer, Bytes: sig[:]},
+					},
+				)
 			}
-			public, err := hex.DecodeString(input.SignerPublicKey)
-			if err != nil {
-				return transaction.Transaction{}, err
+			// The selected profile explicitly permits the direct native STX lock.
+			options.PostConditionMode = transaction.Allow
+			if kind == api.PostconditionPoX5Enrollment {
+				amount, err := clarity.Uint128(input.Amount.String())
+				if err != nil {
+					return transaction.Transaction{}, err
+				}
+				return transaction.Call(
+					options,
+					pox4Address,
+					"pox-5",
+					"stake",
+					[]clarity.Value{
+						manager,
+						amount,
+						clarity.Uint(end - first),
+						clarity.Uint(state.pox.BurnHeight),
+						{Type: clarity.None},
+					},
+				)
 			}
-			return transaction.Call(options, input.Administrator, "direct-signer", "register-self", []clarity.Value{manager, {Type: clarity.Buffer, Bytes: public}, clarity.Uint(nonce), {Type: clarity.Buffer, Bytes: sig[:]}})
-		}
-		// The selected profile explicitly permits the direct native STX lock.
-		options.PostConditionMode = transaction.Allow
-		if kind == api.PostconditionPoX5Enrollment {
-			amount, err := clarity.Uint128(input.Amount.String())
-			if err != nil {
-				return transaction.Transaction{}, err
-			}
-			return transaction.Call(options, pox4Address, "pox-5", "stake", []clarity.Value{manager, amount, clarity.Uint(end - first), clarity.Uint(state.pox.BurnHeight), {Type: clarity.None}})
-		}
-		return transaction.Call(options, pox4Address, "pox-5", "stake-update", []clarity.Value{manager, manager, clarity.Uint(end - state.end), clarity.Uint(0), {Type: clarity.None}})
-	})
+			return transaction.Call(
+				options,
+				pox4Address,
+				"pox-5",
+				"stake-update",
+				[]clarity.Value{manager, manager, clarity.Uint(end - state.end), clarity.Uint(0), {Type: clarity.None}},
+			)
+		},
+	)
 	if stream.Pending() != 0 {
 		input.Amount = new(big.Int).Set(input.Amount)
 		r.goal = &pox5Goal{input: input, kind: kind, first: first, end: end, target: target, administrator: admin}
@@ -273,6 +348,7 @@ func (r *StackerRole) observeGoal(ctx context.Context) string {
 		return reasonConflict
 	}
 	var proof any
+	//nolint:exhaustive // Only manager lifecycle goals use this observer; enrollment uses the other path.
 	switch goal.kind {
 	case api.PostconditionManagerDeployment:
 		if state.sourceFound {
@@ -280,7 +356,11 @@ func (r *StackerRole) observeGoal(ctx context.Context) string {
 		}
 	case api.PostconditionSignerRegistration:
 		if state.sourceFound && state.registered && state.granted {
-			proof = struct{ Manager, SourceDigest, Key string }{goal.input.manager(), sourceDigest(state.source), goal.input.SignerPublicKey}
+			proof = struct{ Manager, SourceDigest, Key string }{
+				goal.input.manager(),
+				sourceDigest(state.source),
+				goal.input.SignerPublicKey,
+			}
 		}
 	default:
 		if state.observation != nil && state.first == goal.first && state.end == goal.end {
@@ -297,7 +377,13 @@ func (r *StackerRole) observeGoal(ctx context.Context) string {
 		if goal.administrator {
 			nonce = state.administrator.Nonce
 		}
-		evidence := api.TransactionPostcondition{TxID: stream.pending.transaction.TxID, Kind: goal.kind, StateDigest: foundation.Digest(proof), StacksTip: state.view.IndexBlockID, ObservedAt: metav1.NewTime(r.now().UTC())}
+		evidence := api.TransactionPostcondition{
+			TxID:        stream.pending.transaction.TxID,
+			Kind:        goal.kind,
+			StateDigest: foundation.Digest(proof),
+			StacksTip:   state.view.IndexBlockID,
+			ObservedAt:  metav1.NewTime(r.now().UTC()),
+		}
 		reason, err = stream.SettleObserved(evidence.TxID, nonce, evidence)
 		if err != nil || stream.Pending() != 0 {
 			return reason
@@ -327,7 +413,16 @@ func (r *StackerRole) pending() int32 {
 
 // result snapshots both independent account streams and the latest native evidence.
 func (r *StackerRole) result(reason string) stacksworker.RoleResult {
-	result := stacksworker.RoleResult{Transactions: r.legacy.stream.Facts(), PoX5: r.current.DeepCopy(), AppliedPolicyDigest: r.applied, Pending: r.pending(), Failed: r.failed, Blocked: poxBlocked(reason, r.pending()), Reason: reason, RequeueAfter: time.Second}
+	result := stacksworker.RoleResult{
+		Transactions:        r.legacy.stream.Facts(),
+		PoX5:                r.current.DeepCopy(),
+		AppliedPolicyDigest: r.applied,
+		Pending:             r.pending(),
+		Failed:              r.failed,
+		Blocked:             poxBlocked(reason, r.pending()),
+		Reason:              reason,
+		RequeueAfter:        time.Second,
+	}
 	if r.administrator != &r.legacy.stream {
 		result.AdministratorTransactions = r.administrator.Facts()
 	}
@@ -344,5 +439,13 @@ func (r *StackerRole) Drain(ctx context.Context, snapshot stacksworker.Snapshot)
 		r.observeGoal(ctx)
 	}
 	result := r.result(reasonDraining)
-	return stacksworker.DrainResult{Done: result.Pending == 0, Settled: result.Pending == 0, Pending: result.Pending, Transactions: result.Transactions, AdministratorTransactions: result.AdministratorTransactions, PoX4: r.legacy.current.DeepCopy(), PoX5: result.PoX5}, nil
+	return stacksworker.DrainResult{
+		Done:                      result.Pending == 0,
+		Settled:                   result.Pending == 0,
+		Pending:                   result.Pending,
+		Transactions:              result.Transactions,
+		AdministratorTransactions: result.AdministratorTransactions,
+		PoX4:                      r.legacy.current.DeepCopy(),
+		PoX5:                      result.PoX5,
+	}, nil
 }

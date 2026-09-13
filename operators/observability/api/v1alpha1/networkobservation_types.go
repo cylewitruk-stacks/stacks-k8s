@@ -199,7 +199,3 @@ type NetworkObservationList struct {
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []NetworkObservation `json:"items"`
 }
-
-func init() {
-	SchemeBuilder.Register(&NetworkObservation{}, &NetworkObservationList{})
-}

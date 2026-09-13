@@ -103,7 +103,9 @@ func (w *Worker) Run(ctx context.Context) error {
 
 // defaults validates enrollment and allocates a unique process-start nonce.
 func (w *Worker) defaults() error {
-	if w.Client == nil || w.Reader == nil || w.RPC == nil || w.Input.Namespace == "" || w.Input.RecordName == "" || w.Input.RecordUID == "" || w.Input.CredentialsUID == "" {
+	if w.Client == nil || w.Reader == nil || w.RPC == nil || w.Input.Namespace == "" || w.Input.RecordName == "" ||
+		w.Input.RecordUID == "" ||
+		w.Input.CredentialsUID == "" {
 		return fmt.Errorf("incomplete Bitcoin worker enrollment")
 	}
 	if w.Now == nil {
@@ -128,7 +130,11 @@ func (w *Worker) defaults() error {
 // Step observes one record and authorizes at most one new bounded mutation.
 func (w *Worker) Step(ctx context.Context) error {
 	record := &bitcoin.BitcoinExecution{}
-	if e := w.Reader.Get(ctx, client.ObjectKey{Namespace: w.Input.Namespace, Name: w.Input.RecordName}, record); e != nil {
+	if e := w.Reader.Get(
+		ctx,
+		client.ObjectKey{Namespace: w.Input.Namespace, Name: w.Input.RecordName},
+		record,
+	); e != nil {
 		return e
 	}
 	if record.UID != w.Input.RecordUID {
@@ -164,7 +170,8 @@ func (w *Worker) Step(ctx context.Context) error {
 	if operation != nil && operation.Method == bitcoin.RPCUnloadWallet {
 		record.Status.PendingWalletRemoval = operation.Wallet.DeepCopy()
 	}
-	if !equality.Semantic.DeepEqual(record.Status.Observation, observation) || !equality.Semantic.DeepEqual(previousRemoval, record.Status.PendingWalletRemoval) {
+	if !equality.Semantic.DeepEqual(record.Status.Observation, observation) ||
+		!equality.Semantic.DeepEqual(previousRemoval, record.Status.PendingWalletRemoval) {
 		record.Status.Observation = observation
 		record.Status.Phase = bitcoin.ExecutionIdle
 		if e = w.Client.Status().Update(ctx, record); e != nil {
@@ -199,7 +206,12 @@ func (w *Worker) Step(ctx context.Context) error {
 }
 
 // arm reserves local capacity before CAS and starts only its own confirmed authorization.
-func (w *Worker) arm(ctx context.Context, record *bitcoin.BitcoinExecution, a admitted, operation bitcoin.BitcoinArmedRPC) error {
+func (w *Worker) arm(
+	ctx context.Context,
+	record *bitcoin.BitcoinExecution,
+	a admitted,
+	operation bitcoin.BitcoinArmedRPC,
+) error {
 	w.mu.Lock()
 	if w.closed || w.active {
 		w.mu.Unlock()
@@ -236,14 +248,16 @@ func (w *Worker) arm(ctx context.Context, record *bitcoin.BitcoinExecution, a ad
 		return fmt.Errorf("another mutation owner retains exclusion")
 	}
 	if operation.Offer != nil {
-		if !equality.Semantic.DeepEqual(current.Spec.Offer, operation.Offer) || operation.Offer.Number <= current.Status.CompletedOffer {
+		if !equality.Semantic.DeepEqual(current.Spec.Offer, operation.Offer) ||
+			operation.Offer.Number <= current.Status.CompletedOffer {
 			return fmt.Errorf("generation offer changed")
 		}
 		if e = w.authorizeOffer(ctx, fresh, operation.Offer); e != nil {
 			return e
 		}
 		height, tip, e := w.chain(ctx, fresh.target.Endpoint)
-		if e != nil || height != operation.Offer.ExpectedHeight || tip != operation.Offer.ExpectedTip || height >= operation.Offer.Ceiling {
+		if e != nil || height != operation.Offer.ExpectedHeight || tip != operation.Offer.ExpectedTip ||
+			height >= operation.Offer.Ceiling {
 			return fmt.Errorf("final generation ceiling preflight differs")
 		}
 	}
@@ -285,7 +299,7 @@ func (w *Worker) arm(ctx context.Context, record *bitcoin.BitcoinExecution, a ad
 	if closed || ctx.Err() != nil {
 		return w.withdraw(ctx, current, "")
 	}
-	receiver, cancel := context.WithCancel(context.Background())
+	receiver, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	w.mu.Lock()
 	w.cancel = cancel
 	w.mu.Unlock()
@@ -318,7 +332,11 @@ func (w *Worker) collect(ctx context.Context, record *bitcoin.BitcoinExecution, 
 	if e != nil {
 		return
 	}
-	receipt := bitcoin.BitcoinRPCReceipt{Request: request, BlockHash: hash, ReceivedAt: metav1.NewTime(w.Now().UTC())}
+	receipt := bitcoin.BitcoinRPCReceipt{
+		Request:    request,
+		BlockHash:  hash,
+		ReceivedAt: metav1.NewTime(w.Now().UTC()),
+	}
 	for ctx.Err() == nil {
 		attempt, cancel := context.WithTimeout(ctx, 5*time.Second)
 		e = w.account(attempt, record, &receipt)
@@ -340,7 +358,11 @@ func (w *Worker) collect(ctx context.Context, record *bitcoin.BitcoinExecution, 
 var errRetired = errors.New("execution environment retired")
 
 // account atomically records a receipt and its counters without releasing reservation ownership.
-func (w *Worker) account(ctx context.Context, record *bitcoin.BitcoinExecution, receipt *bitcoin.BitcoinRPCReceipt) error {
+func (w *Worker) account(
+	ctx context.Context,
+	record *bitcoin.BitcoinExecution,
+	receipt *bitcoin.BitcoinRPCReceipt,
+) error {
 	current := &bitcoin.BitcoinExecution{}
 	if e := w.Reader.Get(ctx, client.ObjectKeyFromObject(record), current); e != nil {
 		return e

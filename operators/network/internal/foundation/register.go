@@ -20,7 +20,12 @@ type RuntimeOptions struct {
 
 // Register composes independent root, identity and definition controllers in one manager.
 func Register(manager ctrl.Manager, image string, options ...RuntimeOptions) error {
-	root := &Reconciler{Client: manager.GetClient(), Reader: manager.GetAPIReader(), Scheme: manager.GetScheme(), RuntimeKinds: map[api.ParticipantKind]bool{}}
+	root := &Reconciler{
+		Client:       manager.GetClient(),
+		Reader:       manager.GetAPIReader(),
+		Scheme:       manager.GetScheme(),
+		RuntimeKinds: map[api.ParticipantKind]bool{},
+	}
 	for _, option := range options {
 		for _, kind := range option.Kinds {
 			root.RuntimeKinds[kind] = true
@@ -36,7 +41,13 @@ func Register(manager ctrl.Manager, image string, options ...RuntimeOptions) err
 		return err
 	}
 	for _, wallet := range []bool{false, true} {
-		r := &IdentityReconciler{Client: manager.GetClient(), Reader: manager.GetAPIReader(), Scheme: manager.GetScheme(), Wallet: wallet, Image: image}
+		r := &IdentityReconciler{
+			Client: manager.GetClient(),
+			Reader: manager.GetAPIReader(),
+			Scheme: manager.GetScheme(),
+			Wallet: wallet,
+			Image:  image,
+		}
 		if err := r.SetupWithManager(manager); err != nil {
 			return err
 		}

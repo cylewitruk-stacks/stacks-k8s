@@ -20,15 +20,48 @@ import (
 
 func TestDependencyCheckRejectsStaleCredentialStatus(t *testing.T) {
 	for _, derived := range []bool{false, true} {
-		for _, mode := range []string{"missing", "replaced", "deleting", "current", "account-replaced", "fingerprint-changed"} {
+		for _, mode := range []string{
+			"missing",
+			"replaced",
+			"deleting",
+			"current",
+			"account-replaced",
+			"fingerprint-changed",
+		} {
 			t.Run(fmt.Sprintf("derived=%t/%s", derived, mode), func(t *testing.T) {
 				scheme := runtime.NewScheme()
-				corev1.AddToScheme(scheme)
-				stacks.AddToScheme(scheme)
-				bitcoin.AddToScheme(scheme)
-				account := &stacks.StacksAccount{ObjectMeta: metav1.ObjectMeta{Name: "account", Namespace: "test", UID: "account-uid"}, Status: common.ResolutionStatus{Identity: &common.PublicIdentity{Address: "public"}, Digest: "fingerprint", CredentialsRef: &common.SecretKeyRef{Name: "key", Key: "privateKey"}, CredentialsUID: "key-uid", Conditions: []metav1.Condition{{Type: "Resolved", Status: metav1.ConditionTrue}}}}
+				if err := corev1.AddToScheme(scheme); err != nil {
+					t.Fatal(err)
+				}
+				if err := stacks.AddToScheme(scheme); err != nil {
+					t.Fatal(err)
+				}
+				if err := bitcoin.AddToScheme(scheme); err != nil {
+					t.Fatal(err)
+				}
+				account := &stacks.StacksAccount{
+					ObjectMeta: metav1.ObjectMeta{Name: "account", Namespace: "test", UID: "account-uid"},
+					Status: common.ResolutionStatus{
+						Identity:       &common.PublicIdentity{Address: "public"},
+						Digest:         "fingerprint",
+						CredentialsRef: &common.SecretKeyRef{Name: "key", Key: "privateKey"},
+						CredentialsUID: "key-uid",
+						Conditions:     []metav1.Condition{{Type: "Resolved", Status: metav1.ConditionTrue}},
+					},
+				}
 				pinned := binding("StacksAccount", account, account.Status.Digest)
-				wallet := &bitcoin.BitcoinWallet{ObjectMeta: metav1.ObjectMeta{Name: "wallet", Namespace: "test", UID: "wallet-uid"}, Spec: bitcoin.BitcoinWalletSpec{KeySource: &bitcoin.WalletKeySource{StacksMinerAccountRef: &common.NameRef{Name: "account"}}}, Status: common.ResolutionStatus{Identity: &common.PublicIdentity{Address: "public"}, Digest: "wallet-fingerprint", Dependencies: []common.Binding{pinned}, Conditions: []metav1.Condition{{Type: "Resolved", Status: metav1.ConditionTrue}}}}
+				wallet := &bitcoin.BitcoinWallet{
+					ObjectMeta: metav1.ObjectMeta{Name: "wallet", Namespace: "test", UID: "wallet-uid"},
+					Spec: bitcoin.BitcoinWalletSpec{
+						KeySource: &bitcoin.WalletKeySource{StacksMinerAccountRef: &common.NameRef{Name: "account"}},
+					},
+					Status: common.ResolutionStatus{
+						Identity:     &common.PublicIdentity{Address: "public"},
+						Digest:       "wallet-fingerprint",
+						Dependencies: []common.Binding{pinned},
+						Conditions:   []metav1.Condition{{Type: "Resolved", Status: metav1.ConditionTrue}},
+					},
+				}
 				if derived {
 					pinned = binding("BitcoinWallet", wallet, wallet.Status.Digest)
 				}
@@ -40,7 +73,10 @@ func TestDependencyCheckRejectsStaleCredentialStatus(t *testing.T) {
 				}
 				objects := []client.Object{account, wallet}
 				if mode != "missing" {
-					secret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "key", Namespace: "test", UID: "key-uid"}, Immutable: ptr.To(true)}
+					secret := &corev1.Secret{
+						ObjectMeta: metav1.ObjectMeta{Name: "key", Namespace: "test", UID: "key-uid"},
+						Immutable:  ptr.To(true),
+					}
 					if mode == "replaced" {
 						secret.UID = "replacement"
 					}
@@ -52,7 +88,10 @@ func TestDependencyCheckRejectsStaleCredentialStatus(t *testing.T) {
 				}
 				base := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
 				reader := &metadataCounter{Client: base}
-				check := newDependencyCheck(reader, &api.StacksNetwork{ObjectMeta: metav1.ObjectMeta{Namespace: "test"}})
+				check := newDependencyCheck(
+					reader,
+					&api.StacksNetwork{ObjectMeta: metav1.ObjectMeta{Namespace: "test"}},
+				)
 				err := check.validate(context.Background(), []common.Binding{pinned, pinned})
 				if (err == nil) != (mode == "current") {
 					t.Fatalf("mode %s: %v", mode, err)
@@ -74,7 +113,12 @@ type metadataCounter struct {
 	secretReads int
 }
 
-func (r *metadataCounter) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+func (r *metadataCounter) Get(
+	ctx context.Context,
+	key client.ObjectKey,
+	obj client.Object,
+	opts ...client.GetOption,
+) error {
 	if _, ok := obj.(*corev1.Secret); ok {
 		return fmt.Errorf("private Secret read forbidden")
 	}
@@ -86,15 +130,39 @@ func (r *metadataCounter) Get(ctx context.Context, key client.ObjectKey, obj cli
 
 func TestDependencyCheckRetainedParticipantMustRemainSelected(t *testing.T) {
 	scheme := runtime.NewScheme()
-	api.AddToScheme(scheme)
-	p := &api.StacksNetworkParticipant{ObjectMeta: metav1.ObjectMeta{Name: "instance", Namespace: "test", UID: "instance-uid", OwnerReferences: []metav1.OwnerReference{{UID: "root-uid", Controller: ptr.To(true)}}}, Spec: api.StacksNetworkParticipantSpec{NetworkUID: "root-uid", ParticipantName: "node", Kind: "StacksNode"}, Status: api.ParticipantStatus{Admission: &api.Admission{}}}
+	if err := api.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	p := &api.StacksNetworkParticipant{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "instance",
+			Namespace:       "test",
+			UID:             "instance-uid",
+			OwnerReferences: []metav1.OwnerReference{{UID: "root-uid", Controller: ptr.To(true)}},
+		},
+		Spec: api.StacksNetworkParticipantSpec{
+			NetworkUID:      "root-uid",
+			ParticipantName: "node",
+			Kind:            "StacksNode",
+		},
+		Status: api.ParticipantStatus{Admission: &api.Admission{}},
+	}
 	base := fake.NewClientBuilder().WithScheme(scheme).WithObjects(p).Build()
-	root := &api.StacksNetwork{ObjectMeta: metav1.ObjectMeta{Namespace: "test", UID: "root-uid"}, Spec: api.StacksNetworkSpec{Participants: []api.Participant{{Name: "node", Kind: "StacksNode"}}}, Status: api.StacksNetworkStatus{Identities: []api.InstanceIdentity{{Name: "node", UID: types.UID("instance-uid")}}}}
+	root := &api.StacksNetwork{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "test", UID: "root-uid"},
+		Spec:       api.StacksNetworkSpec{Participants: []api.Participant{{Name: "node", Kind: "StacksNode"}}},
+		Status: api.StacksNetworkStatus{
+			Identities: []api.InstanceIdentity{{Name: "node", UID: types.UID("instance-uid")}},
+		},
+	}
 	for _, selected := range []bool{true, false} {
 		if !selected {
 			root.Spec.Participants = nil
 		}
-		err := newDependencyCheck(base, root).validate(context.Background(), []common.Binding{binding("StacksNetworkParticipant", p, "")})
+		err := newDependencyCheck(
+			base,
+			root,
+		).validate(context.Background(), []common.Binding{binding("StacksNetworkParticipant", p, "")})
 		if (err == nil) != selected {
 			t.Fatalf("selected=%t: %v", selected, err)
 		}
@@ -105,15 +173,50 @@ func TestRetainedParticipantChecksSourceAndTransitiveDependencies(t *testing.T) 
 	for _, mode := range []string{"valid", "source-missing", "source-replaced", "child-missing", "cycle"} {
 		t.Run(mode, func(t *testing.T) {
 			scheme := runtime.NewScheme()
-			api.AddToScheme(scheme)
-			bitcoin.AddToScheme(scheme)
-			stacks.AddToScheme(scheme)
-			p := &api.StacksNetworkParticipant{ObjectMeta: metav1.ObjectMeta{Name: "instance", Namespace: "test", UID: "instance-uid", OwnerReferences: []metav1.OwnerReference{{UID: "root-uid", Controller: ptr.To(true)}}}, Spec: api.StacksNetworkParticipantSpec{NetworkUID: "root-uid", ParticipantName: "node", Kind: "BitcoinNode", Source: api.Source{Name: "definition", UID: "definition-uid"}}}
-			root := &api.StacksNetwork{ObjectMeta: metav1.ObjectMeta{Namespace: "test", UID: "root-uid"}, Spec: api.StacksNetworkSpec{Participants: []api.Participant{{Name: "node", Kind: "BitcoinNode"}}}, Status: api.StacksNetworkStatus{Identities: []api.InstanceIdentity{{Name: "node", UID: p.UID}}}}
-			account := &stacks.StacksAccount{ObjectMeta: metav1.ObjectMeta{Name: "account", Namespace: "test", UID: "account-uid"}, Status: common.ResolutionStatus{Identity: &common.PublicIdentity{Address: "public"}, Digest: "public-fingerprint", Conditions: []metav1.Condition{{Type: "Resolved", Status: metav1.ConditionTrue}}}}
-			p.Status.Admission = &api.Admission{Source: p.Spec.Source, Dependencies: []common.Binding{binding("StacksAccount", account, account.Status.Digest)}}
+			if err := api.AddToScheme(scheme); err != nil {
+				t.Fatal(err)
+			}
+			if err := bitcoin.AddToScheme(scheme); err != nil {
+				t.Fatal(err)
+			}
+			if err := stacks.AddToScheme(scheme); err != nil {
+				t.Fatal(err)
+			}
+			p := &api.StacksNetworkParticipant{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:            "instance",
+					Namespace:       "test",
+					UID:             "instance-uid",
+					OwnerReferences: []metav1.OwnerReference{{UID: "root-uid", Controller: ptr.To(true)}},
+				},
+				Spec: api.StacksNetworkParticipantSpec{
+					NetworkUID:      "root-uid",
+					ParticipantName: "node",
+					Kind:            "BitcoinNode",
+					Source:          api.Source{Name: "definition", UID: "definition-uid"},
+				},
+			}
+			root := &api.StacksNetwork{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "test", UID: "root-uid"},
+				Spec:       api.StacksNetworkSpec{Participants: []api.Participant{{Name: "node", Kind: "BitcoinNode"}}},
+				Status:     api.StacksNetworkStatus{Identities: []api.InstanceIdentity{{Name: "node", UID: p.UID}}},
+			}
+			account := &stacks.StacksAccount{
+				ObjectMeta: metav1.ObjectMeta{Name: "account", Namespace: "test", UID: "account-uid"},
+				Status: common.ResolutionStatus{
+					Identity:   &common.PublicIdentity{Address: "public"},
+					Digest:     "public-fingerprint",
+					Conditions: []metav1.Condition{{Type: "Resolved", Status: metav1.ConditionTrue}},
+				},
+			}
+			p.Status.Admission = &api.Admission{
+				Source:       p.Spec.Source,
+				Dependencies: []common.Binding{binding("StacksAccount", account, account.Status.Digest)},
+			}
 			// Candidate-policy failure is not itself a reason to discard a still-valid admission.
-			p.Status.Conditions = []metav1.Condition{{Type: "Resolved", Status: metav1.ConditionFalse, Reason: "RequiresReplacement"}}
+			p.Status.Conditions = []metav1.Condition{
+				{Type: "Resolved", Status: metav1.ConditionFalse, Reason: "RequiresReplacement"},
+			}
 			if mode == "cycle" {
 				p.Status.Admission.Dependencies = []common.Binding{binding("StacksNetworkParticipant", p, "")}
 			}
@@ -122,14 +225,19 @@ func TestRetainedParticipantChecksSourceAndTransitiveDependencies(t *testing.T) 
 				objects = append(objects, account)
 			}
 			if mode != "source-missing" {
-				source := &bitcoin.BitcoinNode{ObjectMeta: metav1.ObjectMeta{Name: "definition", Namespace: "test", UID: "definition-uid"}}
+				source := &bitcoin.BitcoinNode{
+					ObjectMeta: metav1.ObjectMeta{Name: "definition", Namespace: "test", UID: "definition-uid"},
+				}
 				if mode == "source-replaced" {
 					source.UID = "new-definition"
 				}
 				objects = append(objects, source)
 			}
 			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
-			err := newDependencyCheck(c, root).validate(context.Background(), []common.Binding{binding("StacksNetworkParticipant", p, "")})
+			err := newDependencyCheck(
+				c,
+				root,
+			).validate(context.Background(), []common.Binding{binding("StacksNetworkParticipant", p, "")})
 			if (err == nil) != (mode == "valid") {
 				t.Fatalf("mode %s: %v", mode, err)
 			}

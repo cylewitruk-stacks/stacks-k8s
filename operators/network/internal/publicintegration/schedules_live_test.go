@@ -32,18 +32,28 @@ func scheduleMatches(s snapshot, t scheduleTrial) (*participantEvidence, bool) {
 	if s.Status.ObservationPolicy == nil {
 		return nil, false
 	}
-	freshness := time.Duration(3*s.Status.ObservationPolicy.PollIntervalSeconds+s.Status.ObservationPolicy.RPCAllowanceSeconds) * time.Second
+	freshness := time.Duration(
+		3*s.Status.ObservationPolicy.PollIntervalSeconds+s.Status.ObservationPolicy.RPCAllowanceSeconds,
+	) * time.Second
 	for i := range s.Participants {
 		p := &s.Participants[i]
 		if p.Identity.UID != t.producer {
 			continue
 		}
 		a, v := p.Status.Admission, p.Status.Scheduling
-		if a == nil || a.Configuration.BitcoinBlockProduction == nil || v == nil || v.PolicyDigest != a.PolicyDigest || v.ObservedAt == nil || v.ObservedAt.After(s.At) || s.At.Sub(v.ObservedAt.Time) > freshness {
+		if a == nil || a.Configuration.BitcoinBlockProduction == nil || v == nil || v.PolicyDigest != a.PolicyDigest ||
+			v.ObservedAt == nil ||
+			v.ObservedAt.After(s.At) ||
+			s.At.Sub(v.ObservedAt.Time) > freshness {
 			return nil, false
 		}
 		policy := a.Configuration.BitcoinBlockProduction
-		if policy.Schedule == nil || !reflect.DeepEqual(*policy.Schedule, t.baseline.Spec) || policy.Targets == nil || !reflect.DeepEqual(*policy.Targets, t.targets) || v.Schedule == nil || !reflect.DeepEqual(*v.Schedule, t.effective) || v.ScheduleRef == nil || v.ScheduleRef.UID != t.baseline.UID {
+		if policy.Schedule == nil || !reflect.DeepEqual(*policy.Schedule, t.baseline.Spec) || policy.Targets == nil ||
+			!reflect.DeepEqual(*policy.Targets, t.targets) ||
+			v.Schedule == nil ||
+			!reflect.DeepEqual(*v.Schedule, t.effective) ||
+			v.ScheduleRef == nil ||
+			v.ScheduleRef.UID != t.baseline.UID {
 			return nil, false
 		}
 		if (t.override == "") != (v.Override == nil) || t.override != "" && v.Override.Override.UID != t.override {
@@ -56,7 +66,10 @@ func scheduleMatches(s snapshot, t scheduleTrial) (*participantEvidence, bool) {
 			found := false
 			for _, selected := range v.Targets {
 				for _, node := range s.Participants {
-					if node.Kind == "BitcoinNode" && node.Name == desired.NodeRef.Name && node.Identity.UID == selected.Participant.UID && node.Identity.Name == selected.Participant.Name && selected.Weight == desired.Weight {
+					if node.Kind == "BitcoinNode" && node.Name == desired.NodeRef.Name &&
+						node.Identity.UID == selected.Participant.UID &&
+						node.Identity.Name == selected.Participant.Name &&
+						selected.Weight == desired.Weight {
 						found = true
 					}
 				}
@@ -71,15 +84,31 @@ func scheduleMatches(s snapshot, t scheduleTrial) (*participantEvidence, bool) {
 }
 
 // scheduleReceipt accepts only exact current-process baseline receipts carrying the tested authority.
-func scheduleReceipt(receipt *bitcoin.BitcoinRPCReceipt, view *bitcoin.BitcoinObservation, p *participantEvidence, t scheduleTrial) bool {
-	if receipt == nil || view == nil || receipt.Request.Method != "Generate" || receipt.Request.Action != nil || receipt.Request.ID == "" || receipt.BlockHash == "" || !receipt.ReceivedAt.After(t.after) || receipt.ReceivedAt.After(view.ObservedAt.Time) || receipt.Request.Target != view.Target {
+func scheduleReceipt(
+	receipt *bitcoin.BitcoinRPCReceipt,
+	view *bitcoin.BitcoinObservation,
+	p *participantEvidence,
+	t scheduleTrial,
+) bool {
+	if receipt == nil || view == nil || receipt.Request.Method != "Generate" || receipt.Request.Action != nil ||
+		receipt.Request.ID == "" ||
+		receipt.BlockHash == "" ||
+		!receipt.ReceivedAt.After(t.after) ||
+		receipt.ReceivedAt.After(view.ObservedAt.Time) ||
+		receipt.Request.Target != view.Target {
 		return false
 	}
 	offer := receipt.Request.Offer
-	if offer == nil || offer.Mode != "Baseline" || offer.Production.UID != t.producer || offer.PolicyDigest != p.Status.Scheduling.PolicyDigest || offer.Initialization != p.Status.Scheduling.Initialization || offer.Target == nil || *offer.Target != view.Target.Participant || view.Height <= offer.ExpectedHeight {
+	if offer == nil || offer.Mode != "Baseline" || offer.Production.UID != t.producer ||
+		offer.PolicyDigest != p.Status.Scheduling.PolicyDigest ||
+		offer.Initialization != p.Status.Scheduling.Initialization ||
+		offer.Target == nil ||
+		*offer.Target != view.Target.Participant ||
+		view.Height <= offer.ExpectedHeight {
 		return false
 	}
-	return t.override == "" && offer.Override == nil || t.override != "" && offer.Override != nil && offer.Override.UID == t.override
+	return t.override == "" && offer.Override == nil ||
+		t.override != "" && offer.Override != nil && offer.Override.UID == t.override
 }
 
 // awaitSchedule collects distinct receipts from every selected target without asserting statistical fairness.
@@ -124,8 +153,16 @@ func (h *harness) awaitSchedule(ctx context.Context, name string, t scheduleTria
 }
 
 // scheduleDefinition creates a single immutable timing declaration with an acknowledged UID.
-func (h *harness) scheduleDefinition(ctx context.Context, name string, cadence bitcoin.Cadence) (*bitcoin.BitcoinBlockSchedule, error) {
-	object := &bitcoin.BitcoinBlockSchedule{TypeMeta: metav1.TypeMeta{APIVersion: bitcoin.GroupVersion.String(), Kind: "BitcoinBlockSchedule"}, ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: h.config.namespace}, Spec: bitcoin.BitcoinBlockScheduleSpec{Cadence: cadence}}
+func (h *harness) scheduleDefinition(
+	ctx context.Context,
+	name string,
+	cadence bitcoin.Cadence,
+) (*bitcoin.BitcoinBlockSchedule, error) {
+	object := &bitcoin.BitcoinBlockSchedule{
+		TypeMeta:   metav1.TypeMeta{APIVersion: bitcoin.GroupVersion.String(), Kind: "BitcoinBlockSchedule"},
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: h.config.namespace},
+		Spec:       bitcoin.BitcoinBlockScheduleSpec{Cadence: cadence},
+	}
 	if err := h.c.Create(ctx, object); err != nil {
 		return nil, err
 	}
@@ -133,7 +170,12 @@ func (h *harness) scheduleDefinition(ctx context.Context, name string, cadence b
 }
 
 // changeSchedule changes only the exact fixture's reusable producer, preserving frozen payout/initialization.
-func (h *harness) changeSchedule(ctx context.Context, original *bitcoin.BitcoinBlockProduction, schedule *bitcoin.BitcoinBlockSchedule, targets []bitcoin.ProductionTarget) error {
+func (h *harness) changeSchedule(
+	ctx context.Context,
+	original *bitcoin.BitcoinBlockProduction,
+	schedule *bitcoin.BitcoinBlockSchedule,
+	targets []bitcoin.ProductionTarget,
+) error {
 	var root api.StacksNetwork
 	if err := h.c.Get(ctx, client.ObjectKey{Namespace: h.config.namespace, Name: "network"}, &root); err != nil {
 		return err
@@ -164,25 +206,50 @@ func (h *harness) qualifySchedules(ctx context.Context, before snapshot) (snapsh
 	if err != nil {
 		return before, err
 	}
-	fixed, err := h.scheduleDefinition(ctx, "qualify-fixed", bitcoin.Cadence{Mode: "Fixed", Interval: ptr.To(common.Duration("5s"))})
+	fixed, err := h.scheduleDefinition(
+		ctx,
+		"qualify-fixed",
+		bitcoin.Cadence{Mode: "Fixed", Interval: ptr.To(common.Duration("5s"))},
+	)
 	if err != nil {
 		return before, err
 	}
-	uniform, err := h.scheduleDefinition(ctx, "qualify-uniform", bitcoin.Cadence{Mode: "Uniform", MinimumInterval: ptr.To(common.Duration("5s")), MaximumInterval: ptr.To(common.Duration("7s"))})
+	uniform, err := h.scheduleDefinition(
+		ctx,
+		"qualify-uniform",
+		bitcoin.Cadence{
+			Mode:            "Uniform",
+			MinimumInterval: ptr.To(common.Duration("5s")),
+			MaximumInterval: ptr.To(common.Duration("7s")),
+		},
+	)
 	if err != nil {
 		return before, err
 	}
-	latest, err := h.scheduleDefinition(ctx, "qualify-latest", bitcoin.Cadence{Mode: "Fixed", Interval: ptr.To(common.Duration("7s"))})
+	latest, err := h.scheduleDefinition(
+		ctx,
+		"qualify-latest",
+		bitcoin.Cadence{Mode: "Fixed", Interval: ptr.To(common.Duration("7s"))},
+	)
 	if err != nil {
 		return before, err
 	}
-	targets := []bitcoin.ProductionTarget{{NodeRef: common.NameRef{Name: "btc-01"}, Weight: 1}, {NodeRef: common.NameRef{Name: "btc-02"}, Weight: 2}}
+	targets := []bitcoin.ProductionTarget{
+		{NodeRef: common.NameRef{Name: "btc-01"}, Weight: 1},
+		{NodeRef: common.NameRef{Name: "btc-02"}, Weight: 2},
+	}
 	for _, tc := range []struct {
 		name     string
 		schedule *bitcoin.BitcoinBlockSchedule
 		targets  []bitcoin.ProductionTarget
 	}{{"fixed-single-target", fixed, targets[:1]}, {"uniform-weighted-targets", uniform, targets}} {
-		trial := scheduleTrial{producer: producer, baseline: tc.schedule, effective: tc.schedule.Spec, targets: tc.targets, after: time.Now()}
+		trial := scheduleTrial{
+			producer:  producer,
+			baseline:  tc.schedule,
+			effective: tc.schedule.Spec,
+			targets:   tc.targets,
+			after:     time.Now(),
+		}
 		if err = h.changeSchedule(ctx, original, tc.schedule, tc.targets); err != nil {
 			return before, err
 		}
@@ -196,7 +263,19 @@ func (h *harness) qualifySchedules(ctx context.Context, before snapshot) (snapsh
 		if cancel {
 			name, duration = "qualify-override-cancel", "5m"
 		}
-		request := &bitcoin.BitcoinBlockScheduleOverride{TypeMeta: metav1.TypeMeta{APIVersion: bitcoin.GroupVersion.String(), Kind: "BitcoinBlockScheduleOverride"}, ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: h.config.namespace}, Spec: bitcoin.BitcoinBlockScheduleOverrideSpec{NetworkUID: h.rootUID, ProductionRef: common.NameRef{Name: "blocks"}, Schedule: fixed.Spec.DeepCopy(), Duration: duration}}
+		request := &bitcoin.BitcoinBlockScheduleOverride{
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: bitcoin.GroupVersion.String(),
+				Kind:       "BitcoinBlockScheduleOverride",
+			},
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: h.config.namespace},
+			Spec: bitcoin.BitcoinBlockScheduleOverrideSpec{
+				NetworkUID:    h.rootUID,
+				ProductionRef: common.NameRef{Name: "blocks"},
+				Schedule:      fixed.Spec.DeepCopy(),
+				Duration:      duration,
+			},
+		}
 		if err = h.c.Create(ctx, request); err != nil {
 			return before, err
 		}
@@ -204,7 +283,14 @@ func (h *harness) qualifySchedules(ctx context.Context, before snapshot) (snapsh
 		if cancel {
 			baseline = latest
 		}
-		trial := scheduleTrial{producer: producer, baseline: baseline, effective: fixed.Spec, targets: targets, override: request.UID, after: time.Now()}
+		trial := scheduleTrial{
+			producer:  producer,
+			baseline:  baseline,
+			effective: fixed.Spec,
+			targets:   targets,
+			override:  request.UID,
+			after:     time.Now(),
+		}
 		before, err = h.awaitSchedule(ctx, name+"-active", trial)
 		if err != nil {
 			return before, err
@@ -264,7 +350,13 @@ func (h *harness) qualifySchedules(ctx context.Context, before snapshot) (snapsh
 	if err = h.changeSchedule(ctx, original, nil, nil); err != nil {
 		return before, err
 	}
-	trial := scheduleTrial{producer: producer, baseline: originalSchedule, effective: originalSchedule.Spec, targets: ptr.Deref(original.Spec.Targets, nil), after: time.Now()}
+	trial := scheduleTrial{
+		producer:  producer,
+		baseline:  originalSchedule,
+		effective: originalSchedule.Spec,
+		targets:   ptr.Deref(original.Spec.Targets, nil),
+		after:     time.Now(),
+	}
 	before, err = h.awaitSchedule(ctx, "original-baseline-restored", trial)
 	if err != nil {
 		return before, err
@@ -273,7 +365,10 @@ func (h *harness) qualifySchedules(ctx context.Context, before snapshot) (snapsh
 }
 
 // scheduleFixture resolves the sole referenced producer and its current reusable schedule.
-func (h *harness) scheduleFixture(ctx context.Context, before snapshot) (*bitcoin.BitcoinBlockProduction, *bitcoin.BitcoinBlockSchedule, types.UID, error) {
+func (h *harness) scheduleFixture(
+	ctx context.Context,
+	before snapshot,
+) (*bitcoin.BitcoinBlockProduction, *bitcoin.BitcoinBlockSchedule, types.UID, error) {
 	var root api.StacksNetwork
 	if err := h.c.Get(ctx, client.ObjectKey{Namespace: h.config.namespace, Name: "network"}, &root); err != nil {
 		return nil, nil, "", err
@@ -308,7 +403,11 @@ func (h *harness) scheduleFixture(ctx context.Context, before snapshot) (*bitcoi
 		return nil, nil, "", fmt.Errorf("fixture baseline schedule reference required")
 	}
 	originalSchedule := &bitcoin.BitcoinBlockSchedule{}
-	if err := h.c.Get(ctx, client.ObjectKey{Namespace: h.config.namespace, Name: original.Spec.ScheduleRef.Name}, originalSchedule); err != nil {
+	if err := h.c.Get(
+		ctx,
+		client.ObjectKey{Namespace: h.config.namespace, Name: original.Spec.ScheduleRef.Name},
+		originalSchedule,
+	); err != nil {
 		return nil, nil, "", err
 	}
 	return original, originalSchedule, producer, nil

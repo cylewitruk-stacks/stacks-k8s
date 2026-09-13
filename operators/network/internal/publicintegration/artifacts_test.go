@@ -33,7 +33,11 @@ type operatorPod struct {
 // recordOperator captures the selected installation before creating a fixture; it never requests a rollout.
 func (h *harness) recordOperator(ctx context.Context) error {
 	var deployment appsv1.Deployment
-	if err := h.c.Get(ctx, client.ObjectKey{Namespace: h.config.operatorNamespace, Name: h.config.operatorName}, &deployment); err != nil {
+	if err := h.c.Get(
+		ctx,
+		client.ObjectKey{Namespace: h.config.operatorNamespace, Name: h.config.operatorName},
+		&deployment,
+	); err != nil {
 		return err
 	}
 	if deployment.UID == "" || deployment.UID != h.config.operatorUID || deployment.DeletionTimestamp != nil {
@@ -57,7 +61,9 @@ func (h *harness) recordOperator(ctx context.Context) error {
 	observed := []operatorPod{}
 	for _, pod := range pods.Items {
 		owner := metav1.GetControllerOf(&pod)
-		if owner == nil || owned[owner.UID] == nil || !metav1.IsControlledBy(&pod, owned[owner.UID]) || pod.DeletionTimestamp != nil || pod.Status.Phase != corev1.PodRunning {
+		if owner == nil || owned[owner.UID] == nil || !metav1.IsControlledBy(&pod, owned[owner.UID]) ||
+			pod.DeletionTimestamp != nil ||
+			pod.Status.Phase != corev1.PodRunning {
 			continue
 		}
 		if pod.UID == "" {
@@ -71,9 +77,21 @@ func (h *harness) recordOperator(ctx context.Context) error {
 					continue
 				}
 				if status.State.Running == nil || status.ImageID == "" || status.ContainerID == "" {
-					return fmt.Errorf("operator evidence: running image identity missing for %s/%s", pod.Name, container.Name)
+					return fmt.Errorf(
+						"operator evidence: running image identity missing for %s/%s",
+						pod.Name,
+						container.Name,
+					)
 				}
-				item.Containers = append(item.Containers, operatorContainer{Name: container.Name, Image: container.Image, ImageID: status.ImageID, ContainerID: status.ContainerID})
+				item.Containers = append(
+					item.Containers,
+					operatorContainer{
+						Name:        container.Name,
+						Image:       container.Image,
+						ImageID:     status.ImageID,
+						ContainerID: status.ContainerID,
+					},
+				)
 				found = true
 			}
 			if !found {
@@ -93,7 +111,15 @@ func (h *harness) recordOperator(ctx context.Context) error {
 	for _, container := range deployment.Spec.Template.Spec.Containers {
 		requested[container.Name] = container.Image
 	}
-	return h.event("operator-artifact", map[string]any{"namespace": deployment.Namespace, "deployment": objectIdentity(&deployment), "requestedImages": requested, "pods": observed})
+	return h.event(
+		"operator-artifact",
+		map[string]any{
+			"namespace":       deployment.Namespace,
+			"deployment":      objectIdentity(&deployment),
+			"requestedImages": requested,
+			"pods":            observed,
+		},
+	)
 }
 
 // recordGenesis captures immutable gates as soon as the root publishes their exact artifact.
@@ -112,10 +138,19 @@ func (h *harness) recordGenesis(ctx context.Context, root *api.StacksNetwork) er
 	if err := h.c.Get(ctx, client.ObjectKey{Namespace: root.Namespace, Name: ref.Name}, &genesis); err != nil {
 		return err
 	}
-	if genesis.UID != ref.UID || genesis.DeletionTimestamp != nil || genesis.Spec.Source.NetworkUID != root.UID || !metav1.IsControlledBy(&genesis, root) {
+	if genesis.UID != ref.UID || genesis.DeletionTimestamp != nil || genesis.Spec.Source.NetworkUID != root.UID ||
+		!metav1.IsControlledBy(&genesis, root) {
 		return fmt.Errorf("genesis evidence: artifact identity differs from root")
 	}
-	if err := h.event("genesis-artifact", map[string]any{"networkUID": root.UID, "genesis": objectIdentity(&genesis), "genesisDigest": root.Status.GenesisDigest, "gates": genesis.Spec.Bootstrap.Gates}); err != nil {
+	if err := h.event(
+		"genesis-artifact",
+		map[string]any{
+			"networkUID":    root.UID,
+			"genesis":       objectIdentity(&genesis),
+			"genesisDigest": root.Status.GenesisDigest,
+			"gates":         genesis.Spec.Bootstrap.Gates,
+		},
+	); err != nil {
 		return err
 	}
 	h.recordedGenesisUID = genesis.UID

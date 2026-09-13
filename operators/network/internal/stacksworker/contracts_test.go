@@ -27,8 +27,26 @@ func TestContractObservationPublicationRetainsOriginalAndClearsStaleEvidence(t *
 	root, p, pod, profile := fixture(t)
 	ProjectSession(root, p, pod, nil, time.Now())
 	c := &statusClient{Client: fakeClient(t, root, p, pod)}
-	role := &contractReportRole{observation: &api.ContractSetObservation{SignerPublicKeys: []string{"original"}, Complete: true, ObservedAt: metav1.NewTime(time.Unix(100, 0))}}
-	r := Runtime{Client: c, Namespace: p.Namespace, ParticipantName: p.Name, NetworkUID: root.UID, ParticipantUID: p.UID, PodUID: pod.UID, PodName: pod.Name, Profile: profile, Role: role, Prerequisites: func(context.Context, Snapshot) error { return nil }, nonce: "process"}
+	role := &contractReportRole{
+		observation: &api.ContractSetObservation{
+			SignerPublicKeys: []string{"original"},
+			Complete:         true,
+			ObservedAt:       metav1.NewTime(time.Unix(100, 0)),
+		},
+	}
+	r := Runtime{
+		Client:          c,
+		Namespace:       p.Namespace,
+		ParticipantName: p.Name,
+		NetworkUID:      root.UID,
+		ParticipantUID:  p.UID,
+		PodUID:          pod.UID,
+		PodName:         pod.Name,
+		Profile:         profile,
+		Role:            role,
+		Prerequisites:   func(context.Context, Snapshot) error { return nil },
+		nonce:           "process",
+	}
 	if _, err := r.Reconcile(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -46,7 +64,8 @@ func TestContractObservationPublicationRetainsOriginalAndClearsStaleEvidence(t *
 	if err := c.Get(ctx, client.ObjectKeyFromObject(p), &actual); err != nil {
 		t.Fatal(err)
 	}
-	if role.steps != 2 || actual.Status.Execution.Contracts.SignerPublicKeys[0] != "original" || actual.Status.Execution.Contracts.ObservedAt.Unix() != 100 {
+	if role.steps != 2 || actual.Status.Execution.Contracts.SignerPublicKeys[0] != "original" ||
+		actual.Status.Execution.Contracts.ObservedAt.Unix() != 100 {
 		t.Fatal("publication retry changed native contract evidence")
 	}
 	role.observation = nil

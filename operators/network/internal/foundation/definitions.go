@@ -77,7 +77,13 @@ func (r *DefinitionReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 	status.ObservedGeneration = obj.GetGeneration()
 	status.Digest = Digest(input)
-	condition := metav1.Condition{Type: common.ConditionResolved, Status: metav1.ConditionTrue, Reason: reasonDefinitionValid, Message: "Intrinsic inputs valid; instance wiring is resolved by StacksNetwork", ObservedGeneration: obj.GetGeneration()}
+	condition := metav1.Condition{
+		Type:               common.ConditionResolved,
+		Status:             metav1.ConditionTrue,
+		Reason:             reasonDefinitionValid,
+		Message:            "Intrinsic inputs valid; instance wiring is resolved by StacksNetwork",
+		ObservedGeneration: obj.GetGeneration(),
+	}
 	if validation != nil {
 		condition.Status = metav1.ConditionFalse
 		condition.Reason = reasonDefinitionUnavailable
@@ -85,11 +91,13 @@ func (r *DefinitionReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 	meta.SetStatusCondition(&status.Conditions, condition)
 	if !equal(*previous, *status) {
-		if err := r.Client.Status().Patch(ctx, obj, client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{})); err != nil {
+		if err := r.Client.Status().
+			Patch(ctx, obj, client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{})); err != nil {
 			return ctrl.Result{}, err
 		}
 	}
 	if validation != nil {
+		//nolint:nilerr // Resolution errors are published as conditions and retried on the bounded polling interval.
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 	return ctrl.Result{}, nil
@@ -105,12 +113,18 @@ func (r *DefinitionReconciler) SetupWithManager(m ctrl.Manager) error {
 	if err != nil {
 		return err
 	}
-	return ctrl.NewControllerManagedBy(m).Named("foundation-definition-" + gvk.Kind).For(object).Owns(&stacks.StacksAccount{}).Complete(r)
+	return ctrl.NewControllerManagedBy(m).
+		Named("foundation-definition-" + gvk.Kind).
+		For(object).
+		Owns(&stacks.StacksAccount{}).
+		Complete(r)
 }
 
 func defaultAccount(config *api.Configuration, owner client.Object) *common.NameRef {
 	switch {
-	case config.StacksNode != nil && config.StacksNode.IdentityAccountRef == nil && allowsDefaultIdentity(config.StacksNode):
+	case config.StacksNode != nil &&
+		config.StacksNode.IdentityAccountRef == nil &&
+		allowsDefaultIdentity(config.StacksNode):
 		ref := &common.NameRef{Name: DefaultAccountName(owner.GetName(), "identity")}
 		config.StacksNode.IdentityAccountRef = ref
 		return ref

@@ -26,7 +26,23 @@ func finiteFixture(t *testing.T) (*testFixture, *action.BitcoinBlockGeneration) 
 	f.rpc.exists = true
 	f.rpc.loaded = true
 	f.rpc.imported = true
-	request := &action.BitcoinBlockGeneration{ObjectMeta: metav1.ObjectMeta{Name: "finite", Namespace: "test", UID: "finite-uid", CreationTimestamp: metav1.NewTime(f.now), Finalizers: []string{action.CleanupFinalizer}}, Spec: action.BitcoinBlockGenerationSpec{NetworkUID: f.root.UID, BitcoinNodeRef: action.LocalReference{Name: "bitcoin"}, Address: testAddress, Count: 2, Cadence: action.GenerationCadence{Mode: "Immediate"}, Timeout: metav1.Duration{Duration: time.Minute}}}
+	request := &action.BitcoinBlockGeneration{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "finite",
+			Namespace:         "test",
+			UID:               "finite-uid",
+			CreationTimestamp: metav1.NewTime(f.now),
+			Finalizers:        []string{action.CleanupFinalizer},
+		},
+		Spec: action.BitcoinBlockGenerationSpec{
+			NetworkUID:     f.root.UID,
+			BitcoinNodeRef: action.LocalReference{Name: "bitcoin"},
+			Address:        testAddress,
+			Count:          2,
+			Cadence:        action.GenerationCadence{Mode: "Immediate"},
+			Timeout:        metav1.Duration{Duration: time.Minute},
+		},
+	}
 	if err := f.c.Create(ctx, request); err != nil {
 		t.Fatal(err)
 	}
@@ -62,7 +78,8 @@ func TestFiniteGenerationRetainsReceiptUntilLifecycleAcknowledgement(t *testing.
 		f.worker.workers.Wait()
 	}
 	record := f.readRecord(t)
-	if record.Status.Armed != nil || record.Status.Action.BlocksGenerated != 2 || record.Status.Reservation == nil || len(f.rpc.calls) != 2 {
+	if record.Status.Armed != nil || record.Status.Action.BlocksGenerated != 2 || record.Status.Reservation == nil ||
+		len(f.rpc.calls) != 2 {
 		t.Fatalf("finite receipt accounting: %+v sends%v", record.Status, f.rpc.calls)
 	}
 	if err := f.worker.Step(ctx); err != nil {
@@ -95,20 +112,38 @@ func TestFiniteLostArmWriteNeverSendsOrReplays(t *testing.T) {
 	f, _ := finiteFixture(t)
 	ctx := context.Background()
 	base := f.c
-	f.worker.Client = interceptor.NewClient(base.(client.WithWatch), interceptor.Funcs{SubResourceUpdate: func(ctx context.Context, c client.Client, sub string, object client.Object, opts ...client.SubResourceUpdateOption) error {
-		err := c.SubResource(sub).Update(ctx, object, opts...)
-		if err == nil {
-			if e, ok := object.(*bitcoin.BitcoinExecution); ok && e.Status.Armed != nil {
-				return errors.New("lost write acknowledgement")
-			}
-		}
-		return err
-	}})
+	f.worker.Client = interceptor.NewClient(
+		base.(client.WithWatch),
+		interceptor.Funcs{
+			SubResourceUpdate: func(
+				ctx context.Context,
+				c client.Client,
+				sub string,
+				object client.Object,
+				opts ...client.SubResourceUpdateOption,
+			) error {
+				err := c.SubResource(sub).Update(ctx, object, opts...)
+				if err == nil {
+					if e, ok := object.(*bitcoin.BitcoinExecution); ok && e.Status.Armed != nil {
+						return errors.New("lost write acknowledgement")
+					}
+				}
+				return err
+			},
+		},
+	)
 	if err := f.worker.Step(ctx); err == nil {
 		t.Fatal("expected lost arm acknowledgement")
 	}
 	f.worker.Client = base
-	replacement := &Worker{Client: base, Reader: base, RPC: f.rpc, Input: f.worker.Input, Now: f.worker.Now, ProcessNonce: "new-process"}
+	replacement := &Worker{
+		Client:       base,
+		Reader:       base,
+		RPC:          f.rpc,
+		Input:        f.worker.Input,
+		Now:          f.worker.Now,
+		ProcessNonce: "new-process",
+	}
 	if err := replacement.Step(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -138,7 +173,9 @@ func TestFinitePauseMaintainsReadsAndNeverSends(t *testing.T) {
 		}
 	}
 	record := f.readRecord(t)
-	if len(f.rpc.calls) != 0 || record.Status.Armed != nil || record.Status.Control == nil || f.now.Sub(record.Status.Control.HeartbeatAt.Time) > 5*time.Second || !record.Status.Observation.ObservedAt.Time.Equal(f.now) {
+	if len(f.rpc.calls) != 0 || record.Status.Armed != nil || record.Status.Control == nil ||
+		f.now.Sub(record.Status.Control.HeartbeatAt.Time) > 5*time.Second ||
+		!record.Status.Observation.ObservedAt.Time.Equal(f.now) {
 		t.Fatalf("paused finite activity %+v sends%v", record.Status, f.rpc.calls)
 	}
 }
@@ -146,7 +183,12 @@ func TestFinitePauseMaintainsReadsAndNeverSends(t *testing.T) {
 // deniedActionReader models installation RBAC removal without granting an implicit cancellation signal.
 type deniedActionReader struct{ client.Reader }
 
-func (r deniedActionReader) Get(ctx context.Context, key client.ObjectKey, object client.Object, opts ...client.GetOption) error {
+func (r deniedActionReader) Get(
+	ctx context.Context,
+	key client.ObjectKey,
+	object client.Object,
+	opts ...client.GetOption,
+) error {
 	switch object.(type) {
 	case *action.BitcoinBlockGeneration, *action.BitcoinReorganization:
 		return errors.New("action read forbidden")
@@ -163,7 +205,9 @@ func TestFiniteDisablingReadAccessRetainsUnobservedReservation(t *testing.T) {
 		t.Fatal("lost action permission was accepted as cancellation")
 	}
 	after := f.readRecord(t)
-	if after.Status.Action == nil || after.Status.Reservation == nil || after.Status.Action.CleanupAcknowledged || after.Status.Action.StopReason != before.Status.Action.StopReason || len(f.rpc.calls) != 0 {
+	if after.Status.Action == nil || after.Status.Reservation == nil || after.Status.Action.CleanupAcknowledged ||
+		after.Status.Action.StopReason != before.Status.Action.StopReason ||
+		len(f.rpc.calls) != 0 {
 		t.Fatalf("unobserved reservation changed: %+v", after.Status)
 	}
 }
@@ -172,7 +216,12 @@ func TestFiniteTerminalDrainRetainsUnknownAuthority(t *testing.T) {
 	f, _ := finiteFixture(t)
 	ctx := context.Background()
 	record := f.readRecord(t)
-	record.Status.Armed = &bitcoin.BitcoinArmedRPC{ID: "unacknowledged", Method: "Generate", Action: record.Status.Action.Request.DeepCopy(), Reservation: *record.Status.Reservation}
+	record.Status.Armed = &bitcoin.BitcoinArmedRPC{
+		ID:          "unacknowledged",
+		Method:      "Generate",
+		Action:      record.Status.Action.Request.DeepCopy(),
+		Reservation: *record.Status.Reservation,
+	}
 	if err := f.c.Status().Update(ctx, record); err != nil {
 		t.Fatal(err)
 	}
@@ -189,7 +238,10 @@ func TestFiniteTerminalDrainRetainsUnknownAuthority(t *testing.T) {
 		}
 	}
 	record = f.readRecord(t)
-	if record.Status.Drain == nil || record.Status.Drain.Outcome != "Uncertain" || record.Status.Armed == nil || record.Status.Action == nil || !record.Status.Action.EffectUncertain || len(f.rpc.calls) != 0 {
+	if record.Status.Drain == nil || record.Status.Drain.Outcome != "Uncertain" || record.Status.Armed == nil ||
+		record.Status.Action == nil ||
+		!record.Status.Action.EffectUncertain ||
+		len(f.rpc.calls) != 0 {
 		t.Fatalf("terminal action falsely drained: %+v", record.Status)
 	}
 }
@@ -198,8 +250,16 @@ func TestFiniteReceiptTimeNeverTruncatesLateCompletionOntoDeadline(t *testing.T)
 	f, _ := finiteFixture(t)
 	record := f.readRecord(t)
 	deadline := record.Status.Action.ExpiresAt.Time
-	request := bitcoin.BitcoinArmedRPC{ID: "late", Method: "Generate", Action: record.Status.Action.Request.DeepCopy()}
-	receipt := &bitcoin.BitcoinRPCReceipt{Request: request, BlockHash: "0000000000000000000000000000000000000000000000000000000000000001", ReceivedAt: metav1.NewTime(deadline.Add(time.Millisecond))}
+	request := bitcoin.BitcoinArmedRPC{
+		ID:     "late",
+		Method: "Generate",
+		Action: record.Status.Action.Request.DeepCopy(),
+	}
+	receipt := &bitcoin.BitcoinRPCReceipt{
+		Request:    request,
+		BlockHash:  "0000000000000000000000000000000000000000000000000000000000000001",
+		ReceivedAt: metav1.NewTime(deadline.Add(time.Millisecond)),
+	}
 	if err := accountActionReceipt(record, receipt); err != nil {
 		t.Fatal(err)
 	}

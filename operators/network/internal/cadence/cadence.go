@@ -16,6 +16,7 @@ func Seconds(lower, upper int32, key string) (time.Duration, error) {
 		return 0, fmt.Errorf("invalid cadence bounds")
 	}
 	digest := sha256.Sum256([]byte(key))
+	// #nosec G404 -- Reproducible cadence sampling, not cryptographic randomness or authority.
 	random := rand.New(rand.NewPCG(binary.BigEndian.Uint64(digest[:8]), binary.BigEndian.Uint64(digest[8:16])))
 	return time.Duration(int(lower)+random.IntN(int(upper-lower)+1)) * time.Second, nil
 }

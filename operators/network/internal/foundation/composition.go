@@ -8,10 +8,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	corev1 "k8s.io/api/core/v1"
 	"reflect"
 	"strings"
 	"time"
+
+	corev1 "k8s.io/api/core/v1"
 
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/naming"
 
@@ -89,6 +90,7 @@ func objectMap(v any) (map[string]any, error) {
 	err = d.Decode(&out)
 	return out, err
 }
+
 func decodeMap(m map[string]any, out any) error {
 	b, err := json.Marshal(m)
 	if err != nil {
@@ -98,11 +100,25 @@ func decodeMap(m map[string]any, out any) error {
 	d.DisallowUnknownFields()
 	return d.Decode(out)
 }
+
 func merge(dst, src map[string]any) map[string]any {
 	if dst == nil {
 		dst = map[string]any{}
 	}
-	for _, pair := range [][2]string{{"schedule", "scheduleRef"}, {"overrides", "secretRef"}, {"nodeRefs", "discovery"}} {
+	for _, pair := range [][2]string{
+		{
+			"schedule",
+			"scheduleRef",
+		},
+		{
+			"overrides",
+			"secretRef",
+		},
+		{
+			"nodeRefs",
+			"discovery",
+		},
+	} {
 		if _, ok := src[pair[0]]; ok {
 			delete(dst, pair[1])
 		}
@@ -130,6 +146,7 @@ func merge(dst, src map[string]any) map[string]any {
 	}
 	return dst
 }
+
 func fill(dst, defaults map[string]any) {
 	for k, v := range defaults {
 		prior, ok := dst[k]
@@ -158,7 +175,8 @@ func Compose(root *api.StacksNetwork, entry api.Participant, source any) (api.Co
 	out := map[string]any{}
 	if root.Spec.Defaults != nil {
 		defaults, _ := objectMap(root.Spec.Defaults)
-		if entry.Kind == api.ParticipantBitcoinNode || entry.Kind == api.ParticipantStacksNode || entry.Kind == api.ParticipantStacksSigner {
+		if entry.Kind == api.ParticipantBitcoinNode || entry.Kind == api.ParticipantStacksNode ||
+			entry.Kind == api.ParticipantStacksSigner {
 			if v, ok := defaults["storage"]; ok {
 				out["storage"] = v
 			}
@@ -177,7 +195,9 @@ func Compose(root *api.StacksNetwork, entry api.Participant, source any) (api.Co
 				}
 			}
 		}
-		if entry.Kind == api.ParticipantBitcoinNode || strings.HasPrefix(key, "stacks") && entry.Kind != api.ParticipantStacksNode && entry.Kind != api.ParticipantStacksSigner {
+		if entry.Kind == api.ParticipantBitcoinNode ||
+			strings.HasPrefix(key, "stacks") && entry.Kind != api.ParticipantStacksNode &&
+				entry.Kind != api.ParticipantStacksSigner {
 			if v, ok := defaults["workerPlacement"]; ok {
 				out["workerPlacement"] = v
 			}
@@ -219,7 +239,9 @@ func Compose(root *api.StacksNetwork, entry api.Participant, source any) (api.Co
 		fill(out, map[string]any{"bundle": "sbtc-regtest-v1"})
 	case api.ParticipantBitcoinBlockProduction:
 		if out["schedule"] == nil && out["scheduleRef"] == nil {
-			out["schedule"] = map[string]any{"cadence": map[string]any{"mode": string(bitcoin.CadenceFixed), "interval": "5s"}}
+			out["schedule"] = map[string]any{
+				"cadence": map[string]any{"mode": string(bitcoin.CadenceFixed), "interval": "5s"},
+			}
 		}
 	}
 	var result api.Configuration
@@ -236,6 +258,7 @@ func sourceSpec(obj client.Object) (any, error) {
 	}
 	return m["spec"], nil
 }
+
 func inlineSpec(entry api.Participant) (any, error) {
 	m, err := objectMap(entry.Definition.Inline)
 	if err != nil {
@@ -254,6 +277,7 @@ func duration(value common.Duration) (time.Duration, error) {
 	}
 	return v, nil
 }
+
 func validateSchedule(s bitcoin.BitcoinBlockScheduleSpec) error {
 	c := s.Cadence
 	switch c.Mode {

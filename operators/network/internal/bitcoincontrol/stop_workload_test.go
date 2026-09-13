@@ -25,11 +25,48 @@ func TestControlStopNeedsNoGenesisOrPolicyInputs(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	root := &api.StacksNetwork{ObjectMeta: metav1.ObjectMeta{Name: "network", Namespace: "test", UID: "root", Generation: 2}, Spec: api.StacksNetworkSpec{Operation: "Stopped"}, Status: api.StacksNetworkStatus{Bitcoin: &api.BitcoinRuntimeStatus{ExecutionRefs: []common.Binding{{Name: "record", UID: "record"}}}}}
-	p := &api.StacksNetworkParticipant{ObjectMeta: metav1.ObjectMeta{Name: "p", Namespace: "test", UID: "p"}, Spec: api.StacksNetworkParticipantSpec{NetworkUID: root.UID, ParticipantName: "btc", Kind: "BitcoinNode"}}
-	d := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: controlDeploymentName(p), Namespace: p.Namespace, UID: "d", OwnerReferences: []metav1.OwnerReference{{APIVersion: api.GroupVersion.String(), Kind: "StacksNetworkParticipant", Name: p.Name, UID: p.UID, Controller: ptr.To(true)}}}, Spec: appsv1.DeploymentSpec{Replicas: ptr.To[int32](1)}}
-	record := &bitcoin.BitcoinExecution{ObjectMeta: metav1.ObjectMeta{Name: "record", Namespace: "test", UID: "record"}, Spec: bitcoin.BitcoinExecutionSpec{Participant: common.Binding{UID: p.UID}}, Status: bitcoin.BitcoinExecutionStatus{Observation: &bitcoin.BitcoinObservation{}}}
-	c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(record).WithObjects(root, p, d, record).Build()
+	root := &api.StacksNetwork{
+		ObjectMeta: metav1.ObjectMeta{Name: "network", Namespace: "test", UID: "root", Generation: 2},
+		Spec:       api.StacksNetworkSpec{Operation: "Stopped"},
+		Status: api.StacksNetworkStatus{
+			Bitcoin: &api.BitcoinRuntimeStatus{ExecutionRefs: []common.Binding{{Name: "record", UID: "record"}}},
+		},
+	}
+	p := &api.StacksNetworkParticipant{
+		ObjectMeta: metav1.ObjectMeta{Name: "p", Namespace: "test", UID: "p"},
+		Spec: api.StacksNetworkParticipantSpec{
+			NetworkUID:      root.UID,
+			ParticipantName: "btc",
+			Kind:            "BitcoinNode",
+		},
+	}
+	d := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      controlDeploymentName(p),
+			Namespace: p.Namespace,
+			UID:       "d",
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion: api.GroupVersion.String(),
+					Kind:       "StacksNetworkParticipant",
+					Name:       p.Name,
+					UID:        p.UID,
+					Controller: ptr.To(true),
+				},
+			},
+		},
+		Spec: appsv1.DeploymentSpec{Replicas: ptr.To[int32](1)},
+	}
+	record := &bitcoin.BitcoinExecution{
+		ObjectMeta: metav1.ObjectMeta{Name: "record", Namespace: "test", UID: "record"},
+		Spec:       bitcoin.BitcoinExecutionSpec{Participant: common.Binding{UID: p.UID}},
+		Status:     bitcoin.BitcoinExecutionStatus{Observation: &bitcoin.BitcoinObservation{}},
+	}
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(record).
+		WithObjects(root, p, d, record).
+		Build()
 	r := WorkloadReconciler{Client: c, Reader: c}
 	if _, err := r.stopControlWorkload(ctx, root, p); err != nil {
 		t.Fatal(err)
@@ -40,7 +77,12 @@ func TestControlStopNeedsNoGenesisOrPolicyInputs(t *testing.T) {
 	if *d.Spec.Replicas != 1 {
 		t.Fatal("stopped before drain acknowledgement")
 	}
-	record.Status.Drain = &bitcoin.BitcoinDrainStatus{ProcessNonce: "process", NetworkGeneration: root.Generation, Reason: "NetworkStopped", Outcome: "Drained"}
+	record.Status.Drain = &bitcoin.BitcoinDrainStatus{
+		ProcessNonce:      "process",
+		NetworkGeneration: root.Generation,
+		Reason:            "NetworkStopped",
+		Outcome:           "Drained",
+	}
 	if err := c.Status().Update(ctx, record); err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +99,15 @@ func TestControlStopNeedsNoGenesisOrPolicyInputs(t *testing.T) {
 
 // TestDestructionMayDisposeAfterControlTermination keeps unresolved RPC facts intact.
 func TestDestructionMayDisposeAfterControlTermination(t *testing.T) {
-	for _, mode := range []string{"confirmed", "not-deleting", "stale-control", "stale-root", "running-control", "foreign-owner", "replaced-participant"} {
+	for _, mode := range []string{
+		"confirmed",
+		"not-deleting",
+		"stale-control",
+		"stale-root",
+		"running-control",
+		"foreign-owner",
+		"replaced-participant",
+	} {
 		t.Run(mode, func(t *testing.T) {
 			ctx := context.Background()
 			f := newControlFixture(t)
@@ -76,12 +126,24 @@ func TestDestructionMayDisposeAfterControlTermination(t *testing.T) {
 			if err := f.c.Get(ctx, client.ObjectKeyFromObject(f.root), f.root); err != nil {
 				t.Fatal(err)
 			}
-			record := &bitcoin.BitcoinExecution{ObjectMeta: metav1.ObjectMeta{Name: "record", Namespace: f.p.Namespace, UID: "record"}, Spec: bitcoin.BitcoinExecutionSpec{NetworkUID: f.root.UID, Participant: common.Binding{UID: f.p.UID}}, Status: bitcoin.BitcoinExecutionStatus{Armed: &bitcoin.BitcoinArmedRPC{}}}
+			record := &bitcoin.BitcoinExecution{
+				ObjectMeta: metav1.ObjectMeta{Name: "record", Namespace: f.p.Namespace, UID: "record"},
+				Spec: bitcoin.BitcoinExecutionSpec{
+					NetworkUID:  f.root.UID,
+					Participant: common.Binding{UID: f.p.UID},
+				},
+				Status: bitcoin.BitcoinExecutionStatus{Armed: &bitcoin.BitcoinArmedRPC{}},
+			}
 			if err := f.c.Create(ctx, record); err != nil {
 				t.Fatal(err)
 			}
 			// No execution pointer can substitute for the exact termination evidence.
-			f.p.Status.BitcoinControl = &api.BitcoinControlRuntimeStatus{DeploymentRef: &common.Binding{UID: f.deployment.UID}, Terminated: true, ObservedGeneration: f.p.Generation, NetworkGeneration: f.root.Generation}
+			f.p.Status.BitcoinControl = &api.BitcoinControlRuntimeStatus{
+				DeploymentRef:      &common.Binding{UID: f.deployment.UID},
+				Terminated:         true,
+				ObservedGeneration: f.p.Generation,
+				NetworkGeneration:  f.root.Generation,
+			}
 			switch mode {
 			case "stale-control":
 				f.p.Status.BitcoinControl.ObservedGeneration--

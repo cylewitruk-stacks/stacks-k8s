@@ -53,7 +53,22 @@ type actorEpoch struct {
 
 // lateFollower reuses a node definition and a recipient account with no existing peer role.
 func lateFollower(name, image string, retain bool) api.Participant {
-	return api.Participant{Name: name, Kind: "StacksNode", Definition: api.Definition{Ref: &common.NameRef{Name: "follower-01"}}, Overrides: &api.Configuration{StacksNode: &stacks.StacksNodeSpec{ActorFields: common.ActorFields{Image: ptr.To(image), Storage: &common.Storage{Size: ptr.To("1Gi"), RetainOnDelete: ptr.To(retain)}}, BitcoinNodeRef: &common.NameRef{Name: "btc-07"}, IdentityAccountRef: &common.NameRef{Name: "traffic-recipient"}, Mining: &stacks.Mining{Enabled: ptr.To(false)}}}}
+	return api.Participant{
+		Name:       name,
+		Kind:       "StacksNode",
+		Definition: api.Definition{Ref: &common.NameRef{Name: "follower-01"}},
+		Overrides: &api.Configuration{
+			StacksNode: &stacks.StacksNodeSpec{
+				ActorFields: common.ActorFields{
+					Image:   ptr.To(image),
+					Storage: &common.Storage{Size: ptr.To("1Gi"), RetainOnDelete: ptr.To(retain)},
+				},
+				BitcoinNodeRef:     &common.NameRef{Name: "btc-07"},
+				IdentityAccountRef: &common.NameRef{Name: "traffic-recipient"},
+				Mining:             &stacks.Mining{Enabled: ptr.To(false)},
+			},
+		},
+	}
 }
 
 // podEpoch requires a current running process identity for each declared container.
@@ -81,7 +96,11 @@ func (h *harness) captureActorGuard(ctx context.Context, s snapshot) (actorGuard
 		return guard, fmt.Errorf("frozen genesis unavailable")
 	}
 	guard.binding = *s.Status.GenesisRef
-	if err := h.c.Get(ctx, client.ObjectKey{Namespace: h.config.namespace, Name: guard.binding.Name}, &guard.genesis); err != nil {
+	if err := h.c.Get(
+		ctx,
+		client.ObjectKey{Namespace: h.config.namespace, Name: guard.binding.Name},
+		&guard.genesis,
+	); err != nil {
 		return guard, err
 	}
 	if guard.genesis.UID != guard.binding.UID {
@@ -122,10 +141,15 @@ func (h *harness) checkActorGuard(ctx context.Context, guard actorGuard, s snaps
 		return fmt.Errorf("actor lifecycle changed frozen genesis binding")
 	}
 	var genesis api.StacksGenesis
-	if err := h.c.Get(ctx, client.ObjectKey{Namespace: h.config.namespace, Name: guard.binding.Name}, &genesis); err != nil {
+	if err := h.c.Get(
+		ctx,
+		client.ObjectKey{Namespace: h.config.namespace, Name: guard.binding.Name},
+		&genesis,
+	); err != nil {
 		return err
 	}
-	if genesis.UID != guard.genesis.UID || genesis.DeletionTimestamp != nil || !reflect.DeepEqual(genesis.Spec, guard.genesis.Spec) {
+	if genesis.UID != guard.genesis.UID || genesis.DeletionTimestamp != nil ||
+		!reflect.DeepEqual(genesis.Spec, guard.genesis.Spec) {
 		return fmt.Errorf("actor lifecycle changed frozen genesis")
 	}
 	for name, expected := range guard.pods {
@@ -148,7 +172,10 @@ func (h *harness) checkActorGuard(ctx context.Context, guard actorGuard, s snaps
 func (h *harness) changeActors(ctx context.Context, change func(*api.StacksNetwork) error) error {
 	for range 5 {
 		var root api.StacksNetwork
-		if err := h.c.Get(ctx, client.ObjectKey{Namespace: h.config.namespace, Name: "network"}, &root); err != nil {
+		if err := h.c.Get(ctx, client.ObjectKey{
+			Namespace: h.config.namespace,
+			Name:      "network",
+		}, &root); err != nil {
 			return err
 		}
 		if root.UID != h.rootUID || root.DeletionTimestamp != nil || root.Spec.Operation != "Running" {
@@ -216,15 +243,33 @@ func readyFollower(s snapshot, name string, minimum uint64) (participantEvidence
 		r := p.Status.Runtime
 		c := meta.FindStatusCondition(p.Status.Conditions, "WorkloadReady")
 		verified := meta.FindStatusCondition(p.Status.Conditions, "ConfigVerified")
-		if verified == nil || verified.Status != metav1.ConditionTrue || verified.ObservedGeneration != p.Identity.Generation {
+		if verified == nil || verified.Status != metav1.ConditionTrue ||
+			verified.ObservedGeneration != p.Identity.Generation {
 			return p, false
 		}
-		if r == nil || r.Terminated || r.PodRef == nil || r.ConfigRef == nil || r.ObservedGeneration != p.Identity.Generation || c == nil || c.Status != metav1.ConditionTrue || c.ObservedGeneration != p.Identity.Generation || r.Protocol == nil || s.Status.ObservationPolicy == nil || s.Status.GenesisRef == nil {
+		if r == nil || r.Terminated || r.PodRef == nil || r.ConfigRef == nil ||
+			r.ObservedGeneration != p.Identity.Generation ||
+			c == nil ||
+			c.Status != metav1.ConditionTrue ||
+			c.ObservedGeneration != p.Identity.Generation ||
+			r.Protocol == nil ||
+			s.Status.ObservationPolicy == nil ||
+			s.Status.GenesisRef == nil {
 			return p, false
 		}
 		view := r.Protocol
-		freshness := time.Duration(3*s.Status.ObservationPolicy.PollIntervalSeconds+s.Status.ObservationPolicy.RPCAllowanceSeconds) * time.Second
-		ready := view.Available && view.FullySynced && view.PodUID == r.PodRef.UID && view.ContainerID == r.ContainerID && view.ConfigurationDigest == r.ConfigurationDigest && view.GenesisUID == s.Status.GenesisRef.UID && view.IndexBlockID != "" && view.StacksHeight > minimum && !view.ObservedAt.IsZero() && !view.ObservedAt.After(s.At) && s.At.Sub(view.ObservedAt.Time) <= freshness
+		freshness := time.Duration(
+			3*s.Status.ObservationPolicy.PollIntervalSeconds+s.Status.ObservationPolicy.RPCAllowanceSeconds,
+		) * time.Second
+		ready := view.Available && view.FullySynced && view.PodUID == r.PodRef.UID &&
+			view.ContainerID == r.ContainerID &&
+			view.ConfigurationDigest == r.ConfigurationDigest &&
+			view.GenesisUID == s.Status.GenesisRef.UID &&
+			view.IndexBlockID != "" &&
+			view.StacksHeight > minimum &&
+			!view.ObservedAt.IsZero() &&
+			!view.ObservedAt.After(s.At) &&
+			s.At.Sub(view.ObservedAt.Time) <= freshness
 		return p, ready
 	}
 	return participantEvidence{}, false
@@ -237,7 +282,10 @@ func (h *harness) actorClaim(ctx context.Context, r *api.ParticipantRuntimeStatu
 		return storage, fmt.Errorf("actor Pod binding unavailable")
 	}
 	var pod corev1.Pod
-	if err := h.c.Get(ctx, client.ObjectKey{Namespace: h.config.namespace, Name: r.PodRef.Name}, &pod); err != nil {
+	if err := h.c.Get(ctx, client.ObjectKey{
+		Namespace: h.config.namespace,
+		Name:      r.PodRef.Name,
+	}, &pod); err != nil {
 		return storage, err
 	}
 	if pod.UID != r.PodRef.UID || pod.DeletionTimestamp != nil {
@@ -265,10 +313,15 @@ func (h *harness) actorClaim(ctx context.Context, r *api.ParticipantRuntimeStatu
 			return storage, fmt.Errorf("actor has multiple persistent claims")
 		}
 		var claim corev1.PersistentVolumeClaim
-		if err := h.c.Get(ctx, client.ObjectKey{Namespace: h.config.namespace, Name: volume.PersistentVolumeClaim.ClaimName}, &claim); err != nil {
+		if err := h.c.Get(
+			ctx,
+			client.ObjectKey{Namespace: h.config.namespace, Name: volume.PersistentVolumeClaim.ClaimName},
+			&claim,
+		); err != nil {
 			return storage, err
 		}
-		if claim.UID == "" || claim.DeletionTimestamp != nil || claim.Status.Phase != corev1.ClaimBound || claim.Spec.VolumeName == "" {
+		if claim.UID == "" || claim.DeletionTimestamp != nil || claim.Status.Phase != corev1.ClaimBound ||
+			claim.Spec.VolumeName == "" {
 			return storage, fmt.Errorf("actor claim is not currently bound")
 		}
 		storage = actorStorage{Claim: objectIdentity(&claim), Volume: claim.Spec.VolumeName}
@@ -285,11 +338,16 @@ func (h *harness) recordActor(stage string, epoch actorEpoch) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(h.evidence, stage+"-actor.json"), data, 0600)
+	return os.WriteFile(filepath.Join(h.evidence, stage+"-actor.json"), data, 0o600)
 }
 
 // waitFollower qualifies native progress and captures the current claim/process epoch.
-func (h *harness) waitFollower(ctx context.Context, stage, name string, minimum uint64, guard actorGuard) (snapshot, actorEpoch, error) {
+func (h *harness) waitFollower(
+	ctx context.Context,
+	stage, name string,
+	minimum uint64,
+	guard actorGuard,
+) (snapshot, actorEpoch, error) {
 	var epoch actorEpoch
 	observed, err := h.wait(ctx, stage, h.config.progressTimeout, true, func(s snapshot) (bool, error) {
 		p, ready := readyFollower(s, name, minimum)
@@ -303,7 +361,12 @@ func (h *harness) waitFollower(ctx context.Context, stage, name string, minimum 
 		if err != nil {
 			return false, err
 		}
-		epoch = actorEpoch{Participant: p.Identity, Runtime: *p.Status.Runtime.DeepCopy(), Storage: storage, Height: p.Status.Runtime.Protocol.StacksHeight}
+		epoch = actorEpoch{
+			Participant: p.Identity,
+			Runtime:     *p.Status.Runtime.DeepCopy(),
+			Storage:     storage,
+			Height:      p.Status.Runtime.Protocol.StacksHeight,
+		}
 		return true, nil
 	})
 	if err == nil {
@@ -315,7 +378,10 @@ func (h *harness) waitFollower(ctx context.Context, stage, name string, minimum 
 // retainedClaim proves the removed actor's old claim remains a distinct resource.
 func (h *harness) retainedClaim(ctx context.Context, old actorStorage) error {
 	var claim corev1.PersistentVolumeClaim
-	if err := h.c.Get(ctx, client.ObjectKey{Namespace: h.config.namespace, Name: old.Claim.Name}, &claim); err != nil {
+	if err := h.c.Get(ctx, client.ObjectKey{
+		Namespace: h.config.namespace,
+		Name:      old.Claim.Name,
+	}, &claim); err != nil {
 		return err
 	}
 	if claim.UID != old.Claim.UID || claim.Spec.VolumeName != old.Volume || claim.DeletionTimestamp != nil {
@@ -325,7 +391,13 @@ func (h *harness) retainedClaim(ctx context.Context, old actorStorage) error {
 }
 
 // removeFollower waits for retained allocation plus actual participant/workload deletion.
-func (h *harness) removeFollower(ctx context.Context, name string, old actorEpoch, guard actorGuard, retain bool) (snapshot, error) {
+func (h *harness) removeFollower(
+	ctx context.Context,
+	name string,
+	old actorEpoch,
+	guard actorGuard,
+	retain bool,
+) (snapshot, error) {
 	if err := h.controlLateFollower(ctx, name, nil); err != nil {
 		return snapshot{}, err
 	}
@@ -333,7 +405,13 @@ func (h *harness) removeFollower(ctx context.Context, name string, old actorEpoc
 }
 
 // awaitActorRemoved checks actual runtime/storage disposal after a public declaration is removed.
-func (h *harness) awaitActorRemoved(ctx context.Context, name string, old actorEpoch, guard actorGuard, retain bool) (snapshot, error) {
+func (h *harness) awaitActorRemoved(
+	ctx context.Context,
+	name string,
+	old actorEpoch,
+	guard actorGuard,
+	retain bool,
+) (snapshot, error) {
 	return h.wait(ctx, "actor-removed-"+name, h.config.progressTimeout, true, func(s snapshot) (bool, error) {
 		retained := false
 		for _, id := range s.Status.Identities {
@@ -345,22 +423,40 @@ func (h *harness) awaitActorRemoved(ctx context.Context, name string, old actorE
 			return false, nil
 		}
 		var p api.StacksNetworkParticipant
-		if err := h.c.Get(ctx, client.ObjectKey{Namespace: h.config.namespace, Name: old.Participant.Name}, &p); err == nil {
+		if err := h.c.Get(
+			ctx,
+			client.ObjectKey{Namespace: h.config.namespace, Name: old.Participant.Name},
+			&p,
+		); err == nil {
 			if p.UID != old.Participant.UID {
 				return false, fmt.Errorf("removed participant was replaced")
 			}
 			return false, nil
-		} else if !apierrors.IsNotFound(err) {
+		} else if !apierrors.IsNotFound(
+			err,
+		) {
 			return false, nil
 		}
 		var pod corev1.Pod
-		if err := h.c.Get(ctx, client.ObjectKey{Namespace: h.config.namespace, Name: old.Runtime.PodRef.Name}, &pod); !apierrors.IsNotFound(err) {
+		if err := h.c.Get(
+			ctx,
+			client.ObjectKey{Namespace: h.config.namespace, Name: old.Runtime.PodRef.Name},
+			&pod,
+		); !apierrors.IsNotFound(
+			err,
+		) {
 			return false, nil
 		}
 		for _, ref := range old.Runtime.WorkloadRefs {
 			if ref.Kind == "StatefulSet" {
 				var workload appsv1.StatefulSet
-				if err := h.c.Get(ctx, client.ObjectKey{Namespace: h.config.namespace, Name: ref.Name}, &workload); !apierrors.IsNotFound(err) {
+				if err := h.c.Get(
+					ctx,
+					client.ObjectKey{Namespace: h.config.namespace, Name: ref.Name},
+					&workload,
+				); !apierrors.IsNotFound(
+					err,
+				) {
 					return false, nil
 				}
 			}
@@ -371,7 +467,13 @@ func (h *harness) awaitActorRemoved(ctx context.Context, name string, old actorE
 			}
 		} else {
 			var claim corev1.PersistentVolumeClaim
-			if err := h.c.Get(ctx, client.ObjectKey{Namespace: h.config.namespace, Name: old.Storage.Claim.Name}, &claim); !apierrors.IsNotFound(err) {
+			if err := h.c.Get(
+				ctx,
+				client.ObjectKey{Namespace: h.config.namespace, Name: old.Storage.Claim.Name},
+				&claim,
+			); !apierrors.IsNotFound(
+				err,
+			) {
 				return false, nil
 			}
 		}
@@ -384,7 +486,17 @@ func (h *harness) awaitActorRemoved(ctx context.Context, name string, old actorE
 
 // newStorageEpoch rejects a replacement participant that adopted the removed actor's data identity.
 func newStorageEpoch(old, next actorEpoch) error {
-	if old.Participant.UID == "" || next.Participant.UID == "" || old.Participant.UID == next.Participant.UID || old.Runtime.PodRef == nil || next.Runtime.PodRef == nil || old.Runtime.PodRef.UID == next.Runtime.PodRef.UID || old.Storage.Claim.UID == "" || next.Storage.Claim.UID == "" || old.Storage.Claim.UID == next.Storage.Claim.UID || old.Storage.Claim.Name == next.Storage.Claim.Name || old.Storage.Volume == "" || next.Storage.Volume == "" || old.Storage.Volume == next.Storage.Volume {
+	if old.Participant.UID == "" || next.Participant.UID == "" || old.Participant.UID == next.Participant.UID ||
+		old.Runtime.PodRef == nil ||
+		next.Runtime.PodRef == nil ||
+		old.Runtime.PodRef.UID == next.Runtime.PodRef.UID ||
+		old.Storage.Claim.UID == "" ||
+		next.Storage.Claim.UID == "" ||
+		old.Storage.Claim.UID == next.Storage.Claim.UID ||
+		old.Storage.Claim.Name == next.Storage.Claim.Name ||
+		old.Storage.Volume == "" ||
+		next.Storage.Volume == "" ||
+		old.Storage.Volume == next.Storage.Volume {
 		return fmt.Errorf("new participant reused old actor/storage identity")
 	}
 	return nil
@@ -403,7 +515,10 @@ func (h *harness) qualifyActors(ctx context.Context, before snapshot) (snapshot,
 	for _, wanted := range []struct {
 		kind, name string
 		object     client.Object
-	}{{"StacksNode", "follower-01", &stacks.StacksNode{}}, {"StacksAccount", "traffic-recipient", &stacks.StacksAccount{}}} {
+	}{
+		{"StacksNode", "follower-01", &stacks.StacksNode{}},
+		{"StacksAccount", "traffic-recipient", &stacks.StacksAccount{}},
+	} {
 		var uid types.UID
 		for _, o := range h.declared.reusable {
 			if o.GetKind() == wanted.kind && o.GetName() == wanted.name {
@@ -413,7 +528,11 @@ func (h *harness) qualifyActors(ctx context.Context, before snapshot) (snapshot,
 		if uid == "" {
 			return before, fmt.Errorf("reusable %s declaration unavailable", wanted.kind)
 		}
-		if err := h.c.Get(ctx, client.ObjectKey{Namespace: h.config.namespace, Name: wanted.name}, wanted.object); err != nil {
+		if err := h.c.Get(
+			ctx,
+			client.ObjectKey{Namespace: h.config.namespace, Name: wanted.name},
+			wanted.object,
+		); err != nil {
 			return before, err
 		}
 		if wanted.object.GetUID() != uid || wanted.object.GetDeletionTimestamp() != nil {
@@ -426,7 +545,8 @@ func (h *harness) qualifyActors(ctx context.Context, before snapshot) (snapshot,
 	}
 	minimum := uint64(0)
 	for _, p := range before.Participants {
-		if p.Status.Runtime != nil && p.Status.Runtime.Protocol != nil && p.Status.Runtime.Protocol.StacksHeight > minimum {
+		if p.Status.Runtime != nil && p.Status.Runtime.Protocol != nil &&
+			p.Status.Runtime.Protocol.StacksHeight > minimum {
 			minimum = p.Status.Runtime.Protocol.StacksHeight
 		}
 	}
@@ -466,7 +586,13 @@ func (h *harness) qualifyActors(ctx context.Context, before snapshot) (snapshot,
 				}
 				c := meta.FindStatusCondition(p.Status.Conditions, "WorkloadReady")
 				r := p.Status.Runtime
-				if r == nil || !r.Terminated || r.PodRef == nil || r.PodRef.UID != original.Runtime.PodRef.UID || r.ContainerID != original.Runtime.ContainerID || r.ObservedGeneration != p.Identity.Generation || c == nil || c.ObservedGeneration != p.Identity.Generation || c.Reason != "Suspended" || c.Status != metav1.ConditionFalse {
+				if r == nil || !r.Terminated || r.PodRef == nil || r.PodRef.UID != original.Runtime.PodRef.UID ||
+					r.ContainerID != original.Runtime.ContainerID ||
+					r.ObservedGeneration != p.Identity.Generation ||
+					c == nil ||
+					c.ObservedGeneration != p.Identity.Generation ||
+					c.Reason != "Suspended" ||
+					c.Status != metav1.ConditionFalse {
 					return false, nil
 				}
 				if err := h.retainedClaim(ctx, original.Storage); err != nil {
@@ -490,7 +616,11 @@ func (h *harness) qualifyActors(ctx context.Context, before snapshot) (snapshot,
 	if err != nil {
 		return resumed, err
 	}
-	if current.Participant.UID != original.Participant.UID || current.Runtime.PodRef.UID == original.Runtime.PodRef.UID || current.Storage.Claim.UID != original.Storage.Claim.UID || current.Storage.Volume != original.Storage.Volume || !reflect.DeepEqual(current.Runtime.ConfigRef, original.Runtime.ConfigRef) {
+	if current.Participant.UID != original.Participant.UID ||
+		current.Runtime.PodRef.UID == original.Runtime.PodRef.UID ||
+		current.Storage.Claim.UID != original.Storage.Claim.UID ||
+		current.Storage.Volume != original.Storage.Volume ||
+		!reflect.DeepEqual(current.Runtime.ConfigRef, original.Runtime.ConfigRef) {
 		return resumed, fmt.Errorf("suspend/resume changed participant, config or storage identity, or reused old Pod")
 	}
 	removed, err := h.removeFollower(ctx, first, current, guard, true)
@@ -514,10 +644,16 @@ func (h *harness) qualifyActors(ctx context.Context, before snapshot) (snapshot,
 	if err != nil {
 		return removed, err
 	}
-	settled, err := h.wait(ctx, "actors-disposal-ready", h.config.progressTimeout, true, func(s snapshot) (bool, error) {
-		_, ready := progress(s)
-		return ready && condition(s, "Operational", metav1.ConditionTrue), nil
-	})
+	settled, err := h.wait(
+		ctx,
+		"actors-disposal-ready",
+		h.config.progressTimeout,
+		true,
+		func(s snapshot) (bool, error) {
+			_, ready := progress(s)
+			return ready && condition(s, "Operational", metav1.ConditionTrue), nil
+		},
+	)
 	if err != nil {
 		return removed, err
 	}

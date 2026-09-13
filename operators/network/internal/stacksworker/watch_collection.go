@@ -28,17 +28,26 @@ type CollectionObserver interface {
 }
 
 // collectionInformer reconnects and relists through client-go's ordinary reflector.
-func collectionInformer(c dynamic.Interface, namespace string, ref CollectionWatch, role Role, enqueue func()) (cache.SharedIndexInformer, error) {
+func collectionInformer(
+	c dynamic.Interface,
+	namespace string,
+	ref CollectionWatch,
+	role Role,
+	enqueue func(),
+) (cache.SharedIndexInformer, error) {
 	gv, err := schema.ParseGroupVersion(ref.APIVersion)
 	if err != nil || ref.Resource == "" {
 		return nil, fmt.Errorf("invalid collection watch identity")
 	}
 	resource := c.Resource(gv.WithResource(ref.Resource)).Namespace(namespace)
-	listWatch := &cache.ListWatch{ListWithContextFunc: func(ctx context.Context, options metav1.ListOptions) (runtime.Object, error) {
-		return resource.List(ctx, options)
-	}, WatchFuncWithContext: func(ctx context.Context, options metav1.ListOptions) (watch.Interface, error) {
-		return resource.Watch(ctx, options)
-	}}
+	listWatch := &cache.ListWatch{
+		ListWithContextFunc: func(ctx context.Context, options metav1.ListOptions) (runtime.Object, error) {
+			return resource.List(ctx, options)
+		},
+		WatchFuncWithContext: func(ctx context.Context, options metav1.ListOptions) (watch.Interface, error) {
+			return resource.Watch(ctx, options)
+		},
+	}
 	informer := cache.NewSharedIndexInformer(listWatch, &unstructured.Unstructured{}, 0, cache.Indexers{})
 	changed := func(value any, deleted bool) {
 		if tombstone, ok := value.(cache.DeletedFinalStateUnknown); ok {
@@ -51,6 +60,12 @@ func collectionInformer(c dynamic.Interface, namespace string, ref CollectionWat
 		}
 		enqueue()
 	}
-	_, err = informer.AddEventHandler(cache.ResourceEventHandlerFuncs{AddFunc: func(obj any) { changed(obj, false) }, UpdateFunc: func(_, obj any) { changed(obj, false) }, DeleteFunc: func(obj any) { changed(obj, true) }})
+	_, err = informer.AddEventHandler(
+		cache.ResourceEventHandlerFuncs{
+			AddFunc:    func(obj any) { changed(obj, false) },
+			UpdateFunc: func(_, obj any) { changed(obj, false) },
+			DeleteFunc: func(obj any) { changed(obj, true) },
+		},
+	)
 	return informer, err
 }

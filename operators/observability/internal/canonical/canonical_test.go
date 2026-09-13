@@ -7,7 +7,11 @@ func TestDigestMatchesNetworkInventoryCompatibilityVector(t *testing.T) {
 		SchemaVersion      string `json:"schemaVersion"`
 		ObservedGeneration int64  `json:"observedGeneration"`
 		Actors             []any  `json:"actors"`
-	}{SchemaVersion: "network.stacks.org/inventory/v1", ObservedGeneration: 2, Actors: []any{map[string]any{"name": "follower", "kind": "StacksNode"}}}
+	}{
+		SchemaVersion:      "network.stacks.org/inventory/v1",
+		ObservedGeneration: 2,
+		Actors:             []any{map[string]any{"name": "follower", "kind": "StacksNode"}},
+	}
 	digest, err := Digest(payload)
 	if err != nil {
 		t.Fatal(err)

@@ -23,18 +23,23 @@ func main() {
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	defer cancel()
 	command := exec.CommandContext(ctx, "go", "list", "-mod=readonly", "-m", "all")
 	command.Dir = *module
 	command.Env = append(withoutVariable(os.Environ(), "GOWORK="), "GOWORK=off")
 	output, err := command.CombinedOutput()
+	cancel()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "list module graph: %v: %s\n", err, output)
 		os.Exit(1)
 	}
 	forbidden := []string{"k8s.io/client-go", "sigs.k8s.io/controller-runtime"}
 	if *portable {
-		forbidden = append(forbidden, "k8s.io", "github.com/cylewitruk-stacks/stacks-k8s/apis", "github.com/cylewitruk-stacks/stacks-k8s/operators")
+		forbidden = append(
+			forbidden,
+			"k8s.io",
+			"github.com/cylewitruk-stacks/stacks-k8s/apis",
+			"github.com/cylewitruk-stacks/stacks-k8s/operators",
+		)
 	}
 	if err := policy.Validate(bytes.NewReader(output), forbidden); err != nil {
 		fmt.Fprintln(os.Stderr, err)

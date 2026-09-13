@@ -20,8 +20,51 @@ import (
 // MaximumBytes bounds both custom TOML and generated configuration artifacts.
 const MaximumBytes = 900 * 1024
 
-var nodeProtected = []string{"node.name", "node.seed", "node.local_peer_seed", "node.miner", "node.stacker", "node.rpc_bind", "node.p2p_bind", "node.p2p_address", "node.data_url", "node.working_dir", "node.use_test_genesis_chainstate", "node.pox_5_sbtc_contract", "node.pox_5_sbtc_registry_contract", "node.pox_5_bond_admin", "node.pox_5_pause_admin", "connection_options.auth_token", "connection_options.public_ip_address", "burnchain.chain", "burnchain.mode", "burnchain.magic_bytes", "burnchain.pox_prepare_length", "burnchain.pox_reward_length", "burnchain.peer_host", "burnchain.peer_port", "burnchain.rpc_port", "burnchain.rpc_ssl", "burnchain.username", "burnchain.password", "burnchain.wallet_name", "burnchain.local_mining_public_key", "burnchain.epochs", "ustx_balance", "events_observer"}
-var signerProtected = []string{"stacks_private_key", "node_host", "endpoint", "network", "auth_password", "db_path"}
+var (
+	nodeProtected = []string{
+		"node.name",
+		"node.seed",
+		"node.local_peer_seed",
+		"node.miner",
+		"node.stacker",
+		"node.rpc_bind",
+		"node.p2p_bind",
+		"node.p2p_address",
+		"node.data_url",
+		"node.working_dir",
+		"node.use_test_genesis_chainstate",
+		"node.pox_5_sbtc_contract",
+		"node.pox_5_sbtc_registry_contract",
+		"node.pox_5_bond_admin",
+		"node.pox_5_pause_admin",
+		"connection_options.auth_token",
+		"connection_options.public_ip_address",
+		"burnchain.chain",
+		"burnchain.mode",
+		"burnchain.magic_bytes",
+		"burnchain.pox_prepare_length",
+		"burnchain.pox_reward_length",
+		"burnchain.peer_host",
+		"burnchain.peer_port",
+		"burnchain.rpc_port",
+		"burnchain.rpc_ssl",
+		"burnchain.username",
+		"burnchain.password",
+		"burnchain.wallet_name",
+		"burnchain.local_mining_public_key",
+		"burnchain.epochs",
+		"ustx_balance",
+		"events_observer",
+	}
+	signerProtected = []string{
+		"stacks_private_key",
+		"node_host",
+		"endpoint",
+		"network",
+		"auth_password",
+		"db_path",
+	}
+)
 
 // ValidateCustomization checks public structure and protected paths before private rendering.
 func ValidateCustomization(kind api.ParticipantKind, config *common.Config) error {
@@ -34,24 +77,34 @@ func ValidateCustomization(kind api.ParticipantKind, config *common.Config) erro
 	if config.SecretRef != nil && config.Overrides != nil {
 		return fmt.Errorf("configuration sources are exclusive")
 	}
-	if config.Compatibility != nil && *config.Compatibility != common.CompatibilityManaged && *config.Compatibility != common.CompatibilityUnverified {
+	if config.Compatibility != nil && *config.Compatibility != common.CompatibilityManaged &&
+		*config.Compatibility != common.CompatibilityUnverified {
 		return fmt.Errorf("unsupported configuration compatibility")
 	}
-	if config.SecretRef != nil && (len(validation.IsDNS1123Subdomain(config.SecretRef.Name)) != 0 || len(validation.IsConfigMapKey(config.SecretRef.Key)) != 0) {
+	if config.SecretRef != nil &&
+		(len(validation.IsDNS1123Subdomain(config.SecretRef.Name)) != 0 ||
+			len(validation.IsConfigMapKey(config.SecretRef.Key)) != 0) {
 		return fmt.Errorf("invalid configuration Secret reference")
 	}
 	aliases := map[string]bool{}
 	for _, ref := range config.ServiceRefs {
-		if ref.Alias == "" || len(ref.Alias) > 63 || aliases[ref.Alias] || len(validation.IsDNS1123Label(ref.Name)) != 0 {
+		if ref.Alias == "" || len(ref.Alias) > 63 || aliases[ref.Alias] ||
+			len(validation.IsDNS1123Label(ref.Name)) != 0 {
 			return fmt.Errorf("invalid or duplicate Service alias %s", ref.Alias)
 		}
-		if !((ref.Kind == string(api.ParticipantBitcoinNode) || ref.Kind == string(api.ParticipantStacksNode)) && (ref.Endpoint == common.EndpointRPC || ref.Endpoint == common.EndpointP2P) || ref.Kind == string(api.ParticipantStacksSigner) && ref.Endpoint == common.EndpointEvents) {
+		supportedEndpoint := (ref.Kind == string(api.ParticipantBitcoinNode) ||
+			ref.Kind == string(api.ParticipantStacksNode)) &&
+			(ref.Endpoint == common.EndpointRPC ||
+				ref.Endpoint == common.EndpointP2P) ||
+			ref.Kind == string(api.ParticipantStacksSigner) &&
+				ref.Endpoint == common.EndpointEvents
+		if !supportedEndpoint {
 			return fmt.Errorf("unsupported Service endpoint for alias %s", ref.Alias)
 		}
 		aliases[ref.Alias] = true
 	}
 	if len(config.ServiceRefs) > 0 && config.SecretRef == nil {
-		return fmt.Errorf("Service substitutions require a complete configuration Secret")
+		return fmt.Errorf("service substitutions require a complete configuration Secret")
 	}
 	_, err := customOverrides(kind, config)
 	return err
@@ -91,7 +144,12 @@ func customOverrides(kind api.ParticipantKind, config *common.Config) (map[strin
 
 // Apply validates customization and preserves protected managed identities and genesis.
 // The returned bytes may contain private values and must stay in the scoped resolver.
-func Apply(kind api.ParticipantKind, generated, custom []byte, config *common.Config, services map[string]string) ([]byte, bool, error) {
+func Apply(
+	kind api.ParticipantKind,
+	generated, custom []byte,
+	config *common.Config,
+	services map[string]string,
+) ([]byte, bool, error) {
 	if err := ValidateCustomization(kind, config); err != nil {
 		return nil, false, err
 	}

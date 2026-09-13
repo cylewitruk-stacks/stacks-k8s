@@ -38,6 +38,7 @@ func (c *waitClient) Get(ctx context.Context, key client.ObjectKey, obj client.O
 	}
 	return c.Client.Get(ctx, key, obj, opts...)
 }
+
 func (c *waitClient) List(ctx context.Context, obj client.ObjectList, opts ...client.ListOption) error {
 	c.lists++
 	if c.listError != nil {
@@ -61,11 +62,19 @@ func waitFixture(t *testing.T, root *api.StacksNetwork) (*harness, *waitClient) 
 		builder = builder.WithObjects(root)
 	}
 	c := &waitClient{Client: builder.Build()}
-	return &harness{c: c, rootUID: "root-uid", config: liveConfig{fixtureOptions: fixtureOptions{namespace: "test"}}, evidence: t.TempDir()}, c
+	return &harness{
+		c:        c,
+		rootUID:  "root-uid",
+		config:   liveConfig{fixtureOptions: fixtureOptions{namespace: "test"}},
+		evidence: t.TempDir(),
+	}, c
 }
 
 func waitRoot() *api.StacksNetwork {
-	return &api.StacksNetwork{ObjectMeta: metav1.ObjectMeta{Name: "network", Namespace: "test", UID: "root-uid", Generation: 1}, Spec: api.StacksNetworkSpec{Operation: "Running"}}
+	return &api.StacksNetwork{
+		ObjectMeta: metav1.ObjectMeta{Name: "network", Namespace: "test", UID: "root-uid", Generation: 1},
+		Spec:       api.StacksNetworkSpec{Operation: "Running"},
+	}
 }
 
 func TestWaitFailsOnExactRootLossOrTerminalControl(t *testing.T) {
@@ -89,7 +98,13 @@ func TestWaitFailsOnExactRootLossOrTerminalControl(t *testing.T) {
 			// Terminal root control must be visible even if participant discovery is unavailable.
 			c.listError = apierrors.NewServiceUnavailable("collection unavailable")
 			called := false
-			result, err := h.wait(context.Background(), "progress", time.Minute, true, func(snapshot) (bool, error) { called = true; return true, nil })
+			result, err := h.wait(
+				context.Background(),
+				"progress",
+				time.Minute,
+				true,
+				func(snapshot) (bool, error) { called = true; return true, nil },
+			)
 			if err == nil || errors.Is(err, context.DeadlineExceeded) || called || c.gets != 1 || c.lists != 0 {
 				t.Fatalf("terminal result=%v called=%v gets=%d lists=%d", err, called, c.gets, c.lists)
 			}
@@ -101,7 +116,13 @@ func TestWaitFailsOnExactRootLossOrTerminalControl(t *testing.T) {
 }
 
 func TestWaitRetriesReadFailuresAndMissingStartupObservations(t *testing.T) {
-	for _, mode := range []string{"transient-root", "transient-collection", "missing-collection", "startup-empty", "unbound-root"} {
+	for _, mode := range []string{
+		"transient-root",
+		"transient-collection",
+		"missing-collection",
+		"startup-empty",
+		"unbound-root",
+	} {
 		t.Run(mode, func(t *testing.T) {
 			root := waitRoot()
 			if mode == "unbound-root" {
@@ -114,12 +135,21 @@ func TestWaitRetriesReadFailuresAndMissingStartupObservations(t *testing.T) {
 			case "transient-collection":
 				c.listError = apierrors.NewServiceUnavailable("retry")
 			case "missing-collection":
-				c.listError = apierrors.NewNotFound(schema.GroupResource{Group: api.GroupVersion.Group, Resource: "stacksnetworkparticipants"}, "startup")
+				c.listError = apierrors.NewNotFound(
+					schema.GroupResource{Group: api.GroupVersion.Group, Resource: "stacksnetworkparticipants"},
+					"startup",
+				)
 			case "unbound-root":
 				h.rootUID = ""
 			}
 			accepts := 0
-			_, err := h.wait(context.Background(), "startup", 40*time.Millisecond, true, func(s snapshot) (bool, error) { accepts++; return len(s.Participants) > 0, nil })
+			_, err := h.wait(
+				context.Background(),
+				"startup",
+				40*time.Millisecond,
+				true,
+				func(s snapshot) (bool, error) { accepts++; return len(s.Participants) > 0, nil },
+			)
 			if !errors.Is(err, context.DeadlineExceeded) {
 				t.Fatalf("retryable observation failed fast: %v", err)
 			}
@@ -139,7 +169,13 @@ func TestWaitCanObserveRecoveryWithoutAcceptingFailedRead(t *testing.T) {
 	c.getError = apierrors.NewTimeoutError("temporary", 0)
 	c.once = true
 	accepts := 0
-	result, err := h.wait(context.Background(), "recovered", 5*time.Second, true, func(s snapshot) (bool, error) { accepts++; return s.Root.UID == h.rootUID, nil })
+	result, err := h.wait(
+		context.Background(),
+		"recovered",
+		5*time.Second,
+		true,
+		func(s snapshot) (bool, error) { accepts++; return s.Root.UID == h.rootUID, nil },
+	)
 	if err != nil || accepts != 1 || c.gets != 2 || result.At.IsZero() {
 		t.Fatalf("recovery err=%v accepts=%d gets=%d", err, accepts, c.gets)
 	}
@@ -150,13 +186,26 @@ func TestWaitAllowsExpectedStopInCleanupAndHonorsCancellation(t *testing.T) {
 	root.Spec.Operation = "Stopped"
 	root.Status.Phase = "Stopped"
 	h, _ := waitFixture(t, root)
-	if _, err := h.wait(context.Background(), "cleanup", time.Second, false, func(s snapshot) (bool, error) { return s.Status.Phase == "Stopped", nil }); err != nil {
+	if _, err := h.wait(
+		context.Background(),
+		"cleanup",
+		time.Second,
+		false,
+		func(s snapshot) (bool, error) { return s.Status.Phase == "Stopped", nil },
+	); err != nil {
 		t.Fatal(err)
 	}
 	h, _ = waitFixture(t, waitRoot())
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := h.wait(ctx, "interrupted", time.Minute, true, func(snapshot) (bool, error) { t.Fatal("canceled failed read was accepted"); return true, nil }); !errors.Is(err, context.Canceled) || !strings.Contains(err.Error(), "interrupted") {
+	if _, err := h.wait(
+		ctx,
+		"interrupted",
+		time.Minute,
+		true,
+		func(snapshot) (bool, error) { t.Fatal("canceled failed read was accepted"); return true, nil },
+	); !errors.Is(err, context.Canceled) ||
+		!strings.Contains(err.Error(), "interrupted") {
 		t.Fatalf("cancellation: %v", err)
 	}
 }
@@ -166,12 +215,28 @@ func TestWaitRetainsLastActiveEvidenceOnFailure(t *testing.T) {
 	root := waitRoot()
 	h, c := waitFixture(t, root)
 	ctx := context.Background()
-	p := &api.StacksNetworkParticipant{ObjectMeta: metav1.ObjectMeta{Name: "p", Namespace: "test", UID: "p", OwnerReferences: []metav1.OwnerReference{{APIVersion: api.GroupVersion.String(), Kind: "StacksNetwork", Name: root.Name, UID: root.UID, Controller: ptr.To(true)}}}, Spec: api.StacksNetworkParticipantSpec{NetworkUID: root.UID}}
+	p := &api.StacksNetworkParticipant{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "p",
+			Namespace: "test",
+			UID:       "p",
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion: api.GroupVersion.String(),
+					Kind:       "StacksNetwork",
+					Name:       root.Name,
+					UID:        root.UID,
+					Controller: ptr.To(true),
+				},
+			},
+		},
+		Spec: api.StacksNetworkParticipantSpec{NetworkUID: root.UID},
+	}
 	if err := c.Create(ctx, p); err != nil {
 		t.Fatal(err)
 	}
 	first := true
-	_, err := h.wait(ctx, "progress", time.Minute, true, func(s snapshot) (bool, error) {
+	_, err := h.wait(ctx, "progress", time.Minute, true, func(_ snapshot) (bool, error) {
 		if first {
 			first = false
 			root.Status.Phase = "Failed"
@@ -192,7 +257,8 @@ func TestWaitRetainsLastActiveEvidenceOnFailure(t *testing.T) {
 	if err = json.Unmarshal(data, &captured); err != nil {
 		t.Fatal(err)
 	}
-	if captured.Status.Phase == "Failed" || len(captured.Participants) != 1 || captured.Participants[0].Identity.UID != p.UID {
+	if captured.Status.Phase == "Failed" || len(captured.Participants) != 1 ||
+		captured.Participants[0].Identity.UID != p.UID {
 		t.Fatal("prior participant evidence was lost or relabeled")
 	}
 }

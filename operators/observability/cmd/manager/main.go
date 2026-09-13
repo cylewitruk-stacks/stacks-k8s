@@ -1,3 +1,4 @@
+// Command manager runs the read-only observability operator.
 package main
 
 import (
@@ -29,7 +30,15 @@ func main() {
 	topology.AddNetworkTypes(scheme)
 	controllerManager, err := options.New(scheme)
 	must(err)
-	must((&observation.Reconciler{Client: controllerManager.GetClient(), APIReader: controllerManager.GetAPIReader()}).SetupWithManager(controllerManager, options.Concurrency))
+	must(
+		(&observation.Reconciler{
+			Client:    controllerManager.GetClient(),
+			APIReader: controllerManager.GetAPIReader(),
+		}).SetupWithManager(
+			controllerManager,
+			options.Concurrency,
+		),
+	)
 	must(controllerManager.Start(ctrl.SetupSignalHandler()))
 }
 

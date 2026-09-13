@@ -27,13 +27,26 @@ func (w *Worker) actionHeader(ctx context.Context, endpoint, hash string) (*acti
 	if !hashValid(hash) {
 		return nil, fmt.Errorf("invalid block identity")
 	}
-	if err := w.RPC.Call(ctx, endpoint, "action-header", bitcoinrpc.MethodGetBlockHeader, []any{hash, true}, &h); err != nil {
+	if err := w.RPC.Call(
+		ctx,
+		endpoint,
+		"action-header",
+		bitcoinrpc.MethodGetBlockHeader,
+		[]any{hash, true},
+		&h,
+	); err != nil {
 		return nil, err
 	}
-	if h.Hash != hash || h.Height == nil || *h.Height < 0 || !hashValid(h.Work) || *h.Height > 0 && !hashValid(h.Previous) {
+	if h.Hash != hash || h.Height == nil || *h.Height < 0 || !hashValid(h.Work) ||
+		*h.Height > 0 && !hashValid(h.Previous) {
 		return nil, fmt.Errorf("incomplete block header")
 	}
-	return &action.BitcoinChainPoint{Hash: h.Hash, Height: *h.Height, PreviousBlockHash: h.Previous, Chainwork: h.Work}, nil
+	return &action.BitcoinChainPoint{
+		Hash:              h.Hash,
+		Height:            *h.Height,
+		PreviousBlockHash: h.Previous,
+		Chainwork:         h.Work,
+	}, nil
 }
 
 // actionTip couples the canonical height and hash to a validated header.
@@ -68,7 +81,9 @@ func (w *Worker) actionHashAt(ctx context.Context, endpoint string, height int64
 // captureReorganization pins a bounded suffix before granting any mutation authority.
 func (w *Worker) captureReorganization(ctx context.Context, a admitted, state *bitcoin.BitcoinActionReservation) error {
 	spec := state.Reorganization
-	if spec == nil || spec.Depth < 1 || spec.Depth > 6 || !spec.BoundaryPolicy.AllowEpochBoundaryCrossing || !spec.BoundaryPolicy.AllowPreparePhaseBoundaryCrossing || !spec.BoundaryPolicy.AllowRewardCycleBoundaryCrossing {
+	if spec == nil || spec.Depth < 1 || spec.Depth > 6 || !spec.BoundaryPolicy.AllowEpochBoundaryCrossing ||
+		!spec.BoundaryPolicy.AllowPreparePhaseBoundaryCrossing ||
+		!spec.BoundaryPolicy.AllowRewardCycleBoundaryCrossing {
 		return fmt.Errorf("reorganization boundary policy unavailable")
 	}
 	var tips []struct {
@@ -125,14 +140,20 @@ func (w *Worker) captureReorganization(ctx context.Context, a admitted, state *b
 }
 
 // reorganizationPreflight refuses external chain movement before each irreversible send.
-func (w *Worker) reorganizationPreflight(ctx context.Context, a admitted, state *bitcoin.BitcoinActionReservation, replacement bool) error {
+func (w *Worker) reorganizationPreflight(
+	ctx context.Context,
+	a admitted,
+	state *bitcoin.BitcoinActionReservation,
+	replacement bool,
+) error {
 	expected := state.OriginalChain
 	if replacement {
 		expected = state.ForkParent
 		if state.AcceptedChain != nil {
 			expected = state.AcceptedChain
 		}
-		if state.ForkParent == nil || expected == nil || expected.Height-state.ForkParent.Height != int64(state.BlocksGenerated) {
+		if state.ForkParent == nil || expected == nil ||
+			expected.Height-state.ForkParent.Height != int64(state.BlocksGenerated) {
 			return fmt.Errorf("replacement receipts unverified")
 		}
 	}
@@ -160,7 +181,8 @@ func (w *Worker) verifyReplacement(ctx context.Context, a admitted, record *bitc
 		previous = state.AcceptedChain
 	}
 	verified := previous.Height - state.ForkParent.Height
-	if verified < 0 || verified > int64(state.BlocksGenerated) || len(state.ReplacementBlockHashes) != int(state.BlocksGenerated) {
+	if verified < 0 || verified > int64(state.BlocksGenerated) ||
+		len(state.ReplacementBlockHashes) != int(state.BlocksGenerated) {
 		return false, fmt.Errorf("replacement receipt accounting differs")
 	}
 	if verified == int64(state.BlocksGenerated) {
@@ -170,7 +192,8 @@ func (w *Worker) verifyReplacement(ctx context.Context, a admitted, record *bitc
 	if err != nil {
 		return false, err
 	}
-	if header.Height != previous.Height+1 || header.PreviousBlockHash != previous.Hash || header.Chainwork <= previous.Chainwork {
+	if header.Height != previous.Height+1 || header.PreviousBlockHash != previous.Hash ||
+		header.Chainwork <= previous.Chainwork {
 		return false, fmt.Errorf("replacement ancestry differs")
 	}
 	state.AcceptedChain = header
@@ -178,7 +201,12 @@ func (w *Worker) verifyReplacement(ctx context.Context, a admitted, record *bitc
 }
 
 // stepReorganization performs bounded suffix replacement and only the captured compensation.
-func (w *Worker) stepReorganization(ctx context.Context, record *bitcoin.BitcoinExecution, view actionView, same bool) error {
+func (w *Worker) stepReorganization(
+	ctx context.Context,
+	record *bitcoin.BitcoinExecution,
+	view actionView,
+	same bool,
+) error {
 	state := record.Status.Action
 	if state.FinalChain != nil {
 		return nil
@@ -186,7 +214,8 @@ func (w *Worker) stepReorganization(ctx context.Context, record *bitcoin.Bitcoin
 	if !state.InvalidationAcknowledged && (state.StopReason != "" || state.EffectUncertain) {
 		return nil
 	}
-	cleanup := state.InvalidationAcknowledged && (state.StopReason != "" || state.EffectUncertain || state.BlocksGenerated >= state.Reorganization.Depth+1)
+	cleanup := state.InvalidationAcknowledged &&
+		(state.StopReason != "" || state.EffectUncertain || state.BlocksGenerated >= state.Reorganization.Depth+1)
 	a, err := w.resolveActor(ctx, record, cleanup || state.CleanupAcknowledged)
 	if err != nil {
 		return err
@@ -194,7 +223,8 @@ func (w *Worker) stepReorganization(ctx context.Context, record *bitcoin.Bitcoin
 	if !equality.Semantic.DeepEqual(a.target, state.Runtime) {
 		return w.stopAction(ctx, record, action.ReasonIdentityDiverged, true)
 	}
-	if state.InvalidationAcknowledged && !state.CleanupAcknowledged && !w.Now().Before(state.ExpiresAt.Add(30*time.Second)) {
+	if state.InvalidationAcknowledged && !state.CleanupAcknowledged &&
+		!w.Now().Before(state.ExpiresAt.Add(30*time.Second)) {
 		return w.stopAction(ctx, record, action.ReasonCleanupDeadlineExceeded, true)
 	}
 	if state.InvalidationAcknowledged && state.StopReason == "" {
@@ -210,7 +240,8 @@ func (w *Worker) stepReorganization(ctx context.Context, record *bitcoin.Bitcoin
 		if state.StopReason != "" || state.EffectUncertain {
 			return nil
 		}
-		if state.BlocksGenerated != state.Reorganization.Depth+1 || state.AcceptedChain == nil || state.AcceptedChain.Chainwork <= state.OriginalChain.Chainwork {
+		if state.BlocksGenerated != state.Reorganization.Depth+1 || state.AcceptedChain == nil ||
+			state.AcceptedChain.Chainwork <= state.OriginalChain.Chainwork {
 			return w.stopAction(ctx, record, reasonReplacementWorkInsufficient, true)
 		}
 		for i, hash := range state.ReplacementBlockHashes {
@@ -233,22 +264,54 @@ func (w *Worker) stepReorganization(ctx context.Context, record *bitcoin.Bitcoin
 		return w.Client.Status().Update(ctx, record)
 	}
 	if cleanup {
-		return w.arm(ctx, record, a, bitcoin.BitcoinArmedRPC{Method: bitcoin.RPCReconsiderBlock, Action: state.Request.DeepCopy(), BlockHash: state.InvalidatedHash})
+		return w.arm(
+			ctx,
+			record,
+			a,
+			bitcoin.BitcoinArmedRPC{
+				Method:    bitcoin.RPCReconsiderBlock,
+				Action:    state.Request.DeepCopy(),
+				BlockHash: state.InvalidatedHash,
+			},
+		)
 	}
 	if !same || !actionAdmissionAcknowledged(view, record) || a.root.Spec.Operation == api.NetworkOperationPaused {
 		return nil
 	}
 	if !state.InvalidationAcknowledged {
-		return w.armReorganization(ctx, record, a, bitcoin.BitcoinArmedRPC{Method: bitcoin.RPCInvalidateBlock, Action: state.Request.DeepCopy(), BlockHash: state.InvalidatedHash})
+		return w.armReorganization(
+			ctx,
+			record,
+			a,
+			bitcoin.BitcoinArmedRPC{
+				Method:    bitcoin.RPCInvalidateBlock,
+				Action:    state.Request.DeepCopy(),
+				BlockHash: state.InvalidatedHash,
+			},
+		)
 	}
 	if state.NextDispatchAt != nil && w.Now().Before(state.NextDispatchAt.Time) {
 		return nil
 	}
-	return w.armReorganization(ctx, record, a, bitcoin.BitcoinArmedRPC{Method: bitcoin.RPCGenerate, Action: state.Request.DeepCopy(), Address: state.Reorganization.Address})
+	return w.armReorganization(
+		ctx,
+		record,
+		a,
+		bitcoin.BitcoinArmedRPC{
+			Method:  bitcoin.RPCGenerate,
+			Action:  state.Request.DeepCopy(),
+			Address: state.Reorganization.Address,
+		},
+	)
 }
 
 // armReorganization records proven ancestry divergence without classifying failed reads as evidence.
-func (w *Worker) armReorganization(ctx context.Context, record *bitcoin.BitcoinExecution, a admitted, operation bitcoin.BitcoinArmedRPC) error {
+func (w *Worker) armReorganization(
+	ctx context.Context,
+	record *bitcoin.BitcoinExecution,
+	a admitted,
+	operation bitcoin.BitcoinArmedRPC,
+) error {
 	err := w.arm(ctx, record, a, operation)
 	if errors.Is(err, errExternalChainMovement) {
 		return w.stopAction(ctx, record, reasonExternalChainMovement, false)

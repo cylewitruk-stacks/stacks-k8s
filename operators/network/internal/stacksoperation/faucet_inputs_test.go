@@ -12,10 +12,23 @@ import (
 )
 
 func TestFaucetPublicInputsRequireFrozenSourceTargetAndGenesis(t *testing.T) {
-	for _, mode := range []string{"valid", "source-uid", "source-digest", "mounted-key", "target-uid", "genesis-source", "genesis-fingerprint"} {
+	for _, mode := range []string{
+		"valid",
+		"source-uid",
+		"source-digest",
+		"mounted-key",
+		"target-uid",
+		"genesis-source",
+		"genesis-fingerprint",
+	} {
 		t.Run(mode, func(t *testing.T) {
 			inputs, s, target := publicFixture(t)
-			s.Participant.Status.Admission.Configuration = api.Configuration{StacksFaucet: &stacks.StacksFaucetSpec{AccountRef: &common.NameRef{Name: "sender"}, TargetNodeRef: &common.NameRef{Name: "node"}}}
+			s.Participant.Status.Admission.Configuration = api.Configuration{
+				StacksFaucet: &stacks.StacksFaucetSpec{
+					AccountRef:    &common.NameRef{Name: "sender"},
+					TargetNodeRef: &common.NameRef{Name: "node"},
+				},
+			}
 			ctx := context.Background()
 			c := inputs.Reader.(client.Client)
 			var genesis api.StacksGenesis
@@ -30,7 +43,10 @@ func TestFaucetPublicInputsRequireFrozenSourceTargetAndGenesis(t *testing.T) {
 				t.Fatal(err)
 			}
 			s.Network.Status.GenesisRef.Fingerprint = foundation.Digest(genesis.Spec)
-			a := &stacks.FaucetAdmission{SourceAccount: &stacks.FaucetBinding{Name: "sender", UID: "account", Fingerprint: "fingerprint"}, Target: &stacks.FaucetBinding{Name: target.Name, UID: target.UID}}
+			a := &stacks.FaucetAdmission{
+				SourceAccount: &stacks.FaucetBinding{Name: "sender", UID: "account", Fingerprint: "fingerprint"},
+				Target:        &stacks.FaucetBinding{Name: target.Name, UID: target.UID},
+			}
 			switch mode {
 			case "source-uid":
 				a.SourceAccount.UID = "replacement"

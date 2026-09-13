@@ -34,7 +34,12 @@ type arguments struct{ role, namespace, participant, participantUID, networkUID,
 func main() {
 	var args arguments
 	var verifyContracts string
-	flag.StringVar(&verifyContracts, "verify-contracts", "", "verify a pinned contract bundle without accessing Kubernetes")
+	flag.StringVar(
+		&verifyContracts,
+		"verify-contracts",
+		"",
+		"verify a pinned contract bundle without accessing Kubernetes",
+	)
 	flag.StringVar(&args.role, "role", "", "declared participant role")
 	flag.StringVar(&args.namespace, "namespace", "", "network namespace")
 	flag.StringVar(&args.participant, "participant", "", "generated participant name")
@@ -58,10 +63,15 @@ func main() {
 
 // run creates only scoped Kubernetes clients; signing keys remain in this worker process.
 func run(ctx context.Context, args arguments) error {
-	if args.role != string(api.ParticipantStacksTransactionProduction) && args.role != string(api.ParticipantStacksStacker) && args.role != string(api.ParticipantStacksContractSet) && args.role != string(api.ParticipantStacksFaucet) {
+	if args.role != string(api.ParticipantStacksTransactionProduction) &&
+		args.role != string(api.ParticipantStacksStacker) &&
+		args.role != string(api.ParticipantStacksContractSet) &&
+		args.role != string(api.ParticipantStacksFaucet) {
 		return fmt.Errorf("unsupported worker role")
 	}
-	if args.namespace == "" || args.participant == "" || args.participantUID == "" || args.networkUID == "" || os.Getenv("POD_UID") == "" || os.Getenv("POD_NAME") == "" {
+	if args.namespace == "" || args.participant == "" || args.participantUID == "" || args.networkUID == "" ||
+		os.Getenv("POD_UID") == "" ||
+		os.Getenv("POD_NAME") == "" {
 		return fmt.Errorf("incomplete worker process identity")
 	}
 	var profile stacksworker.Profile
@@ -73,7 +83,12 @@ func run(ctx context.Context, args arguments) error {
 		return err
 	}
 	scheme := runtime.NewScheme()
-	for _, add := range []func(*runtime.Scheme) error{clientgoscheme.AddToScheme, api.AddToScheme, stacks.AddToScheme, bitcoin.AddToScheme} {
+	for _, add := range []func(*runtime.Scheme) error{
+		clientgoscheme.AddToScheme,
+		api.AddToScheme,
+		stacks.AddToScheme,
+		bitcoin.AddToScheme,
+	} {
 		if err := add(scheme); err != nil {
 			return err
 		}
@@ -103,17 +118,30 @@ func run(ctx context.Context, args arguments) error {
 		faucet.ParticipantUID = types.UID(args.participantUID)
 		faucet.PodUID = types.UID(os.Getenv("POD_UID"))
 	}
-	worker := stacksworker.Runtime{Client: c, Dynamic: d, Namespace: args.namespace, ParticipantName: args.participant, NetworkUID: types.UID(args.networkUID), ParticipantUID: types.UID(args.participantUID), PodName: os.Getenv("POD_NAME"), PodUID: types.UID(os.Getenv("POD_UID")), Profile: normalized, Role: role, Prerequisites: prerequisites}
+	worker := stacksworker.Runtime{
+		Client:          c,
+		Dynamic:         d,
+		Namespace:       args.namespace,
+		ParticipantName: args.participant,
+		NetworkUID:      types.UID(args.networkUID),
+		ParticipantUID:  types.UID(args.participantUID),
+		PodName:         os.Getenv("POD_NAME"),
+		PodUID:          types.UID(os.Getenv("POD_UID")),
+		Profile:         normalized,
+		Role:            role,
+		Prerequisites:   prerequisites,
+	}
 	return worker.Run(ctx)
 }
 
 // mountedKey bounds private input and never includes its bytes in errors.
 func mountedKey(path string) (string, error) {
+	// #nosec G304 -- Explicit CLI input path is intentionally caller-selected and read with a size limit.
 	file, err := os.Open(path)
 	if err != nil {
 		return "", fmt.Errorf("mounted signing key unavailable")
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }() // Read/cleanup completion cannot change the operation's result.
 	data, err := io.ReadAll(io.LimitReader(file, 257))
 	if err != nil || len(data) > 256 {
 		return "", fmt.Errorf("mounted signing key is invalid")
@@ -126,7 +154,11 @@ func mountedKey(path string) (string, error) {
 }
 
 // protocolRole binds mounted private inputs to the role's public identity resolver.
-func protocolRole(kind api.ParticipantKind, profile stacksworker.Profile, reader client.Client) (stacksworker.Role, func(context.Context, stacksworker.Snapshot) error, error) {
+func protocolRole(
+	kind api.ParticipantKind,
+	profile stacksworker.Profile,
+	reader client.Client,
+) (stacksworker.Role, func(context.Context, stacksworker.Snapshot) error, error) {
 	read := func(role string) (string, error) {
 		for _, key := range profile.Keys {
 			if key.Role == role {
@@ -136,9 +168,11 @@ func protocolRole(kind api.ParticipantKind, profile stacksworker.Profile, reader
 		return "", fmt.Errorf("required signing key mount is missing")
 	}
 	senderRole := stacksworker.KeyRoleSender
-	if kind == api.ParticipantStacksStacker {
+	//nolint:exhaustive // Only the supported Stacks worker roles receive these inputs; other kinds stay excluded.
+	switch kind {
+	case api.ParticipantStacksStacker:
 		senderRole = stacksworker.KeyRoleHolder
-	} else if kind == api.ParticipantStacksContractSet {
+	case api.ParticipantStacksContractSet:
 		senderRole = stacksworker.KeyRoleDeployer
 	}
 	key, err := read(senderRole)
@@ -150,6 +184,7 @@ func protocolRole(kind api.ParticipantKind, profile stacksworker.Profile, reader
 		return nil, nil, fmt.Errorf("invalid mounted identity")
 	}
 	inputs := stacksoperation.PublicInputs{Reader: reader, Sender: public.Address}
+	//nolint:exhaustive // Only the supported Stacks worker roles receive these inputs; other kinds stay excluded.
 	switch kind {
 	case api.ParticipantStacksFaucet:
 		role, err := stacksoperation.NewFaucetRole(key, public.Address)
@@ -186,12 +221,25 @@ func protocolRole(kind api.ParticipantKind, profile stacksworker.Profile, reader
 		if err != nil {
 			return nil, nil, fmt.Errorf("invalid mounted administrator identity")
 		}
-		role, err := stacksoperation.NewStackerRole(key, public.Address, consensus, signer.PublicKey, administratorKey, administrator.Address)
+		role, err := stacksoperation.NewStackerRole(
+			key,
+			public.Address,
+			consensus,
+			signer.PublicKey,
+			administratorKey,
+			administrator.Address,
+		)
 		if err != nil {
 			return nil, nil, err
 		}
 		role.ResolvePoX4, role.ResolvePoX5 = inputs.PoX4, inputs.PoX5
-		return role, func(ctx context.Context, s stacksworker.Snapshot) error { _, err := inputs.PoX5(ctx, s); return err }, nil
+		return role, func(ctx context.Context, s stacksworker.Snapshot) error {
+			_, err := inputs.PoX5(
+				ctx,
+				s,
+			)
+			return err
+		}, nil
 	case api.ParticipantStacksContractSet:
 		role, err := stacksoperation.NewContractRole(key, public.Address, "/protocol/sbtc")
 		if err != nil {

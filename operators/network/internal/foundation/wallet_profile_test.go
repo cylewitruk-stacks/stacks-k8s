@@ -29,37 +29,80 @@ func TestWalletProfileAcceptsOnlyPublicCoreWallets(t *testing.T) {
 }
 
 func TestUnsupportedWalletNeverResolvesOrEntersCandidateAdmission(t *testing.T) {
-	for name, key := range map[string]*bitcoin.WalletKeySource{"generated": nil, "imported": {SecretRef: &common.SecretKeyRef{Name: "absent", Key: "descriptor"}}, "derived": {StacksMinerAccountRef: &common.NameRef{Name: "absent"}}} {
+	for name, key := range map[string]*bitcoin.WalletKeySource{
+		"generated": nil,
+		"imported":  {SecretRef: &common.SecretKeyRef{Name: "absent", Key: "descriptor"}},
+		"derived":   {StacksMinerAccountRef: &common.NameRef{Name: "absent"}},
+	} {
 		t.Run(name, func(t *testing.T) {
 			scheme := runtime.NewScheme()
-			for _, add := range []func(*runtime.Scheme) error{bitcoin.AddToScheme, corev1.AddToScheme, batchv1.AddToScheme} {
+			for _, add := range []func(*runtime.Scheme) error{
+				bitcoin.AddToScheme,
+				corev1.AddToScheme,
+				batchv1.AddToScheme,
+			} {
 				if err := add(scheme); err != nil {
 					t.Fatal(err)
 				}
 			}
-			wallet := &bitcoin.BitcoinWallet{ObjectMeta: metav1.ObjectMeta{Name: "unsupported", Namespace: "test", UID: "wallet", Generation: 1}, Spec: bitcoin.BitcoinWalletSpec{WatchOnly: ptr.To(false), KeySource: key}, Status: common.ResolutionStatus{Digest: "prior-public-evidence", ObservedGeneration: 1, Identity: &common.PublicIdentity{}, Conditions: []metav1.Condition{{Type: "Resolved", Status: metav1.ConditionTrue}}}}
+			wallet := &bitcoin.BitcoinWallet{
+				ObjectMeta: metav1.ObjectMeta{Name: "unsupported", Namespace: "test", UID: "wallet", Generation: 1},
+				Spec:       bitcoin.BitcoinWalletSpec{WatchOnly: ptr.To(false), KeySource: key},
+				Status: common.ResolutionStatus{
+					Digest:             "prior-public-evidence",
+					ObservedGeneration: 1,
+					Identity:           &common.PublicIdentity{},
+					Conditions:         []metav1.Condition{{Type: "Resolved", Status: metav1.ConditionTrue}},
+				},
+			}
 			c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(wallet).WithObjects(wallet).Build()
-			p := &candidate{instance: &api.StacksNetworkParticipant{ObjectMeta: metav1.ObjectMeta{Namespace: wallet.Namespace}}}
-			if err := p.wallet(t.Context(), c, &common.NameRef{Name: wallet.Name}); !errors.Is(err, ErrUnsupportedWalletProfile) {
+			p := &candidate{
+				instance: &api.StacksNetworkParticipant{ObjectMeta: metav1.ObjectMeta{Namespace: wallet.Namespace}},
+			}
+			if err := p.wallet(
+				t.Context(),
+				c,
+				&common.NameRef{Name: wallet.Name},
+			); !errors.Is(
+				err,
+				ErrUnsupportedWalletProfile,
+			) {
 				t.Fatalf("stale resolved candidate admitted: %v", err)
 			}
-			check := newDependencyCheck(c, &api.StacksNetwork{ObjectMeta: metav1.ObjectMeta{Namespace: wallet.Namespace}})
-			if err := check.validate(t.Context(), []common.Binding{{Kind: "BitcoinWallet", Name: wallet.Name, UID: wallet.UID, Fingerprint: wallet.Status.Digest}}); !errors.Is(err, ErrUnsupportedWalletProfile) {
+			check := newDependencyCheck(
+				c,
+				&api.StacksNetwork{ObjectMeta: metav1.ObjectMeta{Namespace: wallet.Namespace}},
+			)
+			if err := check.validate(
+				t.Context(),
+				[]common.Binding{
+					{Kind: "BitcoinWallet", Name: wallet.Name, UID: wallet.UID, Fingerprint: wallet.Status.Digest},
+				},
+			); !errors.Is(
+				err,
+				ErrUnsupportedWalletProfile,
+			) {
 				t.Fatalf("stale resolved dependency admitted: %v", err)
 			}
 			r := IdentityReconciler{Client: c, Reader: c, Scheme: scheme, Wallet: true}
 			result, err := r.Reconcile(t.Context(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(wallet)})
-			if err != nil || result.Requeue || result.RequeueAfter != 0 {
+			if err != nil || result.RequeueAfter != 0 {
 				t.Fatalf("permanent unsupported input retried: %+v %v", result, err)
 			}
 			if err := c.Get(t.Context(), client.ObjectKeyFromObject(wallet), wallet); err != nil {
 				t.Fatal(err)
 			}
 			cond := meta.FindStatusCondition(wallet.Status.Conditions, "Resolved")
-			if cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != "UnsupportedWalletProfile" || cond.ObservedGeneration != wallet.Generation || wallet.Status.Digest != "prior-public-evidence" {
+			if cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != "UnsupportedWalletProfile" ||
+				cond.ObservedGeneration != wallet.Generation ||
+				wallet.Status.Digest != "prior-public-evidence" {
 				t.Fatal("unsupported profile failed to preserve evidence and withdraw resolution", wallet.Status)
 			}
-			for _, list := range []client.ObjectList{&corev1.SecretList{}, &corev1.ConfigMapList{}, &batchv1.JobList{}} {
+			for _, list := range []client.ObjectList{
+				&corev1.SecretList{},
+				&corev1.ConfigMapList{},
+				&batchv1.JobList{},
+			} {
 				if err := c.List(t.Context(), list); err != nil {
 					t.Fatal(err)
 				}

@@ -40,7 +40,13 @@ func TestPublicBoundWorkerEviction(t *testing.T) {
 	}
 	t.Cleanup(func() {
 		if err := h.cleanup(); err != nil {
-			t.Errorf("eviction fixture cleanup incomplete: %v; namespace=%s UID=%s evidence=%s", err, config.namespace, h.namespaceUID, h.evidence)
+			t.Errorf(
+				"eviction fixture cleanup incomplete: %v; namespace=%s UID=%s evidence=%s",
+				err,
+				config.namespace,
+				h.namespaceUID,
+				h.evidence,
+			)
 		}
 	})
 	signals, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -52,7 +58,8 @@ func TestPublicBoundWorkerEviction(t *testing.T) {
 	}
 	initialized, err := h.wait(ctx, "eviction-initialized", config.timeout, true, func(s snapshot) (bool, error) {
 		_, ready := progress(s)
-		return ready && condition(s, "Initialized", metav1.ConditionTrue) && condition(s, "Operational", metav1.ConditionTrue), nil
+		return ready && condition(s, "Initialized", metav1.ConditionTrue) &&
+			condition(s, "Operational", metav1.ConditionTrue), nil
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -66,7 +73,12 @@ func TestPublicBoundWorkerEviction(t *testing.T) {
 	if err := h.cleanup(); err != nil {
 		t.Fatal(err)
 	}
-	t.Logf("bound management Pod evicted through policy/v1; Failed latched, binding retained, no replacement or resumed execution observed; normal disposal completed; evidence=%s", h.evidence)
+	t.Logf(
+		"bound management Pod evicted through policy/v1; Failed latched, binding "+
+			"retained, no replacement or resumed execution observed; normal disposal "+
+			"completed; evidence=%s",
+		h.evidence,
+	)
 }
 
 // evictionSelection pins the live management session and process before submitting eviction.
@@ -83,16 +95,33 @@ func selectEvictionWorker(s snapshot) (evictionSelection, error) {
 	if s.Operation != "Running" || s.Deleting || failed(s) || s.Status.ObservationPolicy == nil {
 		return evictionSelection{}, fmt.Errorf("eviction requires a running healthy root")
 	}
-	freshness := time.Duration(3*s.Status.ObservationPolicy.PollIntervalSeconds+s.Status.ObservationPolicy.RPCAllowanceSeconds) * time.Second
+	freshness := time.Duration(
+		3*s.Status.ObservationPolicy.PollIntervalSeconds+s.Status.ObservationPolicy.RPCAllowanceSeconds,
+	) * time.Second
 	for _, p := range s.Participants {
 		e := p.Status.Execution
-		if p.Kind != "StacksTransactionProduction" || e == nil || e.Phase != "Active" || e.ProcessNonce == "" || e.Transactions == nil || e.Transactions.Included == 0 || e.ObservedAt.IsZero() || e.ObservedAt.After(s.At) || s.At.Sub(e.ObservedAt.Time) > freshness {
+		if p.Kind != "StacksTransactionProduction" || e == nil || e.Phase != "Active" || e.ProcessNonce == "" ||
+			e.Transactions == nil ||
+			e.Transactions.Included == 0 ||
+			e.ObservedAt.IsZero() ||
+			e.ObservedAt.After(s.At) ||
+			s.At.Sub(e.ObservedAt.Time) > freshness {
 			continue
 		}
 		for _, id := range s.Status.Identities {
 			session := id.Worker
-			if id.UID == p.Identity.UID && id.Name == p.Name && !id.Removing && session != nil && session.Shutdown == nil && session.Disposal == nil && session.Pod.Kind == "Pod" && session.Pod.UID == e.PodUID && session.ProfileDigest == e.ProfileDigest {
-				return evictionSelection{Participant: p.Identity, LogicalName: p.Name, Session: *session.DeepCopy(), Execution: *e.DeepCopy()}, nil
+			if id.UID == p.Identity.UID && id.Name == p.Name && !id.Removing && session != nil &&
+				session.Shutdown == nil &&
+				session.Disposal == nil &&
+				session.Pod.Kind == "Pod" &&
+				session.Pod.UID == e.PodUID &&
+				session.ProfileDigest == e.ProfileDigest {
+				return evictionSelection{
+					Participant: p.Identity,
+					LogicalName: p.Name,
+					Session:     *session.DeepCopy(),
+					Execution:   *e.DeepCopy(),
+				}, nil
 			}
 		}
 	}
@@ -111,17 +140,33 @@ func (h *harness) evictBoundWorker(ctx context.Context) error {
 		return err
 	}
 	var participant api.StacksNetworkParticipant
-	if err := h.c.Get(ctx, client.ObjectKey{Namespace: h.config.namespace, Name: selected.Participant.Name}, &participant); err != nil {
+	if err := h.c.Get(
+		ctx,
+		client.ObjectKey{Namespace: h.config.namespace, Name: selected.Participant.Name},
+		&participant,
+	); err != nil {
 		return err
 	}
-	if participant.UID != selected.Participant.UID || participant.Spec.NetworkUID != h.rootUID || participant.DeletionTimestamp != nil {
+	if participant.UID != selected.Participant.UID || participant.Spec.NetworkUID != h.rootUID ||
+		participant.DeletionTimestamp != nil {
 		return fmt.Errorf("eviction participant identity changed")
 	}
 	var pod corev1.Pod
-	if err := h.c.Get(ctx, client.ObjectKey{Namespace: h.config.namespace, Name: selected.Session.Pod.Name}, &pod); err != nil {
+	if err := h.c.Get(
+		ctx,
+		client.ObjectKey{Namespace: h.config.namespace, Name: selected.Session.Pod.Name},
+		&pod,
+	); err != nil {
 		return err
 	}
-	if pod.UID != selected.Session.Pod.UID || !metav1.IsControlledBy(&pod, &participant) || pod.DeletionTimestamp != nil || pod.Spec.RestartPolicy != corev1.RestartPolicyNever || pod.Status.Phase != corev1.PodRunning || len(pod.Spec.Containers) != 1 || len(pod.Spec.InitContainers) != 0 || len(pod.Spec.EphemeralContainers) != 0 || pod.Annotations["network.stacks.org/worker-profile"] != selected.Session.ProfileDigest {
+	if pod.UID != selected.Session.Pod.UID || !metav1.IsControlledBy(&pod, &participant) ||
+		pod.DeletionTimestamp != nil ||
+		pod.Spec.RestartPolicy != corev1.RestartPolicyNever ||
+		pod.Status.Phase != corev1.PodRunning ||
+		len(pod.Spec.Containers) != 1 ||
+		len(pod.Spec.InitContainers) != 0 ||
+		len(pod.Spec.EphemeralContainers) != 0 ||
+		pod.Annotations["network.stacks.org/worker-profile"] != selected.Session.ProfileDigest {
 		return fmt.Errorf("eviction target is not the exact current standalone worker")
 	}
 	retained := false
@@ -142,7 +187,10 @@ func (h *harness) evictBoundWorker(ctx context.Context) error {
 	if err := h.event("worker-eviction-request", map[string]any{"selected": selected, "pod": pod}); err != nil {
 		return err
 	}
-	eviction := &policyv1.Eviction{ObjectMeta: metav1.ObjectMeta{Namespace: pod.Namespace, Name: pod.Name}, DeleteOptions: &metav1.DeleteOptions{Preconditions: &metav1.Preconditions{UID: &pod.UID}}}
+	eviction := &policyv1.Eviction{
+		ObjectMeta:    metav1.ObjectMeta{Namespace: pod.Namespace, Name: pod.Name},
+		DeleteOptions: &metav1.DeleteOptions{Preconditions: &metav1.Preconditions{UID: &pod.UID}},
+	}
 	if err := h.c.SubResource("eviction").Create(ctx, &pod, eviction); err != nil {
 		return fmt.Errorf("native eviction failed (no alternate delete attempted): %w", err)
 	}
@@ -161,17 +209,30 @@ type evictionView struct {
 
 // readEvictionView rejects replacement Pods at either the deterministic name or another participant-owned name.
 func (h *harness) readEvictionView(ctx context.Context, selected evictionSelection) (evictionView, error) {
-	v := evictionView{At: time.Now().UTC(), Root: &api.StacksNetwork{}, Participant: &api.StacksNetworkParticipant{}, Termination: "TerminationUnknown"}
-	if err := h.c.Get(ctx, client.ObjectKey{Namespace: h.config.namespace, Name: "network"}, v.Root); err != nil {
+	v := evictionView{
+		At:          time.Now().UTC(),
+		Root:        &api.StacksNetwork{},
+		Participant: &api.StacksNetworkParticipant{},
+		Termination: "TerminationUnknown",
+	}
+	if err := h.c.Get(ctx, client.ObjectKey{
+		Namespace: h.config.namespace,
+		Name:      "network",
+	}, v.Root); err != nil {
 		return v, err
 	}
 	if v.Root.UID != h.rootUID {
 		return v, fmt.Errorf("eviction root identity changed")
 	}
-	if err := h.c.Get(ctx, client.ObjectKey{Namespace: h.config.namespace, Name: selected.Participant.Name}, v.Participant); err != nil {
+	if err := h.c.Get(
+		ctx,
+		client.ObjectKey{Namespace: h.config.namespace, Name: selected.Participant.Name},
+		v.Participant,
+	); err != nil {
 		return v, err
 	}
-	if v.Participant.UID != selected.Participant.UID || v.Participant.Spec.NetworkUID != h.rootUID || !metav1.IsControlledBy(v.Participant, v.Root) {
+	if v.Participant.UID != selected.Participant.UID || v.Participant.Spec.NetworkUID != h.rootUID ||
+		!metav1.IsControlledBy(v.Participant, v.Root) {
 		return v, fmt.Errorf("eviction participant identity changed")
 	}
 	for _, id := range v.Root.Status.Identities {
@@ -182,7 +243,8 @@ func (h *harness) readEvictionView(ctx context.Context, selected evictionSelecti
 			v.Session = id.Worker.DeepCopy()
 		}
 	}
-	if v.Session == nil || v.Session.Pod != selected.Session.Pod || v.Session.ProfileDigest != selected.Session.ProfileDigest {
+	if v.Session == nil || v.Session.Pod != selected.Session.Pod ||
+		v.Session.ProfileDigest != selected.Session.ProfileDigest {
 		return v, fmt.Errorf("evicted worker binding changed or disappeared")
 	}
 	var pods corev1.PodList
@@ -207,7 +269,10 @@ func (h *harness) readEvictionView(ctx context.Context, selected evictionSelecti
 				if c.ContainerID != "" && c.ContainerID != selected.ContainerID || c.RestartCount != 0 {
 					return v, fmt.Errorf("bound worker process restarted after eviction")
 				}
-				if (v.Pod.Status.Phase == corev1.PodSucceeded || v.Pod.Status.Phase == corev1.PodFailed) && c.State.Terminated != nil && c.State.Terminated.Reason != "ContainerStatusUnknown" && c.ContainerID == selected.ContainerID {
+				if (v.Pod.Status.Phase == corev1.PodSucceeded || v.Pod.Status.Phase == corev1.PodFailed) &&
+					c.State.Terminated != nil &&
+					c.State.Terminated.Reason != "ContainerStatusUnknown" &&
+					c.ContainerID == selected.ContainerID {
 					v.Termination = "Terminated"
 				}
 			}
@@ -229,7 +294,11 @@ func (h *harness) awaitEvictedWorker(ctx context.Context, selected evictionSelec
 	for {
 		view, err := h.readEvictionView(ctx, selected)
 		if data, encodeErr := json.MarshalIndent(view, "", "  "); encodeErr == nil {
-			if writeErr := os.WriteFile(filepath.Join(h.evidence, "worker-eviction-latest.json"), data, 0600); writeErr != nil {
+			if writeErr := os.WriteFile(
+				filepath.Join(h.evidence, "worker-eviction-latest.json"),
+				data,
+				0o600,
+			); writeErr != nil {
 				return writeErr
 			}
 		}
@@ -240,12 +309,17 @@ func (h *harness) awaitEvictedWorker(ctx context.Context, selected evictionSelec
 			return fmt.Errorf("root terminal control changed before eviction qualification completed")
 		}
 		execution := view.Participant.Status.Execution
-		if execution == nil || execution.PodUID != selected.Execution.PodUID || execution.ProcessNonce != selected.Execution.ProcessNonce || execution.ProfileDigest != selected.Execution.ProfileDigest {
+		if execution == nil || execution.PodUID != selected.Execution.PodUID ||
+			execution.ProcessNonce != selected.Execution.ProcessNonce ||
+			execution.ProfileDigest != selected.Execution.ProfileDigest {
 			return fmt.Errorf("worker execution identity disappeared or restarted after eviction")
 		}
 		rootFailed := failed(snapshot{Status: view.Root.Status})
 		if view.Pod == nil && view.Termination != "Terminated" {
-			return fmt.Errorf("TerminationUnknown: bound Pod disappeared without retained process termination; normal cleanup must retain uncertainty")
+			return fmt.Errorf(
+				"TerminationUnknown: bound Pod disappeared without retained process termination; " +
+					"normal cleanup must retain uncertainty",
+			)
 		}
 		if !heldSince.IsZero() && !rootFailed {
 			return fmt.Errorf("root Failed latch cleared after eviction")
@@ -267,7 +341,10 @@ func (h *harness) awaitEvictedWorker(ctx context.Context, selected evictionSelec
 		}
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("eviction failure/termination observation ended: %w; latest public evidence retained", ctx.Err())
+			return fmt.Errorf(
+				"eviction failure/termination observation ended: %w; latest public evidence retained",
+				ctx.Err(),
+			)
 		case <-ticker.C:
 		}
 	}

@@ -15,7 +15,15 @@ import (
 func TestRenderedProfileAndExactRBAC(t *testing.T) {
 	chart := filepath.Join("..", "..", "..", "..", "charts", "stacks-chaos-profile")
 	render := func(args ...string) ([]*unstructured.Unstructured, error) {
-		data, err := exec.Command("helm", append([]string{"template", "test", chart, "--namespace", "profile-test"}, args...)...).CombinedOutput()
+		// #nosec G204 -- Fixed executable and separate arguments from the test harness; no shell evaluation.
+		data, err := exec.CommandContext(t.Context(), "helm", append([]string{
+			"template",
+			"test",
+			chart,
+			"--namespace",
+			"profile-test",
+		}, args...)...).
+			CombinedOutput()
 		if err != nil {
 			return nil, err
 		}
@@ -53,14 +61,32 @@ func TestRenderedProfileAndExactRBAC(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	for _, mode := range []string{"wildcard", "status-write", "namespace", "quota", "warn-only", "token", "binding", "create-only", "other-resource", "extra-rule", "exclude-rule", "object-selector", "cluster-scope"} {
+	for _, mode := range []string{
+		"wildcard",
+		"status-write",
+		"namespace",
+		"quota",
+		"warn-only",
+		"token",
+		"binding",
+		"create-only",
+		"other-resource",
+		"extra-rule",
+		"exclude-rule",
+		"object-selector",
+		"cluster-scope",
+	} {
 		changed := make([]*unstructured.Unstructured, len(objects))
 		for i, o := range objects {
 			changed[i] = o.DeepCopy()
 		}
 		for _, o := range changed {
 			switch {
-			case o.GetKind() == "ValidatingAdmissionPolicy" && (mode == "create-only" || mode == "other-resource" || mode == "extra-rule" || mode == "cluster-scope"):
+			case o.GetKind() == "ValidatingAdmissionPolicy" &&
+				(mode == "create-only" ||
+					mode == "other-resource" ||
+					mode == "extra-rule" ||
+					mode == "cluster-scope"):
 				rules, _, _ := unstructured.NestedSlice(o.Object, "spec", "matchConstraints", "resourceRules")
 				rule := rules[0].(map[string]any)
 				switch mode {
@@ -78,9 +104,19 @@ func TestRenderedProfileAndExactRBAC(t *testing.T) {
 				rules, _, _ := unstructured.NestedSlice(o.Object, "spec", "matchConstraints", "resourceRules")
 				_ = unstructured.SetNestedSlice(o.Object, rules, "spec", "matchConstraints", "excludeResourceRules")
 			case o.GetKind() == "ValidatingAdmissionPolicy" && mode == "object-selector":
-				_ = unstructured.SetNestedField(o.Object, map[string]any{"matchLabels": map[string]any{"skip": "true"}}, "spec", "matchConstraints", "objectSelector")
+				_ = unstructured.SetNestedField(
+					o.Object,
+					map[string]any{"matchLabels": map[string]any{"skip": "true"}},
+					"spec",
+					"matchConstraints",
+					"objectSelector",
+				)
 			case o.GetKind() == "Role" && mode == "wildcard":
-				_ = unstructured.SetNestedSlice(o.Object, []any{map[string]any{"apiGroups": []any{"*"}, "resources": []any{"*"}, "verbs": []any{"*"}}}, "rules")
+				_ = unstructured.SetNestedSlice(
+					o.Object,
+					[]any{map[string]any{"apiGroups": []any{"*"}, "resources": []any{"*"}, "verbs": []any{"*"}}},
+					"rules",
+				)
 			case o.GetKind() == "Role" && mode == "status-write":
 				rules, _, _ := unstructured.NestedSlice(o.Object, "rules")
 				rules[0].(map[string]any)["verbs"] = []any{"get", "list", "watch", "create", "delete", "patch"}
@@ -105,7 +141,7 @@ func TestRenderedProfileAndExactRBAC(t *testing.T) {
 
 func TestSchemaRejectsUnverifiedOfflineFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "crd.yaml")
-	if err := os.WriteFile(path, []byte("not the upstream schema"), 0600); err != nil {
+	if err := os.WriteFile(path, []byte("not the upstream schema"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("STACKS_CHAOS_CRD_FILE", path)

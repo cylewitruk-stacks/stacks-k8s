@@ -27,11 +27,68 @@ import (
 // fixture supplies one admitted inactive transaction-production candidate.
 func fixture(t *testing.T) (*api.StacksNetwork, *api.StacksNetworkParticipant, *corev1.Pod, Profile) {
 	t.Helper()
-	root := &api.StacksNetwork{ObjectMeta: metav1.ObjectMeta{Name: "network", Namespace: "test", UID: "network-uid", Generation: 1}, Spec: api.StacksNetworkSpec{Operation: "Running", Participants: []api.Participant{{Name: "producer", Kind: "StacksTransactionProduction"}}}, Status: api.StacksNetworkStatus{Identities: []api.InstanceIdentity{{Name: "producer", UID: "participant-uid"}}, GenesisRef: &common.Binding{Kind: "StacksGenesis", Name: "genesis", UID: "genesis-uid"}}}
+	root := &api.StacksNetwork{
+		ObjectMeta: metav1.ObjectMeta{Name: "network", Namespace: "test", UID: "network-uid", Generation: 1},
+		Spec: api.StacksNetworkSpec{
+			Operation:    "Running",
+			Participants: []api.Participant{{Name: "producer", Kind: "StacksTransactionProduction"}},
+		},
+		Status: api.StacksNetworkStatus{
+			Identities: []api.InstanceIdentity{{Name: "producer", UID: "participant-uid"}},
+			GenesisRef: &common.Binding{Kind: "StacksGenesis", Name: "genesis", UID: "genesis-uid"},
+		},
+	}
 	configuration := api.Configuration{StacksTransactionProduction: &stacks.StacksTransactionProductionSpec{}}
-	p := &api.StacksNetworkParticipant{ObjectMeta: metav1.ObjectMeta{Name: foundation.ParticipantName(string(root.UID), "producer"), Namespace: root.Namespace, UID: "participant-uid", Generation: 1, OwnerReferences: []metav1.OwnerReference{{APIVersion: api.GroupVersion.String(), Kind: "StacksNetwork", Name: root.Name, UID: root.UID, Controller: ptr.To(true)}}}, Spec: api.StacksNetworkParticipantSpec{NetworkUID: root.UID, ParticipantName: "producer", Kind: "StacksTransactionProduction", Configuration: configuration}, Status: api.ParticipantStatus{Admission: &api.Admission{Configuration: configuration, PolicyDigest: foundation.Digest(configuration)}}}
-	p.Status.Conditions = []metav1.Condition{{Type: "AdmissionReady", Status: metav1.ConditionTrue, ObservedGeneration: p.Generation, Reason: "RetainedPolicyEligible", Message: "eligible", LastTransitionTime: metav1.Now()}}
-	profile := Profile{Image: "worker:test", Configuration: common.Binding{Kind: "ConfigMap", Name: "bootstrap", UID: "config-uid"}, Keys: []KeyMount{{Role: "sender", Secret: common.Binding{Kind: "Secret", Name: "sender-key", UID: "key-uid"}, Key: "privateKey"}}, Reads: []ReadBinding{{APIVersion: "stacks.stacks.org/v1alpha2", Resource: "stacksaccounts", Name: "sender"}}}
+	p := &api.StacksNetworkParticipant{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       foundation.ParticipantName(string(root.UID), "producer"),
+			Namespace:  root.Namespace,
+			UID:        "participant-uid",
+			Generation: 1,
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion: api.GroupVersion.String(),
+					Kind:       "StacksNetwork",
+					Name:       root.Name,
+					UID:        root.UID,
+					Controller: ptr.To(true),
+				},
+			},
+		},
+		Spec: api.StacksNetworkParticipantSpec{
+			NetworkUID:      root.UID,
+			ParticipantName: "producer",
+			Kind:            "StacksTransactionProduction",
+			Configuration:   configuration,
+		},
+		Status: api.ParticipantStatus{
+			Admission: &api.Admission{Configuration: configuration, PolicyDigest: foundation.Digest(configuration)},
+		},
+	}
+	p.Status.Conditions = []metav1.Condition{
+		{
+			Type:               "AdmissionReady",
+			Status:             metav1.ConditionTrue,
+			ObservedGeneration: p.Generation,
+			Reason:             "RetainedPolicyEligible",
+			Message:            "eligible",
+			LastTransitionTime: metav1.Now(),
+		},
+	}
+	profile := Profile{
+		Image:         "worker:test",
+		Configuration: common.Binding{Kind: "ConfigMap", Name: "bootstrap", UID: "config-uid"},
+		Keys: []KeyMount{
+			{
+				Role:   "sender",
+				Secret: common.Binding{Kind: "Secret", Name: "sender-key", UID: "key-uid"},
+				Key:    "privateKey",
+			},
+		},
+		Reads: []ReadBinding{
+			{APIVersion: "stacks.stacks.org/v1alpha2", Resource: "stacksaccounts", Name: "sender"},
+		},
+	}
 	pod, err := Pod(p, profile)
 	if err != nil {
 		t.Fatal(err)
@@ -39,7 +96,9 @@ func fixture(t *testing.T) (*api.StacksNetwork, *api.StacksNetworkParticipant, *
 	pod.UID = "pod-uid"
 	pod.Spec.NodeName = "node"
 	pod.Status.Phase = corev1.PodRunning
-	p.Status.Runtime = &api.ParticipantRuntimeStatus{WorkerCandidate: &api.WorkerCandidate{Pod: podBinding(pod), ProfileDigest: profile.Digest()}}
+	p.Status.Runtime = &api.ParticipantRuntimeStatus{
+		WorkerCandidate: &api.WorkerCandidate{Pod: podBinding(pod), ProfileDigest: profile.Digest()},
+	}
 	return root, p, pod, profile
 }
 
@@ -47,12 +106,21 @@ func fixture(t *testing.T) (*api.StacksNetwork, *api.StacksNetworkParticipant, *
 func fakeClient(t *testing.T, objects ...client.Object) client.Client {
 	t.Helper()
 	scheme := runtime.NewScheme()
-	for _, add := range []func(*runtime.Scheme) error{api.AddToScheme, stacks.AddToScheme, corev1.AddToScheme, rbacv1.AddToScheme} {
+	for _, add := range []func(*runtime.Scheme) error{
+		api.AddToScheme,
+		stacks.AddToScheme,
+		corev1.AddToScheme,
+		rbacv1.AddToScheme,
+	} {
 		if err := add(scheme); err != nil {
 			t.Fatal(err)
 		}
 	}
-	return fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(&api.StacksNetwork{}, &api.StacksNetworkParticipant{}, &corev1.Pod{}).WithObjects(objects...).Build()
+	return fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&api.StacksNetwork{}, &api.StacksNetworkParticipant{}, &corev1.Pod{}).
+		WithObjects(objects...).
+		Build()
 }
 
 func TestExactBindingSurvivesLostWriteAndClassifiesBoundLoss(t *testing.T) {
@@ -72,11 +140,21 @@ func TestExactBindingSurvivesLostWriteAndClassifiesBoundLoss(t *testing.T) {
 		pod             *corev1.Pod
 		err             error
 		failed, unknown bool
-	}{{"read error", nil, fmt.Errorf("timeout"), false, true}, {"missing", nil, apierrors.NewNotFound(schema.GroupResource{Resource: "pods"}, pod.Name), true, true}, {"replacement", func() *corev1.Pod { x := pod.DeepCopy(); x.UID = "replacement"; return x }(), nil, true, true}, {"terminal", func() *corev1.Pod { x := pod.DeepCopy(); x.Status.Phase = corev1.PodFailed; return x }(), nil, true, true}} {
+	}{
+		{"read error", nil, fmt.Errorf("timeout"), false, true},
+		{"missing", nil, apierrors.NewNotFound(schema.GroupResource{Resource: "pods"}, pod.Name), true, true},
+		{"replacement", func() *corev1.Pod { x := pod.DeepCopy(); x.UID = "replacement"; return x }(), nil, true, true},
+		{"terminal", func() *corev1.Pod {
+			x := pod.DeepCopy()
+			x.Status.Phase = corev1.PodFailed
+			return x
+		}(), nil, true, true},
+	} {
 		t.Run(test.name, func(t *testing.T) {
-			copy := bound.DeepCopy()
-			fact := ProjectSession(copy, p, test.pod, test.err, now)
-			if fact.Failed != test.failed || fact.Unknown != test.unknown || copy.Status.Identities[0].Worker.Pod.UID != pod.UID {
+			snapshot := bound.DeepCopy()
+			fact := ProjectSession(snapshot, p, test.pod, test.err, now)
+			if fact.Failed != test.failed || fact.Unknown != test.unknown ||
+				snapshot.Status.Identities[0].Worker.Pod.UID != pod.UID {
 				t.Fatalf("unexpected session fact: %+v", fact)
 			}
 		})
@@ -100,13 +178,27 @@ func TestOrderedDisposalRetainsUnsettledAndExactTermination(t *testing.T) {
 			if settled {
 				phase, pending = "Settled", 0
 			}
-			p.Status.Execution = &api.WorkerExecutionStatus{PodUID: pod.UID, ProcessNonce: "process", ProfileDigest: profile.Digest(), NetworkGeneration: root.Generation, Reason: "NetworkStopped", Phase: phase, Pending: pending, ObservedAt: metav1.NewTime(now)}
+			p.Status.Execution = &api.WorkerExecutionStatus{
+				PodUID:            pod.UID,
+				ProcessNonce:      "process",
+				ProfileDigest:     profile.Digest(),
+				NetworkGeneration: root.Generation,
+				Reason:            "NetworkStopped",
+				Phase:             phase,
+				Pending:           pending,
+				ObservedAt:        metav1.NewTime(now),
+			}
 			fact = ProjectSession(root, p, pod, nil, now)
 			if !fact.Changed || fact.Failed == settled || session.Disposal == nil || session.Disposal.Terminated {
 				t.Fatalf("disposition: %+v", fact)
 			}
 			pod.Status.Phase = corev1.PodSucceeded
-			pod.Status.ContainerStatuses = []corev1.ContainerStatus{{Name: "worker", State: corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{ExitCode: 0}}}}
+			pod.Status.ContainerStatuses = []corev1.ContainerStatus{
+				{
+					Name:  "worker",
+					State: corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{ExitCode: 0}},
+				},
+			}
 			fact = ProjectSession(root, p, pod, nil, now)
 			if !fact.Changed || !session.Disposal.Terminated {
 				t.Fatal("exact process exit not retained")
@@ -131,7 +223,10 @@ func TestOrderedDisposalRetainsUnsettledAndExactTermination(t *testing.T) {
 
 func TestWorkerRBACAndStaticProfileDoNotGrantSecretOrTopologyAPI(t *testing.T) {
 	_, p, pod, profile := fixture(t)
-	if pod.Spec.RestartPolicy != corev1.RestartPolicyNever || len(pod.Spec.Containers) != 1 || len(pod.Spec.InitContainers) != 0 || pod.Spec.Containers[0].VolumeMounts[1].MountPath != "/keys/sender" || pod.Spec.Volumes[1].Secret.Items[0].Key != "privateKey" {
+	if pod.Spec.RestartPolicy != corev1.RestartPolicyNever || len(pod.Spec.Containers) != 1 ||
+		len(pod.Spec.InitContainers) != 0 ||
+		pod.Spec.Containers[0].VolumeMounts[1].MountPath != "/keys/sender" ||
+		pod.Spec.Volumes[1].Secret.Items[0].Key != "privateKey" {
 		t.Fatal("standalone role key boundary missing")
 	}
 	for _, rule := range Rules(p, profile) {
@@ -143,7 +238,10 @@ func TestWorkerRBACAndStaticProfileDoNotGrantSecretOrTopologyAPI(t *testing.T) {
 				t.Fatal("worker has private/topology API access")
 			}
 			for _, verb := range rule.Verbs {
-				if verb != "get" && verb != "list" && verb != "watch" && (verb != "patch" || resource != "stacksnetworkparticipants/status" || rule.ResourceNames[0] != p.Name) {
+				if verb != "get" && verb != "list" && verb != "watch" &&
+					(verb != "patch" ||
+						resource != "stacksnetworkparticipants/status" ||
+						rule.ResourceNames[0] != p.Name) {
 					t.Fatal("unexpected worker mutation permission")
 				}
 			}
@@ -187,9 +285,18 @@ type statusWriter struct {
 func (c *statusClient) Status() client.SubResourceWriter {
 	return &statusWriter{SubResourceWriter: c.Client.Status(), parent: c}
 }
-func (w *statusWriter) Patch(ctx context.Context, object client.Object, patch client.Patch, options ...client.SubResourcePatchOption) error {
+
+func (w *statusWriter) Patch(
+	ctx context.Context,
+	object client.Object,
+	patch client.Patch,
+	options ...client.SubResourcePatchOption,
+) error {
 	p, ok := object.(*api.StacksNetworkParticipant)
-	if !ok || p.Status.Execution == nil || p.Status.Runtime != nil || p.Status.Admission != nil || p.Status.BitcoinControl != nil || p.Status.Scheduling != nil || len(p.Status.Conditions) > 0 {
+	if !ok || p.Status.Execution == nil || p.Status.Runtime != nil || p.Status.Admission != nil ||
+		p.Status.BitcoinControl != nil ||
+		p.Status.Scheduling != nil ||
+		len(p.Status.Conditions) > 0 {
 		return fmt.Errorf("worker attempted to write another status owner")
 	}
 	opts := &client.SubResourcePatchOptions{}
@@ -207,7 +314,7 @@ func (w *statusWriter) Patch(ctx context.Context, object client.Object, patch cl
 	w.parent.lose = false
 	if !lose || w.parent.commit {
 		var current api.StacksNetworkParticipant
-		if err := w.parent.Client.Get(ctx, client.ObjectKeyFromObject(p), &current); err != nil {
+		if err := w.parent.Get(ctx, client.ObjectKeyFromObject(p), &current); err != nil {
 			return err
 		}
 		if current.UID != p.UID {
@@ -235,8 +342,15 @@ type testRole struct {
 func (r *testRole) Step(_ context.Context, s Snapshot) (RoleResult, error) {
 	r.steps++
 	r.snapshot = s
-	return RoleResult{AppliedPolicyDigest: s.Participant.Status.Admission.PolicyDigest, Pending: int32(r.steps), Reason: "Observed", RequeueAfter: time.Second}, nil
+	return RoleResult{
+		AppliedPolicyDigest: s.Participant.Status.Admission.PolicyDigest,
+		// #nosec G115 -- Small deterministic fixture counters/values are bounded by the test setup.
+		Pending:      int32(r.steps),
+		Reason:       "Observed",
+		RequeueAfter: time.Second,
+	}, nil
 }
+
 func (r *testRole) Drain(context.Context, Snapshot) (DrainResult, error) {
 	r.drains++
 	return DrainResult{Done: true, Settled: true}, nil
@@ -250,7 +364,19 @@ func TestExecutionPublicationGateAndSnapshotBoundAuthorization(t *testing.T) {
 			ProjectSession(root, p, pod, nil, time.Now())
 			c := &statusClient{Client: fakeClient(t, root, p, pod)}
 			role := &testRole{}
-			r := Runtime{Client: c, Namespace: p.Namespace, ParticipantName: p.Name, NetworkUID: root.UID, ParticipantUID: p.UID, PodUID: pod.UID, PodName: pod.Name, Profile: profile, Role: role, Prerequisites: func(context.Context, Snapshot) error { return nil }, nonce: "process"}
+			r := Runtime{
+				Client:          c,
+				Namespace:       p.Namespace,
+				ParticipantName: p.Name,
+				NetworkUID:      root.UID,
+				ParticipantUID:  p.UID,
+				PodUID:          pod.UID,
+				PodName:         pod.Name,
+				Profile:         profile,
+				Role:            role,
+				Prerequisites:   func(context.Context, Snapshot) error { return nil },
+				nonce:           "process",
+			}
 			if _, err := r.Reconcile(ctx); err != nil {
 				t.Fatal(err)
 			}
@@ -316,6 +442,7 @@ func (r *scriptedRole) Step(context.Context, Snapshot) (RoleResult, error) {
 	r.calls++
 	return r.result, nil
 }
+
 func (r *scriptedRole) Drain(context.Context, Snapshot) (DrainResult, error) {
 	return DrainResult{Done: true, Settled: true}, nil
 }
@@ -325,12 +452,37 @@ func TestPriorAppliedPolicyObservationRetainedAcrossPublicationFailure(t *testin
 	root, p, pod, profile := fixture(t)
 	ProjectSession(root, p, pod, nil, time.Now())
 	old := p.Status.Admission.PolicyDigest
-	p.Status.Execution = &api.WorkerExecutionStatus{PodUID: pod.UID, ProcessNonce: "process", ProfileDigest: profile.Digest(), AppliedPolicyDigest: old, Pending: 1, Phase: "Active", ObservedAt: metav1.Now()}
+	p.Status.Execution = &api.WorkerExecutionStatus{
+		PodUID:              pod.UID,
+		ProcessNonce:        "process",
+		ProfileDigest:       profile.Digest(),
+		AppliedPolicyDigest: old,
+		Pending:             1,
+		Phase:               "Active",
+		ObservedAt:          metav1.Now(),
+	}
 	p.Status.Admission.Configuration.StacksTransactionProduction.Interval = ptr.To(common.Duration("9s"))
 	p.Status.Admission.PolicyDigest = foundation.Digest(p.Status.Admission.Configuration)
 	c := &statusClient{Client: fakeClient(t, root, p, pod), lose: true}
-	role := &scriptedRole{result: RoleResult{AppliedPolicyDigest: old, Transactions: &api.TransactionExecutionStatus{Included: 1}, Reason: "Included"}}
-	r := Runtime{Client: c, Namespace: p.Namespace, ParticipantName: p.Name, ParticipantUID: p.UID, NetworkUID: root.UID, PodName: pod.Name, PodUID: pod.UID, Profile: profile, Role: role, nonce: "process"}
+	role := &scriptedRole{
+		result: RoleResult{
+			AppliedPolicyDigest: old,
+			Transactions:        &api.TransactionExecutionStatus{Included: 1},
+			Reason:              "Included",
+		},
+	}
+	r := Runtime{
+		Client:          c,
+		Namespace:       p.Namespace,
+		ParticipantName: p.Name,
+		ParticipantUID:  p.UID,
+		NetworkUID:      root.UID,
+		PodName:         pod.Name,
+		PodUID:          pod.UID,
+		Profile:         profile,
+		Role:            role,
+		nonce:           "process",
+	}
 	if _, err := r.Reconcile(ctx); err == nil || r.pendingReport == nil {
 		t.Fatal("old pending result not retained")
 	}
@@ -345,7 +497,8 @@ func TestPriorAppliedPolicyObservationRetainedAcrossPublicationFailure(t *testin
 	if err := c.Get(ctx, client.ObjectKeyFromObject(p), &current); err != nil {
 		t.Fatal(err)
 	}
-	if current.Status.Execution.AppliedPolicyDigest != old || current.Status.Execution.Transactions.Included != 1 || current.Status.Execution.Pending != 0 {
+	if current.Status.Execution.AppliedPolicyDigest != old || current.Status.Execution.Transactions.Included != 1 ||
+		current.Status.Execution.Pending != 0 {
 		t.Fatal("old operation evidence lost or aliased")
 	}
 	role.result.AppliedPolicyDigest = "arbitrary-old-policy"
@@ -358,7 +511,17 @@ func TestInactiveCandidateNeverExecutesAndProcessRestartExits(t *testing.T) {
 	root, p, pod, profile := fixture(t)
 	c := &statusClient{Client: fakeClient(t, root, p, pod)}
 	role := &testRole{}
-	r := Runtime{Client: c, Namespace: p.Namespace, ParticipantName: p.Name, ParticipantUID: p.UID, NetworkUID: root.UID, PodName: pod.Name, PodUID: pod.UID, Profile: profile, Role: role}
+	r := Runtime{
+		Client:          c,
+		Namespace:       p.Namespace,
+		ParticipantName: p.Name,
+		ParticipantUID:  p.UID,
+		NetworkUID:      root.UID,
+		PodName:         pod.Name,
+		PodUID:          pod.UID,
+		Profile:         profile,
+		Role:            role,
+	}
 	if _, err := r.Reconcile(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -373,13 +536,25 @@ func TestInactiveCandidateNeverExecutesAndProcessRestartExits(t *testing.T) {
 }
 
 func TestMutablePodProcessFieldsCannotKeepProfileAuthorization(t *testing.T) {
-	for _, change := range []func(*corev1.Pod){func(p *corev1.Pod) { p.Spec.Containers[0].Image = "other:image" }, func(p *corev1.Pod) { p.Spec.Containers[0].Args = []string{"other"} }, func(p *corev1.Pod) { p.Spec.Volumes[1].Secret.SecretName = "other-key" }, func(p *corev1.Pod) { p.Spec.Containers[0].Env[0].Value = "other" }} {
+	for _, change := range []func(*corev1.Pod){
+		func(p *corev1.Pod) { p.Spec.Containers[0].Image = "other:image" },
+		func(p *corev1.Pod) { p.Spec.Containers[0].Args = []string{"other"} },
+		func(p *corev1.Pod) { p.Spec.Volumes[1].Secret.SecretName = "other-key" },
+		func(p *corev1.Pod) { p.Spec.Containers[0].Env[0].Value = "other" },
+	} {
 		root, p, pod, _ := fixture(t)
 		change(pod)
 		if _, err := profileFromPod(pod); err == nil {
 			t.Fatal("changed Pod process accepted")
 		}
-		if fact := ProjectSession(root, p, pod, nil, time.Now()); !fact.Failed || root.Status.Identities[0].Worker != nil {
+		if fact := ProjectSession(
+			root,
+			p,
+			pod,
+			nil,
+			time.Now(),
+		); !fact.Failed ||
+			root.Status.Identities[0].Worker != nil {
 			t.Fatal("changed candidate bound")
 		}
 	}
@@ -393,7 +568,9 @@ func TestMutableReadsRetainOldNamedDependenciesUntilPolicyAdopted(t *testing.T) 
 		t.Fatal(err)
 	}
 	before := profile.Digest()
-	profile.Reads = []ReadBinding{{APIVersion: "stacks.stacks.org/v1alpha2", Resource: "stacksaccounts", Name: "new-recipient"}}
+	profile.Reads = []ReadBinding{
+		{APIVersion: "stacks.stacks.org/v1alpha2", Resource: "stacksaccounts", Name: "new-recipient"},
+	}
 	if profile.Digest() != before {
 		t.Fatal("read permission edit rolled worker identity")
 	}
@@ -402,7 +579,10 @@ func TestMutableReadsRetainOldNamedDependenciesUntilPolicyAdopted(t *testing.T) 
 		t.Fatal(err)
 	}
 	var role rbacv1.Role
-	if err := c.Get(context.Background(), client.ObjectKey{Namespace: p.Namespace, Name: Name(p)}, &role); err != nil {
+	if err := c.Get(context.Background(), client.ObjectKey{
+		Namespace: p.Namespace,
+		Name:      Name(p),
+	}, &role); err != nil {
 		t.Fatal(err)
 	}
 	if len(role.Rules) != 6 {
@@ -426,9 +606,23 @@ func TestSuccessfulObservationHeartbeatDoesNotRefreshCachedEvidence(t *testing.T
 	root, p, pod, profile := fixture(t)
 	ProjectSession(root, p, pod, nil, time.Now())
 	c := &statusClient{Client: fakeClient(t, root, p, pod)}
-	role := &scriptedRole{result: RoleResult{Reason: "Current", AppliedPolicyDigest: p.Status.Admission.PolicyDigest}}
+	role := &scriptedRole{result: RoleResult{
+		Reason:              "Current",
+		AppliedPolicyDigest: p.Status.Admission.PolicyDigest,
+	}}
 	now := time.Now().Truncate(time.Second)
-	r := Runtime{Client: c, Namespace: p.Namespace, ParticipantName: p.Name, ParticipantUID: p.UID, NetworkUID: root.UID, PodName: pod.Name, PodUID: pod.UID, Profile: profile, Role: role, Now: func() time.Time { return now }}
+	r := Runtime{
+		Client:          c,
+		Namespace:       p.Namespace,
+		ParticipantName: p.Name,
+		ParticipantUID:  p.UID,
+		NetworkUID:      root.UID,
+		PodName:         pod.Name,
+		PodUID:          pod.UID,
+		Profile:         profile,
+		Role:            role,
+		Now:             func() time.Time { return now },
+	}
 	if _, err := r.Reconcile(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -465,28 +659,68 @@ type publicOnlyClient struct {
 	privateReads int
 }
 
-func (c *publicOnlyClient) Get(ctx context.Context, key client.ObjectKey, object client.Object, options ...client.GetOption) error {
+func (c *publicOnlyClient) Get(
+	ctx context.Context,
+	key client.ObjectKey,
+	object client.Object,
+	options ...client.GetOption,
+) error {
 	if _, private := object.(*corev1.Secret); private {
 		c.privateReads++
 		return fmt.Errorf("shared operator read private material")
 	}
 	return c.Client.Get(ctx, key, object, options...)
 }
+
 func (c *publicOnlyClient) Create(ctx context.Context, object client.Object, options ...client.CreateOption) error {
 	if object.GetUID() == "" {
 		object.SetUID(types.UID("created-" + object.GetName()))
 	}
 	return c.Client.Create(ctx, object, options...)
 }
+
 func TestTransactionBootstrapPinsMetadataAndIgnoresMutablePolicy(t *testing.T) {
 	ctx := context.Background()
 	root, p, _, _ := fixture(t)
-	account := &stacks.StacksAccount{ObjectMeta: metav1.ObjectMeta{Name: "sender", Namespace: p.Namespace, UID: "account-uid", Generation: 1}, Status: common.ResolutionStatus{ObservedGeneration: 1, Digest: "public-digest", Identity: &common.PublicIdentity{Address: "STTEST", PublicKey: "02public"}, CredentialsRef: &common.SecretKeyRef{Name: "sender-key", Key: "privateKey"}, CredentialsUID: "key-uid", Conditions: []metav1.Condition{{Type: "Resolved", Status: metav1.ConditionTrue, Reason: "Resolved", LastTransitionTime: metav1.Now()}}}}
-	key := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "sender-key", Namespace: p.Namespace, UID: "key-uid"}, Immutable: ptr.To(true), Data: map[string][]byte{"privateKey": []byte("never-read")}}
-	genesis := &api.StacksGenesis{ObjectMeta: metav1.ObjectMeta{Name: root.Status.GenesisRef.Name, Namespace: root.Namespace, UID: root.Status.GenesisRef.UID, OwnerReferences: []metav1.OwnerReference{{APIVersion: api.GroupVersion.String(), Kind: "StacksNetwork", Name: root.Name, UID: root.UID, Controller: ptr.To(true)}}}}
+	account := &stacks.StacksAccount{
+		ObjectMeta: metav1.ObjectMeta{Name: "sender", Namespace: p.Namespace, UID: "account-uid", Generation: 1},
+		Status: common.ResolutionStatus{
+			ObservedGeneration: 1,
+			Digest:             "public-digest",
+			Identity:           &common.PublicIdentity{Address: "STTEST", PublicKey: "02public"},
+			CredentialsRef:     &common.SecretKeyRef{Name: "sender-key", Key: "privateKey"},
+			CredentialsUID:     "key-uid",
+			Conditions: []metav1.Condition{
+				{Type: "Resolved", Status: metav1.ConditionTrue, Reason: "Resolved", LastTransitionTime: metav1.Now()},
+			},
+		},
+	}
+	key := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "sender-key", Namespace: p.Namespace, UID: "key-uid"},
+		Immutable:  ptr.To(true),
+		Data:       map[string][]byte{"privateKey": []byte("never-read")},
+	}
+	genesis := &api.StacksGenesis{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      root.Status.GenesisRef.Name,
+			Namespace: root.Namespace,
+			UID:       root.Status.GenesisRef.UID,
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion: api.GroupVersion.String(),
+					Kind:       "StacksNetwork",
+					Name:       root.Name,
+					UID:        root.UID,
+					Controller: ptr.To(true),
+				},
+			},
+		},
+	}
 	root.Status.GenesisDigest = foundation.Digest(genesis.Spec.Chain)
 	p.Status.Admission.Configuration.StacksTransactionProduction.AccountRef = &common.NameRef{Name: account.Name}
-	p.Status.Admission.Dependencies = []common.Binding{{Kind: "StacksAccount", Name: account.Name, UID: account.UID, Fingerprint: account.Status.Digest}}
+	p.Status.Admission.Dependencies = []common.Binding{
+		{Kind: "StacksAccount", Name: account.Name, UID: account.UID, Fingerprint: account.Status.Digest},
+	}
 	c := &publicOnlyClient{Client: fakeClient(t, root, p, account, key, genesis)}
 	resolver := TransactionProfiles{Client: c, Reader: c, Image: "worker:fixed"}
 	first, err := resolver.Resolve(ctx, root, p)
@@ -507,7 +741,7 @@ func TestTransactionBootstrapPinsMetadataAndIgnoresMutablePolicy(t *testing.T) {
 		t.Fatal("sender mount identity not pinned")
 	}
 	key.UID = "replacement"
-	if err := c.Client.Delete(ctx, key); err != nil {
+	if err := c.Delete(ctx, key); err != nil {
 		t.Fatal(err)
 	}
 	key.ResourceVersion = ""
@@ -523,21 +757,76 @@ func TestStackerMountsAllFixedRolesBeforeFirstActivation(t *testing.T) {
 	ctx := context.Background()
 	root, p, _, _ := fixture(t)
 	p.Spec.Kind = "StacksStacker"
-	policy := &stacks.StacksStackerSpec{HolderAccountRef: &common.NameRef{Name: "holder"}, AdministratorAccountRef: &common.NameRef{Name: "admin"}, SignerRef: &common.NameRef{Name: "consensus-signer"}}
+	policy := &stacks.StacksStackerSpec{
+		HolderAccountRef:        &common.NameRef{Name: "holder"},
+		AdministratorAccountRef: &common.NameRef{Name: "admin"},
+		SignerRef:               &common.NameRef{Name: "consensus-signer"},
+	}
 	p.Status.Admission.Configuration = api.Configuration{StacksStacker: policy}
 	signer := p.DeepCopy()
 	signer.Name = foundation.ParticipantName(string(root.UID), "consensus-signer")
 	signer.UID = "signer-uid"
 	signer.Spec.Kind = "StacksSigner"
 	signer.Spec.ParticipantName = "consensus-signer"
-	signer.Status.Admission = &api.Admission{Configuration: api.Configuration{StacksSigner: &stacks.StacksSignerSpec{AccountRef: &common.NameRef{Name: "consensus"}}}}
-	p.Status.Admission.Dependencies = []common.Binding{{Kind: "StacksNetworkParticipant", Name: signer.Name, UID: signer.UID}}
-	genesis := &api.StacksGenesis{ObjectMeta: metav1.ObjectMeta{Name: root.Status.GenesisRef.Name, Namespace: p.Namespace, UID: root.Status.GenesisRef.UID, OwnerReferences: []metav1.OwnerReference{{APIVersion: api.GroupVersion.String(), Kind: "StacksNetwork", Name: root.Name, UID: root.UID, Controller: ptr.To(true)}}}}
+	signer.Status.Admission = &api.Admission{
+		Configuration: api.Configuration{
+			StacksSigner: &stacks.StacksSignerSpec{AccountRef: &common.NameRef{Name: "consensus"}},
+		},
+	}
+	p.Status.Admission.Dependencies = []common.Binding{
+		{Kind: "StacksNetworkParticipant", Name: signer.Name, UID: signer.UID},
+	}
+	genesis := &api.StacksGenesis{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      root.Status.GenesisRef.Name,
+			Namespace: p.Namespace,
+			UID:       root.Status.GenesisRef.UID,
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion: api.GroupVersion.String(),
+					Kind:       "StacksNetwork",
+					Name:       root.Name,
+					UID:        root.UID,
+					Controller: ptr.To(true),
+				},
+			},
+		},
+	}
 	root.Status.GenesisDigest = foundation.Digest(genesis.Spec.Chain)
 	objects := []client.Object{root, p, signer, genesis}
 	for _, name := range []string{"holder", "admin", "consensus"} {
-		account := &stacks.StacksAccount{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: p.Namespace, UID: types.UID(name + "-account"), Generation: 1}, Status: common.ResolutionStatus{ObservedGeneration: 1, Digest: name + "-public", Identity: &common.PublicIdentity{Address: "ST" + name, PublicKey: "02" + name}, CredentialsRef: &common.SecretKeyRef{Name: name + "-key", Key: "privateKey"}, CredentialsUID: types.UID(name + "-key-uid"), Conditions: []metav1.Condition{{Type: "Resolved", Status: metav1.ConditionTrue, Reason: "Resolved", LastTransitionTime: metav1.Now()}}}}
-		key := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: account.Status.CredentialsRef.Name, Namespace: p.Namespace, UID: account.Status.CredentialsUID}, Immutable: ptr.To(true), Data: map[string][]byte{"privateKey": []byte("private")}}
+		account := &stacks.StacksAccount{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:       name,
+				Namespace:  p.Namespace,
+				UID:        types.UID(name + "-account"),
+				Generation: 1,
+			},
+			Status: common.ResolutionStatus{
+				ObservedGeneration: 1,
+				Digest:             name + "-public",
+				Identity:           &common.PublicIdentity{Address: "ST" + name, PublicKey: "02" + name},
+				CredentialsRef:     &common.SecretKeyRef{Name: name + "-key", Key: "privateKey"},
+				CredentialsUID:     types.UID(name + "-key-uid"),
+				Conditions: []metav1.Condition{
+					{
+						Type:               "Resolved",
+						Status:             metav1.ConditionTrue,
+						Reason:             "Resolved",
+						LastTransitionTime: metav1.Now(),
+					},
+				},
+			},
+		}
+		key := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      account.Status.CredentialsRef.Name,
+				Namespace: p.Namespace,
+				UID:       account.Status.CredentialsUID,
+			},
+			Immutable: ptr.To(true),
+			Data:      map[string][]byte{"privateKey": []byte("private")},
+		}
 		b := common.Binding{Kind: "StacksAccount", Name: name, UID: account.UID, Fingerprint: account.Status.Digest}
 		if name == "consensus" {
 			signer.Status.Admission.Dependencies = append(signer.Status.Admission.Dependencies, b)
@@ -552,7 +841,8 @@ func TestStackerMountsAllFixedRolesBeforeFirstActivation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(profile.Keys) != 3 || profile.Keys[0].Role != "administrator" || profile.Keys[1].Role != "consensus" || profile.Keys[2].Role != "holder" {
+	if len(profile.Keys) != 3 || profile.Keys[0].Role != "administrator" || profile.Keys[1].Role != "consensus" ||
+		profile.Keys[2].Role != "holder" {
 		t.Fatalf("incomplete first-activation key roles: %+v", profile.Keys)
 	}
 	seen := map[string]bool{}
@@ -580,13 +870,28 @@ func TestStackerMountsAllFixedRolesBeforeFirstActivation(t *testing.T) {
 
 func TestRetryCandidateCanBindBeforeItsFirstStatusPublication(t *testing.T) {
 	root, p, pod, profile := fixture(t)
-	p.Status.Execution = &api.WorkerExecutionStatus{PodUID: "old-never-bound-pod", ProcessNonce: "old-inactive-process", ProfileDigest: profile.Digest(), Phase: "Inactive"}
+	p.Status.Execution = &api.WorkerExecutionStatus{
+		PodUID:        "old-never-bound-pod",
+		ProcessNonce:  "old-inactive-process",
+		ProfileDigest: profile.Digest(),
+		Phase:         "Inactive",
+	}
 	if fact := ProjectSession(root, p, pod, nil, time.Now()); !fact.Changed || fact.Failed {
 		t.Fatal("retry candidate did not bind")
 	}
 	c := &statusClient{Client: fakeClient(t, root, p, pod)}
 	role := &testRole{}
-	r := Runtime{Client: c, Namespace: p.Namespace, ParticipantName: p.Name, ParticipantUID: p.UID, NetworkUID: root.UID, PodName: pod.Name, PodUID: pod.UID, Profile: profile, Role: role}
+	r := Runtime{
+		Client:          c,
+		Namespace:       p.Namespace,
+		ParticipantName: p.Name,
+		ParticipantUID:  p.UID,
+		NetworkUID:      root.UID,
+		PodName:         pod.Name,
+		PodUID:          pod.UID,
+		Profile:         profile,
+		Role:            role,
+	}
 	if _, err := r.Reconcile(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -599,10 +904,30 @@ func TestPoX5ObservationsClearWithoutDiscardingAdministratorAccounting(t *testin
 	ctx := context.Background()
 	root, p, pod, profile := fixture(t)
 	ProjectSession(root, p, pod, nil, time.Now())
-	p.Status.Execution = &api.WorkerExecutionStatus{PodUID: pod.UID, ProcessNonce: "process", ProfileDigest: profile.Digest(), AppliedPolicyDigest: p.Status.Admission.PolicyDigest, Phase: "Active", ObservedAt: metav1.Now(), PoX5: &api.PoX5EnrollmentObservation{TargetCycle: 15, TargetCycleMatched: true}, AdministratorTransactions: &api.TransactionExecutionStatus{Included: 2}}
+	p.Status.Execution = &api.WorkerExecutionStatus{
+		PodUID:                    pod.UID,
+		ProcessNonce:              "process",
+		ProfileDigest:             profile.Digest(),
+		AppliedPolicyDigest:       p.Status.Admission.PolicyDigest,
+		Phase:                     "Active",
+		ObservedAt:                metav1.Now(),
+		PoX5:                      &api.PoX5EnrollmentObservation{TargetCycle: 15, TargetCycleMatched: true},
+		AdministratorTransactions: &api.TransactionExecutionStatus{Included: 2},
+	}
 	c := &statusClient{Client: fakeClient(t, root, p, pod)}
 	role := &scriptedRole{result: RoleResult{AppliedPolicyDigest: p.Status.Admission.PolicyDigest}}
-	r := Runtime{Client: c, Namespace: p.Namespace, ParticipantName: p.Name, ParticipantUID: p.UID, NetworkUID: root.UID, PodName: pod.Name, PodUID: pod.UID, Profile: profile, Role: role, nonce: "process"}
+	r := Runtime{
+		Client:          c,
+		Namespace:       p.Namespace,
+		ParticipantName: p.Name,
+		ParticipantUID:  p.UID,
+		NetworkUID:      root.UID,
+		PodName:         pod.Name,
+		PodUID:          pod.UID,
+		Profile:         profile,
+		Role:            role,
+		nonce:           "process",
+	}
 	if _, err := r.Reconcile(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -610,7 +935,8 @@ func TestPoX5ObservationsClearWithoutDiscardingAdministratorAccounting(t *testin
 	if err := c.Get(ctx, client.ObjectKeyFromObject(p), &current); err != nil {
 		t.Fatal(err)
 	}
-	if current.Status.Execution.PoX5 != nil || current.Status.Execution.AdministratorTransactions == nil || current.Status.Execution.AdministratorTransactions.Included != 2 {
+	if current.Status.Execution.PoX5 != nil || current.Status.Execution.AdministratorTransactions == nil ||
+		current.Status.Execution.AdministratorTransactions.Included != 2 {
 		t.Fatal("stale enrollment survived or cumulative administrator evidence disappeared")
 	}
 	role.result.PoX5 = &api.PoX5EnrollmentObservation{TargetCycle: 15}
@@ -627,7 +953,8 @@ func TestPoX5ObservationsClearWithoutDiscardingAdministratorAccounting(t *testin
 	if err := c.Get(ctx, client.ObjectKeyFromObject(p), &current); err != nil {
 		t.Fatal(err)
 	}
-	if current.Status.Execution.PoX5.TargetCycle != 15 || current.Status.Execution.AdministratorTransactions.Included != 3 {
+	if current.Status.Execution.PoX5.TargetCycle != 15 ||
+		current.Status.Execution.AdministratorTransactions.Included != 3 {
 		t.Fatal("publication retry aliased mutable role evidence")
 	}
 }

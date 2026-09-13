@@ -21,7 +21,13 @@ const AggregateManager = "stacks-network-aggregate"
 // Apply writes only the supplied owned fields. Callers must not pass fetched whole status.
 // UID and resourceVersion preserve identity and optimistic concurrency with current intent.
 // The response refreshes the caller's object for subsequent writes in the same reconciliation.
-func Apply(ctx context.Context, c client.Client, p *api.StacksNetworkParticipant, owned api.ParticipantStatus, manager string) error {
+func Apply(
+	ctx context.Context,
+	c client.Client,
+	p *api.StacksNetworkParticipant,
+	owned api.ParticipantStatus,
+	manager string,
+) error {
 	if p.UID == "" || p.ResourceVersion == "" || manager == "" {
 		return fmt.Errorf("participant status requires persisted identity, revision and field manager")
 	}
@@ -33,11 +39,18 @@ func Apply(ctx context.Context, c client.Client, p *api.StacksNetworkParticipant
 		}
 	}
 	patch := &api.StacksNetworkParticipant{
-		TypeMeta:   metav1.TypeMeta{APIVersion: api.GroupVersion.String(), Kind: api.KindStacksNetworkParticipant},
-		ObjectMeta: metav1.ObjectMeta{Name: p.Name, Namespace: p.Namespace, UID: p.UID, ResourceVersion: p.ResourceVersion},
-		Status:     owned,
+		TypeMeta: metav1.TypeMeta{APIVersion: api.GroupVersion.String(), Kind: api.KindStacksNetworkParticipant},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            p.Name,
+			Namespace:       p.Namespace,
+			UID:             p.UID,
+			ResourceVersion: p.ResourceVersion,
+		},
+		Status: owned,
 	}
-	if err := c.Status().Patch(ctx, patch, client.Apply, client.FieldOwner(manager), client.ForceOwnership); err != nil {
+	if err := c.Status().
+		//nolint:staticcheck // Typed minimal SSA preserves the response; generated apply configurations are not available.
+		Patch(ctx, patch, client.Apply, client.FieldOwner(manager), client.ForceOwnership); err != nil {
 		return err
 	}
 	*p = *patch
@@ -47,7 +60,8 @@ func Apply(ctx context.Context, c client.Client, p *api.StacksNetworkParticipant
 // Managed reports whether this status manager has established ownership on the server.
 func Managed(p *api.StacksNetworkParticipant, manager string) bool {
 	for _, fields := range p.ManagedFields {
-		if fields.Manager == manager && fields.Subresource == "status" && fields.Operation == metav1.ManagedFieldsOperationApply {
+		if fields.Manager == manager && fields.Subresource == "status" &&
+			fields.Operation == metav1.ManagedFieldsOperationApply {
 			return true
 		}
 	}
@@ -61,16 +75,18 @@ func NeedsMigration(p *api.StacksNetworkParticipant) bool { return len(legacyMan
 func legacyManagers(p *api.StacksNetworkParticipant) sets.Set[string] {
 	names := sets.New[string]()
 	for _, entry := range p.ManagedFields {
-		if entry.Manager != "foundation" || entry.Subresource != "status" || entry.Operation != metav1.ManagedFieldsOperationUpdate {
+		if entry.Manager != "foundation" || entry.Subresource != "status" ||
+			entry.Operation != metav1.ManagedFieldsOperationUpdate {
 			continue
 		}
 		// csaupgrade acts on every matching manager/subresource entry. One unsafe
 		// entry vetoes conversion of that manager, including across API versions.
-		if entry.FieldsType != managedFieldsFormat || entry.FieldsV1 == nil || entry.APIVersion != api.GroupVersion.String() {
+		if entry.FieldsType != managedFieldsFormat || entry.FieldsV1 == nil ||
+			entry.APIVersion != api.GroupVersion.String() {
 			return sets.New[string]()
 		}
 		var fields map[string]map[string]json.RawMessage
-		if json.Unmarshal(entry.FieldsV1.Raw, &fields) != nil || len(fields) != 1 {
+		if json.Unmarshal(entry.FieldsV1.GetRawBytes(), &fields) != nil || len(fields) != 1 {
 			return sets.New[string]()
 		}
 		status, ok := fields["f:status"]
@@ -86,7 +102,9 @@ func legacyManagers(p *api.StacksNetworkParticipant) sets.Set[string] {
 			case ".", "f:admission":
 			case "f:conditions":
 				for condition := range children {
-					if condition != "." && condition != `k:{"type":"Resolved"}` && condition != `k:{"type":"PolicyDeferred"}` && condition != `k:{"type":"WorkloadReady"}` {
+					if condition != "." && condition != `k:{"type":"Resolved"}` &&
+						condition != `k:{"type":"PolicyDeferred"}` &&
+						condition != `k:{"type":"WorkloadReady"}` {
 						return sets.New[string]()
 					}
 				}
@@ -113,7 +131,9 @@ func migrate(ctx context.Context, c client.Client, p *api.StacksNetworkParticipa
 	if err := json.Unmarshal(data, &operations); err != nil {
 		return err
 	}
-	operations = append([]map[string]any{{"op": "test", "path": "/metadata/uid", "value": string(p.UID)}}, operations...)
+	operations = append(
+		[]map[string]any{{"op": "test", "path": "/metadata/uid", "value": string(p.UID)}},
+		operations...)
 	data, err = json.Marshal(operations)
 	if err != nil {
 		return err
@@ -129,7 +149,7 @@ func OwnsCondition(p *api.StacksNetworkParticipant, manager, conditionType strin
 			continue
 		}
 		var fields map[string]map[string]map[string]json.RawMessage
-		if json.Unmarshal(entry.FieldsV1.Raw, &fields) != nil {
+		if json.Unmarshal(entry.FieldsV1.GetRawBytes(), &fields) != nil {
 			continue
 		}
 		if _, ok := fields["f:status"]["f:conditions"]["k:"+string(key)]; ok {

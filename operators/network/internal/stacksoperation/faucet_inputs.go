@@ -33,9 +33,16 @@ type FaucetInputs struct {
 }
 
 // Faucet fresh-resolves fixed source and target identities; request limits were fixed at admission.
-func (r PublicInputs) Faucet(ctx context.Context, s stacksworker.Snapshot, admission *stacks.FaucetAdmission) (FaucetInputs, error) {
+func (r PublicInputs) Faucet(
+	ctx context.Context,
+	s stacksworker.Snapshot,
+	admission *stacks.FaucetAdmission,
+) (FaucetInputs, error) {
 	var input FaucetInputs
-	if r.Reader == nil || s.Network == nil || s.Participant == nil || s.Participant.Status.Admission == nil || admission == nil || admission.SourceAccount == nil || admission.Target == nil {
+	if r.Reader == nil || s.Network == nil || s.Participant == nil || s.Participant.Status.Admission == nil ||
+		admission == nil ||
+		admission.SourceAccount == nil ||
+		admission.Target == nil {
 		return input, errors.New("faucet inputs unavailable")
 	}
 	policy := s.Participant.Status.Admission.Configuration.StacksFaucet
@@ -46,7 +53,9 @@ func (r PublicInputs) Faucet(ctx context.Context, s stacksworker.Snapshot, admis
 	if err != nil {
 		return input, err
 	}
-	if source.Name != admission.SourceAccount.Name || source.UID != admission.SourceAccount.UID || source.Status.Digest != admission.SourceAccount.Fingerprint || source.Status.Identity.Address != r.Sender {
+	if source.Name != admission.SourceAccount.Name || source.UID != admission.SourceAccount.UID ||
+		source.Status.Digest != admission.SourceAccount.Fingerprint ||
+		source.Status.Identity.Address != r.Sender {
 		return input, errors.New("faucet source identity changed")
 	}
 	target, err := r.target(ctx, s, policy.TargetNodeRef.Name)
@@ -74,7 +83,10 @@ func (r PublicInputs) Faucet(ctx context.Context, s stacksworker.Snapshot, admis
 	if err = r.Reader.Get(ctx, client.ObjectKey{Namespace: s.Network.Namespace, Name: ref.Name}, &genesis); err != nil {
 		return input, err
 	}
-	if genesis.UID != ref.UID || genesis.DeletionTimestamp != nil || !metav1.IsControlledBy(&genesis, s.Network) || genesis.Spec.Source.NetworkUID != s.Network.UID || foundation.Digest(genesis.Spec) != ref.Fingerprint || foundation.Digest(genesis.Spec.Chain) != s.Network.Status.GenesisDigest {
+	if genesis.UID != ref.UID || genesis.DeletionTimestamp != nil || !metav1.IsControlledBy(&genesis, s.Network) ||
+		genesis.Spec.Source.NetworkUID != s.Network.UID ||
+		foundation.Digest(genesis.Spec) != ref.Fingerprint ||
+		foundation.Digest(genesis.Spec.Chain) != s.Network.Status.GenesisDigest {
 		return input, errors.New("faucet genesis identity changed")
 	}
 	for _, epoch := range genesis.Spec.Chain.Epochs {

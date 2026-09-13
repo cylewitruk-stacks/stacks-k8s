@@ -36,9 +36,24 @@ type actionOptions struct {
 
 func main() {
 	var actions actionOptions
-	flag.BoolVar(&actions.generation, "bitcoin-generation-enabled", false, "enable bounded Bitcoin block-generation actions")
-	flag.BoolVar(&actions.reorganization, "bitcoin-reorganization-enabled", false, "enable bounded Bitcoin reorganization actions")
-	mode := flag.String("mode", foundation.ModeController, "controller, resolve-key, resolve-bitcoin-config, resolve-stacks-config, validate-stacks-config or bitcoin-control")
+	flag.BoolVar(
+		&actions.generation,
+		"bitcoin-generation-enabled",
+		false,
+		"enable bounded Bitcoin block-generation actions",
+	)
+	flag.BoolVar(
+		&actions.reorganization,
+		"bitcoin-reorganization-enabled",
+		false,
+		"enable bounded Bitcoin reorganization actions",
+	)
+	mode := flag.String(
+		"mode",
+		foundation.ModeController,
+		"controller, resolve-key, resolve-bitcoin-config, resolve-stacks-config, "+
+			"validate-stacks-config or bitcoin-control",
+	)
 	input := flag.String("input", "", "public resolver binding JSON")
 	inputFile := flag.String("input-file", "", "bounded public configuration resolver request file")
 	image := flag.String("resolver-image", "", "image used for scoped identity resolver Jobs")
@@ -55,9 +70,16 @@ func main() {
 		os.Exit(1)
 	}
 }
+
 func run(ctx context.Context, mode, input, image, health string, leader bool, enabled actionOptions) error {
 	scheme := runtime.NewScheme()
-	for _, add := range []func(*runtime.Scheme) error{clientgoscheme.AddToScheme, api.AddToScheme, bitcoin.AddToScheme, stacks.AddToScheme, actions.AddToScheme} {
+	for _, add := range []func(*runtime.Scheme) error{
+		clientgoscheme.AddToScheme,
+		api.AddToScheme,
+		bitcoin.AddToScheme,
+		stacks.AddToScheme,
+		actions.AddToScheme,
+	} {
 		if err := add(scheme); err != nil {
 			return err
 		}
@@ -116,25 +138,84 @@ func run(ctx context.Context, mode, input, image, health string, leader bool, en
 	if mode != foundation.ModeController || image == "" {
 		return fmt.Errorf("controller requires --resolver-image")
 	}
-	manager, err := ctrl.NewManager(config, ctrl.Options{Cache: foundation.CacheOptions(), Scheme: scheme, LeaderElection: leader, LeaderElectionID: "stacks-network-operator.network.stacks.org", HealthProbeBindAddress: health, Metrics: metricsserver.Options{BindAddress: "0"}, Client: client.Options{Cache: &client.CacheOptions{DisableFor: []client.Object{&corev1.Secret{}, &corev1.ServiceAccount{}, &rbacv1.Role{}, &rbacv1.RoleBinding{}}}}})
+	manager, err := ctrl.NewManager(
+		config,
+		ctrl.Options{
+			Cache:                  foundation.CacheOptions(),
+			Scheme:                 scheme,
+			LeaderElection:         leader,
+			LeaderElectionID:       "stacks-network-operator.network.stacks.org",
+			HealthProbeBindAddress: health,
+			Metrics:                metricsserver.Options{BindAddress: "0"},
+			Client: client.Options{
+				Cache: &client.CacheOptions{
+					DisableFor: []client.Object{
+						&corev1.Secret{},
+						&corev1.ServiceAccount{},
+						&rbacv1.Role{},
+						&rbacv1.RoleBinding{},
+					},
+				},
+			},
+		},
+	)
 	if err != nil {
 		return err
 	}
-	for name, object := range map[string]client.Object{"genesis": &api.StacksGenesis{}, "bitcoin-execution": &bitcoin.BitcoinExecution{}, "bitcoin-initialization": &bitcoin.BitcoinInitialization{}} {
-		artifacts := &foundation.ArtifactReconciler{Client: manager.GetClient(), Reader: manager.GetAPIReader(), Object: object, Name: "artifact-" + name}
+	for name, object := range map[string]client.Object{
+		"genesis":                &api.StacksGenesis{},
+		"bitcoin-execution":      &bitcoin.BitcoinExecution{},
+		"bitcoin-initialization": &bitcoin.BitcoinInitialization{},
+	} {
+		artifacts := &foundation.ArtifactReconciler{
+			Client: manager.GetClient(),
+			Reader: manager.GetAPIReader(),
+			Object: object,
+			Name:   "artifact-" + name,
+		}
 		if err := artifacts.SetupWithManager(manager); err != nil {
 			return err
 		}
 	}
-	actorKinds := []api.ParticipantKind{api.ParticipantBitcoinNode, api.ParticipantStacksNode, api.ParticipantStacksSigner}
-	configuration := &participantworkload.Reconciler{Client: manager.GetClient(), Reader: manager.GetAPIReader(), ResolverImage: image}
-	projection := &networkruntime.Reconciler{Client: manager.GetClient(), Reader: manager.GetAPIReader(), Scheme: scheme, ActorKinds: actorKinds}
-	kinds := append(append([]api.ParticipantKind(nil), actorKinds...), api.ParticipantBitcoinBlockProduction, api.ParticipantStacksTransactionProduction, api.ParticipantStacksStacker, api.ParticipantStacksContractSet, api.ParticipantStacksFaucet)
-	if err := foundation.Register(manager, image, foundation.RuntimeOptions{Configurations: configuration, Kinds: kinds, Runtime: projection}); err != nil {
+	actorKinds := []api.ParticipantKind{
+		api.ParticipantBitcoinNode,
+		api.ParticipantStacksNode,
+		api.ParticipantStacksSigner,
+	}
+	configuration := &participantworkload.Reconciler{
+		Client:        manager.GetClient(),
+		Reader:        manager.GetAPIReader(),
+		ResolverImage: image,
+	}
+	projection := &networkruntime.Reconciler{
+		Client:     manager.GetClient(),
+		Reader:     manager.GetAPIReader(),
+		Scheme:     scheme,
+		ActorKinds: actorKinds,
+	}
+	kinds := append(
+		append([]api.ParticipantKind(nil), actorKinds...),
+		api.ParticipantBitcoinBlockProduction,
+		api.ParticipantStacksTransactionProduction,
+		api.ParticipantStacksStacker,
+		api.ParticipantStacksContractSet,
+		api.ParticipantStacksFaucet,
+	)
+	//nolint:contextcheck // Manager setup registers lifetime indexes before the manager starts serving requests.
+	if err := foundation.Register(
+		manager,
+		image,
+		foundation.RuntimeOptions{Configurations: configuration, Kinds: kinds, Runtime: projection},
+	); err != nil {
 		return err
 	}
 	for _, kind := range actorKinds {
-		actor := &participantworkload.Reconciler{Client: manager.GetClient(), Reader: manager.GetAPIReader(), ResolverImage: image, Kind: kind}
+		actor := &participantworkload.Reconciler{
+			Client:        manager.GetClient(),
+			Reader:        manager.GetAPIReader(),
+			ResolverImage: image,
+			Kind:          kind,
+		}
 		if kind == api.ParticipantBitcoinNode {
 			actor.BeforeStop = func(ctx context.Context, p *api.StacksNetworkParticipant) (bool, error) {
 				return bitcoincontrol.CheckDrained(ctx, manager.GetAPIReader(), p)
@@ -148,7 +229,13 @@ func run(ctx context.Context, mode, input, image, health string, leader bool, en
 			return err
 		}
 	}
-	control := &bitcoincontrol.WorkloadReconciler{Client: manager.GetClient(), Reader: manager.GetAPIReader(), Image: image, ActionsEnabled: enabled.generation, ReorganizationEnabled: enabled.reorganization}
+	control := &bitcoincontrol.WorkloadReconciler{
+		Client:                manager.GetClient(),
+		Reader:                manager.GetAPIReader(),
+		Image:                 image,
+		ActionsEnabled:        enabled.generation,
+		ReorganizationEnabled: enabled.reorganization,
+	}
 	if err := control.SetupWithManager(manager); err != nil {
 		return err
 	}
@@ -160,17 +247,32 @@ func run(ctx context.Context, mode, input, image, health string, leader bool, en
 	if err := scheduler.SetupWithManager(manager); err != nil {
 		return err
 	}
-	production := &bitcoincontrol.ProductionStatusReconciler{Client: manager.GetClient(), Reader: manager.GetAPIReader()}
+	production := &bitcoincontrol.ProductionStatusReconciler{
+		Client: manager.GetClient(),
+		Reader: manager.GetAPIReader(),
+	}
 	if err := production.SetupWithManager(manager); err != nil {
 		return err
 	}
 	requests := &faucetrequest.Reconciler{Client: manager.GetClient(), Reader: manager.GetAPIReader()}
+	//nolint:contextcheck // Manager setup registers lifetime indexes before the manager starts serving requests.
 	if err := requests.SetupWithManager(manager); err != nil {
 		return err
 	}
 	profiles := stacksworker.Profiles{Client: manager.GetClient(), Reader: manager.GetAPIReader(), Image: image}
-	for _, kind := range []api.ParticipantKind{api.ParticipantStacksTransactionProduction, api.ParticipantStacksStacker, api.ParticipantStacksContractSet, api.ParticipantStacksFaucet} {
-		worker := &stacksworker.Reconciler{Client: manager.GetClient(), Reader: manager.GetAPIReader(), Kind: kind, ResolveProfile: profiles.Resolve, ResolveReads: profiles.Reads}
+	for _, kind := range []api.ParticipantKind{
+		api.ParticipantStacksTransactionProduction,
+		api.ParticipantStacksStacker,
+		api.ParticipantStacksContractSet,
+		api.ParticipantStacksFaucet,
+	} {
+		worker := &stacksworker.Reconciler{
+			Client:         manager.GetClient(),
+			Reader:         manager.GetAPIReader(),
+			Kind:           kind,
+			ResolveProfile: profiles.Resolve,
+			ResolveReads:   profiles.Reads,
+		}
 		if err := worker.SetupWithManager(manager); err != nil {
 			return err
 		}

@@ -12,8 +12,20 @@ import (
 )
 
 func TestBootstrapCompatibilityUsesExplicitRequirements(t *testing.T) {
-	req := api.BootstrapRequirement{Kind: "StacksStacker", PolicyDigest: "original", AmountMicroSTX: ptr.To(common.Amount("100")), LockCycles: ptr.To[int32](6), RenewWhenRemainingCycles: ptr.To[int32](3)}
-	policy := api.Configuration{StacksStacker: &stacks.StacksStackerSpec{AmountMicroSTX: ptr.To(common.Amount("100")), LockCycles: ptr.To[int32](6), RenewWhenRemainingCycles: ptr.To[int32](3)}}
+	req := api.BootstrapRequirement{
+		Kind:                     "StacksStacker",
+		PolicyDigest:             "original",
+		AmountMicroSTX:           ptr.To(common.Amount("100")),
+		LockCycles:               ptr.To[int32](6),
+		RenewWhenRemainingCycles: ptr.To[int32](3),
+	}
+	policy := api.Configuration{
+		StacksStacker: &stacks.StacksStackerSpec{
+			AmountMicroSTX:           ptr.To(common.Amount("100")),
+			LockCycles:               ptr.To[int32](6),
+			RenewWhenRemainingCycles: ptr.To[int32](3),
+		},
+	}
 	if !BootstrapPolicyCompatible(req, policy) {
 		t.Fatal("matching captured values rejected")
 	}
@@ -28,8 +40,18 @@ func TestBootstrapCompatibilityUsesExplicitRequirements(t *testing.T) {
 }
 
 func TestBootstrapWalletsPreserveOnlyInitialAttachments(t *testing.T) {
-	req := api.BootstrapRequirement{Kind: "BitcoinNode", Dependencies: []common.Binding{{Kind: "BitcoinWallet", Name: "initial", UID: "initial-wallet"}, {Kind: "StacksNetworkParticipant", Name: "old-seed", UID: "old-seed"}}}
-	policy := api.Configuration{BitcoinNode: &bitcoin.BitcoinNodeSpec{WalletRefs: ptr.To([]common.NameRef{{Name: "initial"}, {Name: "optional"}})}}
+	req := api.BootstrapRequirement{
+		Kind: "BitcoinNode",
+		Dependencies: []common.Binding{
+			{Kind: "BitcoinWallet", Name: "initial", UID: "initial-wallet"},
+			{Kind: "StacksNetworkParticipant", Name: "old-seed", UID: "old-seed"},
+		},
+	}
+	policy := api.Configuration{
+		BitcoinNode: &bitcoin.BitcoinNodeSpec{
+			WalletRefs: ptr.To([]common.NameRef{{Name: "initial"}, {Name: "optional"}}),
+		},
+	}
 	if !BootstrapPolicyCompatible(req, policy) {
 		t.Fatal("optional attachment or removed seed blocked bootstrap-compatible policy")
 	}
@@ -40,11 +62,48 @@ func TestBootstrapWalletsPreserveOnlyInitialAttachments(t *testing.T) {
 }
 
 func TestBootstrapDeferralEndsAtLastAffectedVerifiedGate(t *testing.T) {
-	for _, mode := range []string{"pending", "completed", "foreign-genesis", "fingerprint", "chain-digest", "wrong-name", "nonprefix", "unordered", "wrong-ceiling"} {
+	for _, mode := range []string{
+		"pending",
+		"completed",
+		"foreign-genesis",
+		"fingerprint",
+		"chain-digest",
+		"wrong-name",
+		"nonprefix",
+		"unordered",
+		"wrong-ceiling",
+	} {
 		t.Run(mode, func(t *testing.T) {
-			g := &api.StacksGenesis{ObjectMeta: metav1.ObjectMeta{UID: "genesis"}, Spec: api.StacksGenesisSpec{Bootstrap: api.Bootstrap{Gates: []api.Gate{{Name: "PrepareBitcoin", BitcoinCeiling: 203}, {Name: "PreparePoX5", BitcoinCeiling: 281}, {Name: "PrepareWaterfall", BitcoinCeiling: 299}}}}}
+			g := &api.StacksGenesis{
+				ObjectMeta: metav1.ObjectMeta{UID: "genesis"},
+				Spec: api.StacksGenesisSpec{
+					Bootstrap: api.Bootstrap{
+						Gates: []api.Gate{
+							{Name: "PrepareBitcoin", BitcoinCeiling: 203},
+							{Name: "PreparePoX5", BitcoinCeiling: 281},
+							{Name: "PrepareWaterfall", BitcoinCeiling: 299},
+						},
+					},
+				},
+			}
 			now := metav1.Now()
-			root := &api.StacksNetwork{Status: api.StacksNetworkStatus{GenesisRef: &common.Binding{UID: g.UID, Fingerprint: Digest(g.Spec)}, GenesisDigest: Digest(g.Spec.Chain), Initialization: &api.InitializationStatus{GenesisUID: g.UID, GenesisDigest: Digest(g.Spec.Chain), GateIndex: 2, AuthorizedCeiling: 299, Gates: []api.GateObservation{{Name: "PrepareBitcoin", CompletedAt: &now}, {Name: "PreparePoX5", CompletedAt: &now}, {Name: "PrepareWaterfall"}}}}}
+			root := &api.StacksNetwork{
+				Status: api.StacksNetworkStatus{
+					GenesisRef:    &common.Binding{UID: g.UID, Fingerprint: Digest(g.Spec)},
+					GenesisDigest: Digest(g.Spec.Chain),
+					Initialization: &api.InitializationStatus{
+						GenesisUID:        g.UID,
+						GenesisDigest:     Digest(g.Spec.Chain),
+						GateIndex:         2,
+						AuthorizedCeiling: 299,
+						Gates: []api.GateObservation{
+							{Name: "PrepareBitcoin", CompletedAt: &now},
+							{Name: "PreparePoX5", CompletedAt: &now},
+							{Name: "PrepareWaterfall"},
+						},
+					},
+				},
+			}
 			switch mode {
 			case "pending":
 				root.Status.Initialization.GateIndex = 1
@@ -66,7 +125,10 @@ func TestBootstrapDeferralEndsAtLastAffectedVerifiedGate(t *testing.T) {
 			case "wrong-ceiling":
 				root.Status.Initialization.AuthorizedCeiling = 300
 			}
-			if got := bootstrapPolicyPending(bootstrapCompletedGates(root, g), api.BootstrapRequirement{Kind: "StacksContractSet"}); got != (mode != "completed") {
+			if got := bootstrapPolicyPending(
+				bootstrapCompletedGates(root, g),
+				api.BootstrapRequirement{Kind: "StacksContractSet"},
+			); got != (mode != "completed") {
 				t.Fatalf("pending=%v for %s", got, mode)
 			}
 		})

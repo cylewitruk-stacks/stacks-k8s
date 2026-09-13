@@ -21,7 +21,11 @@ type predicate struct {
 }
 
 // selectedMember resolves one required singleton through the root's allocated UID.
-func selectedMember(root *api.StacksNetwork, kind api.ParticipantKind, participants []api.StacksNetworkParticipant) (*api.StacksNetworkParticipant, predicate) {
+func selectedMember(
+	root *api.StacksNetwork,
+	kind api.ParticipantKind,
+	participants []api.StacksNetworkParticipant,
+) (*api.StacksNetworkParticipant, predicate) {
 	for _, entry := range root.Spec.Participants {
 		if entry.Kind != kind {
 			continue
@@ -32,7 +36,10 @@ func selectedMember(root *api.StacksNetwork, kind api.ParticipantKind, participa
 			}
 			for i := range participants {
 				p := &participants[i]
-				if p.UID == id.UID && p.Spec.Kind == kind && p.Spec.ParticipantName == entry.Name && p.Spec.NetworkUID == root.UID && metav1.IsControlledBy(p, root) && p.DeletionTimestamp == nil {
+				if p.UID == id.UID && p.Spec.Kind == kind && p.Spec.ParticipantName == entry.Name &&
+					p.Spec.NetworkUID == root.UID &&
+					metav1.IsControlledBy(p, root) &&
+					p.DeletionTimestamp == nil {
 					if p.Status.Admission == nil {
 						return nil, predicate{metav1.ConditionUnknown, string(kind) + api.ReasonAdmissionUnavailable}
 					}
@@ -61,11 +68,23 @@ func capabilityPaused(root *api.StacksNetwork, p *api.StacksNetworkParticipant) 
 // currentWorker requires a current execution observation from the bound surviving process.
 func currentWorker(root *api.StacksNetwork, p *api.StacksNetworkParticipant, now time.Time) bool {
 	e := p.Status.Execution
-	if e == nil || e.ProcessNonce == "" || e.ObservedGeneration != p.Generation || e.NetworkGeneration != root.Generation || !fresh(e.ObservedAt, now) || e.Phase == api.WorkerPhaseInactive || e.Phase == api.WorkerPhaseFailed || e.Phase == api.WorkerPhaseUnknown || e.Phase == api.WorkerPhaseDraining || e.Phase == api.WorkerPhaseSettled || e.Phase == api.WorkerPhaseUnsettled {
+	if e == nil || e.ProcessNonce == "" || e.ObservedGeneration != p.Generation ||
+		e.NetworkGeneration != root.Generation ||
+		!fresh(e.ObservedAt, now) ||
+		e.Phase == api.WorkerPhaseInactive ||
+		e.Phase == api.WorkerPhaseFailed ||
+		e.Phase == api.WorkerPhaseUnknown ||
+		e.Phase == api.WorkerPhaseDraining ||
+		e.Phase == api.WorkerPhaseSettled ||
+		e.Phase == api.WorkerPhaseUnsettled {
 		return false
 	}
 	for _, id := range root.Status.Identities {
-		if id.UID == p.UID && id.Name == p.Spec.ParticipantName && !id.Removing && id.Worker != nil && id.Worker.Shutdown == nil && id.Worker.Disposal == nil && id.Worker.Pod.UID == e.PodUID && id.Worker.ProfileDigest == e.ProfileDigest {
+		if id.UID == p.UID && id.Name == p.Spec.ParticipantName && !id.Removing && id.Worker != nil &&
+			id.Worker.Shutdown == nil &&
+			id.Worker.Disposal == nil &&
+			id.Worker.Pod.UID == e.PodUID &&
+			id.Worker.ProfileDigest == e.ProfileDigest {
 			return true
 		}
 	}
@@ -82,7 +101,9 @@ func bitcoinOperational(root *api.StacksNetwork, participants []api.StacksNetwor
 		return predicate{metav1.ConditionFalse, reasonBitcoinProductionPaused}
 	}
 	s := p.Status.Scheduling
-	if s == nil || s.ObservedAt == nil || !fresh(*s.ObservedAt, now) || s.PolicyDigest != p.Status.Admission.PolicyDigest || s.Schedule == nil {
+	if s == nil || s.ObservedAt == nil || !fresh(*s.ObservedAt, now) ||
+		s.PolicyDigest != p.Status.Admission.PolicyDigest ||
+		s.Schedule == nil {
 		return predicate{metav1.ConditionUnknown, reasonBitcoinObservationUnavailable}
 	}
 	if s.EligibleTargets == 0 {
@@ -100,10 +121,12 @@ func bitcoinOperational(root *api.StacksNetwork, participants []api.StacksNetwor
 			bound, err = time.ParseDuration(string(*s.Schedule.Cadence.MaximumInterval))
 		}
 	}
-	if err != nil || bound < time.Second || bound > time.Hour || s.ProgressWindowSeconds != int64(foundation.ProgressWindow(bound)/time.Second) {
+	if err != nil || bound < time.Second || bound > time.Hour ||
+		s.ProgressWindowSeconds != int64(foundation.ProgressWindow(bound)/time.Second) {
 		return predicate{metav1.ConditionUnknown, reasonBitcoinTimingUnavailable}
 	}
-	if s.LastAcknowledgedAt == nil || s.LastAcknowledgedAt.Time.After(now) || now.Sub(s.LastAcknowledgedAt.Time) > foundation.ProgressWindow(bound) {
+	if s.LastAcknowledgedAt == nil || s.LastAcknowledgedAt.After(now) ||
+		now.Sub(s.LastAcknowledgedAt.Time) > foundation.ProgressWindow(bound) {
 		return predicate{metav1.ConditionFalse, reasonBitcoinProgressOverdue}
 	}
 	return predicate{metav1.ConditionTrue, reasonBitcoinProgressObserved}
@@ -113,16 +136,23 @@ func bitcoinOperational(root *api.StacksNetwork, participants []api.StacksNetwor
 func minerOperational(root *api.StacksNetwork, participants []api.StacksNetworkParticipant) predicate {
 	waiting := false
 	for _, entry := range root.Spec.Participants {
-		if entry.Kind != api.ParticipantStacksNode || entry.Control != nil && ptr.Deref(entry.Control.Suspended, false) {
+		if entry.Kind != api.ParticipantStacksNode ||
+			entry.Control != nil && ptr.Deref(entry.Control.Suspended, false) {
 			continue
 		}
 		for i := range participants {
 			p := &participants[i]
-			if p.Spec.ParticipantName != entry.Name || !selectedInstance(root, p) || p.Spec.Kind != api.ParticipantStacksNode || p.Status.Admission == nil || p.DeletionTimestamp != nil || !metav1.IsControlledBy(p, root) || p.Spec.Control != nil && ptr.Deref(p.Spec.Control.Suspended, false) {
+			if p.Spec.ParticipantName != entry.Name || !selectedInstance(root, p) ||
+				p.Spec.Kind != api.ParticipantStacksNode ||
+				p.Status.Admission == nil ||
+				p.DeletionTimestamp != nil ||
+				!metav1.IsControlledBy(p, root) ||
+				p.Spec.Control != nil && ptr.Deref(p.Spec.Control.Suspended, false) {
 				continue
 			}
 			policy := p.Status.Admission.Configuration.StacksNode
-			if policy == nil || policy.Mining == nil || !ptr.Deref(policy.Mining.Enabled, false) || policy.Config != nil && ptr.Deref(policy.Config.Compatibility, "") == common.CompatibilityUnverified {
+			if policy == nil || policy.Mining == nil || !ptr.Deref(policy.Mining.Enabled, false) ||
+				policy.Config != nil && ptr.Deref(policy.Config.Compatibility, "") == common.CompatibilityUnverified {
 				continue
 			}
 			if currentActorReady(p) {
@@ -141,7 +171,12 @@ func minerOperational(root *api.StacksNetwork, participants []api.StacksNetworkP
 }
 
 // trafficOperational requires current canonical inclusion, exact original ingress, and recent progress.
-func trafficOperational(root *api.StacksNetwork, g *api.StacksGenesis, participants []api.StacksNetworkParticipant, now time.Time) predicate {
+func trafficOperational(
+	root *api.StacksNetwork,
+	g *api.StacksGenesis,
+	participants []api.StacksNetworkParticipant,
+	now time.Time,
+) predicate {
 	p, result := selectedMember(root, api.ParticipantStacksTransactionProduction, participants)
 	if p == nil {
 		return result
@@ -162,31 +197,49 @@ func trafficOperational(root *api.StacksNetwork, g *api.StacksGenesis, participa
 	ingress := false
 	for i := range participants {
 		target := &participants[i]
-		if target.UID != o.TargetParticipantUID || !selectedInstance(root, target) || target.Spec.Kind != api.ParticipantStacksNode || target.Spec.NetworkUID != root.UID || !metav1.IsControlledBy(target, root) || target.DeletionTimestamp != nil || !currentActorReady(target) {
+		if target.UID != o.TargetParticipantUID || !selectedInstance(root, target) ||
+			target.Spec.Kind != api.ParticipantStacksNode ||
+			target.Spec.NetworkUID != root.UID ||
+			!metav1.IsControlledBy(target, root) ||
+			target.DeletionTimestamp != nil ||
+			!currentActorReady(target) {
 			continue
 		}
 		for _, entry := range root.Spec.Participants {
 			if entry.Kind == target.Spec.Kind && entry.Name == target.Spec.ParticipantName {
-				ingress = target.Status.Runtime.PodRef.UID == o.TargetPodUID && target.Status.Runtime.ContainerID == o.TargetContainerID && target.Status.Runtime.ConfigurationDigest == o.TargetConfigurationDigest
+				ingress = target.Status.Runtime.PodRef.UID == o.TargetPodUID &&
+					target.Status.Runtime.ContainerID == o.TargetContainerID &&
+					target.Status.Runtime.ConfigurationDigest == o.TargetConfigurationDigest
 			}
 		}
 	}
 	if !ingress {
 		return predicate{metav1.ConditionUnknown, reasonTrafficIngressUnavailable}
 	}
+	if o.EffectiveIntervalSeconds < 1 || o.EffectiveIntervalSeconds > 3600 {
+		return predicate{metav1.ConditionUnknown, reasonTrafficTimingUnavailable}
+	}
 	interval := time.Duration(o.EffectiveIntervalSeconds) * time.Second
-	if interval < time.Second || interval > time.Hour || o.ProgressWindowSeconds != uint64(foundation.ProgressWindow(interval)/time.Second) {
+	if interval < time.Second || interval > time.Hour ||
+		// #nosec G115 -- The interval is bounded to 1s..1h; ProgressWindow returns 130s..10810s.
+		o.ProgressWindowSeconds != uint64(foundation.ProgressWindow(interval)/time.Second) {
 		return predicate{metav1.ConditionUnknown, reasonTrafficTimingUnavailable}
 	}
 	inclusion := p.Status.Execution.Transactions.LastInclusion
-	if inclusion == nil || inclusion.TxID != o.TxID || !inclusion.Success || inclusion.ObservedAt.Time.After(now) || now.Sub(inclusion.ObservedAt.Time) > foundation.ProgressWindow(interval) {
+	if inclusion == nil || inclusion.TxID != o.TxID || !inclusion.Success || inclusion.ObservedAt.After(now) ||
+		now.Sub(inclusion.ObservedAt.Time) > foundation.ProgressWindow(interval) {
 		return predicate{metav1.ConditionFalse, reasonTrafficProgressOverdue}
 	}
 	return predicate{metav1.ConditionTrue, reasonCanonicalTransferObserved}
 }
 
 // contractsOperational uses current membership and frozen public contract inputs without replaying gates.
-func contractsOperational(root *api.StacksNetwork, g *api.StacksGenesis, participants []api.StacksNetworkParticipant, now time.Time) predicate {
+func contractsOperational(
+	root *api.StacksNetwork,
+	g *api.StacksGenesis,
+	participants []api.StacksNetworkParticipant,
+	now time.Time,
+) predicate {
 	p, result := selectedMember(root, api.ParticipantStacksContractSet, participants)
 	if p == nil {
 		return result
@@ -203,7 +256,9 @@ func contractsOperational(root *api.StacksNetwork, g *api.StacksGenesis, partici
 		return predicate{metav1.ConditionUnknown, reasonContractAdmissionUnavailable}
 	}
 	for _, req := range g.Spec.Bootstrap.Requirements {
-		if req.Kind == api.ParticipantStacksContractSet && foundation.Digest(req.RegistryInitialization) == foundation.Digest(policy.Initialization) && contractObservationMatches(o, g, req, now) {
+		if req.Kind == api.ParticipantStacksContractSet &&
+			foundation.Digest(req.RegistryInitialization) == foundation.Digest(policy.Initialization) &&
+			contractObservationMatches(o, g, req, now) {
 			return predicate{metav1.ConditionTrue, reasonContractsObserved}
 		}
 	}
@@ -226,7 +281,12 @@ func combinePredicates(values ...predicate) predicate {
 }
 
 // projectOperation distinguishes completed initialization, requested operation and recent protocol progress.
-func (r *Reconciler) projectOperation(ctx context.Context, root *api.StacksNetwork, participants []api.StacksNetworkParticipant, now time.Time) error {
+func (r *Reconciler) projectOperation(
+	ctx context.Context,
+	root *api.StacksNetwork,
+	participants []api.StacksNetworkParticipant,
+	now time.Time,
+) error {
 	state := root.Status.Initialization
 	if state == nil || !state.Completed {
 		return nil
@@ -240,34 +300,74 @@ func (r *Reconciler) projectOperation(ctx context.Context, root *api.StacksNetwo
 		if traffic.status != metav1.ConditionTrue || !postWaterfallObserved(root, g, participants, now) {
 			return nil
 		}
-		set(root, api.ConditionInitialized, metav1.ConditionTrue, reasonBootstrapCompleted, "Frozen gates and post-waterfall canonical production are observed")
+		set(
+			root,
+			api.ConditionInitialized,
+			metav1.ConditionTrue,
+			reasonBootstrapCompleted,
+			"Frozen gates and post-waterfall canonical production are observed",
+		)
 	}
 	if root.Spec.Operation != api.NetworkOperationRunning {
 		return nil
 	}
 	root.Status.Phase = api.NetworkPhaseRunning
-	set(root, api.ConditionRunning, metav1.ConditionTrue, api.ReasonRunning, "Initialization is complete and running operation is requested")
+	set(
+		root,
+		api.ConditionRunning,
+		metav1.ConditionTrue,
+		api.ReasonRunning,
+		"Initialization is complete and running operation is requested",
+	)
 	bitcoin := bitcoinOperational(root, participants, now)
 	if bitcoin.status == metav1.ConditionTrue {
 		production, _ := selectedMember(root, api.ParticipantBitcoinBlockProduction, participants)
-		if err := bitcoincontrol.ValidateSchedulingOverride(ctx, r.Reader, root, production, production.Status.Scheduling, now); err != nil {
+		if err := bitcoincontrol.ValidateSchedulingOverride(
+			ctx,
+			r.Reader,
+			root,
+			production,
+			production.Status.Scheduling,
+			now,
+		); err != nil {
 			bitcoin = predicate{metav1.ConditionUnknown, reasonBitcoinTimingUnavailable}
 		}
 	}
-	result := combinePredicates(bitcoin, minerOperational(root, participants), traffic, contractsOperational(root, g, participants, now))
-	set(root, api.ConditionOperational, result.status, result.reason, "Recent baseline availability and canonical progress are assessed independently of experiment controls")
+	result := combinePredicates(
+		bitcoin,
+		minerOperational(root, participants),
+		traffic,
+		contractsOperational(root, g, participants, now),
+	)
+	set(
+		root,
+		api.ConditionOperational,
+		result.status,
+		result.reason,
+		"Recent baseline availability and canonical progress are assessed independently of experiment controls",
+	)
 	return nil
 }
 
 // postWaterfallObserved requires a newly submitted transfer and the initial nodes beyond the final ceiling.
-func postWaterfallObserved(root *api.StacksNetwork, g *api.StacksGenesis, participants []api.StacksNetworkParticipant, now time.Time) bool {
+func postWaterfallObserved(
+	root *api.StacksNetwork,
+	g *api.StacksGenesis,
+	participants []api.StacksNetworkParticipant,
+	now time.Time,
+) bool {
 	gates := g.Spec.Bootstrap.Gates
 	if len(gates) == 0 {
 		return false
 	}
-	boundary := uint64(gates[len(gates)-1].BitcoinCeiling + 1)
+	ceiling := gates[len(gates)-1].BitcoinCeiling
+	if ceiling < 0 {
+		return false
+	}
+	boundary := uint64(ceiling) + 1
 	traffic, _ := selectedMember(root, api.ParticipantStacksTransactionProduction, participants)
-	if traffic == nil || traffic.Status.Execution == nil || traffic.Status.Execution.Traffic == nil || traffic.Status.Execution.Traffic.SubmittedBurnHeight < boundary {
+	if traffic == nil || traffic.Status.Execution == nil || traffic.Status.Execution.Traffic == nil ||
+		traffic.Status.Execution.Traffic.SubmittedBurnHeight < boundary {
 		return false
 	}
 	found := false
@@ -281,7 +381,13 @@ func postWaterfallObserved(root *api.StacksNetwork, g *api.StacksGenesis, partic
 			return false
 		}
 		o := p.Status.Runtime.Protocol
-		if o == nil || !o.Available || !o.FullySynced || !fresh(o.ObservedAt, now) || o.GenesisUID != g.UID || o.NetworkID != 0x80000000 || o.PodUID != p.Status.Runtime.PodRef.UID || o.ContainerID != p.Status.Runtime.ContainerID || o.ConfigurationDigest != p.Status.Runtime.ConfigurationDigest || o.BurnHeight < boundary || o.PoXContract != "ST000000000000000000002AMW42H.pox-5" {
+		if o == nil || !o.Available || !o.FullySynced || !fresh(o.ObservedAt, now) || o.GenesisUID != g.UID ||
+			o.NetworkID != 0x80000000 ||
+			o.PodUID != p.Status.Runtime.PodRef.UID ||
+			o.ContainerID != p.Status.Runtime.ContainerID ||
+			o.ConfigurationDigest != p.Status.Runtime.ConfigurationDigest ||
+			o.BurnHeight < boundary ||
+			o.PoXContract != "ST000000000000000000002AMW42H.pox-5" {
 			return false
 		}
 	}

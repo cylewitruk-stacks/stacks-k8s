@@ -24,12 +24,19 @@ type faucetNotice struct {
 
 // CollectionWatches selects the request collection in this worker's namespace.
 func (r *FaucetRole) CollectionWatches() []stacksworker.CollectionWatch {
-	return []stacksworker.CollectionWatch{{APIVersion: stacks.GroupVersion.String(), Resource: stacks.ResourceStacksFaucetRequest}}
+	return []stacksworker.CollectionWatch{
+		{APIVersion: stacks.GroupVersion.String(), Resource: stacks.ResourceStacksFaucetRequest},
+	}
 }
 
 // CollectionChanged records bounded hints from initial lists, relists and duplicate events.
-func (r *FaucetRole) CollectionChanged(ref stacksworker.CollectionWatch, object *unstructured.Unstructured, deleted bool) {
-	if ref.APIVersion != stacks.GroupVersion.String() || ref.Resource != stacks.ResourceStacksFaucetRequest || object.GetNamespace() != r.Namespace {
+func (r *FaucetRole) CollectionChanged(
+	ref stacksworker.CollectionWatch,
+	object *unstructured.Unstructured,
+	deleted bool,
+) {
+	if ref.APIVersion != stacks.GroupVersion.String() || ref.Resource != stacks.ResourceStacksFaucetRequest ||
+		object.GetNamespace() != r.Namespace {
 		return
 	}
 	var request stacks.StacksFaucetRequest
@@ -37,7 +44,9 @@ func (r *FaucetRole) CollectionChanged(ref stacksworker.CollectionWatch, object 
 		return
 	}
 	a := request.Status.Admission
-	if a == nil || a.Decision != stacks.FaucetDecisionAdmitted || a.Faucet == nil || a.Worker == nil || a.Faucet.UID != r.ParticipantUID || a.Worker.UID != r.PodUID {
+	if a == nil || a.Decision != stacks.FaucetDecisionAdmitted || a.Faucet == nil || a.Worker == nil ||
+		a.Faucet.UID != r.ParticipantUID ||
+		a.Worker.UID != r.PodUID {
 		return
 	}
 	r.mu.Lock()
@@ -57,7 +66,13 @@ func (r *FaucetRole) CollectionChanged(ref stacksworker.CollectionWatch, object 
 		return
 	}
 	expiry, _ := faucetrequest.Deadline(&request)
-	r.notices[request.UID] = faucetNotice{key: client.ObjectKeyFromObject(&request), uid: request.UID, created: request.CreationTimestamp.Time, expires: expiry, deleted: deleted}
+	r.notices[request.UID] = faucetNotice{
+		key:     client.ObjectKeyFromObject(&request),
+		uid:     request.UID,
+		created: request.CreationTimestamp.Time,
+		expires: expiry,
+		deleted: deleted,
+	}
 }
 
 // takeNotice selects best-effort creation/UID order; pending sends do not block deadline refusals.
@@ -101,7 +116,11 @@ func (r *FaucetRole) rescanNotices(ctx context.Context) error {
 	continuation := ""
 	for {
 		var list stacks.StacksFaucetRequestList
-		if err := r.Client.List(ctx, &list, &client.ListOptions{Namespace: r.Namespace, Limit: 500, Continue: continuation}); err != nil {
+		if err := r.Client.List(
+			ctx,
+			&list,
+			&client.ListOptions{Namespace: r.Namespace, Limit: 500, Continue: continuation},
+		); err != nil {
 			r.mu.Lock()
 			r.rescan = true
 			r.mu.Unlock()

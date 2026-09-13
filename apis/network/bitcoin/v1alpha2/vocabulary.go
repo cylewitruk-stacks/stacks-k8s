@@ -54,7 +54,8 @@ const (
 	ExecutionAbandoned ExecutionPhase = "Abandoned"
 )
 
-// InitializationPhase names supported BitcoinInitializationStatus.Phase values. Unknown input still requires validation.
+// InitializationPhase names supported BitcoinInitializationStatus.Phase values. Unknown input still requires
+// validation.
 type InitializationPhase string
 
 const (
@@ -82,7 +83,8 @@ const (
 	DrainUncertain DrainOutcome = "Uncertain"
 )
 
-// ControlOperation names supported BitcoinControlAcknowledgement.Operation values. Unknown input still requires validation.
+// ControlOperation names supported BitcoinControlAcknowledgement.Operation values. Unknown input still
+// requires validation.
 type ControlOperation string
 
 const (
@@ -106,7 +108,8 @@ const (
 	BaselineUnassigned BaselineStage = "Unassigned"
 )
 
-// OverridePhase names supported BitcoinBlockScheduleOverrideStatus.Phase values. Unknown input still requires validation.
+// OverridePhase names supported BitcoinBlockScheduleOverrideStatus.Phase values. Unknown input still requires
+// validation.
 type OverridePhase string
 
 const (

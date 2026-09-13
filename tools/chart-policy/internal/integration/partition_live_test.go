@@ -43,12 +43,23 @@ func newFaultFixture(t *testing.T, namespace, network string, enrolled bool) *fa
 	if os.Getenv("STACKS_CHAOS_PARTITION_LIVE") != "1" {
 		t.Skip("set STACKS_CHAOS_PARTITION_LIVE=1 for disposable partition fixtures")
 	}
-	f := &faultFixture{t: t, namespace: namespace, network: network, kubeconfig: os.Getenv("STACKS_CHAOS_KUBECONFIG"), kubecontext: os.Getenv("STACKS_CHAOS_CONTEXT"), pods: map[string]*corev1.Pod{}}
+	f := &faultFixture{
+		t:           t,
+		namespace:   namespace,
+		network:     network,
+		kubeconfig:  os.Getenv("STACKS_CHAOS_KUBECONFIG"),
+		kubecontext: os.Getenv("STACKS_CHAOS_CONTEXT"),
+		pods:        map[string]*corev1.Pod{},
+	}
 	f.profileEnrolled = enrolled
 	if f.kubeconfig == "" || f.kubecontext == "" {
 		t.Fatal("explicit kubeconfig and context required")
 	}
-	config, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(&clientcmd.ClientConfigLoadingRules{ExplicitPath: f.kubeconfig}, &clientcmd.ConfigOverrides{CurrentContext: f.kubecontext}).ClientConfig()
+	config, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
+		&clientcmd.ClientConfigLoadingRules{ExplicitPath: f.kubeconfig},
+		&clientcmd.ConfigOverrides{CurrentContext: f.kubecontext},
+	).
+		ClientConfig()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,7 +76,9 @@ func newFaultFixture(t *testing.T, namespace, network string, enrolled bool) *fa
 	f.ctx, cancel = context.WithTimeout(context.Background(), 8*time.Minute)
 	t.Cleanup(cancel)
 	list := &unstructured.UnstructuredList{}
-	list.SetGroupVersionKind(schema.GroupVersionKind{Group: "chaos-mesh.org", Version: "v1alpha1", Kind: "NetworkChaosList"})
+	list.SetGroupVersionKind(
+		schema.GroupVersionKind{Group: "chaos-mesh.org", Version: "v1alpha1", Kind: "NetworkChaosList"},
+	)
 	if err := f.admin.List(f.ctx, list, client.InNamespace(namespace)); err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +98,11 @@ func newFaultFixture(t *testing.T, namespace, network string, enrolled bool) *fa
 		}
 		f.wait("current CEL compilation", 30*time.Second, func() bool {
 			policy := &admissionv1.ValidatingAdmissionPolicy{}
-			if err := f.admin.Get(f.ctx, client.ObjectKey{Name: "stacks-network-faults-" + namespace}, policy); err != nil {
+			if err := f.admin.Get(
+				f.ctx,
+				client.ObjectKey{Name: "stacks-network-faults-" + namespace},
+				policy,
+			); err != nil {
 				t.Fatal(err)
 			}
 			if policy.Status.ObservedGeneration != policy.Generation || policy.Status.TypeChecking == nil {
@@ -100,11 +117,16 @@ func newFaultFixture(t *testing.T, namespace, network string, enrolled bool) *fa
 		t.Fatal("administrative control-loss fixture must not be agent-enrolled")
 	}
 	secret := &corev1.Secret{}
-	if err := f.admin.Get(f.ctx, client.ObjectKey{Namespace: namespace, Name: "stacks-bitcoin-observer-rpc"}, secret); err != nil {
+	if err := f.admin.Get(
+		f.ctx,
+		client.ObjectKey{Namespace: namespace, Name: "stacks-bitcoin-observer-rpc"},
+		secret,
+	); err != nil {
 		t.Fatal(err)
 	}
 	var credentials struct{ Username, Password string }
-	if json.Unmarshal(secret.Data["credentials.json"], &credentials) != nil || credentials.Username == "" || credentials.Password == "" {
+	if json.Unmarshal(secret.Data["credentials.json"], &credentials) != nil || credentials.Username == "" ||
+		credentials.Password == "" {
 		t.Fatal("invalid observer credentials")
 	}
 	f.username, f.password = credentials.Username, credentials.Password
@@ -149,7 +171,11 @@ func (f *faultFixture) object(group, kind, name string) *unstructured.Unstructur
 func (f *faultFixture) pod(actor string) *corev1.Pod {
 	f.t.Helper()
 	pod := &corev1.Pod{}
-	if err := f.admin.Get(f.ctx, client.ObjectKey{Namespace: f.namespace, Name: f.network + "-" + actor + "-0"}, pod); err != nil {
+	if err := f.admin.Get(
+		f.ctx,
+		client.ObjectKey{Namespace: f.namespace, Name: f.network + "-" + actor + "-0"},
+		pod,
+	); err != nil {
 		f.t.Fatal(err)
 	}
 	if pod.Status.PodIP == "" {
@@ -164,7 +190,8 @@ func (f *faultFixture) pod(actor string) *corev1.Pod {
 		}
 		for i, before := range old.Status.ContainerStatuses {
 			after := pod.Status.ContainerStatuses[i]
-			if before.Name != after.Name || before.ContainerID != after.ContainerID || before.RestartCount != after.RestartCount {
+			if before.Name != after.Name || before.ContainerID != after.ContainerID ||
+				before.RestartCount != after.RestartCount {
 				f.t.Fatal("actor process changed during qualification")
 			}
 		}
@@ -178,7 +205,11 @@ func (f *faultFixture) pod(actor string) *corev1.Pod {
 
 // command uses the explicitly selected cluster and never includes credentials in argv.
 func (f *faultFixture) command(ctx context.Context, args ...string) *exec.Cmd {
-	return exec.CommandContext(ctx, "kubectl", append([]string{"--kubeconfig", f.kubeconfig, "--context", f.kubecontext, "-n", f.namespace}, args...)...)
+	// #nosec G204 G702 -- Fixed executable and separate arguments from the test harness; no shell evaluation.
+	return exec.CommandContext(
+		ctx,
+		"kubectl",
+		append([]string{"--kubeconfig", f.kubeconfig, "--context", f.kubecontext, "-n", f.namespace}, args...)...)
 }
 
 // rpc sends observer credentials on stdin; its timeout is solely a read-only probe bound.
@@ -190,7 +221,21 @@ func (f *faultFixture) rpc(actor, address, port, method string, result any) erro
 func (f *faultFixture) observerRPC(parent context.Context, pod, address, port, method string, result any) error {
 	ctx, cancel := context.WithTimeout(parent, 5*time.Second)
 	defer cancel()
-	command := f.command(ctx, "exec", "-i", pod, "--", "bitcoin-cli", "-regtest", "-rpcconnect="+address, "-rpcport="+port, "-rpcclienttimeout=2", "-rpcuser="+f.username, "-stdinrpcpass", method)
+	command := f.command(
+		ctx,
+		"exec",
+		"-i",
+		pod,
+		"--",
+		"bitcoin-cli",
+		"-regtest",
+		"-rpcconnect="+address,
+		"-rpcport="+port,
+		"-rpcclienttimeout=2",
+		"-rpcuser="+f.username,
+		"-stdinrpcpass",
+		method,
+	)
 	command.Stdin = strings.NewReader(f.password + "\n")
 	output, err := command.Output()
 	if err != nil {
@@ -233,7 +278,13 @@ func (f *faultFixture) pause(paused bool, actors ...string) {
 	f.wait("production policy update", 10*time.Second, func() bool {
 		o := f.object("network.stacks.org", "StacksNetwork", f.network)
 		base := o.DeepCopy()
-		if err := unstructured.SetNestedField(o.Object, paused, "spec", "bitcoinBlockProduction", "paused"); err != nil {
+		if err := unstructured.SetNestedField(
+			o.Object,
+			paused,
+			"spec",
+			"bitcoinBlockProduction",
+			"paused",
+		); err != nil {
 			f.t.Fatal(err)
 		}
 		err := f.admin.Patch(f.ctx, o, client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{}))
@@ -261,13 +312,29 @@ func (f *faultFixture) pause(paused bool, actors ...string) {
 
 // partition constructs one native actor-to-actor fault within the public profile.
 func (f *faultFixture) partition(name, source, target, duration string) *unstructured.Unstructured {
-	selector := func(actor string) map[string]any {
+	selector := func(_ string) map[string]any {
 		return map[string]any{"namespaces": []any{f.namespace}}
 	}
-	o := &unstructured.Unstructured{Object: map[string]any{"apiVersion": "chaos-mesh.org/v1alpha1", "kind": "NetworkChaos", "spec": map[string]any{"action": "partition", "mode": "one", "direction": "both", "duration": duration, "selector": selector(source), "target": map[string]any{"mode": "one", "selector": selector(target)}}}}
+	o := &unstructured.Unstructured{
+		Object: map[string]any{
+			"apiVersion": "chaos-mesh.org/v1alpha1",
+			"kind":       "NetworkChaos",
+			"spec": map[string]any{
+				"action":    "partition",
+				"mode":      "one",
+				"direction": "both",
+				"duration":  duration,
+				"selector":  selector(source),
+				"target":    map[string]any{"mode": "one", "selector": selector(target)},
+			},
+		},
+	}
 	o.SetNamespace(f.namespace)
 	o.SetName(name)
-	o.SetLabels(map[string]string{"network.stacks.org/network": f.network, "actions.stacks.org/correlation-id": name})
+	o.SetLabels(map[string]string{
+		"network.stacks.org/network":        f.network,
+		"actions.stacks.org/correlation-id": name,
+	})
 	if f.profileEnrolled {
 		if err := chaosprofile.BindActors(f.ctx, f.admin, o, source, target); err != nil {
 			f.t.Fatal(err)
@@ -279,7 +346,10 @@ func (f *faultFixture) partition(name, source, target, duration string) *unstruc
 			if i == 1 {
 				path = []string{"spec", "target", "selector", "labelSelectors"}
 			}
-			_ = unstructured.SetNestedStringMap(o.Object, map[string]string{"network.stacks.org/network": f.network, "network.stacks.org/actor": actor}, path...)
+			_ = unstructured.SetNestedStringMap(
+				o.Object,
+				map[string]string{"network.stacks.org/network": f.network, "network.stacks.org/actor": actor},
+				path...)
 		}
 	}
 	return o
@@ -367,14 +437,22 @@ func TestLiveBitcoinPartition(t *testing.T) {
 	for _, expiry := range []bool{false, true} {
 		name := fmt.Sprintf("bitcoin-partition-expiry-%t", expiry)
 		f.pause(true, "bitcoin", "bitcoin-2")
-		f.wait("common starting chain", 90*time.Second, func() bool { _, a := f.chain("bitcoin"); _, b := f.chain("bitcoin-2"); return a == b })
+		f.wait(
+			"common starting chain",
+			90*time.Second,
+			func() bool { _, a := f.chain("bitcoin"); _, b := f.chain("bitcoin-2"); return a == b },
+		)
 		f.checkPeerRPC(true)
 		fault := f.partition(name, "bitcoin", "bitcoin-2", "60s")
 		f.inject(fault)
 		startA, startB := f.receipts("bitcoin"), f.receipts("bitcoin-2")
 		f.pause(false)
 		f.checkPeerRPC(false)
-		f.wait("both independent producer receipt paths", 35*time.Second, func() bool { return f.receipts("bitcoin") > startA && f.receipts("bitcoin-2") > startB })
+		f.wait(
+			"both independent producer receipt paths",
+			35*time.Second,
+			func() bool { return f.receipts("bitcoin") > startA && f.receipts("bitcoin-2") > startB },
+		)
 		// Compare drained tips: an in-flight receipt can change relative work while pause propagates.
 		f.wait("stable unequal split-chain work", 25*time.Second, func() bool {
 			f.pause(true, "bitcoin", "bitcoin-2")
@@ -395,18 +473,37 @@ func TestLiveBitcoinPartition(t *testing.T) {
 		if a == b || ha == hb || !f.condition(name, "AllInjected") || f.condition(name, "AllRecovered") {
 			t.Fatal("split-chain evidence not established during injection")
 		}
-		t.Logf("split tips=%d/%s,%d/%s; receipts=%d->%d,%d->%d", a, ha, b, hb, startA, f.receipts("bitcoin"), startB, f.receipts("bitcoin-2"))
+		t.Logf(
+			"split tips=%d/%s,%d/%s; receipts=%d->%d,%d->%d",
+			a,
+			ha,
+			b,
+			hb,
+			startA,
+			f.receipts("bitcoin"),
+			startB,
+			f.receipts("bitcoin-2"),
+		)
 		// Delay and partition consume the same existing-object quota.
 		extra := f.partition("quota-probe", "bitcoin", "bitcoin-2", "10s")
 		_ = unstructured.SetNestedField(extra.Object, "delay", "spec", "action")
 		_ = unstructured.SetNestedField(extra.Object, "to", "spec", "direction")
 		_ = unstructured.SetNestedField(extra.Object, map[string]any{"latency": "100ms"}, "spec", "delay")
-		if err := f.admin.Create(f.ctx, extra, client.DryRunAll); err == nil || !strings.Contains(err.Error(), "exceeded quota") {
+		if err := f.admin.Create(
+			f.ctx,
+			extra,
+			client.DryRunAll,
+		); err == nil ||
+			!strings.Contains(err.Error(), "exceeded quota") {
 			t.Fatalf("combined quota: %v", err)
 		}
 		f.recover(fault, expiry)
 		f.checkPeerRPC(true)
-		f.wait("heavier-chain reconvergence", 90*time.Second, func() bool { _, a := f.chain("bitcoin"); _, b := f.chain("bitcoin-2"); return a == b })
+		f.wait(
+			"heavier-chain reconvergence",
+			90*time.Second,
+			func() bool { _, a := f.chain("bitcoin"); _, b := f.chain("bitcoin-2"); return a == b },
+		)
 		_, tip := f.chain("bitcoin")
 		expected := ha
 		if b > a {
@@ -417,7 +514,11 @@ func TestLiveBitcoinPartition(t *testing.T) {
 		}
 		before := f.receipts("bitcoin") + f.receipts("bitcoin-2")
 		f.pause(false)
-		f.wait("production after reconnection", 20*time.Second, func() bool { return f.receipts("bitcoin")+f.receipts("bitcoin-2") > before })
+		f.wait(
+			"production after reconnection",
+			20*time.Second,
+			func() bool { return f.receipts("bitcoin")+f.receipts("bitcoin-2") > before },
+		)
 		t.Logf("rejoined tip=%s; production resumed", tip)
 		f.pod("bitcoin")
 		f.pod("bitcoin-2")
@@ -469,13 +570,23 @@ func TestLiveStacksBitcoinPartition(t *testing.T) {
 		f.logCycleContext("injected: " + name)
 		f.wait("selected miner burn-chain lag", 30*time.Second, func() bool {
 			height, _ := f.chain("bitcoin")
-			return f.receipts("bitcoin") >= receipts+2 && height-f.stacksBurnHeight("miner") >= 2 && f.stacksBurnHeight("signer-node") > f.stacksBurnHeight("miner")
+			return f.receipts("bitcoin") >= receipts+2 && height-f.stacksBurnHeight("miner") >= 2 &&
+				f.stacksBurnHeight("signer-node") > f.stacksBurnHeight("miner")
 		})
 		if !f.condition(name, "AllInjected") || f.condition(name, "AllRecovered") {
 			t.Fatal("lag not observed during active fault")
 		}
 		height, _ := f.chain("bitcoin")
-		t.Logf("during fault: Core=%d miner=%d signer-node=%d; Bitcoin receipts=%d->%d; confirmed=%d->%d", height, f.stacksBurnHeight("miner"), f.stacksBurnHeight("signer-node"), receipts, f.receipts("bitcoin"), before, confirmed())
+		t.Logf(
+			"during fault: Core=%d miner=%d signer-node=%d; Bitcoin receipts=%d->%d; confirmed=%d->%d",
+			height,
+			f.stacksBurnHeight("miner"),
+			f.stacksBurnHeight("signer-node"),
+			receipts,
+			f.receipts("bitcoin"),
+			before,
+			confirmed(),
+		)
 		f.recover(fault, expiry)
 		f.logCycleContext("native cleanup: " + name)
 		after := confirmed()

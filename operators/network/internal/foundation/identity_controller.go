@@ -89,19 +89,34 @@ func (r *IdentityReconciler) Reconcile(ctx context.Context, request ctrl.Request
 		*status = result
 	}
 	status.ObservedGeneration = obj.GetGeneration()
-	meta.SetStatusCondition(&status.Conditions, metav1.Condition{Type: common.ConditionResolved, Status: condition, Reason: reason, Message: message, ObservedGeneration: obj.GetGeneration()})
+	meta.SetStatusCondition(
+		&status.Conditions,
+		metav1.Condition{
+			Type:               common.ConditionResolved,
+			Status:             condition,
+			Reason:             reason,
+			Message:            message,
+			ObservedGeneration: obj.GetGeneration(),
+		},
+	)
 	if !equal(previous, *status) {
-		if err := r.Client.Status().Patch(ctx, obj, client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{})); err != nil {
+		if err := r.Client.Status().
+			Patch(ctx, obj, client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{})); err != nil {
 			return ctrl.Result{}, err
 		}
 	}
-	if resolveErr != nil && !errors.Is(resolveErr, errResolverFailed) && !errors.Is(resolveErr, ErrUnsupportedWalletProfile) {
+	if resolveErr != nil && !errors.Is(resolveErr, errResolverFailed) &&
+		!errors.Is(resolveErr, ErrUnsupportedWalletProfile) {
 		return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
 	}
 	return ctrl.Result{}, nil
 }
 
-func (r *IdentityReconciler) resolve(ctx context.Context, obj resolvable, inputDigest string) (common.ResolutionStatus, error) {
+func (r *IdentityReconciler) resolve(
+	ctx context.Context,
+	obj resolvable,
+	inputDigest string,
+) (common.ResolutionStatus, error) {
 	status := *obj.GetResolutionStatus().DeepCopy()
 	var imported *common.SecretKeyRef
 	generated, descriptor := true, false
@@ -127,7 +142,11 @@ func (r *IdentityReconciler) resolve(ctx context.Context, obj resolvable, inputD
 		if key := v.Spec.KeySource; key != nil {
 			if key.StacksMinerAccountRef != nil {
 				var account stacks.StacksAccount
-				if err := r.Reader.Get(ctx, types.NamespacedName{Namespace: v.Namespace, Name: key.StacksMinerAccountRef.Name}, &account); err != nil {
+				if err := r.Reader.Get(
+					ctx,
+					types.NamespacedName{Namespace: v.Namespace, Name: key.StacksMinerAccountRef.Name},
+					&account,
+				); err != nil {
 					return status, fmt.Errorf("miner account unavailable")
 				}
 				if !resolved(&account) {
@@ -136,12 +155,21 @@ func (r *IdentityReconciler) resolve(ctx context.Context, obj resolvable, inputD
 				if len(status.Dependencies) > 0 && status.Dependencies[0].UID != account.UID {
 					return status, fmt.Errorf("miner account identity changed")
 				}
-				status.Dependencies = []common.Binding{objectref.WithFingerprint(objectref.Account(&account), account.Status.Digest)}
+				status.Dependencies = []common.Binding{
+					objectref.WithFingerprint(objectref.Account(&account), account.Status.Digest),
+				}
 				public, err := identity.FromPublic(account.Status.Identity.PublicKey)
 				if err != nil {
 					return status, err
 				}
-				return resolvedIdentity(status, public, "pkh("+public.MiningPublicKey+")", public.MiningAddress, nil, ""), nil
+				return resolvedIdentity(
+					status,
+					public,
+					"pkh("+public.MiningPublicKey+")",
+					public.MiningAddress,
+					nil,
+					"",
+				), nil
 			}
 			if key.SecretRef != nil {
 				imported = key.SecretRef
@@ -154,15 +182,25 @@ func (r *IdentityReconciler) resolve(ctx context.Context, obj resolvable, inputD
 	if r.Wallet {
 		kind = bitcoin.KindBitcoinWallet
 	}
-	credentials := common.SecretKeyRef{Name: RuntimeName("", string(obj.GetUID()), kind, obj.GetName(), "key"), Key: "privateKey"}
+	credentials := common.SecretKeyRef{
+		Name: RuntimeName("", string(obj.GetUID()), kind, obj.GetName(), "key"),
+		Key:  "privateKey",
+	}
 	if imported != nil {
 		credentials = *imported
 	}
-	metadata := &metav1.PartialObjectMetadata{TypeMeta: metav1.TypeMeta{APIVersion: corev1.SchemeGroupVersion.String(), Kind: common.KindSecret}}
+	metadata := &metav1.PartialObjectMetadata{
+		TypeMeta: metav1.TypeMeta{APIVersion: corev1.SchemeGroupVersion.String(), Kind: common.KindSecret},
+	}
 	err := r.Reader.Get(ctx, types.NamespacedName{Namespace: obj.GetNamespace(), Name: credentials.Name}, metadata)
 	if apierrors.IsNotFound(err) && generated && status.Digest == "" {
 		empty := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: credentials.Name, Namespace: obj.GetNamespace()}}
-		if err := controllerutil.SetControllerReference(obj, empty, r.Scheme, controllerutil.WithBlockOwnerDeletion(false)); err != nil {
+		if err := controllerutil.SetControllerReference(
+			obj,
+			empty,
+			r.Scheme,
+			controllerutil.WithBlockOwnerDeletion(false),
+		); err != nil {
 			return status, err
 		}
 		if err := r.Client.Create(ctx, empty); err != nil && !apierrors.IsAlreadyExists(err) {
@@ -176,11 +214,26 @@ func (r *IdentityReconciler) resolve(ctx context.Context, obj resolvable, inputD
 	if generated && !ownedUID(metadata, obj.GetUID()) {
 		return status, fmt.Errorf("generated credential has foreign ownership")
 	}
-	if status.Digest != "" && (status.CredentialsUID != metadata.UID || status.CredentialsRef == nil || *status.CredentialsRef != credentials) {
+	if status.Digest != "" &&
+		(status.CredentialsUID != metadata.UID ||
+			status.CredentialsRef == nil ||
+			*status.CredentialsRef != credentials) {
 		return status, fmt.Errorf("credential identity changed")
 	}
-	reportName := RuntimeName("", string(obj.GetUID()), kind, obj.GetName(), "report-"+strings.TrimPrefix(inputDigest, "sha256:"))
-	report := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: reportName, Namespace: obj.GetNamespace(), Labels: map[string]string{managedByLabel: foundationManager}}}
+	reportName := RuntimeName(
+		"",
+		string(obj.GetUID()),
+		kind,
+		obj.GetName(),
+		"report-"+strings.TrimPrefix(inputDigest, "sha256:"),
+	)
+	report := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      reportName,
+			Namespace: obj.GetNamespace(),
+			Labels:    map[string]string{managedByLabel: foundationManager},
+		},
+	}
 	if err := createOwned(ctx, r.Client, r.Scheme, obj, report); err != nil {
 		return status, err
 	}
@@ -195,7 +248,8 @@ func (r *IdentityReconciler) resolve(ctx context.Context, obj resolvable, inputD
 		if len(data) > 16384 || json.Unmarshal([]byte(data), &result) != nil {
 			return status, fmt.Errorf("invalid public identity report")
 		}
-		if result.SourceUID != obj.GetUID() || result.InputDigest != inputDigest || result.CredentialsUID != metadata.UID {
+		if result.SourceUID != obj.GetUID() || result.InputDigest != inputDigest ||
+			result.CredentialsUID != metadata.UID {
 			return status, fmt.Errorf("identity report binding changed")
 		}
 		verified, err := identity.FromPublic(result.Public.PublicKey)
@@ -208,16 +262,39 @@ func (r *IdentityReconciler) resolve(ctx context.Context, obj resolvable, inputD
 				return status, fmt.Errorf("invalid public wallet report")
 			}
 		}
-		return resolvedIdentity(status, result.Public, result.Descriptor, result.BitcoinAddress, &credentials, metadata.UID), nil
+		return resolvedIdentity(
+			status,
+			result.Public,
+			result.Descriptor,
+			result.BitcoinAddress,
+			&credentials,
+			metadata.UID,
+		), nil
 	}
-	in := KeyJobInput{Namespace: obj.GetNamespace(), SourceUID: obj.GetUID(), InputDigest: inputDigest, CredentialsRef: credentials, CredentialsUID: metadata.UID, Generate: generated, Descriptor: descriptor, ReportName: report.Name, ReportUID: report.UID}
+	in := KeyJobInput{
+		Namespace:      obj.GetNamespace(),
+		SourceUID:      obj.GetUID(),
+		InputDigest:    inputDigest,
+		CredentialsRef: credentials,
+		CredentialsUID: metadata.UID,
+		Generate:       generated,
+		Descriptor:     descriptor,
+		ReportName:     report.Name,
+		ReportUID:      report.UID,
+	}
 	if err := provisionKeyJob(ctx, r.Client, r.Reader, r.Scheme, obj, r.Image, in); err != nil {
 		return status, err
 	}
 	return status, fmt.Errorf("waiting for scoped identity resolver report")
 }
 
-func resolvedIdentity(status common.ResolutionStatus, p identity.Public, descriptor, address string, credentials *common.SecretKeyRef, uid types.UID) common.ResolutionStatus {
+func resolvedIdentity(
+	status common.ResolutionStatus,
+	p identity.Public,
+	descriptor, address string,
+	credentials *common.SecretKeyRef,
+	uid types.UID,
+) common.ResolutionStatus {
 	status.Identity = &common.PublicIdentity{Address: p.Address, PublicKey: p.PublicKey}
 	status.CredentialsRef = credentials
 	status.CredentialsUID = uid
@@ -229,9 +306,11 @@ func resolvedIdentity(status common.ResolutionStatus, p identity.Public, descrip
 	}{*status.Identity, descriptor})
 	return status
 }
+
 func resolved(obj resolvable) bool {
 	s := obj.GetResolutionStatus()
-	return obj.GetDeletionTimestamp() == nil && s.ObservedGeneration == obj.GetGeneration() && s.Identity != nil && meta.IsStatusConditionTrue(s.Conditions, common.ConditionResolved)
+	return obj.GetDeletionTimestamp() == nil && s.ObservedGeneration == obj.GetGeneration() && s.Identity != nil &&
+		meta.IsStatusConditionTrue(s.Conditions, common.ConditionResolved)
 }
 
 // SetupWithManager registers targeted public-report and metadata-only credential notifications.
@@ -250,7 +329,16 @@ func DefaultAccountName(name, suffix string) string {
 }
 
 // EnsureDefaultAccount creates an independently or instance-owned generated identity.
-func EnsureDefaultAccount(ctx context.Context, c client.Client, s *runtime.Scheme, owner client.Object, name string) error {
-	account := &stacks.StacksAccount{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: owner.GetNamespace()}, Spec: stacks.StacksAccountSpec{Key: &common.KeySource{Generate: ptr.To(true)}}}
+func EnsureDefaultAccount(
+	ctx context.Context,
+	c client.Client,
+	s *runtime.Scheme,
+	owner client.Object,
+	name string,
+) error {
+	account := &stacks.StacksAccount{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: owner.GetNamespace()},
+		Spec:       stacks.StacksAccountSpec{Key: &common.KeySource{Generate: ptr.To(true)}},
+	}
 	return createOwned(ctx, c, s, owner, account)
 }

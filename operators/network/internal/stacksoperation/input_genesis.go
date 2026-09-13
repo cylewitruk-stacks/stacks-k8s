@@ -12,9 +12,18 @@ import (
 )
 
 // inputGenesis verifies current instance membership and the immutable public chain artifact.
-func (r PublicInputs) inputGenesis(ctx context.Context, s stacksworker.Snapshot, kind api.ParticipantKind) (*api.StacksGenesis, error) {
+func (r PublicInputs) inputGenesis(
+	ctx context.Context,
+	s stacksworker.Snapshot,
+	kind api.ParticipantKind,
+) (*api.StacksGenesis, error) {
 	root, p := s.Network, s.Participant
-	if r.Reader == nil || root == nil || p == nil || root.UID == "" || p.UID == "" || p.Status.Admission == nil || p.Spec.Kind != kind || p.Namespace != root.Namespace || p.Spec.NetworkUID != root.UID || p.DeletionTimestamp != nil || !metav1.IsControlledBy(p, root) {
+	if r.Reader == nil || root == nil || p == nil || root.UID == "" || p.UID == "" || p.Status.Admission == nil ||
+		p.Spec.Kind != kind ||
+		p.Namespace != root.Namespace ||
+		p.Spec.NetworkUID != root.UID ||
+		p.DeletionTimestamp != nil ||
+		!metav1.IsControlledBy(p, root) {
 		return nil, errors.New("current worker admission unavailable")
 	}
 	selected, allocated := false, false
@@ -32,14 +41,20 @@ func (r PublicInputs) inputGenesis(ctx context.Context, s stacksworker.Snapshot,
 	if err := r.Reader.Get(ctx, client.ObjectKey{Namespace: root.Namespace, Name: ref.Name}, &genesis); err != nil {
 		return nil, err
 	}
-	if genesis.UID != ref.UID || genesis.Spec.Source.NetworkUID != root.UID || genesis.DeletionTimestamp != nil || !metav1.IsControlledBy(&genesis, root) || foundation.Digest(genesis.Spec.Chain) != root.Status.GenesisDigest || foundation.Digest(genesis.Spec) != ref.Fingerprint {
+	if genesis.UID != ref.UID || genesis.Spec.Source.NetworkUID != root.UID || genesis.DeletionTimestamp != nil ||
+		!metav1.IsControlledBy(&genesis, root) ||
+		foundation.Digest(genesis.Spec.Chain) != root.Status.GenesisDigest ||
+		foundation.Digest(genesis.Spec) != ref.Fingerprint {
 		return nil, errors.New("frozen genesis identity unavailable")
 	}
 	return &genesis, nil
 }
 
 // initialRequirement distinguishes original participants from independently admitted later instances.
-func initialRequirement(genesis *api.StacksGenesis, p *api.StacksNetworkParticipant) (*api.BootstrapRequirement, error) {
+func initialRequirement(
+	genesis *api.StacksGenesis,
+	p *api.StacksNetworkParticipant,
+) (*api.BootstrapRequirement, error) {
 	for i := range genesis.Spec.Bootstrap.Requirements {
 		required := &genesis.Spec.Bootstrap.Requirements[i]
 		if required.Participant.Name == p.Name && required.Participant.UID != p.UID {

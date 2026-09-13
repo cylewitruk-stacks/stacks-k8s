@@ -27,19 +27,78 @@ type readOnlyEvidenceClient struct {
 	reader client.Reader
 }
 
-func (c readOnlyEvidenceClient) Get(ctx context.Context, key client.ObjectKey, out client.Object, opts ...client.GetOption) error {
+func (c readOnlyEvidenceClient) Get(
+	ctx context.Context,
+	key client.ObjectKey,
+	out client.Object,
+	opts ...client.GetOption,
+) error {
 	return c.reader.Get(ctx, key, out, opts...)
 }
+
 func (c readOnlyEvidenceClient) List(ctx context.Context, out client.ObjectList, opts ...client.ListOption) error {
 	return c.reader.List(ctx, out, opts...)
 }
 
 func TestOperatorArtifactRecordsOwnedRuntimeWithoutMutation(t *testing.T) {
-	for _, mode := range []string{"valid", "replaced-deployment", "foreign-rs", "foreign-pod", "missing-image", "pending-pod", "missing-status"} {
+	for _, mode := range []string{
+		"valid",
+		"replaced-deployment",
+		"foreign-rs",
+		"foreign-pod",
+		"missing-image",
+		"pending-pod",
+		"missing-status",
+	} {
 		t.Run(mode, func(t *testing.T) {
-			dep := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "operator", Namespace: "system", UID: "dep"}, Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "manager", Image: "operator:new", Env: []corev1.EnvVar{{Name: "PRIVATE", Value: "must-not-record"}}}}}}}}
-			rs := &appsv1.ReplicaSet{ObjectMeta: metav1.ObjectMeta{Name: "rs", Namespace: "system", UID: "rs", OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(dep, appsv1.SchemeGroupVersion.WithKind("Deployment"))}}}
-			pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod", Namespace: "system", UID: "pod", OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(rs, appsv1.SchemeGroupVersion.WithKind("ReplicaSet"))}}, Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "manager", Image: "operator:old"}}}, Status: corev1.PodStatus{Phase: corev1.PodRunning, ContainerStatuses: []corev1.ContainerStatus{{Name: "manager", ImageID: "runtime://sha256:actual", ContainerID: "containerd://process", State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}}}}}}
+			dep := &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{Name: "operator", Namespace: "system", UID: "dep"},
+				Spec: appsv1.DeploymentSpec{
+					Template: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{
+								{
+									Name:  "manager",
+									Image: "operator:new",
+									Env:   []corev1.EnvVar{{Name: "PRIVATE", Value: "must-not-record"}},
+								},
+							},
+						},
+					},
+				},
+			}
+			rs := &appsv1.ReplicaSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "rs",
+					Namespace: "system",
+					UID:       "rs",
+					OwnerReferences: []metav1.OwnerReference{
+						*metav1.NewControllerRef(dep, appsv1.SchemeGroupVersion.WithKind("Deployment")),
+					},
+				},
+			}
+			pod := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "pod",
+					Namespace: "system",
+					UID:       "pod",
+					OwnerReferences: []metav1.OwnerReference{
+						*metav1.NewControllerRef(rs, appsv1.SchemeGroupVersion.WithKind("ReplicaSet")),
+					},
+				},
+				Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "manager", Image: "operator:old"}}},
+				Status: corev1.PodStatus{
+					Phase: corev1.PodRunning,
+					ContainerStatuses: []corev1.ContainerStatus{
+						{
+							Name:        "manager",
+							ImageID:     "runtime://sha256:actual",
+							ContainerID: "containerd://process",
+							State:       corev1.ContainerState{Running: &corev1.ContainerStateRunning{}},
+						},
+					},
+				},
+			}
 			switch mode {
 			case "replaced-deployment":
 				dep.UID = "replacement"
@@ -58,7 +117,11 @@ func TestOperatorArtifactRecordsOwnedRuntimeWithoutMutation(t *testing.T) {
 			_ = appsv1.AddToScheme(scheme)
 			_ = corev1.AddToScheme(scheme)
 			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(dep, rs, pod).Build()
-			h := harness{c: readOnlyEvidenceClient{reader: c}, config: liveConfig{operatorNamespace: "system", operatorName: "operator", operatorUID: "dep"}, evidence: t.TempDir()}
+			h := harness{
+				c:        readOnlyEvidenceClient{reader: c},
+				config:   liveConfig{operatorNamespace: "system", operatorName: "operator", operatorUID: "dep"},
+				evidence: t.TempDir(),
+			}
 			err := h.recordOperator(context.Background())
 			if mode != "valid" {
 				if err == nil {
@@ -82,7 +145,10 @@ func TestOperatorArtifactRecordsOwnedRuntimeWithoutMutation(t *testing.T) {
 			if err := json.Unmarshal(data, &event); err != nil {
 				t.Fatal(err)
 			}
-			if event.Details.Requested["manager"] != "operator:new" || len(event.Details.Pods) != 1 || event.Details.Pods[0].Containers[0].Image != "operator:old" || event.Details.Pods[0].Containers[0].ImageID != "runtime://sha256:actual" || strings.Contains(string(data), "must-not-record") {
+			if event.Details.Requested["manager"] != "operator:new" || len(event.Details.Pods) != 1 ||
+				event.Details.Pods[0].Containers[0].Image != "operator:old" ||
+				event.Details.Pods[0].Containers[0].ImageID != "runtime://sha256:actual" ||
+				strings.Contains(string(data), "must-not-record") {
 				t.Fatalf("incorrect public image evidence: %s", data)
 			}
 		})
@@ -92,8 +158,26 @@ func TestOperatorArtifactRecordsOwnedRuntimeWithoutMutation(t *testing.T) {
 func TestGenesisArtifactPinsIdentityAndRecordsFrozenGatesOnce(t *testing.T) {
 	for _, mode := range []string{"valid", "replaced", "foreign-root", "foreign-owner"} {
 		t.Run(mode, func(t *testing.T) {
-			root := &api.StacksNetwork{ObjectMeta: metav1.ObjectMeta{Name: "network", Namespace: "lab", UID: "network"}, Status: api.StacksNetworkStatus{GenesisRef: &common.Binding{Name: "genesis", UID: "genesis"}}}
-			genesis := &api.StacksGenesis{ObjectMeta: metav1.ObjectMeta{Name: "genesis", Namespace: "lab", UID: "genesis", OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(root, api.GroupVersion.WithKind("StacksNetwork"))}}, Spec: api.StacksGenesisSpec{Source: api.GenesisSource{NetworkUID: root.UID}, Bootstrap: api.Bootstrap{Gates: []api.Gate{{Name: "EnrollPoX5", BitcoinCeiling: 294, TargetCycle: ptr.To(int64(15))}}}}}
+			root := &api.StacksNetwork{
+				ObjectMeta: metav1.ObjectMeta{Name: "network", Namespace: "lab", UID: "network"},
+				Status:     api.StacksNetworkStatus{GenesisRef: &common.Binding{Name: "genesis", UID: "genesis"}},
+			}
+			genesis := &api.StacksGenesis{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "genesis",
+					Namespace: "lab",
+					UID:       "genesis",
+					OwnerReferences: []metav1.OwnerReference{
+						*metav1.NewControllerRef(root, api.GroupVersion.WithKind("StacksNetwork")),
+					},
+				},
+				Spec: api.StacksGenesisSpec{
+					Source: api.GenesisSource{NetworkUID: root.UID},
+					Bootstrap: api.Bootstrap{
+						Gates: []api.Gate{{Name: "EnrollPoX5", BitcoinCeiling: 294, TargetCycle: ptr.To(int64(15))}},
+					},
+				},
+			}
 			switch mode {
 			case "replaced":
 				genesis.UID = "other"
@@ -131,7 +215,9 @@ func TestGenesisArtifactPinsIdentityAndRecordsFrozenGatesOnce(t *testing.T) {
 			if err := json.Unmarshal(data, &event); err != nil {
 				t.Fatal(err)
 			}
-			if len(event.Details.Gates) != 1 || event.Details.Gates[0].BitcoinCeiling != 294 || *event.Details.Gates[0].TargetCycle != 15 || strings.Count(string(data), "\n") != 1 {
+			if len(event.Details.Gates) != 1 || event.Details.Gates[0].BitcoinCeiling != 294 ||
+				*event.Details.Gates[0].TargetCycle != 15 ||
+				strings.Count(string(data), "\n") != 1 {
 				t.Fatalf("incorrect frozen gates: %s", data)
 			}
 		})
@@ -139,7 +225,17 @@ func TestGenesisArtifactPinsIdentityAndRecordsFrozenGatesOnce(t *testing.T) {
 }
 
 func TestOperatorEvidenceSelectionDoesNotEnableRestart(t *testing.T) {
-	for key, value := range map[string]string{"KUBECONFIG": "selected", "CONTEXT": "kind-test", "NAMESPACE": "fresh", "BITCOIN_IMAGE": "bitcoin:test", "STACKS_IMAGE": "stacks:test", "OPERATOR_NAMESPACE": "system", "OPERATOR_NAME": "operator", "OPERATOR_UID": "dep", "OPERATOR_RESTART": ""} {
+	for key, value := range map[string]string{
+		"KUBECONFIG":         "selected",
+		"CONTEXT":            "kind-test",
+		"NAMESPACE":          "fresh",
+		"BITCOIN_IMAGE":      "bitcoin:test",
+		"STACKS_IMAGE":       "stacks:test",
+		"OPERATOR_NAMESPACE": "system",
+		"OPERATOR_NAME":      "operator",
+		"OPERATOR_UID":       "dep",
+		"OPERATOR_RESTART":   "",
+	} {
 		t.Setenv("STACKS_PUBLIC_"+key, value)
 	}
 	c, err := readConfig()

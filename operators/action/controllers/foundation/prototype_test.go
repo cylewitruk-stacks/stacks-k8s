@@ -10,7 +10,10 @@ import (
 
 // TestActionPrototypeIsolation pins each status view to a fresh supported object.
 func TestActionPrototypeIsolation(t *testing.T) {
-	for _, prototype := range []client.Object{&action.BitcoinBlockGeneration{}, &action.BitcoinReorganization{}} {
+	for _, prototype := range []client.Object{
+		&action.BitcoinBlockGeneration{},
+		&action.BitcoinReorganization{},
+	} {
 		r := &Reconciler{Prototype: prototype}
 		first, status, err := r.object()
 		if err != nil {
@@ -42,7 +45,12 @@ func TestActionPrototypeIsolation(t *testing.T) {
 
 // TestActionPrototypeRejectsUnsupportedTypes keeps scheme registration separate from authority.
 func TestActionPrototypeRejectsUnsupportedTypes(t *testing.T) {
-	for _, prototype := range []client.Object{nil, (*action.BitcoinBlockGeneration)(nil), (*action.BitcoinReorganization)(nil), &corev1.Pod{}} {
+	for _, prototype := range []client.Object{
+		nil,
+		(*action.BitcoinBlockGeneration)(nil),
+		(*action.BitcoinReorganization)(nil),
+		&corev1.Pod{},
+	} {
 		r := &Reconciler{Prototype: prototype}
 		if object, status, err := r.object(); err == nil || object != nil || status != nil {
 			t.Fatalf("accepted %T", prototype)

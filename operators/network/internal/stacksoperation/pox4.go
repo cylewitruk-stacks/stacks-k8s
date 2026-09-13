@@ -58,7 +58,12 @@ func NewPoX4Role(holderKey, holder, signerKey, signerPublic string) (*PoX4Role, 
 	if err != nil || s.PublicKey != signerPublic {
 		return nil, errors.New("PoX consensus key differs")
 	}
-	return &PoX4Role{holderKey: compressed, signerKey: signerKey, signerPublic: signerPublic, stream: NonceStream{Address: holder}}, nil
+	return &PoX4Role{
+		holderKey:    compressed,
+		signerKey:    signerKey,
+		signerPublic: signerPublic,
+		stream:       NonceStream{Address: holder},
+	}, nil
 }
 
 // now reads the configured wall clock.
@@ -84,9 +89,18 @@ func (r *PoX4Role) Step(ctx context.Context, snapshot stacksworker.Snapshot) (st
 	}
 	input, snapshot, err := r.inputs(ctx, snapshot)
 	if err != nil {
+		//nolint:nilerr // Publish the reason and retry without failing the worker session.
 		return r.result(reasonDependenciesUnavailable), nil
 	}
-	if input.Node == nil || input.Holder != r.stream.Address || input.SignerPublicKey != r.signerPublic || input.Amount == nil || input.Amount.Sign() <= 0 || input.Amount.BitLen() > 128 || input.LockCycles < 2 || input.LockCycles > 12 || input.RenewWhenRemainingCycles < 1 || input.RenewWhenRemainingCycles >= input.LockCycles || input.InitialCohort && input.EnrollmentCeiling == 0 {
+	if input.Node == nil || input.Holder != r.stream.Address || input.SignerPublicKey != r.signerPublic ||
+		input.Amount == nil ||
+		input.Amount.Sign() <= 0 ||
+		input.Amount.BitLen() > 128 ||
+		input.LockCycles < 2 ||
+		input.LockCycles > 12 ||
+		input.RenewWhenRemainingCycles < 1 ||
+		input.RenewWhenRemainingCycles >= input.LockCycles ||
+		input.InitialCohort && input.EnrollmentCeiling == 0 {
 		r.cached = nil
 		return r.result(reasonInvalidPolicy), nil
 	}
@@ -94,12 +108,13 @@ func (r *PoX4Role) Step(ctx context.Context, snapshot stacksworker.Snapshot) (st
 	if !snapshot.CachedApplied && snapshot.RememberApplied != nil {
 		snapshot.RememberApplied(r.applied)
 	}
-	copy := clonePoX4Inputs(input)
-	r.cached, r.cachedDigest = &copy, r.applied
+	clonedInput := clonePoX4Inputs(input)
+	r.cached, r.cachedDigest = &clonedInput, r.applied
 	target := input.TargetCycle
 	if r.initialDone || !input.InitialCohort {
 		pox, err := input.Node.PoX(ctx)
 		if err != nil {
+			//nolint:nilerr // Publish the reason and retry without failing the worker session.
 			return r.result(reasonPoXObservationUnavailable), nil
 		}
 		if pox.Contract != PoX4Contract {
@@ -114,6 +129,7 @@ func (r *PoX4Role) Step(ctx context.Context, snapshot stacksworker.Snapshot) (st
 	}
 	state, err := observePoX4(ctx, input, target, r.now())
 	if err != nil {
+		//nolint:nilerr // Missing observation holds the policy; it does not fail the worker.
 		return r.result(reasonPoXObservationUnavailable), nil
 	}
 	r.current = state.observation
@@ -128,12 +144,14 @@ func (r *PoX4Role) Step(ctx context.Context, snapshot stacksworker.Snapshot) (st
 			r.failed = true
 			return r.result(reasonPoX4LockExpired), nil
 		}
-		if state.pox.RewardCycle == math.MaxUint64 || input.InitialCohort && state.pox.RewardCycle+1 > input.TargetCycle {
+		if state.pox.RewardCycle == math.MaxUint64 ||
+			input.InitialCohort && state.pox.RewardCycle+1 > input.TargetCycle {
 			r.failed = true
 			return r.result(reasonBootstrapWindowMissed), nil
 		}
 		first := state.pox.RewardCycle + 1
-		if first > math.MaxUint64-input.LockCycles || input.InitialCohort && first+input.LockCycles <= input.TargetCycle {
+		if first > math.MaxUint64-input.LockCycles ||
+			input.InitialCohort && first+input.LockCycles <= input.TargetCycle {
 			return r.result(reasonInvalidBootstrapWindow), nil
 		}
 		if input.InitialCohort && state.info.BurnHeight >= input.EnrollmentCeiling {
@@ -148,7 +166,17 @@ func (r *PoX4Role) Step(ctx context.Context, snapshot stacksworker.Snapshot) (st
 		if !input.InitialCohort {
 			target = first
 		}
-		return r.offer(ctx, snapshot, input, state, api.PostconditionPoX4Enrollment, input.LockCycles, first, first+input.LockCycles, target)
+		return r.offer(
+			ctx,
+			snapshot,
+			input,
+			state,
+			api.PostconditionPoX4Enrollment,
+			input.LockCycles,
+			first,
+			first+input.LockCycles,
+			target,
+		)
 	}
 	if state.observation == nil {
 		return r.result(reasonEnrollmentStateMismatch), nil
@@ -178,17 +206,36 @@ func (r *PoX4Role) Step(ctx context.Context, snapshot stacksworker.Snapshot) (st
 	if state.end > math.MaxUint64-extend {
 		return r.result(reasonInvalidPoXCycle), nil
 	}
-	return r.offer(ctx, snapshot, input, state, api.PostconditionPoX4Extension, extend, first, state.end+extend, state.end)
+	return r.offer(
+		ctx,
+		snapshot,
+		input,
+		state,
+		api.PostconditionPoX4Extension,
+		extend,
+		first,
+		state.end+extend,
+		state.end,
+	)
 }
 
 // offer constructs explicit SIP-018 authorization and sends through the shared nonce stream once.
-func (r *PoX4Role) offer(ctx context.Context, snapshot stacksworker.Snapshot, input PoX4Inputs, state pox4State, kind api.PostconditionKind, cycles, first, end, target uint64) (stacksworker.RoleResult, error) {
+func (r *PoX4Role) offer(
+	ctx context.Context,
+	snapshot stacksworker.Snapshot,
+	input PoX4Inputs,
+	state pox4State,
+	kind api.PostconditionKind,
+	cycles, first, end, target uint64,
+) (stacksworker.RoleResult, error) {
 	payout, err := pox4Payout(input.Holder)
 	if err != nil {
+		//nolint:nilerr // Publish the reason and retry without failing the worker session.
 		return r.result(reasonInvalidHolder), nil
 	}
 	amount, err := clarity.Uint128(input.Amount.String())
 	if err != nil {
+		//nolint:nilerr // Publish the reason and retry without failing the worker session.
 		return r.result(api.ReasonInvalidAmount), nil
 	}
 	required := new(big.Int).SetUint64(PoX4Fee)
@@ -196,34 +243,67 @@ func (r *PoX4Role) offer(ctx context.Context, snapshot stacksworker.Snapshot, in
 		required.Add(required, input.Amount)
 	}
 	var nonceUsed uint64
-	reason, err := r.stream.Offer(ctx, r.now, input.Node, required, snapshot.Authorize, func(nonce uint64) (transaction.Transaction, error) {
-		nonceUsed = nonce
-		topic := signing.TopicStackSTX
-		if kind == api.PostconditionPoX4Extension {
-			topic = signing.TopicStackExtend
-		}
-		signature, err := signing.PoX(r.signerKey, signing.PoXAuthorization{Address: payout, RewardCycle: state.pox.RewardCycle, Topic: topic, Period: cycles, MaxAmount: amount, AuthID: clarity.Uint(nonce), ChainID: 0x80000000})
-		if err != nil {
-			return transaction.Transaction{}, err
-		}
-		authorization := signing.SignerArguments{Signature: signature[:], PublicKey: r.signerPublic, MaxAmount: amount, AuthID: clarity.Uint(nonce)}
-		var args []clarity.Value
-		if kind == api.PostconditionPoX4Enrollment {
-			args, err = signing.StackSTXArguments(amount, payout, state.pox.BurnHeight, cycles, authorization)
-		} else {
-			args, err = signing.StackExtendArguments(payout, cycles, authorization)
-		}
-		if err != nil {
-			return transaction.Transaction{}, err
-		}
-		return transaction.Call(transaction.Options{Version: transaction.Testnet, ChainID: 0x80000000, Nonce: nonce, Fee: PoX4Fee, PostConditionMode: transaction.Deny, PrivateKey: r.holderKey}, pox4Address, "pox-4", topic, args)
-	})
+	reason, _ := r.stream.Offer(
+		ctx,
+		r.now,
+		input.Node,
+		required,
+		snapshot.Authorize,
+		func(nonce uint64) (transaction.Transaction, error) {
+			nonceUsed = nonce
+			topic := signing.TopicStackSTX
+			if kind == api.PostconditionPoX4Extension {
+				topic = signing.TopicStackExtend
+			}
+			signature, err := signing.PoX(
+				r.signerKey,
+				signing.PoXAuthorization{
+					Address:     payout,
+					RewardCycle: state.pox.RewardCycle,
+					Topic:       topic,
+					Period:      cycles,
+					MaxAmount:   amount,
+					AuthID:      clarity.Uint(nonce),
+					ChainID:     0x80000000,
+				},
+			)
+			if err != nil {
+				return transaction.Transaction{}, err
+			}
+			authorization := signing.SignerArguments{
+				Signature: signature[:],
+				PublicKey: r.signerPublic,
+				MaxAmount: amount,
+				AuthID:    clarity.Uint(nonce),
+			}
+			var args []clarity.Value
+			if kind == api.PostconditionPoX4Enrollment {
+				args, err = signing.StackSTXArguments(amount, payout, state.pox.BurnHeight, cycles, authorization)
+			} else {
+				args, err = signing.StackExtendArguments(payout, cycles, authorization)
+			}
+			if err != nil {
+				return transaction.Transaction{}, err
+			}
+			return transaction.Call(
+				transaction.Options{
+					Version:           transaction.Testnet,
+					ChainID:           0x80000000,
+					Nonce:             nonce,
+					Fee:               PoX4Fee,
+					PostConditionMode: transaction.Deny,
+					PrivateKey:        r.holderKey,
+				},
+				pox4Address,
+				"pox-4",
+				topic,
+				args,
+			)
+		},
+	)
 	if r.stream.Pending() != 0 {
 		input.Amount = new(big.Int).Set(input.Amount)
 		r.goal = &pox4Goal{input: input, kind: kind, first: first, end: end, target: target, nonce: nonceUsed}
-	}
-	if err != nil {
-		return r.result(reason), nil
 	}
 	return r.result(reason), nil
 }
@@ -247,7 +327,13 @@ func (r *PoX4Role) observeGoal(ctx context.Context) string {
 	if r.stream.Pending() != 0 {
 		observation := *state.observation
 		observation.ObservedAt = metav1.Time{}
-		evidence := api.TransactionPostcondition{TxID: r.stream.pending.transaction.TxID, Kind: goal.kind, StateDigest: foundation.Digest(observation), StacksTip: state.tip, ObservedAt: metav1.NewTime(r.now().UTC())}
+		evidence := api.TransactionPostcondition{
+			TxID:        r.stream.pending.transaction.TxID,
+			Kind:        goal.kind,
+			StateDigest: foundation.Digest(observation),
+			StacksTip:   state.tip,
+			ObservedAt:  metav1.NewTime(r.now().UTC()),
+		}
 		reason, err = r.stream.SettleObserved(evidence.TxID, state.account.Nonce, evidence)
 		if err != nil || r.stream.Pending() != 0 {
 			return reason
@@ -270,7 +356,13 @@ func (r *PoX4Role) Drain(ctx context.Context, _ stacksworker.Snapshot) (stackswo
 		r.observeGoal(ctx)
 	}
 	pending := r.pending()
-	return stacksworker.DrainResult{Done: pending == 0, Settled: pending == 0, Pending: pending, Transactions: r.stream.Facts(), PoX4: r.current.DeepCopy()}, nil
+	return stacksworker.DrainResult{
+		Done:         pending == 0,
+		Settled:      pending == 0,
+		Pending:      pending,
+		Transactions: r.stream.Facts(),
+		PoX4:         r.current.DeepCopy(),
+	}, nil
 }
 
 // pending includes an operation awaiting public state after its exact transaction was included.
@@ -283,5 +375,14 @@ func (r *PoX4Role) pending() int32 {
 
 // result snapshots public facts for retry-safe publication.
 func (r *PoX4Role) result(reason string) stacksworker.RoleResult {
-	return stacksworker.RoleResult{Transactions: r.stream.Facts(), PoX4: r.current.DeepCopy(), AppliedPolicyDigest: r.applied, Pending: r.pending(), Reason: reason, Blocked: poxBlocked(reason, r.pending()), Failed: r.failed, RequeueAfter: time.Second}
+	return stacksworker.RoleResult{
+		Transactions:        r.stream.Facts(),
+		PoX4:                r.current.DeepCopy(),
+		AppliedPolicyDigest: r.applied,
+		Pending:             r.pending(),
+		Reason:              reason,
+		Blocked:             poxBlocked(reason, r.pending()),
+		Failed:              r.failed,
+		RequeueAfter:        time.Second,
+	}
 }

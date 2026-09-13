@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/decred/dcrd/dcrec/secp256k1/v4"
+	//nolint:gosec,staticcheck // HASH160 is required by the Stacks and Bitcoin consensus address format.
 	"golang.org/x/crypto/ripemd160"
 )
 
@@ -75,11 +76,18 @@ func public(k *secp256k1.PublicKey) Public {
 	hash := hash160(compressed)
 	// Stacks single-signature testnet version is 26 (T in the c32 alphabet).
 	payload := append(append([]byte{}, hash...), checksum(append([]byte{26}, hash...))...)
-	return Public{Address: "ST" + encode(payload, "0123456789ABCDEFGHJKMNPQRSTVWXYZ"), PublicKey: hex.EncodeToString(compressed), MiningPublicKey: hex.EncodeToString(uncompressed), BitcoinAddress: bitcoin(compressed), MiningAddress: bitcoin(uncompressed)}
+	return Public{
+		Address:         "ST" + encode(payload, "0123456789ABCDEFGHJKMNPQRSTVWXYZ"),
+		PublicKey:       hex.EncodeToString(compressed),
+		MiningPublicKey: hex.EncodeToString(uncompressed),
+		BitcoinAddress:  bitcoin(compressed),
+		MiningAddress:   bitcoin(uncompressed),
+	}
 }
 
 func hash160(b []byte) []byte {
 	s := sha256.Sum256(b)
+	//nolint:gosec // HASH160 is required by the Stacks and Bitcoin consensus address format.
 	h := ripemd160.New() // HASH160 is required by the Stacks/Bitcoin address format.
 	_, _ = h.Write(s[:])
 	return h.Sum(nil)
@@ -89,6 +97,7 @@ func bitcoin(key []byte) string {
 	b := append([]byte{111}, hash160(key)...)
 	return encode(append(b, checksum(b)...), "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz")
 }
+
 func encode(b []byte, alphabet string) string {
 	n := new(big.Int).SetBytes(b)
 	radix := big.NewInt(int64(len(alphabet)))
@@ -117,7 +126,8 @@ func FromDescriptor(descriptor string) (Public, string, error) {
 		return Public{}, "", errors.New("descriptor must be raw public pkh(key)")
 	}
 	raw, err := hex.DecodeString(descriptor[4 : len(descriptor)-1])
-	if err != nil || !((len(raw) == 33 && (raw[0] == 2 || raw[0] == 3)) || (len(raw) == 65 && raw[0] == 4)) {
+	valid := len(raw) == 33 && (raw[0] == 2 || raw[0] == 3) || len(raw) == 65 && raw[0] == 4
+	if err != nil || !valid {
 		return Public{}, "", errors.New("invalid descriptor public key")
 	}
 	key, err := secp256k1.ParsePubKey(raw)

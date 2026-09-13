@@ -66,7 +66,12 @@ func (d *directRead) stable(ctx context.Context) error {
 			return err
 		}
 		if after.GetDeletionTimestamp() != nil || !reflect.DeepEqual(left, right) {
-			return &InconclusiveError{Reason: fmt.Sprintf("identity resource %s changed during observation", client.ObjectKeyFromObject(before))}
+			return &InconclusiveError{
+				Reason: fmt.Sprintf(
+					"identity resource %s changed during observation",
+					client.ObjectKeyFromObject(before),
+				),
+			}
 		}
 	}
 	return nil
@@ -120,7 +125,13 @@ func (r Reader) observeParticipants(ctx context.Context, namespace, name, expect
 		return Snapshot{}, &NotReadyError{Reason: "network identity is unavailable or deleting"}
 	}
 	participants := &unstructured.UnstructuredList{}
-	participants.SetGroupVersionKind(schema.GroupVersionKind{Group: api.GroupVersion.Group, Version: VersionV1Alpha2, Kind: api.KindStacksNetworkParticipantList})
+	participants.SetGroupVersionKind(
+		schema.GroupVersionKind{
+			Group:   api.GroupVersion.Group,
+			Version: VersionV1Alpha2,
+			Kind:    api.KindStacksNetworkParticipantList,
+		},
+	)
 	if err := r.APIReader.List(ctx, participants, client.InNamespace(namespace), client.Limit(1001)); err != nil {
 		return Snapshot{}, err
 	}
@@ -167,7 +178,9 @@ func (r Reader) observeParticipants(ctx context.Context, namespace, name, expect
 			}
 			return Snapshot{}, &InconclusiveError{Reason: err.Error()}
 		}
-		if p.Spec.NetworkUID != root.UID || p.Spec.ParticipantName != selected.Name || p.Spec.Kind != selected.Kind || !exactOwner(p, api.GroupVersion.String(), api.KindStacksNetwork, root.Name, root.UID) || p.DeletionTimestamp != nil {
+		if p.Spec.NetworkUID != root.UID || p.Spec.ParticipantName != selected.Name || p.Spec.Kind != selected.Kind ||
+			!exactOwner(p, api.GroupVersion.String(), api.KindStacksNetwork, root.Name, root.UID) ||
+			p.DeletionTimestamp != nil {
 			return Snapshot{}, &InconclusiveError{Reason: "participant owner or allocation identity differs"}
 		}
 		reads.objects = append(reads.objects, raw.DeepCopy())
@@ -186,7 +199,12 @@ func (r Reader) observeParticipants(ctx context.Context, namespace, name, expect
 		}
 		return actors[i].Name < actors[j].Name
 	})
-	binding := observation.NetworkBinding{Name: root.Name, UID: root.UID, ObservedGeneration: root.Generation, NetworkAPIVersion: api.GroupVersion.String()}
+	binding := observation.NetworkBinding{
+		Name:               root.Name,
+		UID:                root.UID,
+		ObservedGeneration: root.Generation,
+		NetworkAPIVersion:  api.GroupVersion.String(),
+	}
 	digest, err := canonical.Digest(struct {
 		Schema  string                              `json:"schema"`
 		Network observation.NetworkBinding          `json:"network"`
@@ -248,11 +266,13 @@ func bytesDigest(data []byte) string {
 // exactOwner verifies the complete controller owner reference.
 func exactOwner(object metav1.Object, version, kind, name string, uid types.UID) bool {
 	owner := metav1.GetControllerOf(object)
-	return owner != nil && uid != "" && owner.APIVersion == version && owner.Kind == kind && owner.Name == name && owner.UID == uid
+	return owner != nil && uid != "" && owner.APIVersion == version && owner.Kind == kind && owner.Name == name &&
+		owner.UID == uid
 }
 
 // actorContainerV2 maps the closed actor-kind union to its native container.
 func actorContainerV2(kind api.ParticipantKind) string {
+	//nolint:exhaustive // Only actor kinds have this workload property; capabilities use separate workloads.
 	switch kind {
 	case api.ParticipantBitcoinNode:
 		return api.ContainerBitcoin

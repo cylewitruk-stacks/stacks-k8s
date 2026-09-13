@@ -4,6 +4,9 @@ package bitcoincontrol
 
 import (
 	"context"
+	"strings"
+	"testing"
+
 	bitcoin "github.com/cylewitruk-stacks/stacks-k8s/apis/network/bitcoin/v1alpha2"
 	api "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha2"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/foundation"
@@ -13,8 +16,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"strings"
-	"testing"
 )
 
 // TestSharedArtifactEarlyDeletionRemainsWritable models GC deletion requests; envtest has no garbage collector.
@@ -27,18 +28,58 @@ func TestSharedArtifactEarlyDeletionRemainsWritable(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	for _, propagation := range []metav1.DeletionPropagation{metav1.DeletePropagationBackground, metav1.DeletePropagationForeground} {
+	for _, propagation := range []metav1.DeletionPropagation{
+		metav1.DeletePropagationBackground,
+		metav1.DeletePropagationForeground,
+	} {
 		t.Run(string(propagation), func(t *testing.T) {
 			namespace := "artifact-" + strings.ToLower(string(propagation))
 			must(c.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}))
-			root := &api.StacksNetwork{ObjectMeta: metav1.ObjectMeta{Name: "network", Namespace: namespace, Finalizers: []string{"network.stacks.org/foundation"}}, Spec: api.StacksNetworkSpec{Operation: "Stopped"}}
+			root := &api.StacksNetwork{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "network",
+					Namespace:  namespace,
+					Finalizers: []string{"network.stacks.org/foundation"},
+				},
+				Spec: api.StacksNetworkSpec{Operation: "Stopped"},
+			}
 			must(c.Create(ctx, root))
-			p := &api.StacksNetworkParticipant{ObjectMeta: metav1.ObjectMeta{Name: "core", Namespace: namespace, Finalizers: []string{"test.example/dispose"}}, Spec: api.StacksNetworkParticipantSpec{NetworkUID: root.UID, ParticipantName: "core", Kind: "BitcoinNode", Configuration: api.Configuration{BitcoinNode: &bitcoin.BitcoinNodeSpec{}}}}
+			p := &api.StacksNetworkParticipant{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "core",
+					Namespace:  namespace,
+					Finalizers: []string{"test.example/dispose"},
+				},
+				Spec: api.StacksNetworkParticipantSpec{
+					NetworkUID:      root.UID,
+					ParticipantName: "core",
+					Kind:            "BitcoinNode",
+					Configuration:   api.Configuration{BitcoinNode: &bitcoin.BitcoinNodeSpec{}},
+				},
+			}
 			must(controllerutil.SetControllerReference(root, p, c.Scheme()))
 			must(c.Create(ctx, p))
+			//nolint:contextcheck // Fixture reads use testing.T.Context, independent of the exercised operation deadline.
 			f := baselineFixture(t)
-			execution := &bitcoin.BitcoinExecution{ObjectMeta: metav1.ObjectMeta{Name: "execution", Namespace: namespace, Finalizers: []string{foundation.ArtifactFinalizer}}, Spec: bitcoin.BitcoinExecutionSpec{NetworkUID: root.UID, Participant: binding("StacksNetworkParticipant", p)}}
-			initial := &bitcoin.BitcoinInitialization{ObjectMeta: metav1.ObjectMeta{Name: "initialization", Namespace: namespace, Finalizers: []string{foundation.ArtifactFinalizer}}, Spec: *f.initial.Spec.DeepCopy()}
+			execution := &bitcoin.BitcoinExecution{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "execution",
+					Namespace:  namespace,
+					Finalizers: []string{foundation.ArtifactFinalizer},
+				},
+				Spec: bitcoin.BitcoinExecutionSpec{
+					NetworkUID:  root.UID,
+					Participant: binding("StacksNetworkParticipant", p),
+				},
+			}
+			initial := &bitcoin.BitcoinInitialization{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "initialization",
+					Namespace:  namespace,
+					Finalizers: []string{foundation.ArtifactFinalizer},
+				},
+				Spec: *f.initial.Spec.DeepCopy(),
+			}
 			initial.Spec.NetworkUID = root.UID
 			objects := []client.Object{execution, initial}
 			for _, o := range objects {

@@ -44,7 +44,11 @@ type bootstrapAccount struct {
 }
 
 // account resolves exact admitted public identity and scoped credential metadata.
-func (r Profiles) account(ctx context.Context, p *api.StacksNetworkParticipant, name, role string) (bootstrapAccount, error) {
+func (r Profiles) account(
+	ctx context.Context,
+	p *api.StacksNetworkParticipant,
+	name, role string,
+) (bootstrapAccount, error) {
 	var account stacks.StacksAccount
 	if err := r.Reader.Get(ctx, client.ObjectKey{Namespace: p.Namespace, Name: name}, &account); err != nil {
 		return bootstrapAccount{}, err
@@ -52,27 +56,55 @@ func (r Profiles) account(ctx context.Context, p *api.StacksNetworkParticipant, 
 	captured := false
 	if p.Status.Admission != nil {
 		for _, b := range p.Status.Admission.Dependencies {
-			if b.Kind == stacks.KindStacksAccount && b.Name == name && b.UID == account.UID && b.Fingerprint == account.Status.Digest {
+			if b.Kind == stacks.KindStacksAccount && b.Name == name && b.UID == account.UID &&
+				b.Fingerprint == account.Status.Digest {
 				captured = true
 			}
 		}
 	}
-	if !captured || account.DeletionTimestamp != nil || account.Status.ObservedGeneration != account.Generation || !meta.IsStatusConditionTrue(account.Status.Conditions, common.ConditionResolved) || account.Status.Identity == nil || account.Status.CredentialsRef == nil || account.Status.CredentialsUID == "" {
+	if !captured || account.DeletionTimestamp != nil || account.Status.ObservedGeneration != account.Generation ||
+		!meta.IsStatusConditionTrue(account.Status.Conditions, common.ConditionResolved) ||
+		account.Status.Identity == nil ||
+		account.Status.CredentialsRef == nil ||
+		account.Status.CredentialsUID == "" {
 		return bootstrapAccount{}, fmt.Errorf("role account is not admitted and resolved")
 	}
-	key := KeyMount{Role: role, Secret: common.Binding{Kind: common.KindSecret, Name: account.Status.CredentialsRef.Name, UID: account.Status.CredentialsUID}, Key: account.Status.CredentialsRef.Key}
-	secretMeta := &metav1.PartialObjectMetadata{TypeMeta: metav1.TypeMeta{APIVersion: corev1.SchemeGroupVersion.String(), Kind: common.KindSecret}}
-	if err := r.Reader.Get(ctx, client.ObjectKey{Namespace: p.Namespace, Name: key.Secret.Name}, secretMeta); err != nil {
+	key := KeyMount{
+		Role: role,
+		Secret: common.Binding{
+			Kind: common.KindSecret,
+			Name: account.Status.CredentialsRef.Name,
+			UID:  account.Status.CredentialsUID,
+		},
+		Key: account.Status.CredentialsRef.Key,
+	}
+	secretMeta := &metav1.PartialObjectMetadata{
+		TypeMeta: metav1.TypeMeta{APIVersion: corev1.SchemeGroupVersion.String(), Kind: common.KindSecret},
+	}
+	if err := r.Reader.Get(
+		ctx,
+		client.ObjectKey{Namespace: p.Namespace, Name: key.Secret.Name},
+		secretMeta,
+	); err != nil {
 		return bootstrapAccount{}, err
 	}
 	if secretMeta.UID != key.Secret.UID || secretMeta.DeletionTimestamp != nil {
 		return bootstrapAccount{}, fmt.Errorf("role key identity changed")
 	}
-	return bootstrapAccount{Account: objectref.WithFingerprint(objectref.Account(&account), account.Status.Digest), Identity: *account.Status.Identity, Credential: key}, nil
+	return bootstrapAccount{
+		Account:    objectref.WithFingerprint(objectref.Account(&account), account.Status.Digest),
+		Identity:   *account.Status.Identity,
+		Credential: key,
+	}, nil
 }
 
 // signer resolves the exact admitted consensus participant without reading its private config.
-func (r Profiles) signer(ctx context.Context, root *api.StacksNetwork, p *api.StacksNetworkParticipant, name string) (*api.StacksNetworkParticipant, error) {
+func (r Profiles) signer(
+	ctx context.Context,
+	root *api.StacksNetwork,
+	p *api.StacksNetworkParticipant,
+	name string,
+) (*api.StacksNetworkParticipant, error) {
 	generated := foundation.ParticipantName(string(root.UID), name)
 	var signer api.StacksNetworkParticipant
 	if err := r.Reader.Get(ctx, client.ObjectKey{Namespace: p.Namespace, Name: generated}, &signer); err != nil {
@@ -84,14 +116,24 @@ func (r Profiles) signer(ctx context.Context, root *api.StacksNetwork, p *api.St
 			captured = true
 		}
 	}
-	if !captured || signer.Spec.NetworkUID != root.UID || signer.Spec.ParticipantName != name || signer.Spec.Kind != api.ParticipantStacksSigner || signer.DeletionTimestamp != nil || !metav1.IsControlledBy(&signer, root) || signer.Status.Admission == nil || signer.Status.Admission.Configuration.StacksSigner == nil || signer.Status.Admission.Configuration.StacksSigner.AccountRef == nil {
+	if !captured || signer.Spec.NetworkUID != root.UID || signer.Spec.ParticipantName != name ||
+		signer.Spec.Kind != api.ParticipantStacksSigner ||
+		signer.DeletionTimestamp != nil ||
+		!metav1.IsControlledBy(&signer, root) ||
+		signer.Status.Admission == nil ||
+		signer.Status.Admission.Configuration.StacksSigner == nil ||
+		signer.Status.Admission.Configuration.StacksSigner.AccountRef == nil {
 		return nil, fmt.Errorf("consensus participant identity unavailable")
 	}
 	return &signer, nil
 }
 
 // Resolve pins each role's keys and immutable public genesis/identity configuration.
-func (r Profiles) Resolve(ctx context.Context, root *api.StacksNetwork, p *api.StacksNetworkParticipant) (Profile, error) {
+func (r Profiles) Resolve(
+	ctx context.Context,
+	root *api.StacksNetwork,
+	p *api.StacksNetworkParticipant,
+) (Profile, error) {
 	if p.Status.Admission == nil || root.Status.GenesisRef == nil {
 		return Profile{}, fmt.Errorf("worker admission unavailable")
 	}
@@ -108,6 +150,7 @@ func (r Profiles) Resolve(ctx context.Context, root *api.StacksNetwork, p *api.S
 		return err
 	}
 	policy := p.Status.Admission.Configuration
+	//nolint:exhaustive // Only the supported Stacks worker roles receive these inputs; other kinds stay excluded.
 	switch p.Spec.Kind {
 	case api.ParticipantStacksFaucet:
 		if policy.StacksFaucet == nil {
@@ -156,10 +199,16 @@ func (r Profiles) Resolve(ctx context.Context, root *api.StacksNetwork, p *api.S
 		return Profile{}, fmt.Errorf("worker role bootstrap is unsupported")
 	}
 	var genesis api.StacksGenesis
-	if err := r.Reader.Get(ctx, client.ObjectKey{Namespace: p.Namespace, Name: root.Status.GenesisRef.Name}, &genesis); err != nil {
+	if err := r.Reader.Get(
+		ctx,
+		client.ObjectKey{Namespace: p.Namespace, Name: root.Status.GenesisRef.Name},
+		&genesis,
+	); err != nil {
 		return Profile{}, err
 	}
-	if genesis.UID != root.Status.GenesisRef.UID || genesis.DeletionTimestamp != nil || !metav1.IsControlledBy(&genesis, root) || foundation.Digest(genesis.Spec.Chain) != root.Status.GenesisDigest {
+	if genesis.UID != root.Status.GenesisRef.UID || genesis.DeletionTimestamp != nil ||
+		!metav1.IsControlledBy(&genesis, root) ||
+		foundation.Digest(genesis.Spec.Chain) != root.Status.GenesisDigest {
 		return Profile{}, fmt.Errorf("frozen genesis identity changed")
 	}
 	// Bootstrap excludes live amount, fee, destination, timing and root generation.
@@ -174,8 +223,18 @@ func (r Profiles) Resolve(ctx context.Context, root *api.StacksNetwork, p *api.S
 		return Profile{}, err
 	}
 	metadata := metadata(p)
-	metadata.Name = foundation.RuntimeName(string(root.UID), string(p.UID), string(p.Spec.Kind), p.Spec.ParticipantName, "bootstrap-"+foundation.Digest(input)[7:19])
-	configuration := &corev1.ConfigMap{ObjectMeta: metadata, Immutable: ptr.To(true), Data: map[string]string{"input.json": string(raw)}}
+	metadata.Name = foundation.RuntimeName(
+		string(root.UID),
+		string(p.UID),
+		string(p.Spec.Kind),
+		p.Spec.ParticipantName,
+		"bootstrap-"+foundation.Digest(input)[7:19],
+	)
+	configuration := &corev1.ConfigMap{
+		ObjectMeta: metadata,
+		Immutable:  ptr.To(true),
+		Data:       map[string]string{"input.json": string(raw)},
+	}
 	if err := r.Client.Create(ctx, configuration); err != nil && !apierrors.IsAlreadyExists(err) {
 		return Profile{}, err
 	}
@@ -183,7 +242,9 @@ func (r Profiles) Resolve(ctx context.Context, root *api.StacksNetwork, p *api.S
 	if err := r.Reader.Get(ctx, client.ObjectKeyFromObject(configuration), &current); err != nil {
 		return Profile{}, err
 	}
-	if !metav1.IsControlledBy(&current, p) || current.DeletionTimestamp != nil || !ptr.Deref(current.Immutable, false) || !reflect.DeepEqual(current.Data, configuration.Data) {
+	if !metav1.IsControlledBy(&current, p) || current.DeletionTimestamp != nil ||
+		!ptr.Deref(current.Immutable, false) ||
+		!reflect.DeepEqual(current.Data, configuration.Data) {
 		return Profile{}, fmt.Errorf("worker bootstrap configuration conflicts")
 	}
 	reads, err := r.Reads(ctx, root, p)
@@ -194,25 +255,62 @@ func (r Profiles) Resolve(ctx context.Context, root *api.StacksNetwork, p *api.S
 	for _, account := range accounts {
 		keys = append(keys, account.Credential)
 	}
-	return (Profile{Image: r.Image, Configuration: objectref.ConfigMap(&current), Keys: keys, Reads: reads, Placement: placement}).Normalize()
+	return (Profile{
+		Image:         r.Image,
+		Configuration: objectref.ConfigMap(&current),
+		Keys:          keys,
+		Reads:         reads,
+		Placement:     placement,
+	}).Normalize()
 }
 
 // Reads selects current public dependencies; keys remain mounted and never API-readable.
-func (r Profiles) Reads(ctx context.Context, root *api.StacksNetwork, p *api.StacksNetworkParticipant) ([]ReadBinding, error) {
+func (r Profiles) Reads(
+	ctx context.Context,
+	root *api.StacksNetwork,
+	p *api.StacksNetworkParticipant,
+) ([]ReadBinding, error) {
 	if p.Status.Admission == nil || root.Status.GenesisRef == nil {
 		return nil, fmt.Errorf("worker admitted dependencies unavailable")
 	}
-	reads := []ReadBinding{{APIVersion: api.GroupVersion.String(), Resource: api.ResourceStacksGenesis, Name: root.Status.GenesisRef.Name}}
+	reads := []ReadBinding{
+		{
+			APIVersion: api.GroupVersion.String(),
+			Resource:   api.ResourceStacksGenesis,
+			Name:       root.Status.GenesisRef.Name,
+		},
+	}
 	if source := p.Status.Admission.Source; source.Name != "" {
-		reads = append(reads, ReadBinding{APIVersion: stacks.GroupVersion.String(), Resource: strings.ToLower(string(p.Spec.Kind)) + "s", Name: source.Name})
+		reads = append(
+			reads,
+			ReadBinding{
+				APIVersion: stacks.GroupVersion.String(),
+				Resource:   strings.ToLower(string(p.Spec.Kind)) + "s",
+				Name:       source.Name,
+			},
+		)
 	}
 	add := func(dependencies []common.Binding) {
 		for _, b := range dependencies {
 			switch b.Kind {
 			case stacks.KindStacksAccount:
-				reads = append(reads, ReadBinding{APIVersion: stacks.GroupVersion.String(), Resource: stacks.ResourceStacksAccount, Name: b.Name})
+				reads = append(
+					reads,
+					ReadBinding{
+						APIVersion: stacks.GroupVersion.String(),
+						Resource:   stacks.ResourceStacksAccount,
+						Name:       b.Name,
+					},
+				)
 			case api.KindStacksNetworkParticipant:
-				reads = append(reads, ReadBinding{APIVersion: api.GroupVersion.String(), Resource: api.ResourceStacksNetworkParticipant, Name: b.Name})
+				reads = append(
+					reads,
+					ReadBinding{
+						APIVersion: api.GroupVersion.String(),
+						Resource:   api.ResourceStacksNetworkParticipant,
+						Name:       b.Name,
+					},
+				)
 			}
 		}
 	}

@@ -15,18 +15,76 @@ import (
 
 // faucetContractFixture contains synthetic observations only for assertion validation.
 func faucetContractFixture() (faucetSelection, *stacks.StacksFaucetRequest) {
-	s := faucetSelection{participant: identity{Name: "participant", UID: "participant-uid"}, worker: identity{Name: "worker", UID: "worker-uid"}, logicalName: "faucet", processNonce: "process", profileDigest: "sha256:" + strings.Repeat("a", 64), destination: stacks.FaucetBinding{Kind: "StacksAccount", Name: "traffic-recipient", UID: "recipient-uid", Fingerprint: "recipient-digest"}, source: stacks.FaucetBinding{Kind: "StacksAccount", Name: "source", UID: "source-uid"}, target: stacks.FaucetBinding{Kind: "StacksNetworkParticipant", Name: "target", UID: "target-uid"}, address: "ST000000000000000000002AMW42H", amount: "1", offered: 3, included: 2, completed: 2}
+	s := faucetSelection{
+		participant:   identity{Name: "participant", UID: "participant-uid"},
+		worker:        identity{Name: "worker", UID: "worker-uid"},
+		logicalName:   "faucet",
+		processNonce:  "process",
+		profileDigest: "sha256:" + strings.Repeat("a", 64),
+		destination: stacks.FaucetBinding{
+			Kind:        "StacksAccount",
+			Name:        "traffic-recipient",
+			UID:         "recipient-uid",
+			Fingerprint: "recipient-digest",
+		},
+		source:    stacks.FaucetBinding{Kind: "StacksAccount", Name: "source", UID: "source-uid"},
+		target:    stacks.FaucetBinding{Kind: "StacksNetworkParticipant", Name: "target", UID: "target-uid"},
+		address:   "ST000000000000000000002AMW42H",
+		amount:    "1",
+		offered:   3,
+		included:  2,
+		completed: 2,
+	}
 	request := faucetRequest("test", "network-uid", s, time.Minute)
 	request.Name = "request"
 	request.UID = "request-uid"
 	request.CreationTimestamp = metav1.NewTime(time.Now().Add(-time.Minute))
-	request.Status.Admission = &stacks.FaucetAdmission{Decision: "Admitted", NetworkUID: "network-uid", Faucet: &stacks.FaucetBinding{Kind: "StacksNetworkParticipant", Name: s.participant.Name, UID: s.participant.UID}, Worker: &stacks.FaucetBinding{Kind: "Pod", Name: s.worker.Name, UID: s.worker.UID}, ProfileDigest: s.profileDigest, SourceAccount: &s.source, Target: &s.target, DestinationAccount: &s.destination, Destination: s.address, AmountMicroSTX: s.amount}
-	request.Status.Execution = &stacks.FaucetExecution{Phase: "Completed", Reason: "Included", NetworkUID: "network-uid", FaucetUID: s.participant.UID, WorkerUID: s.worker.UID, ProcessNonce: s.processNonce, Destination: s.address, AmountMicroSTX: s.amount, TxID: strings.Repeat("b", 64), InclusionBlockID: strings.Repeat("c", 64), ObservedAt: metav1.Now()}
+	request.Status.Admission = &stacks.FaucetAdmission{
+		Decision:   "Admitted",
+		NetworkUID: "network-uid",
+		Faucet: &stacks.FaucetBinding{
+			Kind: "StacksNetworkParticipant",
+			Name: s.participant.Name,
+			UID:  s.participant.UID,
+		},
+		Worker:             &stacks.FaucetBinding{Kind: "Pod", Name: s.worker.Name, UID: s.worker.UID},
+		ProfileDigest:      s.profileDigest,
+		SourceAccount:      &s.source,
+		Target:             &s.target,
+		DestinationAccount: &s.destination,
+		Destination:        s.address,
+		AmountMicroSTX:     s.amount,
+	}
+	request.Status.Execution = &stacks.FaucetExecution{
+		Phase:            "Completed",
+		Reason:           "Included",
+		NetworkUID:       "network-uid",
+		FaucetUID:        s.participant.UID,
+		WorkerUID:        s.worker.UID,
+		ProcessNonce:     s.processNonce,
+		Destination:      s.address,
+		AmountMicroSTX:   s.amount,
+		TxID:             strings.Repeat("b", 64),
+		InclusionBlockID: strings.Repeat("c", 64),
+		ObservedAt:       metav1.Now(),
+	}
 	return s, request
 }
 
 func TestFaucetRequestRequiresNativeOutcomeAndExactIdentities(t *testing.T) {
-	for _, mode := range []string{"valid", "projection-only", "submitted", "replaced-request", "other-worker", "other-source", "no-send", "no-block", "old-observation", "wrong-amount", "uncertain"} {
+	for _, mode := range []string{
+		"valid",
+		"projection-only",
+		"submitted",
+		"replaced-request",
+		"other-worker",
+		"other-source",
+		"no-send",
+		"no-block",
+		"old-observation",
+		"wrong-amount",
+		"uncertain",
+	} {
 		t.Run(mode, func(t *testing.T) {
 			s, r := faucetContractFixture()
 			switch mode {
@@ -41,9 +99,9 @@ func TestFaucetRequestRequiresNativeOutcomeAndExactIdentities(t *testing.T) {
 			case "other-worker":
 				r.Status.Execution.WorkerUID = "replacement"
 			case "other-source":
-				copy := *r.Status.Admission.SourceAccount
-				copy.UID = "replacement"
-				r.Status.Admission.SourceAccount = &copy
+				snapshot := *r.Status.Admission.SourceAccount
+				snapshot.UID = "replacement"
+				r.Status.Admission.SourceAccount = &snapshot
 			case "no-send":
 				r.Status.Execution.NoSend = true
 			case "no-block":
@@ -75,8 +133,21 @@ func TestFaucetRequestRequiresNativeOutcomeAndExactIdentities(t *testing.T) {
 }
 
 func TestFaucetSelectionCannotFollowRemovedOrReplacementParticipants(t *testing.T) {
-	root := &api.StacksNetwork{Spec: api.StacksNetworkSpec{Participants: []api.Participant{{Name: "faucet", Kind: "StacksFaucet"}}}, Status: api.StacksNetworkStatus{Identities: []api.InstanceIdentity{{Name: "faucet", UID: "participant", Worker: &api.WorkerSession{Pod: api.WorkerPodBinding{Name: "worker", UID: "worker"}}}}}}
-	participants := []participantEvidence{{Identity: identity{Name: "generated", UID: "participant"}, Name: "faucet", Kind: "StacksFaucet"}}
+	root := &api.StacksNetwork{
+		Spec: api.StacksNetworkSpec{Participants: []api.Participant{{Name: "faucet", Kind: "StacksFaucet"}}},
+		Status: api.StacksNetworkStatus{
+			Identities: []api.InstanceIdentity{
+				{
+					Name:   "faucet",
+					UID:    "participant",
+					Worker: &api.WorkerSession{Pod: api.WorkerPodBinding{Name: "worker", UID: "worker"}},
+				},
+			},
+		},
+	}
+	participants := []participantEvidence{
+		{Identity: identity{Name: "generated", UID: "participant"}, Name: "faucet", Kind: "StacksFaucet"},
+	}
 	if _, _, err := selectedFaucet(root, participants); err != nil {
 		t.Fatal(err)
 	}
@@ -90,7 +161,10 @@ func TestFaucetSelectionCannotFollowRemovedOrReplacementParticipants(t *testing.
 		t.Fatal("removed faucet selected")
 	}
 	root.Status.Identities[0].Removing = false
-	root.Spec.Participants = append(root.Spec.Participants, api.Participant{Name: "another", Kind: "StacksFaucet"})
+	root.Spec.Participants = append(root.Spec.Participants, api.Participant{
+		Name: "another",
+		Kind: "StacksFaucet",
+	})
 	if _, _, err := selectedFaucet(root, participants); err == nil {
 		t.Fatal("ambiguous faucet selection")
 	}
@@ -98,8 +172,18 @@ func TestFaucetSelectionCannotFollowRemovedOrReplacementParticipants(t *testing.
 
 func TestFaucetCountersRejectReplayAndProcessReplacement(t *testing.T) {
 	selection, _ := faucetContractFixture()
-	execution := &api.WorkerExecutionStatus{PodUID: selection.worker.UID, ProcessNonce: selection.processNonce, ProfileDigest: selection.profileDigest, Transactions: &api.TransactionExecutionStatus{Offered: 5, Included: 4}, Faucet: &stacks.FaucetWorkerSummary{Completed: 4}}
-	s := snapshot{Participants: []participantEvidence{{Identity: selection.participant, Status: api.ParticipantStatus{Execution: execution}}}}
+	execution := &api.WorkerExecutionStatus{
+		PodUID:        selection.worker.UID,
+		ProcessNonce:  selection.processNonce,
+		ProfileDigest: selection.profileDigest,
+		Transactions:  &api.TransactionExecutionStatus{Offered: 5, Included: 4},
+		Faucet:        &stacks.FaucetWorkerSummary{Completed: 4},
+	}
+	s := snapshot{
+		Participants: []participantEvidence{
+			{Identity: selection.participant, Status: api.ParticipantStatus{Execution: execution}},
+		},
+	}
 	if _, ready, err := faucetCounters(s, selection); err != nil || !ready {
 		t.Fatalf("two sends: %v", err)
 	}
@@ -117,7 +201,17 @@ func TestFaucetCountersRejectReplayAndProcessReplacement(t *testing.T) {
 func TestFaucetFixtureSupportsTwoPublicRequests(t *testing.T) {
 	for _, variant := range []string{"minimal14", "full30"} {
 		t.Run(variant, func(t *testing.T) {
-			fixture, err := loadFixture(fixtureOptions{path: defaultFixture, namespace: "test", variant: variant, bitcoinImage: "bitcoin:31.1", stacksImage: "stacks:pinned", signerImage: "stacks:pinned", cadence: 5 * time.Second})
+			fixture, err := loadFixture(
+				fixtureOptions{
+					path:         defaultFixture,
+					namespace:    "test",
+					variant:      variant,
+					bitcoinImage: "bitcoin:31.1",
+					stacksImage:  "stacks:pinned",
+					signerImage:  "stacks:pinned",
+					cadence:      5 * time.Second,
+				},
+			)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -132,7 +226,10 @@ func TestFaucetFixtureSupportsTwoPublicRequests(t *testing.T) {
 			}
 			selection, _ := faucetContractFixture()
 			r := faucetRequest("test", "actual-root-uid", selection, time.Minute)
-			if r.UID != "" || r.Name != "" || r.GenerateName == "" || r.Spec.FaucetRef.Name != "faucet" || r.Spec.Destination.AccountRef.Name != "traffic-recipient" || r.Spec.AmountMicroSTX != common.Amount("1") || len(r.OwnerReferences) != 0 {
+			if r.UID != "" || r.Name != "" || r.GenerateName == "" || r.Spec.FaucetRef.Name != "faucet" ||
+				r.Spec.Destination.AccountRef.Name != "traffic-recipient" ||
+				r.Spec.AmountMicroSTX != common.Amount("1") ||
+				len(r.OwnerReferences) != 0 {
 				t.Fatal("request invented identity or private inputs")
 			}
 		})

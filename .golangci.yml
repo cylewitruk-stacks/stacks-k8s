@@ -1,0 +1,55 @@
+version: "2"
+
+# Include tagged test/helper code in analysis without executing it.
+run:
+  timeout: 10m
+  modules-download-mode: readonly
+  tests: true
+  build-tags:
+    - integration
+    - live
+
+linters:
+  default: standard
+  enable:
+    - bodyclose
+    - contextcheck
+    - durationcheck
+    - errorlint
+    - exhaustive
+    - gocritic
+    - gosec
+    - lll
+    - misspell
+    - nilerr
+    - nilnesserr
+    - noctx
+    - nolintlint
+    - revive
+  exclusions:
+    generated: strict
+    rules:
+      # Kubebuilder consumes each CEL/validation marker as one indivisible line.
+      - linters: [lll]
+        source: '^\s*//\s*\+kubebuilder:'
+      # Test helpers conventionally take testing.T first, before their context.
+      - linters: [revive]
+        path: '_test\.go$'
+        text: '^context-as-argument:'
+  settings:
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+    lll:
+      line-length: 120
+
+formatters:
+  exclusions:
+    generated: strict
+  enable:
+    - gofumpt
+    - goimports
+    - golines
+  settings:
+    golines:
+      max-len: 120

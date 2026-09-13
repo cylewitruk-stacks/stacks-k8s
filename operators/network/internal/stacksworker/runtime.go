@@ -179,7 +179,10 @@ func (r *Runtime) fresh(ctx context.Context) (snapshot Snapshot, readErr error) 
 		return Snapshot{}, err
 	}
 	r.observePartialRoot(&root)
-	if err := r.Client.Get(ctx, client.ObjectKey{Namespace: r.Namespace, Name: r.ParticipantName}, &p); err != nil {
+	if err := r.Client.Get(ctx, client.ObjectKey{
+		Namespace: r.Namespace,
+		Name:      r.ParticipantName,
+	}, &p); err != nil {
 		return Snapshot{}, err
 	}
 	if root.UID != r.NetworkUID || p.UID != r.ParticipantUID || p.Spec.NetworkUID != r.NetworkUID {
@@ -199,16 +202,24 @@ func (r *Runtime) fresh(ctx context.Context) (snapshot Snapshot, readErr error) 
 	if err := r.Client.Get(ctx, client.ObjectKey{Namespace: r.Namespace, Name: r.PodName}, &pod); err != nil {
 		return Snapshot{}, err
 	}
-	if pod.UID != r.PodUID || r.PodName != Name(&p) || !ownedPod(&pod, &p) || pod.DeletionTimestamp != nil || terminal(&pod) {
+	if pod.UID != r.PodUID || r.PodName != Name(&p) || !ownedPod(&pod, &p) || pod.DeletionTimestamp != nil ||
+		terminal(&pod) {
 		return Snapshot{}, fmt.Errorf("worker Pod identity unavailable")
 	}
 	profile, err := profileFromPod(&pod)
 	if err != nil || profile.Digest() != r.Profile.Digest() {
 		return Snapshot{}, fmt.Errorf("worker fixed profile changed")
 	}
-	snapshot = Snapshot{admissionError: admissionErr, Network: &root, Participant: &p, Profile: r.Profile, Paused: paused(&root, &p)}
+	snapshot = Snapshot{
+		admissionError: admissionErr,
+		Network:        &root,
+		Participant:    &p,
+		Profile:        r.Profile,
+		Paused:         paused(&root, &p),
+	}
 	if id.Worker != nil {
-		if id.Worker.Pod.UID != r.PodUID || id.Worker.Pod.Name != r.PodName || id.Worker.ProfileDigest != r.Profile.Digest() {
+		if id.Worker.Pod.UID != r.PodUID || id.Worker.Pod.Name != r.PodName ||
+			id.Worker.ProfileDigest != r.Profile.Digest() {
 			return Snapshot{}, fmt.Errorf("worker durable binding differs")
 		}
 		snapshot.Shutdown = id.Worker.Shutdown
@@ -234,7 +245,11 @@ func (r *Runtime) Authorize(ctx context.Context) error {
 }
 
 // authorizeExpected binds fresh callers to their observed policy/control view.
-func (r *Runtime) authorizeExpected(ctx context.Context, root *api.StacksNetwork, p *api.StacksNetworkParticipant) error {
+func (r *Runtime) authorizeExpected(
+	ctx context.Context,
+	root *api.StacksNetwork,
+	p *api.StacksNetworkParticipant,
+) error {
 	return r.authorizeInvocation(ctx, Snapshot{Network: root, Participant: p}, false)
 }
 
@@ -254,7 +269,11 @@ func (r *Runtime) authorizeInvocation(ctx context.Context, expected Snapshot, ca
 		}
 		return err
 	}
-	if snapshot.Network.Generation != expected.Network.Generation || snapshot.Participant.Generation != expected.Participant.Generation || !reflect.DeepEqual(snapshot.Network.Status.GenesisRef, expected.Network.Status.GenesisRef) || snapshot.Network.Status.GenesisDigest != expected.Network.Status.GenesisDigest || !reflect.DeepEqual(snapshot.Participant.Status.Admission, expected.Participant.Status.Admission) {
+	if snapshot.Network.Generation != expected.Network.Generation ||
+		snapshot.Participant.Generation != expected.Participant.Generation ||
+		!reflect.DeepEqual(snapshot.Network.Status.GenesisRef, expected.Network.Status.GenesisRef) ||
+		snapshot.Network.Status.GenesisDigest != expected.Network.Status.GenesisDigest ||
+		!reflect.DeepEqual(snapshot.Participant.Status.Admission, expected.Participant.Status.Admission) {
 		r.cacheHeld = true
 		return fmt.Errorf("worker invocation policy or control changed")
 	}
@@ -262,11 +281,17 @@ func (r *Runtime) authorizeInvocation(ctx context.Context, expected Snapshot, ca
 		r.cacheHeld = true
 		return fmt.Errorf("current worker control withdraws submissions")
 	}
-	if snapshot.Participant.Status.Admission == nil || foundation.Digest(snapshot.Participant.Status.Admission.Configuration) != snapshot.Participant.Status.Admission.PolicyDigest {
+	if snapshot.Participant.Status.Admission == nil ||
+		foundation.Digest(
+			snapshot.Participant.Status.Admission.Configuration,
+		) != snapshot.Participant.Status.Admission.PolicyDigest {
 		r.cacheHeld = true
 		return fmt.Errorf("complete admitted worker policy unavailable")
 	}
-	if execution := snapshot.Participant.Status.Execution; execution == nil || execution.PodUID != r.PodUID || execution.ProcessNonce != r.nonce || execution.ProfileDigest != r.Profile.Digest() || execution.Phase == api.WorkerPhaseFailed {
+	if execution := snapshot.Participant.Status.Execution; execution == nil || execution.PodUID != r.PodUID ||
+		execution.ProcessNonce != r.nonce ||
+		execution.ProfileDigest != r.Profile.Digest() ||
+		execution.Phase == api.WorkerPhaseFailed {
 		r.cacheHeld = true
 		return fmt.Errorf("worker process acknowledgement unavailable")
 	}
@@ -332,15 +357,30 @@ func (r *Runtime) Reconcile(ctx context.Context) (Result, error) {
 	if err != nil {
 		return Result{RequeueAfter: time.Second}, err
 	}
-	if previous := p.Status.Execution; previous != nil && previous.ProcessNonce != "" && previous.ProcessNonce != r.nonce && !(previous.PodUID != r.PodUID && previous.Phase == api.WorkerPhaseInactive && (id.Worker == nil || id.Worker.Pod.UID == r.PodUID)) {
-		return Result{Exit: true}, fmt.Errorf("worker process restart cannot recover a prior execution session")
+	if previous := p.Status.Execution; previous != nil && previous.ProcessNonce != "" &&
+		previous.ProcessNonce != r.nonce {
+		reusable := previous.PodUID != r.PodUID && previous.Phase == api.WorkerPhaseInactive &&
+			(id.Worker == nil || id.Worker.Pod.UID == r.PodUID)
+		if !reusable {
+			return Result{Exit: true}, fmt.Errorf("worker process restart cannot recover a prior execution session")
+		}
 	}
-	status := api.WorkerExecutionStatus{PodUID: r.PodUID, ProcessNonce: r.nonce, ProfileDigest: r.Profile.Digest(), ObservedGeneration: p.Generation, NetworkGeneration: root.Generation, ObservedAt: metav1.NewTime(r.now().UTC().Truncate(time.Second)), Phase: api.WorkerPhaseInactive}
+
+	status := api.WorkerExecutionStatus{
+		PodUID:             r.PodUID,
+		ProcessNonce:       r.nonce,
+		ProfileDigest:      r.Profile.Digest(),
+		ObservedGeneration: p.Generation,
+		NetworkGeneration:  root.Generation,
+		ObservedAt:         metav1.NewTime(r.now().UTC().Truncate(time.Second)),
+		Phase:              api.WorkerPhaseInactive,
+	}
 	previousEvidence := p.Status.Execution
 	if r.pendingReport != nil {
 		previousEvidence = r.pendingReport
 	}
-	if previous := previousEvidence; previous != nil && previous.PodUID == r.PodUID && previous.ProcessNonce == r.nonce {
+	if previous := previousEvidence; previous != nil && previous.PodUID == r.PodUID &&
+		previous.ProcessNonce == r.nonce {
 		status.AppliedPolicyDigest = previous.AppliedPolicyDigest
 		status.Pending = previous.Pending
 		status.Transactions = previous.Transactions.DeepCopy()
@@ -353,10 +393,14 @@ func (r *Runtime) Reconcile(ctx context.Context) (Result, error) {
 	}
 	if id.Worker == nil {
 		status.Reason = reasonAwaitingDurableBinding
-		return Result{Exit: stoppedReason(root, p, id) != "", RequeueAfter: 5 * time.Second}, r.publish(ctx, p, &status)
+		return Result{
+			Exit:         stoppedReason(root, p, id) != "",
+			RequeueAfter: 5 * time.Second,
+		}, r.publish(ctx, p, &status)
 	}
 	r.activated = true
-	if p.Status.Execution != nil && p.Status.Execution.PodUID == r.PodUID && p.Status.Execution.ProcessNonce == r.nonce {
+	if p.Status.Execution != nil && p.Status.Execution.PodUID == r.PodUID &&
+		p.Status.Execution.ProcessNonce == r.nonce {
 		r.processAcknowledged = true
 	}
 	if id.Worker.Disposal != nil {
@@ -440,7 +484,8 @@ func (r *Runtime) Reconcile(ctx context.Context) (Result, error) {
 	}
 	r.stepUsedCached = snapshot.CachedApplied
 	result, err := r.Role.Step(ctx, snapshot)
-	if result.Pending < 0 || result.Pending > 1000 || len(result.Reason) > 128 || len(result.AppliedPolicyDigest) > 128 {
+	if result.Pending < 0 || result.Pending > 1000 || len(result.Reason) > 128 ||
+		len(result.AppliedPolicyDigest) > 128 {
 		return Result{Exit: true}, fmt.Errorf("role execution summary exceeds bound")
 	}
 	status.Phase = api.WorkerPhaseActive
@@ -469,14 +514,30 @@ func (r *Runtime) Reconcile(ctx context.Context) (Result, error) {
 	if result.Transactions != nil {
 		status.Transactions = result.Transactions.DeepCopy()
 	}
-	if previousEvidence != nil && (!executionCountersAdvance(previousEvidence.Transactions, status.Transactions) || !executionCountersAdvance(previousEvidence.AdministratorTransactions, status.AdministratorTransactions)) {
+	if previousEvidence != nil &&
+		(!executionCountersAdvance(
+			previousEvidence.Transactions,
+			status.Transactions,
+		) ||
+			!executionCountersAdvance(
+				previousEvidence.AdministratorTransactions,
+				status.AdministratorTransactions,
+			)) {
 		r.cacheHeld = true
 		return Result{Exit: true}, fmt.Errorf("baseline cumulative execution counters regressed")
 	}
 	if result.AppliedPolicyDigest != "" {
 		if p.Status.Admission == nil || result.AppliedPolicyDigest != p.Status.Admission.PolicyDigest {
 			previous := previousEvidence
-			if !((snapshot.CachedApplied || r.stepUsedCached) && r.appliedSnapshot != nil && r.appliedSnapshot.Participant.Status.Admission.PolicyDigest == result.AppliedPolicyDigest) && (previous == nil || previous.AppliedPolicyDigest != result.AppliedPolicyDigest || (previous.Pending == 0 && result.Pending == 0)) {
+			cachedPolicy := (snapshot.CachedApplied ||
+				r.stepUsedCached) &&
+				r.appliedSnapshot != nil &&
+				r.appliedSnapshot.Participant.Status.Admission.PolicyDigest == result.AppliedPolicyDigest
+			if !cachedPolicy &&
+				(previous == nil ||
+					previous.AppliedPolicyDigest != result.AppliedPolicyDigest ||
+					(previous.Pending == 0 &&
+						result.Pending == 0)) {
 				return Result{Exit: true}, fmt.Errorf("role acknowledged an unadmitted policy")
 			}
 		}
@@ -504,15 +565,28 @@ func (r *Runtime) Reconcile(ctx context.Context) (Result, error) {
 }
 
 // publish applies only execution and retains original acknowledgement timestamps on retries.
-func (r *Runtime) publish(ctx context.Context, p *api.StacksNetworkParticipant, status *api.WorkerExecutionStatus) error {
+func (r *Runtime) publish(
+	ctx context.Context,
+	p *api.StacksNetworkParticipant,
+	status *api.WorkerExecutionStatus,
+) error {
 	if previous := p.Status.Execution; previous != nil {
 		stable := *status
 		stable.ObservedAt = previous.ObservedAt
-		if reflect.DeepEqual(*previous, stable) && (status != r.pendingReport || status.ObservedAt.Sub(previous.ObservedAt.Time) < time.Duration(foundation.ObservationPolicy().HeartbeatIntervalSeconds)*time.Second) {
+		if reflect.DeepEqual(*previous, stable) &&
+			(status != r.pendingReport ||
+				status.ObservedAt.Sub(previous.ObservedAt.Time) <
+					time.Duration(foundation.ObservationPolicy().HeartbeatIntervalSeconds)*time.Second) {
 			return nil
 		}
 	}
-	if err := participantstatus.Apply(ctx, r.Client, p, api.ParticipantStatus{Execution: status}, "stacks-network-worker-execution"); err != nil {
+	if err := participantstatus.Apply(
+		ctx,
+		r.Client,
+		p,
+		api.ParticipantStatus{Execution: status},
+		"stacks-network-worker-execution",
+	); err != nil {
 		r.observePending(ctx)
 		return err
 	}

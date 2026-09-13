@@ -25,7 +25,12 @@ func main() {
 	flag.Parse()
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&logs)))
 	scheme := runtime.NewScheme()
-	for _, add := range []func(*runtime.Scheme) error{clientgoscheme.AddToScheme, actionv2.AddToScheme, bitcoinv2.AddToScheme, networkv2.AddToScheme} {
+	for _, add := range []func(*runtime.Scheme) error{
+		clientgoscheme.AddToScheme,
+		actionv2.AddToScheme,
+		bitcoinv2.AddToScheme,
+		networkv2.AddToScheme,
+	} {
 		must(add(scheme))
 	}
 	configuration, err := ctrl.GetConfig()
@@ -40,7 +45,16 @@ func main() {
 		{&actionv2.BitcoinReorganization{}, options.ReorganizationEnabled},
 	} {
 		if registration.enabled {
-			must((&foundation.Reconciler{Client: m.GetClient(), Reader: m.GetAPIReader(), Prototype: registration.prototype, Concurrency: options.Concurrency}).SetupWithManager(m))
+			must(
+				(&foundation.Reconciler{
+					Client:      m.GetClient(),
+					Reader:      m.GetAPIReader(),
+					Prototype:   registration.prototype,
+					Concurrency: options.Concurrency,
+				}).SetupWithManager(
+					m,
+				),
+			)
 		}
 	}
 	must(m.Start(ctrl.SetupSignalHandler()))

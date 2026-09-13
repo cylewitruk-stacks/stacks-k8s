@@ -31,7 +31,14 @@ type networkEpoch struct {
 
 // captureNetworkEpoch reads actual actor storage and worker bindings without reading credentials.
 func (h *harness) captureNetworkEpoch(ctx context.Context, s snapshot) (networkEpoch, error) {
-	e := networkEpoch{Root: h.rootUID, Chain: s.Status.GenesisDigest, Participants: map[string]types.UID{}, Pods: map[types.UID]bool{}, Claims: map[types.UID]bool{}, Volumes: map[string]bool{}}
+	e := networkEpoch{
+		Root:         h.rootUID,
+		Chain:        s.Status.GenesisDigest,
+		Participants: map[string]types.UID{},
+		Pods:         map[types.UID]bool{},
+		Claims:       map[types.UID]bool{},
+		Volumes:      map[string]bool{},
+	}
 	if s.Status.GenesisRef == nil || s.Status.GenesisRef.UID == "" {
 		return e, fmt.Errorf("frozen genesis unavailable")
 	}
@@ -44,7 +51,11 @@ func (h *harness) captureNetworkEpoch(ctx context.Context, s snapshot) (networkE
 					continue
 				}
 				var pod corev1.Pod
-				if err := h.c.Get(ctx, client.ObjectKey{Namespace: h.config.namespace, Name: binding.Pod.Name}, &pod); err != nil {
+				if err := h.c.Get(
+					ctx,
+					client.ObjectKey{Namespace: h.config.namespace, Name: binding.Pod.Name},
+					&pod,
+				); err != nil {
 					return e, err
 				}
 				if binding.Pod.UID == "" || pod.UID != binding.Pod.UID || pod.DeletionTimestamp != nil {
@@ -53,9 +64,14 @@ func (h *harness) captureNetworkEpoch(ctx context.Context, s snapshot) (networkE
 				e.Pods[pod.UID] = true
 			}
 		}
-		if r := p.Status.Runtime; r != nil && r.PodRef != nil && (p.Kind == "BitcoinNode" || p.Kind == "StacksNode" || p.Kind == "StacksSigner") {
+		if r := p.Status.Runtime; r != nil && r.PodRef != nil &&
+			(p.Kind == "BitcoinNode" || p.Kind == "StacksNode" || p.Kind == "StacksSigner") {
 			var pod corev1.Pod
-			if err := h.c.Get(ctx, client.ObjectKey{Namespace: h.config.namespace, Name: r.PodRef.Name}, &pod); err != nil {
+			if err := h.c.Get(
+				ctx,
+				client.ObjectKey{Namespace: h.config.namespace, Name: r.PodRef.Name},
+				&pod,
+			); err != nil {
 				return e, err
 			}
 			if pod.UID != r.PodRef.UID || pod.DeletionTimestamp != nil {
@@ -76,7 +92,11 @@ func (h *harness) captureNetworkEpoch(ctx context.Context, s snapshot) (networkE
 					continue
 				}
 				var pod corev1.Pod
-				if err := h.c.Get(ctx, client.ObjectKey{Namespace: h.config.namespace, Name: id.Worker.Pod.Name}, &pod); err != nil {
+				if err := h.c.Get(
+					ctx,
+					client.ObjectKey{Namespace: h.config.namespace, Name: id.Worker.Pod.Name},
+					&pod,
+				); err != nil {
 					return e, err
 				}
 				if pod.UID != x.PodUID || pod.DeletionTimestamp != nil {
@@ -96,10 +116,17 @@ func (h *harness) captureNetworkEpoch(ctx context.Context, s snapshot) (networkE
 
 // independentNetworkEpoch rejects runtime or storage reuse while requiring the same chain inputs.
 func independentNetworkEpoch(old, next networkEpoch) error {
-	if old.Root == "" || next.Root == "" || old.Root == next.Root || old.Genesis == "" || next.Genesis == "" || old.Genesis == next.Genesis || old.Chain == "" || old.Chain != next.Chain {
+	if old.Root == "" || next.Root == "" || old.Root == next.Root || old.Genesis == "" || next.Genesis == "" ||
+		old.Genesis == next.Genesis ||
+		old.Chain == "" ||
+		old.Chain != next.Chain {
 		return fmt.Errorf("repeated network genesis identity differs from contract")
 	}
-	if len(old.Participants) != len(next.Participants) || len(next.Pods) == 0 || len(old.Pods) != len(next.Pods) || len(next.Claims) == 0 || len(old.Claims) != len(next.Claims) || len(next.Volumes) == 0 || len(old.Volumes) != len(next.Volumes) {
+	if len(old.Participants) != len(next.Participants) || len(next.Pods) == 0 || len(old.Pods) != len(next.Pods) ||
+		len(next.Claims) == 0 ||
+		len(old.Claims) != len(next.Claims) ||
+		len(next.Volumes) == 0 ||
+		len(old.Volumes) != len(next.Volumes) {
 		return fmt.Errorf("repeated network has incomplete runtime evidence")
 	}
 	for name, id := range old.Participants {
@@ -134,7 +161,14 @@ func (h *harness) recreateNetwork(ctx context.Context) error {
 	if ns.UID != h.namespaceUID || ns.DeletionTimestamp != nil {
 		return fmt.Errorf("repeated namespace identity changed")
 	}
-	root := &unstructured.Unstructured{Object: map[string]any{"apiVersion": api.GroupVersion.String(), "kind": "StacksNetwork", "metadata": map[string]any{"name": "network", "namespace": h.config.namespace}, "spec": h.declared.root.DeepCopy().Object["spec"]}}
+	root := &unstructured.Unstructured{
+		Object: map[string]any{
+			"apiVersion": api.GroupVersion.String(),
+			"kind":       "StacksNetwork",
+			"metadata":   map[string]any{"name": "network", "namespace": h.config.namespace},
+			"spec":       h.declared.root.DeepCopy().Object["spec"],
+		},
+	}
 	marker := string(uuid.NewUUID())
 	root.SetAnnotations(map[string]string{"network.stacks.org/qualification-create": marker})
 	createErr := h.c.Create(ctx, root)
@@ -143,7 +177,8 @@ func (h *harness) recreateNetwork(ctx context.Context) error {
 		if err := h.c.Get(ctx, client.ObjectKey{Namespace: h.config.namespace, Name: "network"}, current); err != nil {
 			return fmt.Errorf("new root create unconfirmed: %w", createErr)
 		}
-		if current.Annotations["network.stacks.org/qualification-create"] != marker || current.DeletionTimestamp != nil {
+		if current.Annotations["network.stacks.org/qualification-create"] != marker ||
+			current.DeletionTimestamp != nil {
 			return fmt.Errorf("new root identity cannot be attributed")
 		}
 		root.SetUID(current.UID)
@@ -153,7 +188,10 @@ func (h *harness) recreateNetwork(ctx context.Context) error {
 	}
 	h.rootUID = root.GetUID()
 	h.createdRoot = true
-	return h.event("repeated-root-created", map[string]any{"namespaceUID": h.namespaceUID, "networkUID": h.rootUID, "createAcknowledged": createErr == nil})
+	return h.event(
+		"repeated-root-created",
+		map[string]any{"namespaceUID": h.namespaceUID, "networkUID": h.rootUID, "createAcknowledged": createErr == nil},
+	)
 }
 
 // qualifyRepeat proves two network incarnations from the same surviving declarations.
@@ -166,7 +204,11 @@ func (h *harness) qualifyRepeat(ctx context.Context, before snapshot) error {
 	if err != nil {
 		return err
 	}
-	if err = os.WriteFile(filepath.Join(h.evidence, "first-network-epoch.json"), append(data, '\n'), 0600); err != nil {
+	if err = os.WriteFile(
+		filepath.Join(h.evidence, "first-network-epoch.json"),
+		append(data, '\n'),
+		0o600,
+	); err != nil {
 		return err
 	}
 	if err = h.disposeNetwork(ctx, false); err != nil {
@@ -177,7 +219,8 @@ func (h *harness) qualifyRepeat(ctx context.Context, before snapshot) error {
 	}
 	ready, err := h.wait(ctx, "repeated-initialized", h.config.timeout, true, func(s snapshot) (bool, error) {
 		_, progressing := progress(s)
-		return progressing && condition(s, "Initialized", metav1.ConditionTrue) && condition(s, "Operational", metav1.ConditionTrue), nil
+		return progressing && condition(s, "Initialized", metav1.ConditionTrue) &&
+			condition(s, "Operational", metav1.ConditionTrue), nil
 	})
 	if err != nil {
 		return err

@@ -20,19 +20,25 @@ func TestSourceAtPinsCanonicalReadAndDistinguishesAbsence(t *testing.T) {
 		}
 		if strings.HasSuffix(r.URL.Path, "/missing") {
 			w.WriteHeader(http.StatusNotFound)
-			fmt.Fprint(w, "No contract source data found")
+			if _, err := fmt.Fprint(w, "No contract source data found"); err != nil {
+				t.Error(err)
+			}
 			return
 		}
 		if strings.HasSuffix(r.URL.Path, "/missing-tip") {
 			w.WriteHeader(http.StatusNotFound)
-			fmt.Fprint(w, "Chain tip not found")
+			if _, err := fmt.Fprint(w, "Chain tip not found"); err != nil {
+				t.Error(err)
+			}
 			return
 		}
 		if strings.HasSuffix(r.URL.Path, "/unavailable") {
 			w.WriteHeader(http.StatusServiceUnavailable)
 			return
 		}
-		fmt.Fprint(w, `{"source":"(define-read-only (test) true)"}`)
+		if _, err := fmt.Fprint(w, `{"source":"(define-read-only (test) true)"}`); err != nil {
+			t.Error(err)
+		}
 	}))
 	defer server.Close()
 	c, err := New(Config{Endpoint: server.URL, Timeout: time.Second, MaxResponseBytes: 4096})

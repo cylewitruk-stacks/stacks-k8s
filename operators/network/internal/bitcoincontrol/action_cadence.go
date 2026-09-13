@@ -10,7 +10,9 @@ import (
 
 // validateActionCadence checks every decoded mode before reserving finite work.
 func validateActionCadence(c action.GenerationCadence, count int32) error {
-	if count < 1 || count > 100 || c.Mode != action.CadenceFixed && c.IntervalSeconds != 0 || c.Mode != action.CadenceUniform && (c.MinSeconds != 0 || c.MaxSeconds != 0) || c.Mode != action.CadenceExplicit && len(c.DelaysSeconds) != 0 {
+	if count < 1 || count > 100 || c.Mode != action.CadenceFixed && c.IntervalSeconds != 0 ||
+		c.Mode != action.CadenceUniform && (c.MinSeconds != 0 || c.MaxSeconds != 0) ||
+		c.Mode != action.CadenceExplicit && len(c.DelaysSeconds) != 0 {
 		return fmt.Errorf("invalid finite cadence")
 	}
 	switch c.Mode {

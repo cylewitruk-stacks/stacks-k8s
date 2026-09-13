@@ -33,12 +33,14 @@ func (n *pox5Node) PoX(ctx context.Context) (rpc.PoX, error) {
 	}
 	return p, e
 }
+
 func (n *pox5Node) PoXAt(ctx context.Context, tip string) (rpc.PoX, error) {
 	if tip != strings.Repeat("d", 64) {
 		return rpc.PoX{}, errors.New("unbound PoX query")
 	}
 	return n.PoX(ctx)
 }
+
 func (n *pox5Node) Account(ctx context.Context, address string) (rpc.Account, error) {
 	account, e := n.poxNode.Account(ctx, address)
 	if address == n.admin && n.admin != n.holder {
@@ -47,19 +49,26 @@ func (n *pox5Node) Account(ctx context.Context, address string) (rpc.Account, er
 	}
 	return account, e
 }
+
 func (n *pox5Node) AccountAt(ctx context.Context, address, tip string) (rpc.Account, error) {
 	if tip != strings.Repeat("d", 64) {
 		return rpc.Account{}, errors.New("unbound account query")
 	}
 	return n.Account(ctx, address)
 }
+
 func (n *pox5Node) SourceAt(_ context.Context, address, contract, tip string) (string, bool, error) {
 	if address != n.admin || contract != "direct-signer" || tip != strings.Repeat("d", 64) {
 		return "", false, errors.New("unbound source query")
 	}
 	return n.source, n.sourceFound, n.sourceErr
 }
-func (n *pox5Node) ReadOnlyAt(ctx context.Context, tip, sender, address, contract, method string, args []clarity.Value) (clarity.Value, error) {
+
+func (n *pox5Node) ReadOnlyAt(
+	ctx context.Context,
+	tip, sender, address, contract, method string,
+	args []clarity.Value,
+) (clarity.Value, error) {
 	if tip != strings.Repeat("d", 64) || address != pox4Address {
 		return clarity.Value{}, errors.New("unbound contract query")
 	}
@@ -101,7 +110,14 @@ func (n *pox5Node) ReadOnlyAt(ctx context.Context, tip, sender, address, contrac
 		if n.mismatch == "manager" {
 			manager, _ = clarity.Principal(n.holder + ".other")
 		}
-		return tuple(map[string]clarity.Value{"amount-ustx": amount, "first-reward-cycle": clarity.Uint(n.first), "num-cycles": clarity.Uint(n.period), "signer": manager}), nil
+		return tuple(
+			map[string]clarity.Value{
+				"amount-ustx":        amount,
+				"first-reward-cycle": clarity.Uint(n.first),
+				"num-cycles":         clarity.Uint(n.period),
+				"signer":             manager,
+			},
+		), nil
 	case "get-signer-cycle-membership":
 		if n.mismatch == "member" {
 			amount = clarity.Uint(1)
@@ -135,7 +151,14 @@ func newPoX5Fixture(t *testing.T, shared bool) (*StackerRole, *pox5Node, stacksw
 		adminKey = strings.Repeat("0", 63) + "1"
 	}
 	admin, _ := identity.FromPrivate(adminKey)
-	role, e := NewStackerRole(strings.Repeat("0", 63)+"1", node.holder, strings.Repeat("0", 63)+"2", node.signer, adminKey, admin.Address)
+	role, e := NewStackerRole(
+		strings.Repeat("0", 63)+"1",
+		node.holder,
+		strings.Repeat("0", 63)+"2",
+		node.signer,
+		adminKey,
+		admin.Address,
+	)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -148,7 +171,18 @@ func newPoX5Fixture(t *testing.T, shared bool) (*StackerRole, *pox5Node, stacksw
 		return in, e
 	}
 	role.ResolvePoX5 = func(context.Context, stacksworker.Snapshot) (PoX5Inputs, error) {
-		return PoX5Inputs{InitialCohort: true, Node: n, Holder: n.holder, Administrator: n.admin, SignerPublicKey: n.signer, Amount: big.NewInt(100000), LockCycles: 6, RenewWhenRemainingCycles: 3, TargetCycle: 15, Epoch4Height: 282}, nil
+		return PoX5Inputs{
+			InitialCohort:            true,
+			Node:                     n,
+			Holder:                   n.holder,
+			Administrator:            n.admin,
+			SignerPublicKey:          n.signer,
+			Amount:                   big.NewInt(100000),
+			LockCycles:               6,
+			RenewWhenRemainingCycles: 3,
+			TargetCycle:              15,
+			Epoch4Height:             282,
+		}, nil
 	}
 	return role, n, snapshot
 }
@@ -165,7 +199,8 @@ func TestPoX5ManagerEnrollmentSequenceUsesIndependentNonceStreams(t *testing.T) 
 			r, n, s := newPoX5Fixture(t, shared)
 			ctx := context.Background()
 			deployed, _ := r.Step(ctx, s)
-			if deployed.Pending != 1 || len(n.sent) != 1 || !bytes.Contains(n.sent[0].Bytes, []byte("as-contract?")) || !bytes.Contains(n.sent[0].Bytes, []byte(n.holder)) {
+			if deployed.Pending != 1 || len(n.sent) != 1 || !bytes.Contains(n.sent[0].Bytes, []byte("as-contract?")) ||
+				!bytes.Contains(n.sent[0].Bytes, []byte(n.holder)) {
 				t.Fatalf("manager deployment missing: %+v", deployed)
 			}
 			n.source, _ = protocolcontracts.DirectManager(n.holder)
@@ -180,7 +215,8 @@ func TestPoX5ManagerEnrollmentSequenceUsesIndependentNonceStreams(t *testing.T) 
 				t.Fatalf("source did not settle: %+v", observed)
 			}
 			registered, _ := r.Step(ctx, s)
-			if registered.Pending != 1 || len(n.sent) != 2 || !bytes.Contains(n.sent[1].Bytes, []byte("register-self")) {
+			if registered.Pending != 1 || len(n.sent) != 2 ||
+				!bytes.Contains(n.sent[1].Bytes, []byte("register-self")) {
 				t.Fatalf("registration missing: %+v", registered)
 			}
 			n.registered, n.granted = true, true
@@ -197,14 +233,20 @@ func TestPoX5ManagerEnrollmentSequenceUsesIndependentNonceStreams(t *testing.T) 
 			n.present = true
 			n.nonce++
 			final, _ := r.Step(ctx, s)
-			if final.Pending != 0 || final.PoX5 == nil || final.PoX5.TargetCycle != 15 || final.PoX5.EndCycleExclusive != 21 || final.Transactions.Included != 0 || final.Transactions.LastInclusion != nil {
+			if final.Pending != 0 || final.PoX5 == nil || final.PoX5.TargetCycle != 15 ||
+				final.PoX5.EndCycleExclusive != 21 ||
+				final.Transactions.Included != 0 ||
+				final.Transactions.LastInclusion != nil {
 				t.Fatalf("unattributed enrollment evidence incorrect: %+v", final)
 			}
 			if shared {
-				if final.AdministratorTransactions != nil || final.Transactions.Offered != 3 || final.Transactions.PostconditionObserved != 3 {
+				if final.AdministratorTransactions != nil || final.Transactions.Offered != 3 ||
+					final.Transactions.PostconditionObserved != 3 {
 					t.Fatal("same account streams duplicated")
 				}
-			} else if final.Transactions.Offered != 1 || final.AdministratorTransactions.Offered != 2 || final.AdministratorTransactions.PostconditionObserved != 2 {
+			} else if final.Transactions.Offered != 1 ||
+				final.AdministratorTransactions.Offered != 2 ||
+				final.AdministratorTransactions.PostconditionObserved != 2 {
 				t.Fatal("independent account facts mixed")
 			}
 		})
@@ -212,7 +254,20 @@ func TestPoX5ManagerEnrollmentSequenceUsesIndependentNonceStreams(t *testing.T) 
 }
 
 func TestPoX5UnknownSendNeverReplaysAndExactStateRejectsInterference(t *testing.T) {
-	for _, change := range []string{"unchanged-nonce", "higher-nonce", "source", "key", "grant", "manager", "member", "delegated", "set", "unlock", "consensus", "amount"} {
+	for _, change := range []string{
+		"unchanged-nonce",
+		"higher-nonce",
+		"source",
+		"key",
+		"grant",
+		"manager",
+		"member",
+		"delegated",
+		"set",
+		"unlock",
+		"consensus",
+		"amount",
+	} {
 		t.Run(change, func(t *testing.T) {
 			r, n, s := newPoX5Fixture(t, false)
 			n.readyManager()
@@ -243,7 +298,8 @@ func TestPoX5UnknownSendNeverReplaysAndExactStateRejectsInterference(t *testing.
 			s.Paused = true
 			for range 3 {
 				got, _ := r.Step(ctx, s)
-				if got.Pending != 1 || got.Transactions.PostconditionObserved != 0 || got.PoX5 != nil && change != "higher-nonce" && change != "unchanged-nonce" {
+				if got.Pending != 1 || got.Transactions.PostconditionObserved != 0 ||
+					got.PoX5 != nil && change != "higher-nonce" && change != "unchanged-nonce" {
 					t.Fatalf("bad state cleared ambiguity: %+v", got)
 				}
 			}
@@ -284,13 +340,22 @@ func TestPoX5RenewalRequiresNativeWindowAndPreservesAmountPolicy(t *testing.T) {
 	n.nonce++
 	n.included, n.executionSuccess = true, true
 	got, _ = r.Step(ctx, s)
-	if got.Pending != 0 || got.Transactions.Included != 1 || got.Transactions.PostconditionObserved != 0 || got.PoX5.EndCycleExclusive != 25 {
+	if got.Pending != 0 || got.Transactions.Included != 1 || got.Transactions.PostconditionObserved != 0 ||
+		got.PoX5.EndCycleExclusive != 25 {
 		t.Fatalf("renewal evidence incorrect: %+v", got)
 	}
 }
 
 func TestPoX5NoSendsWithoutActivationAuthorizationOrCompatibility(t *testing.T) {
-	for _, change := range []string{"early", "paused", "source", "source-unavailable", "key", "authorization", "missed-cycle"} {
+	for _, change := range []string{
+		"early",
+		"paused",
+		"source",
+		"source-unavailable",
+		"key",
+		"authorization",
+		"missed-cycle",
+	} {
 		t.Run(change, func(t *testing.T) {
 			r, n, s := newPoX5Fixture(t, false)
 			n.readyManager()
@@ -344,7 +409,8 @@ func TestStackerTransitionRetainsUnknownPoX4AndSharesHolderNonce(t *testing.T) {
 	}
 	n.included = false
 	next, _ := r.Step(ctx, s)
-	if next.Pending != 1 || len(n.sent) != 2 || r.administrator != &r.legacy.stream || r.legacy.stream.pending.nonce != 8 {
+	if next.Pending != 1 || len(n.sent) != 2 || r.administrator != &r.legacy.stream ||
+		r.legacy.stream.pending.nonce != 8 {
 		t.Fatalf("transition lost surviving account stream: %+v", next)
 	}
 }
@@ -362,7 +428,9 @@ func TestPoX5ObservationPreservesFullWidthStake(t *testing.T) {
 		return input, err
 	}
 	got, _ := r.Step(context.Background(), s)
-	if got.PoX5 == nil || got.PoX5.AmountMicroSTX != amount.String() || got.PoX5.DelegatedAmountMicroSTX != amount.String() || len(n.sent) != 0 {
+	if got.PoX5 == nil || got.PoX5.AmountMicroSTX != amount.String() ||
+		got.PoX5.DelegatedAmountMicroSTX != amount.String() ||
+		len(n.sent) != 0 {
 		t.Fatalf("full-width native stake truncated: %+v", got)
 	}
 }

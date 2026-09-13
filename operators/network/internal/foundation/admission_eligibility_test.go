@@ -3,8 +3,9 @@ package foundation
 import (
 	"context"
 	"fmt"
-	"k8s.io/apimachinery/pkg/types"
 	"testing"
+
+	"k8s.io/apimachinery/pkg/types"
 
 	common "github.com/cylewitruk-stacks/stacks-k8s/apis/network/common/v1alpha2"
 	stacks "github.com/cylewitruk-stacks/stacks-k8s/apis/network/stacks/v1alpha2"
@@ -17,15 +18,47 @@ import (
 )
 
 func TestRetainedAdmissionEligibilityIsIndependentOfCandidateGeneration(t *testing.T) {
-	for _, mode := range []string{"valid", "newer-invalid-source", "different-candidate-source", "missing", "replaced", "deleting", "API-unavailable", "missing-account"} {
+	for _, mode := range []string{
+		"valid",
+		"newer-invalid-source",
+		"different-candidate-source",
+		"missing",
+		"replaced",
+		"deleting",
+		"API-unavailable",
+		"missing-account",
+	} {
 		t.Run(mode, func(t *testing.T) {
 			root, p := unrecordedWorker()
 			root.Status.Identities = []api.InstanceIdentity{{Name: p.Spec.ParticipantName, UID: p.UID}}
-			source := &stacks.StacksFaucet{ObjectMeta: metav1.ObjectMeta{Name: "original", Namespace: p.Namespace, UID: "source-uid", Generation: 4}}
+			source := &stacks.StacksFaucet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "original",
+					Namespace:  p.Namespace,
+					UID:        "source-uid",
+					Generation: 4,
+				},
+			}
 			policy := api.Configuration{StacksFaucet: &stacks.StacksFaucetSpec{}}
-			p.Spec.Source = api.Source{Name: source.Name, UID: source.UID, Generation: source.Generation, Digest: "public"}
-			p.Status.Admission = &api.Admission{Source: p.Spec.Source, Configuration: policy, PolicyDigest: Digest(policy)}
-			p.Status.Conditions = []metav1.Condition{{Type: "Resolved", Status: metav1.ConditionFalse, Reason: "RequiresReplacement", ObservedGeneration: p.Generation}}
+			p.Spec.Source = api.Source{
+				Name:       source.Name,
+				UID:        source.UID,
+				Generation: source.Generation,
+				Digest:     "public",
+			}
+			p.Status.Admission = &api.Admission{
+				Source:        p.Spec.Source,
+				Configuration: policy,
+				PolicyDigest:  Digest(policy),
+			}
+			p.Status.Conditions = []metav1.Condition{
+				{
+					Type:               "Resolved",
+					Status:             metav1.ConditionFalse,
+					Reason:             "RequiresReplacement",
+					ObservedGeneration: p.Generation,
+				},
+			}
 			switch mode {
 			case "newer-invalid-source":
 				source.Generation++
@@ -39,7 +72,9 @@ func TestRetainedAdmissionEligibilityIsIndependentOfCandidateGeneration(t *testi
 				source.DeletionTimestamp = &now
 				source.Finalizers = []string{"test"}
 			case "missing-account":
-				p.Status.Admission.Dependencies = []common.Binding{{Kind: "StacksAccount", Name: "gone", UID: "old", Fingerprint: "old"}}
+				p.Status.Admission.Dependencies = []common.Binding{
+					{Kind: "StacksAccount", Name: "gone", UID: "old", Fingerprint: "old"},
+				}
 			}
 			objects := []client.Object{}
 			if mode != "missing" {
@@ -90,15 +125,29 @@ type eligibilityReads struct {
 	reads map[client.ObjectKey]int
 }
 
-func (r *eligibilityReads) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+func (r *eligibilityReads) Get(
+	ctx context.Context,
+	key client.ObjectKey,
+	obj client.Object,
+	opts ...client.GetOption,
+) error {
 	r.reads[key]++
 	return r.Client.Get(ctx, key, obj, opts...)
 }
 
 func TestAdmissionPassSharesChecksAndNextPassObservesLoss(t *testing.T) {
 	root, original := unrecordedWorker()
-	source := &stacks.StacksFaucet{ObjectMeta: metav1.ObjectMeta{Name: "source", Namespace: original.Namespace, UID: "source"}}
-	account := &stacks.StacksAccount{ObjectMeta: metav1.ObjectMeta{Name: "account", Namespace: original.Namespace, UID: "account"}, Status: common.ResolutionStatus{Identity: &common.PublicIdentity{Address: "public"}, Digest: "fingerprint", Conditions: []metav1.Condition{{Type: "Resolved", Status: metav1.ConditionTrue}}}}
+	source := &stacks.StacksFaucet{
+		ObjectMeta: metav1.ObjectMeta{Name: "source", Namespace: original.Namespace, UID: "source"},
+	}
+	account := &stacks.StacksAccount{
+		ObjectMeta: metav1.ObjectMeta{Name: "account", Namespace: original.Namespace, UID: "account"},
+		Status: common.ResolutionStatus{
+			Identity:   &common.PublicIdentity{Address: "public"},
+			Digest:     "fingerprint",
+			Conditions: []metav1.Condition{{Type: "Resolved", Status: metav1.ConditionTrue}},
+		},
+	}
 	scheme := runtime.NewScheme()
 	_ = stacks.AddToScheme(scheme)
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(source, account).Build()
@@ -113,7 +162,12 @@ func TestAdmissionPassSharesChecksAndNextPassObservesLoss(t *testing.T) {
 		p.UID = types.UID(p.Name)
 		p.Spec.ParticipantName = p.Name
 		config := api.Configuration{StacksFaucet: &stacks.StacksFaucetSpec{}}
-		p.Status.Admission = &api.Admission{Source: api.Source{Name: source.Name, UID: source.UID}, Configuration: config, PolicyDigest: Digest(config), Dependencies: []common.Binding{binding("StacksAccount", account, account.Status.Digest)}}
+		p.Status.Admission = &api.Admission{
+			Source:        api.Source{Name: source.Name, UID: source.UID},
+			Configuration: config,
+			PolicyDigest:  Digest(config),
+			Dependencies:  []common.Binding{binding("StacksAccount", account, account.Status.Digest)},
+		}
 		root.Spec.Participants = append(root.Spec.Participants, api.Participant{Name: p.Name, Kind: p.Spec.Kind})
 		root.Status.Identities = append(root.Status.Identities, api.InstanceIdentity{Name: p.Name, UID: p.UID})
 		participants[i] = p

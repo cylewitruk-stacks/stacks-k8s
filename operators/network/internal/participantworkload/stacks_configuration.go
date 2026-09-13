@@ -23,7 +23,12 @@ import (
 )
 
 // stacksConfiguration resolves public topology before provisioning scoped private rendering.
-func (r *Reconciler) stacksConfiguration(ctx context.Context, root *api.StacksNetwork, p *api.StacksNetworkParticipant, state *api.ParticipantRuntimeStatus) (bool, bool, error) {
+func (r *Reconciler) stacksConfiguration(
+	ctx context.Context,
+	root *api.StacksNetwork,
+	p *api.StacksNetworkParticipant,
+	state *api.ParticipantRuntimeStatus,
+) (bool, bool, error) {
 	in, err := r.stacksInput(ctx, root, p, state)
 	if err != nil {
 		return false, false, err
@@ -38,7 +43,9 @@ func (r *Reconciler) stacksConfiguration(ctx context.Context, root *api.StacksNe
 	if err != nil {
 		return false, false, err
 	}
-	report := &corev1.ConfigMap{ObjectMeta: objectMeta(p, "report-"+strings.TrimPrefix(revision, "sha256:"), api.RoleSupport)}
+	report := &corev1.ConfigMap{
+		ObjectMeta: objectMeta(p, "report-"+strings.TrimPrefix(revision, "sha256:"), api.RoleSupport),
+	}
 	if err := r.createOwned(ctx, p, report); err != nil {
 		return false, false, err
 	}
@@ -52,10 +59,18 @@ func (r *Reconciler) stacksConfiguration(ctx context.Context, root *api.StacksNe
 	state.PolicyDigest = in.PolicyDigest
 	if raw := report.Data["report.json"]; raw != "" {
 		var result StacksConfigReport
-		if len(raw) > 4096 || json.Unmarshal([]byte(raw), &result) != nil || result.InputDigest != digest(in) || result.GenesisDigest != in.Genesis.Fingerprint || result.Identity != in.Identity || !strings.HasPrefix(result.ConfigDigest, "sha256:") {
+		if len(raw) > 4096 || json.Unmarshal([]byte(raw), &result) != nil || result.InputDigest != digest(in) ||
+			result.GenesisDigest != in.Genesis.Fingerprint ||
+			result.Identity != in.Identity ||
+			!strings.HasPrefix(result.ConfigDigest, "sha256:") {
 			return false, false, fmt.Errorf("invalid public Stacks configuration report")
 		}
-		if !result.Verified && (in.Customization == nil || ptr.Deref(in.Customization.Compatibility, common.CompatibilityManaged) != common.CompatibilityUnverified) {
+		if !result.Verified &&
+			(in.Customization == nil ||
+				ptr.Deref(
+					in.Customization.Compatibility,
+					common.CompatibilityManaged,
+				) != common.CompatibilityUnverified) {
 			return false, false, fmt.Errorf("managed configuration agreement unavailable")
 		}
 		state.ConfigRef.Fingerprint = result.ConfigDigest
@@ -73,7 +88,11 @@ func (r *Reconciler) stacksConfiguration(ctx context.Context, root *api.StacksNe
 			report.Data = map[string]string{}
 		}
 		report.Data["input.json"] = string(data)
-		if err := r.Client.Patch(ctx, report, client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{})); err != nil {
+		if err := r.Client.Patch(
+			ctx,
+			report,
+			client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{}),
+		); err != nil {
 			return false, false, err
 		}
 	}
@@ -85,12 +104,31 @@ func (r *Reconciler) stacksConfiguration(ctx context.Context, root *api.StacksNe
 	if in.CandidateDigest != "" {
 		mode = ModeValidateStacksConfig
 	}
-	return false, false, r.provisionConfigurationJob(ctx, p, revision, mode, data, StacksConfigRules(in), placement, report.Name)
+	return false, false, r.provisionConfigurationJob(
+		ctx,
+		p,
+		revision,
+		mode,
+		data,
+		StacksConfigRules(in),
+		placement,
+		report.Name,
+	)
 }
 
 // stacksInput reads public identities and Secret metadata, never private actor bytes.
-func (r *Reconciler) stacksInput(ctx context.Context, root *api.StacksNetwork, p *api.StacksNetworkParticipant, state *api.ParticipantRuntimeStatus) (StacksConfigInput, error) {
-	in := StacksConfigInput{Namespace: p.Namespace, ParticipantUID: p.UID, Kind: p.Spec.Kind, PolicyDigest: p.Status.Admission.PolicyDigest}
+func (r *Reconciler) stacksInput(
+	ctx context.Context,
+	root *api.StacksNetwork,
+	p *api.StacksNetworkParticipant,
+	state *api.ParticipantRuntimeStatus,
+) (StacksConfigInput, error) {
+	in := StacksConfigInput{
+		Namespace:      p.Namespace,
+		ParticipantUID: p.UID,
+		Kind:           p.Spec.Kind,
+		PolicyDigest:   p.Status.Admission.PolicyDigest,
+	}
 	var genesis api.StacksGenesis
 	if r.candidateConfiguration != nil {
 		genesis.Spec = r.candidateConfiguration.Genesis
@@ -100,10 +138,15 @@ func (r *Reconciler) stacksInput(ctx context.Context, root *api.StacksNetwork, p
 		if root.Status.GenesisRef == nil {
 			return in, fmt.Errorf("frozen genesis binding missing")
 		}
-		if err := r.Reader.Get(ctx, client.ObjectKey{Namespace: p.Namespace, Name: root.Status.GenesisRef.Name}, &genesis); err != nil {
+		if err := r.Reader.Get(
+			ctx,
+			client.ObjectKey{Namespace: p.Namespace, Name: root.Status.GenesisRef.Name},
+			&genesis,
+		); err != nil {
 			return in, err
 		}
-		if genesis.UID != root.Status.GenesisRef.UID || genesis.DeletionTimestamp != nil || digest(genesis.Spec.Chain) != root.Status.GenesisDigest {
+		if genesis.UID != root.Status.GenesisRef.UID || genesis.DeletionTimestamp != nil ||
+			digest(genesis.Spec.Chain) != root.Status.GenesisDigest {
 			return in, fmt.Errorf("frozen genesis identity changed")
 		}
 		in.Genesis = objectref.Genesis(&genesis)
@@ -124,12 +167,17 @@ func (r *Reconciler) stacksInput(ctx context.Context, root *api.StacksNetwork, p
 		}
 		// Completed public rendering binds immutable credentials without requiring actor startup.
 		btcRuntime := btc.Status.Runtime
-		if btcRuntime == nil || btcRuntime.ActorRPCSecretRef == nil || btcRuntime.ConfigRef == nil || btcRuntime.ConfigRef.Fingerprint == "" || btcRuntime.ConfigurationDigest == "" || btc.Status.Admission == nil || btcRuntime.PolicyDigest != btc.Status.Admission.PolicyDigest {
-			return in, fmt.Errorf("Bitcoin actor credential configuration is not resolved")
+		if btcRuntime == nil || btcRuntime.ActorRPCSecretRef == nil || btcRuntime.ConfigRef == nil ||
+			btcRuntime.ConfigRef.Fingerprint == "" ||
+			btcRuntime.ConfigurationDigest == "" ||
+			btc.Status.Admission == nil ||
+			btcRuntime.PolicyDigest != btc.Status.Admission.PolicyDigest {
+			return in, fmt.Errorf("unresolved Bitcoin actor credential configuration")
 		}
 		actorRPC := *btcRuntime.ActorRPCSecretRef
-		if state.ActorRPCSecretRef != nil && (state.ActorRPCSecretRef.Name != actorRPC.Name || state.ActorRPCSecretRef.UID != actorRPC.UID) {
-			return in, fmt.Errorf("Bitcoin actor credential identity changed")
+		if state.ActorRPCSecretRef != nil &&
+			(state.ActorRPCSecretRef.Name != actorRPC.Name || state.ActorRPCSecretRef.UID != actorRPC.UID) {
+			return in, fmt.Errorf("changed Bitcoin actor credential identity")
 		}
 		if err := r.privateMetadata(ctx, p.Namespace, actorRPC, btc.UID); err != nil {
 			return in, err
@@ -149,7 +197,13 @@ func (r *Reconciler) stacksInput(ctx context.Context, root *api.StacksNetwork, p
 			return in, err
 		}
 		in.ServiceBindings = append(in.ServiceBindings, objectref.Service(p2p), objectref.Service(rpc))
-		in.Node = stacksconfig.NodeParameters{Name: p.Spec.ParticipantName, Chain: genesis.Spec.Chain, P2PAddress: p2p.Spec.ClusterIP, RPCHost: rpc.Spec.ClusterIP, BitcoinHost: serviceHost(btc, common.EndpointP2P)}
+		in.Node = stacksconfig.NodeParameters{
+			Name:        p.Spec.ParticipantName,
+			Chain:       genesis.Spec.Chain,
+			P2PAddress:  p2p.Spec.ClusterIP,
+			RPCHost:     rpc.Spec.ClusterIP,
+			BitcoinHost: serviceHost(btc, common.EndpointP2P),
+		}
 		in.Node.BootstrapPeers, err = r.stacksSeedSnapshot(ctx, root, p)
 		if err != nil {
 			return in, err
@@ -167,7 +221,9 @@ func (r *Reconciler) stacksInput(ctx context.Context, root *api.StacksNetwork, p
 					return in, err
 				}
 				in.Node.WalletName = ptr.Deref(wallet.Spec.WalletName, wallet.Name)
-				if wallet.Spec.KeySource == nil || wallet.Spec.KeySource.StacksMinerAccountRef == nil || accountRef == nil || wallet.Spec.KeySource.StacksMinerAccountRef.Name != accountRef.Name {
+				if wallet.Spec.KeySource == nil || wallet.Spec.KeySource.StacksMinerAccountRef == nil ||
+					accountRef == nil ||
+					wallet.Spec.KeySource.StacksMinerAccountRef.Name != accountRef.Name {
 					return in, fmt.Errorf("miner wallet does not derive from node identity account")
 				}
 			}
@@ -179,11 +235,14 @@ func (r *Reconciler) stacksInput(ctx context.Context, root *api.StacksNetwork, p
 		if err != nil {
 			return in, err
 		}
-		if node.Status.Runtime == nil || node.Status.Runtime.EventAuthSecretRef == nil || node.Status.Runtime.ConfigRef == nil || node.Status.Runtime.ConfigRef.Fingerprint == "" {
+		if node.Status.Runtime == nil || node.Status.Runtime.EventAuthSecretRef == nil ||
+			node.Status.Runtime.ConfigRef == nil ||
+			node.Status.Runtime.ConfigRef.Fingerprint == "" {
 			return in, fmt.Errorf("paired node event authentication unavailable")
 		}
 		ref := *node.Status.Runtime.EventAuthSecretRef
-		if state.EventAuthSecretRef != nil && (state.EventAuthSecretRef.Name != ref.Name || state.EventAuthSecretRef.UID != ref.UID) {
+		if state.EventAuthSecretRef != nil &&
+			(state.EventAuthSecretRef.Name != ref.Name || state.EventAuthSecretRef.UID != ref.UID) {
 			return in, fmt.Errorf("paired event authentication identity changed")
 		}
 		if err := r.privateMetadata(ctx, p.Namespace, ref, node.UID); err != nil {
@@ -198,7 +257,14 @@ func (r *Reconciler) stacksInput(ctx context.Context, root *api.StacksNetwork, p
 		return in, err
 	}
 	in.Identity = *account.Status.Identity
-	in.Key = PrivateInput{Binding: common.Binding{Kind: common.KindSecret, Name: account.Status.CredentialsRef.Name, UID: account.Status.CredentialsUID}, Key: account.Status.CredentialsRef.Key}
+	in.Key = PrivateInput{
+		Binding: common.Binding{
+			Kind: common.KindSecret,
+			Name: account.Status.CredentialsRef.Name,
+			UID:  account.Status.CredentialsUID,
+		},
+		Key: account.Status.CredentialsRef.Key,
+	}
 	if err := r.privateMetadata(ctx, p.Namespace, in.Key.Binding, ""); err != nil {
 		return in, err
 	}
@@ -227,9 +293,17 @@ func serviceHost(p *api.StacksNetworkParticipant, endpoint string) string {
 }
 
 // allocatedService verifies the participant-owned address before advertising it to native peers.
-func (r *Reconciler) allocatedService(ctx context.Context, p *api.StacksNetworkParticipant, endpoint string) (*corev1.Service, error) {
+func (r *Reconciler) allocatedService(
+	ctx context.Context,
+	p *api.StacksNetworkParticipant,
+	endpoint string,
+) (*corev1.Service, error) {
 	var service corev1.Service
-	if err := r.Reader.Get(ctx, client.ObjectKey{Namespace: p.Namespace, Name: Name(p, endpoint)}, &service); err != nil {
+	if err := r.Reader.Get(
+		ctx,
+		client.ObjectKey{Namespace: p.Namespace, Name: Name(p, endpoint)},
+		&service,
+	); err != nil {
 		return nil, err
 	}
 	if !owned(&service, p) || service.DeletionTimestamp != nil || net.ParseIP(service.Spec.ClusterIP) == nil {
@@ -239,11 +313,18 @@ func (r *Reconciler) allocatedService(ctx context.Context, p *api.StacksNetworkP
 }
 
 // privateMetadata checks pinned identity without decoding Secret data.
-func (r *Reconciler) privateMetadata(ctx context.Context, namespace string, ref common.Binding, ownerUID types.UID) error {
+func (r *Reconciler) privateMetadata(
+	ctx context.Context,
+	namespace string,
+	ref common.Binding,
+	ownerUID types.UID,
+) error {
 	if ref.Kind != common.KindSecret || ref.UID == "" {
 		return fmt.Errorf("private input binding missing")
 	}
-	obj := &metav1.PartialObjectMetadata{TypeMeta: metav1.TypeMeta{APIVersion: corev1.SchemeGroupVersion.String(), Kind: common.KindSecret}}
+	obj := &metav1.PartialObjectMetadata{
+		TypeMeta: metav1.TypeMeta{APIVersion: corev1.SchemeGroupVersion.String(), Kind: common.KindSecret},
+	}
 	if err := r.Reader.Get(ctx, client.ObjectKey{Namespace: namespace, Name: ref.Name}, obj); err != nil {
 		return err
 	}
@@ -266,7 +347,13 @@ func admittedBinding(p *api.StacksNetworkParticipant, kind, name string) (common
 }
 
 // boundParticipant verifies the current selected identity behind a mandatory participant ref.
-func (r *Reconciler) boundParticipant(ctx context.Context, root *api.StacksNetwork, p *api.StacksNetworkParticipant, ref *common.NameRef, kind api.ParticipantKind) (*api.StacksNetworkParticipant, error) {
+func (r *Reconciler) boundParticipant(
+	ctx context.Context,
+	root *api.StacksNetwork,
+	p *api.StacksNetworkParticipant,
+	ref *common.NameRef,
+	kind api.ParticipantKind,
+) (*api.StacksNetworkParticipant, error) {
 	if ref == nil {
 		return nil, fmt.Errorf("mandatory participant reference missing")
 	}
@@ -276,10 +363,15 @@ func (r *Reconciler) boundParticipant(ctx context.Context, root *api.StacksNetwo
 		return nil, fmt.Errorf("mandatory participant was not admitted")
 	}
 	var target api.StacksNetworkParticipant
-	if err := r.readConfigurationParticipant(ctx, client.ObjectKey{Namespace: root.Namespace, Name: name}, &target); err != nil {
+	if err := r.readConfigurationParticipant(
+		ctx,
+		client.ObjectKey{Namespace: root.Namespace, Name: name},
+		&target,
+	); err != nil {
 		return nil, err
 	}
-	if target.UID != pin.UID || target.Spec.Kind != kind || target.DeletionTimestamp != nil || !selected(root, &target) {
+	if target.UID != pin.UID || target.Spec.Kind != kind || target.DeletionTimestamp != nil ||
+		!selected(root, &target) {
 		return nil, fmt.Errorf("mandatory participant identity changed")
 	}
 	if r.candidateConfiguration == nil {
@@ -291,7 +383,11 @@ func (r *Reconciler) boundParticipant(ctx context.Context, root *api.StacksNetwo
 }
 
 // boundAccount reads an admitted reusable public identity and exact credential metadata.
-func (r *Reconciler) boundAccount(ctx context.Context, p *api.StacksNetworkParticipant, ref *common.NameRef) (*stacks.StacksAccount, error) {
+func (r *Reconciler) boundAccount(
+	ctx context.Context,
+	p *api.StacksNetworkParticipant,
+	ref *common.NameRef,
+) (*stacks.StacksAccount, error) {
 	if ref == nil {
 		return nil, fmt.Errorf("actor account is required")
 	}
@@ -303,14 +399,21 @@ func (r *Reconciler) boundAccount(ctx context.Context, p *api.StacksNetworkParti
 	if err := r.Reader.Get(ctx, client.ObjectKey{Namespace: p.Namespace, Name: ref.Name}, &account); err != nil {
 		return nil, err
 	}
-	if account.UID != pin.UID || account.DeletionTimestamp != nil || account.Status.Digest != pin.Fingerprint || account.Status.Identity == nil || account.Status.CredentialsRef == nil || account.Status.CredentialsUID == "" {
+	if account.UID != pin.UID || account.DeletionTimestamp != nil || account.Status.Digest != pin.Fingerprint ||
+		account.Status.Identity == nil ||
+		account.Status.CredentialsRef == nil ||
+		account.Status.CredentialsUID == "" {
 		return nil, fmt.Errorf("public actor key agreement unavailable")
 	}
 	return &account, nil
 }
 
 // minerWallet reads the exact wallet identity admitted for native miner spending.
-func (r *Reconciler) minerWallet(ctx context.Context, p *api.StacksNetworkParticipant, ref *common.NameRef) (*bitcoin.BitcoinWallet, error) {
+func (r *Reconciler) minerWallet(
+	ctx context.Context,
+	p *api.StacksNetworkParticipant,
+	ref *common.NameRef,
+) (*bitcoin.BitcoinWallet, error) {
 	if ref == nil {
 		return nil, fmt.Errorf("miner wallet is required")
 	}
@@ -329,14 +432,25 @@ func (r *Reconciler) minerWallet(ctx context.Context, p *api.StacksNetworkPartic
 }
 
 // customServiceHosts resolves only declared same-namespace fixed-port endpoint aliases.
-func (r *Reconciler) customServiceHosts(ctx context.Context, root *api.StacksNetwork, p *api.StacksNetworkParticipant, refs []common.ServiceRef) (map[string]string, error) {
+func (r *Reconciler) customServiceHosts(
+	ctx context.Context,
+	root *api.StacksNetwork,
+	p *api.StacksNetworkParticipant,
+	refs []common.ServiceRef,
+) (map[string]string, error) {
 	hosts := map[string]string{}
 	for _, ref := range refs {
 		if _, ok := hosts[ref.Alias]; ok || ref.Alias == "" {
 			return nil, fmt.Errorf("duplicate or empty Service alias")
 		}
 		kind := api.ParticipantKind(ref.Kind)
-		if !((kind == api.ParticipantBitcoinNode || kind == api.ParticipantStacksNode) && (ref.Endpoint == common.EndpointRPC || ref.Endpoint == common.EndpointP2P) || kind == api.ParticipantStacksSigner && ref.Endpoint == common.EndpointEvents) {
+		supportedEndpoint := (kind == api.ParticipantBitcoinNode ||
+			kind == api.ParticipantStacksNode) &&
+			(ref.Endpoint == common.EndpointRPC ||
+				ref.Endpoint == common.EndpointP2P) ||
+			kind == api.ParticipantStacksSigner &&
+				ref.Endpoint == common.EndpointEvents
+		if !supportedEndpoint {
 			return nil, fmt.Errorf("unsupported Service endpoint")
 		}
 		target, err := r.boundParticipant(ctx, root, p, &common.NameRef{Name: ref.Name}, kind)
@@ -349,21 +463,31 @@ func (r *Reconciler) customServiceHosts(ctx context.Context, root *api.StacksNet
 }
 
 // pairedSignerHost discovers the currently admitted single consensus attachment without readiness cycles.
-func (r *Reconciler) pairedSignerHost(ctx context.Context, root *api.StacksNetwork, p *api.StacksNetworkParticipant) (string, error) {
+func (r *Reconciler) pairedSignerHost(
+	ctx context.Context,
+	root *api.StacksNetwork,
+	p *api.StacksNetworkParticipant,
+) (string, error) {
 	host := ""
 	for _, entry := range root.Spec.Participants {
 		if entry.Kind != api.ParticipantStacksSigner {
 			continue
 		}
 		var signer api.StacksNetworkParticipant
-		if err := r.readConfigurationParticipant(ctx, client.ObjectKey{Namespace: p.Namespace, Name: foundation.ParticipantName(string(root.UID), entry.Name)}, &signer); err != nil {
+		if err := r.readConfigurationParticipant(
+			ctx,
+			client.ObjectKey{Namespace: p.Namespace, Name: foundation.ParticipantName(string(root.UID), entry.Name)},
+			&signer,
+		); err != nil {
 			return "", err
 		}
-		if signer.Status.Admission == nil || signer.Status.Admission.Configuration.StacksSigner == nil || !selected(root, &signer) {
+		if signer.Status.Admission == nil || signer.Status.Admission.Configuration.StacksSigner == nil ||
+			!selected(root, &signer) {
 			continue
 		}
 		ref := signer.Status.Admission.Configuration.StacksSigner.NodeRef
-		if cfg := signer.Status.Admission.Configuration.StacksSigner.Config; cfg != nil && ptr.Deref(cfg.Compatibility, common.CompatibilityManaged) == common.CompatibilityUnverified {
+		if cfg := signer.Status.Admission.Configuration.StacksSigner.Config; cfg != nil &&
+			ptr.Deref(cfg.Compatibility, common.CompatibilityManaged) == common.CompatibilityUnverified {
 			continue
 		}
 		if ref == nil || ref.Name != p.Spec.ParticipantName {
@@ -383,12 +507,18 @@ func (r *Reconciler) pairedSignerHost(ctx context.Context, root *api.StacksNetwo
 }
 
 // stacksSeedSnapshot preserves startup hints when peers later join or disappear.
-func (r *Reconciler) stacksSeedSnapshot(ctx context.Context, root *api.StacksNetwork, p *api.StacksNetworkParticipant) ([]string, error) {
+func (r *Reconciler) stacksSeedSnapshot(
+	ctx context.Context,
+	root *api.StacksNetwork,
+	p *api.StacksNetworkParticipant,
+) ([]string, error) {
 	revision := p.Status.Admission.PolicyDigest
 	if r.candidateConfiguration != nil {
 		revision = candidateConfigurationDigest(*r.candidateConfiguration)
 	}
-	snapshot := &corev1.ConfigMap{ObjectMeta: objectMeta(p, "seeds-"+strings.TrimPrefix(revision, "sha256:"), api.RoleSupport)}
+	snapshot := &corev1.ConfigMap{
+		ObjectMeta: objectMeta(p, "seeds-"+strings.TrimPrefix(revision, "sha256:"), api.RoleSupport),
+	}
 	if err := r.createOwned(ctx, p, snapshot); err != nil {
 		return nil, err
 	}
@@ -424,7 +554,11 @@ func (r *Reconciler) stacksSeedSnapshot(ctx context.Context, root *api.StacksNet
 	seeds := []string{}
 	for _, name := range names {
 		var peer api.StacksNetworkParticipant
-		if err := r.readConfigurationParticipant(ctx, client.ObjectKey{Namespace: p.Namespace, Name: foundation.ParticipantName(string(root.UID), name)}, &peer); err != nil {
+		if err := r.readConfigurationParticipant(
+			ctx,
+			client.ObjectKey{Namespace: p.Namespace, Name: foundation.ParticipantName(string(root.UID), name)},
+			&peer,
+		); err != nil {
 			return nil, err
 		}
 		if peer.Spec.Kind != api.ParticipantStacksNode || peer.DeletionTimestamp != nil || !selected(root, &peer) {
@@ -442,7 +576,11 @@ func (r *Reconciler) stacksSeedSnapshot(ctx context.Context, root *api.StacksNet
 	data, _ := json.Marshal(seeds)
 	base := snapshot.DeepCopy()
 	snapshot.Data = map[string]string{"seeds.json": string(data)}
-	if err := r.Client.Patch(ctx, snapshot, client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{})); err != nil {
+	if err := r.Client.Patch(
+		ctx,
+		snapshot,
+		client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{}),
+	); err != nil {
 		return nil, err
 	}
 	return seeds, nil

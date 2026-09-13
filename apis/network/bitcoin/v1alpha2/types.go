@@ -12,7 +12,23 @@ var GroupVersion = schema.GroupVersion{Group: "bitcoin.stacks.org", Version: "v1
 
 // AddToScheme registers definitions and list kinds.
 func AddToScheme(s *runtime.Scheme) error {
-	s.AddKnownTypes(GroupVersion, &BitcoinNode{}, &BitcoinNodeList{}, &BitcoinWallet{}, &BitcoinWalletList{}, &BitcoinBlockSchedule{}, &BitcoinBlockScheduleList{}, &BitcoinBlockProduction{}, &BitcoinBlockProductionList{}, &BitcoinExecution{}, &BitcoinExecutionList{}, &BitcoinInitialization{}, &BitcoinInitializationList{}, &BitcoinBlockScheduleOverride{}, &BitcoinBlockScheduleOverrideList{})
+	s.AddKnownTypes(
+		GroupVersion,
+		&BitcoinNode{},
+		&BitcoinNodeList{},
+		&BitcoinWallet{},
+		&BitcoinWalletList{},
+		&BitcoinBlockSchedule{},
+		&BitcoinBlockScheduleList{},
+		&BitcoinBlockProduction{},
+		&BitcoinBlockProductionList{},
+		&BitcoinExecution{},
+		&BitcoinExecutionList{},
+		&BitcoinInitialization{},
+		&BitcoinInitializationList{},
+		&BitcoinBlockScheduleOverride{},
+		&BitcoinBlockScheduleOverrideList{},
+	)
 	metav1.AddToGroupVersion(s, GroupVersion)
 	return nil
 }

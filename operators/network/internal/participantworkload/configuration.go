@@ -19,7 +19,12 @@ import (
 )
 
 // configuration captures seed inputs and resolves immutable private configuration.
-func (r *Reconciler) configuration(ctx context.Context, root *api.StacksNetwork, p *api.StacksNetworkParticipant, state *api.ParticipantRuntimeStatus) (bool, error) {
+func (r *Reconciler) configuration(
+	ctx context.Context,
+	root *api.StacksNetwork,
+	p *api.StacksNetworkParticipant,
+	state *api.ParticipantRuntimeStatus,
+) (bool, error) {
 	policy := p.Status.Admission.PolicyDigest
 	configPurpose := "config-" + strings.TrimPrefix(policy, "sha256:")
 	configPin := state.ConfigRef
@@ -30,7 +35,11 @@ func (r *Reconciler) configuration(ctx context.Context, root *api.StacksNetwork,
 		purpose     string
 		pin         *common.Binding
 		destination **common.Binding
-	}{{"rpc-control", state.RPCSecretRef, &state.RPCSecretRef}, {"rpc-actor", state.ActorRPCSecretRef, &state.ActorRPCSecretRef}, {configPurpose, configPin, &state.ConfigRef}} {
+	}{
+		{"rpc-control", state.RPCSecretRef, &state.RPCSecretRef},
+		{"rpc-actor", state.ActorRPCSecretRef, &state.ActorRPCSecretRef},
+		{configPurpose, configPin, &state.ConfigRef},
+	} {
 		ref, err := r.emptySecret(ctx, p, item.purpose, item.pin)
 		if err != nil {
 			return false, err
@@ -38,14 +47,24 @@ func (r *Reconciler) configuration(ctx context.Context, root *api.StacksNetwork,
 		*item.destination = ref
 	}
 	state.PolicyDigest = policy
-	report := &corev1.ConfigMap{ObjectMeta: objectMeta(p, "report-"+strings.TrimPrefix(policy, "sha256:"), api.RoleSupport)}
+	report := &corev1.ConfigMap{
+		ObjectMeta: objectMeta(p, "report-"+strings.TrimPrefix(policy, "sha256:"), api.RoleSupport),
+	}
 	if err := r.createOwned(ctx, p, report); err != nil {
 		return false, err
 	}
 	if err := r.Reader.Get(ctx, client.ObjectKeyFromObject(report), report); err != nil {
 		return false, err
 	}
-	in := BitcoinConfigInput{Namespace: p.Namespace, ParticipantUID: p.UID, PolicyDigest: policy, Config: *state.ConfigRef, ControlCredentials: *state.RPCSecretRef, ActorCredentials: *state.ActorRPCSecretRef, Report: objectref.ConfigMap(report)}
+	in := BitcoinConfigInput{
+		Namespace:          p.Namespace,
+		ParticipantUID:     p.UID,
+		PolicyDigest:       policy,
+		Config:             *state.ConfigRef,
+		ControlCredentials: *state.RPCSecretRef,
+		ActorCredentials:   *state.ActorRPCSecretRef,
+		Report:             objectref.ConfigMap(report),
+	}
 	in.Customization = p.Status.Admission.Configuration.BitcoinNode.Config
 	if in.Customization != nil {
 		if ref := in.Customization.SecretRef; ref != nil {
@@ -82,17 +101,23 @@ func (r *Reconciler) configuration(ctx context.Context, root *api.StacksNetwork,
 		data, _ := json.Marshal(in)
 		base := report.DeepCopy()
 		report.Data = map[string]string{"input.json": string(data)}
-		if err := r.Client.Patch(ctx, report, client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{})); err != nil {
+		if err := r.Client.Patch(
+			ctx,
+			report,
+			client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{}),
+		); err != nil {
 			return false, err
 		}
 	}
 	if raw := report.Data["report.json"]; raw != "" {
 		var result BitcoinConfigReport
-		if len(raw) > 4096 || json.Unmarshal([]byte(raw), &result) != nil || result.InputDigest != digest(in) || !strings.HasPrefix(result.ConfigDigest, "sha256:") {
+		if len(raw) > 4096 || json.Unmarshal([]byte(raw), &result) != nil || result.InputDigest != digest(in) ||
+			!strings.HasPrefix(result.ConfigDigest, "sha256:") {
 			return false, fmt.Errorf("invalid Bitcoin configuration report")
 		}
-		if !result.Verified && in.Customization != nil && ptr.Deref(in.Customization.Compatibility, common.CompatibilityManaged) != common.CompatibilityUnverified {
-			return false, fmt.Errorf("Bitcoin configuration agreement missing")
+		if !result.Verified && in.Customization != nil &&
+			ptr.Deref(in.Customization.Compatibility, common.CompatibilityManaged) != common.CompatibilityUnverified {
+			return false, fmt.Errorf("missing Bitcoin configuration agreement")
 		}
 		state.ConfigurationDigest = digest(in)
 		state.ConfigRef.Fingerprint = result.ConfigDigest
@@ -102,8 +127,15 @@ func (r *Reconciler) configuration(ctx context.Context, root *api.StacksNetwork,
 }
 
 // emptySecret inspects metadata only; private data is generated and read in the Job.
-func (r *Reconciler) emptySecret(ctx context.Context, p *api.StacksNetworkParticipant, purpose string, pin *common.Binding) (*common.Binding, error) {
-	metadata := &metav1.PartialObjectMetadata{TypeMeta: metav1.TypeMeta{APIVersion: corev1.SchemeGroupVersion.String(), Kind: common.KindSecret}}
+func (r *Reconciler) emptySecret(
+	ctx context.Context,
+	p *api.StacksNetworkParticipant,
+	purpose string,
+	pin *common.Binding,
+) (*common.Binding, error) {
+	metadata := &metav1.PartialObjectMetadata{
+		TypeMeta: metav1.TypeMeta{APIVersion: corev1.SchemeGroupVersion.String(), Kind: common.KindSecret},
+	}
 	key := client.ObjectKey{Namespace: p.Namespace, Name: Name(p, purpose)}
 	err := r.Reader.Get(ctx, key, metadata)
 	if apierrors.IsNotFound(err) && pin == nil {
@@ -162,7 +194,16 @@ func peerSeeds(root *api.StacksNetwork, p *api.StacksNetworkParticipant) ([]stri
 	sort.Strings(names)
 	seeds := make([]string, 0, len(names))
 	for _, name := range names {
-		seeds = append(seeds, foundation.RuntimeName(string(root.UID), string(selected[name].UID), string(api.ParticipantBitcoinNode), name, common.EndpointP2P)+"."+root.Namespace+".svc")
+		seeds = append(
+			seeds,
+			foundation.RuntimeName(
+				string(root.UID),
+				string(selected[name].UID),
+				string(api.ParticipantBitcoinNode),
+				name,
+				common.EndpointP2P,
+			)+"."+root.Namespace+".svc",
+		)
 	}
 	return seeds, nil
 }

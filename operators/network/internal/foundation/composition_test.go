@@ -11,21 +11,43 @@ import (
 )
 
 func TestCompositionPrecedenceAndAlternatives(t *testing.T) {
-	root := &api.StacksNetwork{Spec: api.StacksNetworkSpec{Defaults: &api.Defaults{Images: &api.Images{StacksNode: ptr.To("root-image")}, Storage: &common.Storage{Size: ptr.To("4Gi")}}}}
-	entry := api.Participant{Kind: "StacksNode", Overrides: &api.Configuration{StacksNode: &stacks.StacksNodeSpec{ActorFields: common.ActorFields{Image: ptr.To("override-image"), Storage: &common.Storage{Ephemeral: ptr.To(true)}}}}}
-	source := stacks.StacksNodeSpec{ActorFields: common.ActorFields{Image: ptr.To("definition-image")}, Peers: &common.Peers{NodeRefs: ptr.To([]common.NameRef{{Name: "peer"}})}}
+	root := &api.StacksNetwork{
+		Spec: api.StacksNetworkSpec{
+			Defaults: &api.Defaults{
+				Images:  &api.Images{StacksNode: ptr.To("root-image")},
+				Storage: &common.Storage{Size: ptr.To("4Gi")},
+			},
+		},
+	}
+	entry := api.Participant{
+		Kind: "StacksNode",
+		Overrides: &api.Configuration{
+			StacksNode: &stacks.StacksNodeSpec{
+				ActorFields: common.ActorFields{
+					Image:   ptr.To("override-image"),
+					Storage: &common.Storage{Ephemeral: ptr.To(true)},
+				},
+			},
+		},
+	}
+	source := stacks.StacksNodeSpec{
+		ActorFields: common.ActorFields{Image: ptr.To("definition-image")},
+		Peers:       &common.Peers{NodeRefs: ptr.To([]common.NameRef{{Name: "peer"}})},
+	}
 	result, err := Compose(root, entry, source)
 	if err != nil {
 		t.Fatal(err)
 	}
 	n := result.StacksNode
-	if *n.Image != "override-image" || !*n.Storage.Ephemeral || n.Storage.Size != nil || len(*n.Peers.NodeRefs) != 1 || n.Peers.Discovery != nil {
+	if *n.Image != "override-image" || !*n.Storage.Ephemeral || n.Storage.Size != nil || len(*n.Peers.NodeRefs) != 1 ||
+		n.Peers.Discovery != nil {
 		t.Fatalf("precedence/exclusivity: %+v", n)
 	}
 	if *root.Spec.Defaults.Storage.Size != "4Gi" {
 		t.Fatal("mutated defaults")
 	}
 }
+
 func TestGateWindows(t *testing.T) {
 	got, err := gates(DefaultEpochs(), api.PoX{RewardCycleLength: 20, PrepareLength: 5})
 	if err != nil {
@@ -64,10 +86,12 @@ func TestPoX5GateUsesEnrollmentCutoffRatherThanActivationOffset(t *testing.T) {
 		}
 	}
 }
+
 func TestRuntimeNamesBindUIDsAndRespectBounds(t *testing.T) {
 	long := strings.Repeat("a", 253)
 	a := RuntimeName("network-a", "participant-a", "StacksNode", long, "actor")
-	if len(a) > 52 || a == RuntimeName("network-b", "participant-a", "StacksNode", long, "actor") || a == RuntimeName("network-a", "participant-b", "StacksNode", long, "actor") {
+	if len(a) > 52 || a == RuntimeName("network-b", "participant-a", "StacksNode", long, "actor") ||
+		a == RuntimeName("network-a", "participant-b", "StacksNode", long, "actor") {
 		t.Fatal("runtime identity is not isolated")
 	}
 	if len(DefaultAccountName(long, "identity")) > 63 {
@@ -78,18 +102,27 @@ func TestRuntimeNamesBindUIDsAndRespectBounds(t *testing.T) {
 func TestExplicitEmptyListClearsInheritedSeeds(t *testing.T) {
 	root := &api.StacksNetwork{}
 	source := stacks.StacksNodeSpec{Peers: &common.Peers{NodeRefs: ptr.To([]common.NameRef{{Name: "peer"}})}}
-	entry := api.Participant{Kind: "StacksNode", Overrides: &api.Configuration{StacksNode: &stacks.StacksNodeSpec{Peers: &common.Peers{NodeRefs: ptr.To([]common.NameRef{})}}}}
+	entry := api.Participant{
+		Kind: "StacksNode",
+		Overrides: &api.Configuration{
+			StacksNode: &stacks.StacksNodeSpec{Peers: &common.Peers{NodeRefs: ptr.To([]common.NameRef{})}},
+		},
+	}
 	result, err := Compose(root, entry, source)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.StacksNode.Peers.NodeRefs == nil || len(*result.StacksNode.Peers.NodeRefs) != 0 || result.StacksNode.Peers.Discovery != nil {
+	if result.StacksNode.Peers.NodeRefs == nil || len(*result.StacksNode.Peers.NodeRefs) != 0 ||
+		result.StacksNode.Peers.Discovery != nil {
 		t.Fatal("explicit empty peer list was lost or defaulted")
 	}
 }
 
 func TestMinersRequireExplicitIdentity(t *testing.T) {
-	for _, mining := range []*stacks.Mining{{Enabled: ptr.To(true)}, {BitcoinWalletRef: &common.NameRef{Name: "future-wallet"}}} {
+	for _, mining := range []*stacks.Mining{
+		{Enabled: ptr.To(true)},
+		{BitcoinWalletRef: &common.NameRef{Name: "future-wallet"}},
+	} {
 		if allowsDefaultIdentity(&stacks.StacksNodeSpec{Mining: mining}) {
 			t.Fatal("miner received implicit identity")
 		}
@@ -101,7 +134,10 @@ func TestMinersRequireExplicitIdentity(t *testing.T) {
 
 func TestProtectedBindingsExcludeMutableSelection(t *testing.T) {
 	a := []common.Binding{{Kind: "StacksAccount", Name: "sender", UID: "sender-uid"}}
-	b := append(append([]common.Binding{}, a...), common.Binding{Kind: "StacksAccount", Name: "recipient", UID: "recipient-uid"})
+	b := append(
+		append([]common.Binding{}, a...),
+		common.Binding{Kind: "StacksAccount", Name: "recipient", UID: "recipient-uid"},
+	)
 	if !sameIdentities(a, b) {
 		t.Fatal("new mutable reference rejected")
 	}
@@ -109,7 +145,12 @@ func TestProtectedBindingsExcludeMutableSelection(t *testing.T) {
 	if sameIdentities(a, b) {
 		t.Fatal("same-name replacement accepted")
 	}
-	old := api.Configuration{StacksTransactionProduction: &stacks.StacksTransactionProductionSpec{AccountRef: &common.NameRef{Name: "sender"}, TargetNodeRef: &common.NameRef{Name: "node"}}}
+	old := api.Configuration{
+		StacksTransactionProduction: &stacks.StacksTransactionProductionSpec{
+			AccountRef:    &common.NameRef{Name: "sender"},
+			TargetNodeRef: &common.NameRef{Name: "node"},
+		},
+	}
 	next := *old.DeepCopy()
 	next.StacksTransactionProduction.Recipient = &stacks.Recipient{AccountRef: &common.NameRef{Name: "recipient"}}
 	if sameProtectedConfiguration("StacksTransactionProduction", old, next) {

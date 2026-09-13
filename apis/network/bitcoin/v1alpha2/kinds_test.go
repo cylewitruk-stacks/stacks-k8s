@@ -1,8 +1,9 @@
 package v1alpha2
 
 import (
-	"k8s.io/apimachinery/pkg/runtime"
 	"testing"
+
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 // TestKindWireAndSchemeIdentity checks names independently against registered concrete types.

@@ -35,17 +35,25 @@ func progress(s snapshot) (chainProgress, bool) {
 	for _, ref := range s.Status.Bitcoin.ExecutionRefs {
 		boundRecords[ref.UID] = true
 	}
-	freshness := time.Duration(3*s.Status.ObservationPolicy.PollIntervalSeconds+s.Status.ObservationPolicy.RPCAllowanceSeconds) * time.Second
+	freshness := time.Duration(
+		3*s.Status.ObservationPolicy.PollIntervalSeconds+s.Status.ObservationPolicy.RPCAllowanceSeconds,
+	) * time.Second
 	fresh := func(at metav1.Time) bool { return !at.IsZero() && !at.After(s.At) && s.At.Sub(at.Time) <= freshness }
 	for _, p := range s.Participants {
 		state := p.Status.Runtime
+		//nolint:exhaustive // Fixture wire values remain independent of production enum constants.
 		switch p.Kind {
 		case "StacksNode":
 			if state == nil || state.PodRef == nil || state.Protocol == nil {
 				return result, false
 			}
 			view := state.Protocol
-			if !view.Available || !view.FullySynced || view.GenesisUID != s.Status.GenesisRef.UID || view.PodUID != state.PodRef.UID || view.ContainerID != state.ContainerID || view.ConfigurationDigest != state.ConfigurationDigest || !fresh(view.ObservedAt) || view.IndexBlockID == "" {
+			if !view.Available || !view.FullySynced || view.GenesisUID != s.Status.GenesisRef.UID ||
+				view.PodUID != state.PodRef.UID ||
+				view.ContainerID != state.ContainerID ||
+				view.ConfigurationDigest != state.ConfigurationDigest ||
+				!fresh(view.ObservedAt) ||
+				view.IndexBlockID == "" {
 				return result, false
 			}
 			result.stacks[p.Identity.UID] = view.StacksHeight
@@ -59,7 +67,9 @@ func progress(s snapshot) (chainProgress, bool) {
 					continue
 				}
 				view := record.Status.Observation
-				if view == nil || view.Target.Pod.UID != state.PodRef.UID || view.Target.ContainerID != state.ContainerID || !fresh(view.ObservedAt) {
+				if view == nil || view.Height < 0 || view.Target.Pod.UID != state.PodRef.UID ||
+					view.Target.ContainerID != state.ContainerID ||
+					!fresh(view.ObservedAt) {
 					return result, false
 				}
 				result.bitcoin[p.Identity.UID] = uint64(view.Height)
@@ -89,7 +99,9 @@ func progress(s snapshot) (chainProgress, bool) {
 
 // advanced requires every observed native chain view and successful traffic inclusion to advance.
 func advanced(before, after chainProgress) bool {
-	if after.receipts <= before.receipts || after.included <= before.included || len(before.bitcoin) != len(after.bitcoin) || len(before.stacks) != len(after.stacks) {
+	if after.receipts <= before.receipts || after.included <= before.included ||
+		len(before.bitcoin) != len(after.bitcoin) ||
+		len(before.stacks) != len(after.stacks) {
 		return false
 	}
 	for uid, height := range before.bitcoin {
@@ -112,7 +124,8 @@ func (h *harness) awaitProgress(ctx context.Context, stage string, before snapsh
 		var err error
 		before, err = h.wait(ctx, stage+"-baseline", h.config.progressTimeout, true, func(s snapshot) (bool, error) {
 			_, coherent := progress(s)
-			return coherent && condition(s, "Initialized", metav1.ConditionTrue) && condition(s, "Operational", metav1.ConditionTrue), nil
+			return coherent && condition(s, "Initialized", metav1.ConditionTrue) &&
+				condition(s, "Operational", metav1.ConditionTrue), nil
 		})
 		if err != nil {
 			return before, err
@@ -121,7 +134,9 @@ func (h *harness) awaitProgress(ctx context.Context, stage string, before snapsh
 	}
 	return h.wait(ctx, stage, h.config.progressTimeout, true, func(s snapshot) (bool, error) {
 		current, ready := progress(s)
-		return condition(s, "Initialized", metav1.ConditionTrue) && condition(s, "Operational", metav1.ConditionTrue) && ready && advanced(baseline, current), nil
+		return condition(s, "Initialized", metav1.ConditionTrue) && condition(s, "Operational", metav1.ConditionTrue) &&
+			ready &&
+			advanced(baseline, current), nil
 	})
 }
 
@@ -181,7 +196,9 @@ func (h *harness) restartOperator(ctx context.Context, before snapshot) (snapsho
 	if err := h.c.Get(ctx, key, &deployment); err != nil {
 		return before, err
 	}
-	if deployment.UID != h.config.operatorUID || deployment.Namespace != key.Namespace || deployment.DeletionTimestamp != nil || ptr.Deref(deployment.Spec.Replicas, 1) < 1 {
+	if deployment.UID != h.config.operatorUID || deployment.Namespace != key.Namespace ||
+		deployment.DeletionTimestamp != nil ||
+		ptr.Deref(deployment.Spec.Replicas, 1) < 1 {
 		return before, fmt.Errorf("selected operator Deployment identity or desired replicas differ")
 	}
 	podSpec := deployment.Spec.Template.Spec.DeepCopy()
@@ -189,8 +206,14 @@ func (h *harness) restartOperator(ctx context.Context, before snapshot) (snapsho
 	if deployment.Spec.Template.Annotations == nil {
 		deployment.Spec.Template.Annotations = map[string]string{}
 	}
-	deployment.Spec.Template.Annotations["network.stacks.org/publicintegration-restart"] = time.Now().UTC().Format(time.RFC3339Nano)
-	if err := h.c.Patch(ctx, &deployment, client.MergeFromWithOptions(original, client.MergeFromWithOptimisticLock{})); err != nil {
+	deployment.Spec.Template.Annotations["network.stacks.org/publicintegration-restart"] = time.Now().
+		UTC().
+		Format(time.RFC3339Nano)
+	if err := h.c.Patch(
+		ctx,
+		&deployment,
+		client.MergeFromWithOptions(original, client.MergeFromWithOptimisticLock{}),
+	); err != nil {
 		return before, err
 	}
 	generation := deployment.Generation
@@ -208,13 +231,26 @@ func (h *harness) restartOperator(ctx context.Context, before snapshot) (snapsho
 		}
 		replicas := ptr.Deref(current.Spec.Replicas, 1)
 		_, protocolReady := progress(s)
-		ready := current.Status.ObservedGeneration >= generation && current.Status.UpdatedReplicas == replicas && current.Status.AvailableReplicas == replicas && current.Status.Replicas == replicas && current.Status.UnavailableReplicas == 0 && condition(s, "Operational", metav1.ConditionTrue) && protocolReady
+		ready := current.Status.ObservedGeneration >= generation && current.Status.UpdatedReplicas == replicas &&
+			current.Status.AvailableReplicas == replicas &&
+			current.Status.Replicas == replicas &&
+			current.Status.UnavailableReplicas == 0 &&
+			condition(s, "Operational", metav1.ConditionTrue) &&
+			protocolReady
 		if ready {
 			images := map[string]string{}
 			for _, container := range current.Spec.Template.Spec.Containers {
 				images[container.Name] = container.Image
 			}
-			return true, h.event("operator-rollout-ready", map[string]any{"namespace": current.Namespace, "deployment": objectIdentity(&current), "images": images, "status": current.Status})
+			return true, h.event(
+				"operator-rollout-ready",
+				map[string]any{
+					"namespace":  current.Namespace,
+					"deployment": objectIdentity(&current),
+					"images":     images,
+					"status":     current.Status,
+				},
+			)
 		}
 		return false, nil
 	})
@@ -264,7 +300,8 @@ func (h *harness) pauseResume(ctx context.Context, before snapshot) (snapshot, e
 	}
 	resumed, err := h.wait(ctx, "resumed", h.config.progressTimeout, true, func(s snapshot) (bool, error) {
 		_, ready := progress(s)
-		return condition(s, "Initialized", metav1.ConditionTrue) && condition(s, "Operational", metav1.ConditionTrue) && ready, nil
+		return condition(s, "Initialized", metav1.ConditionTrue) && condition(s, "Operational", metav1.ConditionTrue) &&
+			ready, nil
 	})
 	if err != nil {
 		return resumed, err
@@ -297,10 +334,18 @@ func (h *harness) cleanup() error {
 	if ns.UID != h.namespaceUID {
 		return fmt.Errorf("cleanup refused replacement namespace")
 	}
-	if err := h.c.Delete(ctx, &ns, client.Preconditions{UID: &h.namespaceUID}); err != nil && !apierrors.IsNotFound(err) {
+	if err := h.c.Delete(
+		ctx,
+		&ns,
+		client.Preconditions{UID: &h.namespaceUID},
+	); err != nil &&
+		!apierrors.IsNotFound(err) {
 		return err
 	}
-	if err := h.waitAbsent(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: h.config.namespace}}); err != nil {
+	if err := h.waitAbsent(
+		ctx,
+		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: h.config.namespace}},
+	); err != nil {
 		return err
 	}
 	h.cleaned = true
@@ -346,13 +391,25 @@ func (h *harness) disposeNetwork(ctx context.Context, stopFirst bool) error {
 			if stopFirst {
 				propagation = metav1.DeletePropagationBackground
 			}
-			if err := h.event("root-deletion-requested", map[string]any{"uid": h.rootUID, "propagation": propagation, "stopFirst": stopFirst}); err != nil {
+			if err := h.event(
+				"root-deletion-requested",
+				map[string]any{"uid": h.rootUID, "propagation": propagation, "stopFirst": stopFirst},
+			); err != nil {
 				return err
 			}
-			if err := h.c.Delete(ctx, &root, client.Preconditions{UID: &h.rootUID}, client.PropagationPolicy(propagation)); err != nil && !apierrors.IsNotFound(err) {
+			if err := h.c.Delete(
+				ctx,
+				&root,
+				client.Preconditions{UID: &h.rootUID},
+				client.PropagationPolicy(propagation),
+			); err != nil &&
+				!apierrors.IsNotFound(err) {
 				return err
 			}
-			if err := h.waitAbsent(ctx, &api.StacksNetwork{ObjectMeta: metav1.ObjectMeta{Namespace: h.config.namespace, Name: "network"}}); err != nil {
+			if err := h.waitAbsent(
+				ctx,
+				&api.StacksNetwork{ObjectMeta: metav1.ObjectMeta{Namespace: h.config.namespace, Name: "network"}},
+			); err != nil {
 				return err
 			}
 		}
@@ -363,7 +420,12 @@ func (h *harness) disposeNetwork(ctx context.Context, stopFirst bool) error {
 			}
 			current := original.DeepCopy()
 			if err := h.c.Get(ctx, client.ObjectKeyFromObject(original), current); err != nil {
-				return fmt.Errorf("reusable declaration %s/%s not retained: %w", original.GetKind(), original.GetName(), err)
+				return fmt.Errorf(
+					"reusable declaration %s/%s not retained: %w",
+					original.GetKind(),
+					original.GetName(),
+					err,
+				)
 			}
 			if current.GetUID() != original.GetUID() || current.GetDeletionTimestamp() != nil {
 				return fmt.Errorf("reusable declaration identity changed during root deletion")

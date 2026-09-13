@@ -41,7 +41,10 @@ func participantCurrent(root *api.StacksNetwork, p *api.StacksNetworkParticipant
 
 // participantIdentity checks retained actor selection independently of cleanup control state.
 func participantIdentity(root *api.StacksNetwork, p *api.StacksNetworkParticipant) bool {
-	if root.UID == "" || root.DeletionTimestamp != nil || p.DeletionTimestamp != nil || p.Spec.NetworkUID != root.UID || !metav1.IsControlledBy(p, root) || p.Status.Admission == nil || foundation.Digest(p.Status.Admission.Configuration) != p.Status.Admission.PolicyDigest {
+	if root.UID == "" || root.DeletionTimestamp != nil || p.DeletionTimestamp != nil || p.Spec.NetworkUID != root.UID ||
+		!metav1.IsControlledBy(p, root) ||
+		p.Status.Admission == nil ||
+		foundation.Digest(p.Status.Admission.Configuration) != p.Status.Admission.PolicyDigest {
 		return false
 	}
 	selected, pinned := false, false
@@ -81,21 +84,38 @@ func (w *Worker) resolveActor(ctx context.Context, record *bitcoin.BitcoinExecut
 	if e := w.Reader.Get(ctx, client.ObjectKey{Namespace: w.Input.Namespace, Name: "network"}, root); e != nil {
 		return out, e
 	}
-	if root.UID != record.Spec.NetworkUID || root.Status.Bitcoin == nil || !hasBinding(root.Status.Bitcoin.ExecutionRefs, record.Name, record.UID) || root.Status.Bitcoin.InitializationRef == nil || !metav1.IsControlledBy(record, root) || record.DeletionTimestamp != nil || (!cleanup && (root.Spec.Operation == api.NetworkOperationStopped || failed(root))) {
+	if root.UID != record.Spec.NetworkUID || root.Status.Bitcoin == nil ||
+		!hasBinding(root.Status.Bitcoin.ExecutionRefs, record.Name, record.UID) ||
+		root.Status.Bitcoin.InitializationRef == nil ||
+		!metav1.IsControlledBy(record, root) ||
+		record.DeletionTimestamp != nil ||
+		(!cleanup && (root.Spec.Operation == api.NetworkOperationStopped || failed(root))) {
 		return out, fmt.Errorf("network has not authorized this execution record")
 	}
 	p := &api.StacksNetworkParticipant{}
-	if e := w.Reader.Get(ctx, client.ObjectKey{Namespace: record.Namespace, Name: record.Spec.Participant.Name}, p); e != nil {
+	if e := w.Reader.Get(
+		ctx,
+		client.ObjectKey{Namespace: record.Namespace, Name: record.Spec.Participant.Name},
+		p,
+	); e != nil {
 		return out, e
 	}
-	if p.UID != record.Spec.Participant.UID || p.Spec.Kind != api.ParticipantBitcoinNode || !participantIdentity(root, p) || p.Spec.Control != nil && ptr.Deref(p.Spec.Control.Suspended, false) {
-		return out, fmt.Errorf("Bitcoin participant is not currently admitted")
+	if p.UID != record.Spec.Participant.UID || p.Spec.Kind != api.ParticipantBitcoinNode ||
+		!participantIdentity(root, p) ||
+		p.Spec.Control != nil && ptr.Deref(p.Spec.Control.Suspended, false) {
+		return out, fmt.Errorf("unadmitted Bitcoin participant")
 	}
-	if config := p.Status.Admission.Configuration.BitcoinNode; config == nil || config.Config != nil && ptr.Deref(config.Config.Compatibility, common.CompatibilityManaged) == common.CompatibilityUnverified {
+	if config := p.Status.Admission.Configuration.BitcoinNode; config == nil ||
+		config.Config != nil &&
+			ptr.Deref(config.Config.Compatibility, common.CompatibilityManaged) == common.CompatibilityUnverified {
 		return out, fmt.Errorf("managed Bitcoin configuration unavailable")
 	}
 	runtime := p.Status.Runtime
-	if runtime == nil || runtime.PolicyDigest != p.Status.Admission.PolicyDigest || runtime.Terminated || runtime.PodRef == nil || runtime.RPCSecretRef == nil || runtime.ConfigRef == nil || runtime.ContainerID == "" {
+	if runtime == nil || runtime.PolicyDigest != p.Status.Admission.PolicyDigest || runtime.Terminated ||
+		runtime.PodRef == nil ||
+		runtime.RPCSecretRef == nil ||
+		runtime.ConfigRef == nil ||
+		runtime.ContainerID == "" {
 		return out, fmt.Errorf("exact actor runtime identity unavailable")
 	}
 	if runtime.RPCSecretRef.UID != w.Input.CredentialsUID || runtime.RPCSecretRef.Name != w.Input.CredentialsName {
@@ -106,15 +126,21 @@ func (w *Worker) resolveActor(ctx context.Context, record *bitcoin.BitcoinExecut
 		if e := w.Reader.Get(ctx, client.ObjectKey{Namespace: p.Namespace, Name: ref.Name}, &secret); e != nil {
 			return out, e
 		}
-		if secret.UID != ref.UID || secret.DeletionTimestamp != nil || !ptr.Deref(secret.Immutable, false) || !metav1.IsControlledBy(&secret, p) {
+		if secret.UID != ref.UID || secret.DeletionTimestamp != nil || !ptr.Deref(secret.Immutable, false) ||
+			!metav1.IsControlledBy(&secret, p) {
 			return out, fmt.Errorf("immutable actor credential/configuration identity differs")
 		}
 	}
 	var pod corev1.Pod
-	if e := w.Reader.Get(ctx, client.ObjectKey{Namespace: p.Namespace, Name: runtime.PodRef.Name}, &pod); e != nil {
+	if e := w.Reader.Get(ctx, client.ObjectKey{
+		Namespace: p.Namespace,
+		Name:      runtime.PodRef.Name,
+	}, &pod); e != nil {
 		return out, e
 	}
-	if pod.UID != runtime.PodRef.UID || pod.DeletionTimestamp != nil || pod.Status.PodIP == "" || pod.Labels[api.LabelParticipantUID] != string(p.UID) || pod.Labels[api.LabelNetworkUID] != string(root.UID) {
+	if pod.UID != runtime.PodRef.UID || pod.DeletionTimestamp != nil || pod.Status.PodIP == "" ||
+		pod.Labels[api.LabelParticipantUID] != string(p.UID) ||
+		pod.Labels[api.LabelNetworkUID] != string(root.UID) {
 		return out, fmt.Errorf("actor Pod identity differs")
 	}
 	owner := metav1.GetControllerOf(&pod)
@@ -125,12 +151,17 @@ func (w *Worker) resolveActor(ctx context.Context, record *bitcoin.BitcoinExecut
 	if e := w.Reader.Get(ctx, client.ObjectKey{Namespace: p.Namespace, Name: owner.Name}, &workload); e != nil {
 		return out, e
 	}
-	if workload.UID != owner.UID || !metav1.IsControlledBy(&workload, p) || !hasBinding(runtime.WorkloadRefs, workload.Name, workload.UID) || workload.DeletionTimestamp != nil || ptr.Deref(workload.Spec.Replicas, 1) != 1 {
+	if workload.UID != owner.UID || !metav1.IsControlledBy(&workload, p) ||
+		!hasBinding(runtime.WorkloadRefs, workload.Name, workload.UID) ||
+		workload.DeletionTimestamp != nil ||
+		ptr.Deref(workload.Spec.Replicas, 1) != 1 {
 		return out, fmt.Errorf("actor workload identity differs")
 	}
 	process := false
 	for _, status := range pod.Status.ContainerStatuses {
-		if status.Name == api.ContainerBitcoin && status.ContainerID == runtime.ContainerID && status.State.Running != nil && status.Ready {
+		if status.Name == api.ContainerBitcoin && status.ContainerID == runtime.ContainerID &&
+			status.State.Running != nil &&
+			status.Ready {
 			process = true
 		}
 	}
@@ -151,7 +182,9 @@ func (w *Worker) resolveActor(ctx context.Context, record *bitcoin.BitcoinExecut
 	if e := w.Reader.Get(ctx, client.ObjectKey{Namespace: p.Namespace, Name: parts[0]}, &service); e != nil {
 		return out, e
 	}
-	if !metav1.IsControlledBy(&service, p) || service.DeletionTimestamp != nil || service.Spec.Selector[api.LabelParticipantUID] != string(p.UID) || service.Spec.Selector[api.LabelNetworkUID] != string(root.UID) {
+	if !metav1.IsControlledBy(&service, p) || service.DeletionTimestamp != nil ||
+		service.Spec.Selector[api.LabelParticipantUID] != string(p.UID) ||
+		service.Spec.Selector[api.LabelNetworkUID] != string(root.UID) {
 		return out, fmt.Errorf("RPC Service binding differs")
 	}
 	for k, v := range service.Spec.Selector {
@@ -171,26 +204,52 @@ func (w *Worker) resolveActor(ctx context.Context, record *bitcoin.BitcoinExecut
 	if e := w.Reader.Get(ctx, client.ObjectKey{Namespace: p.Namespace, Name: ref.Name}, init); e != nil {
 		return out, e
 	}
-	if init.UID != ref.UID || init.Spec.NetworkUID != root.UID || !metav1.IsControlledBy(init, root) || init.DeletionTimestamp != nil {
+	if init.UID != ref.UID || init.Spec.NetworkUID != root.UID || !metav1.IsControlledBy(init, root) ||
+		init.DeletionTimestamp != nil {
 		return out, fmt.Errorf("initialization record identity unavailable")
 	}
-	out = admitted{root: root, participant: p, initialization: init, pod: &pod, target: bitcoin.BitcoinTargetIdentity{Participant: objectref.Participant(p), Pod: *runtime.PodRef, ContainerID: runtime.ContainerID, Endpoint: "http://" + net.JoinHostPort(pod.Status.PodIP, strconv.Itoa(int(endpoint.Port))), Configuration: *runtime.ConfigRef, Credentials: *runtime.RPCSecretRef, PolicyDigest: p.Status.Admission.PolicyDigest}}
+	out = admitted{
+		root:           root,
+		participant:    p,
+		initialization: init,
+		pod:            &pod,
+		target: bitcoin.BitcoinTargetIdentity{
+			Participant:   objectref.Participant(p),
+			Pod:           *runtime.PodRef,
+			ContainerID:   runtime.ContainerID,
+			Endpoint:      "http://" + net.JoinHostPort(pod.Status.PodIP, strconv.Itoa(int(endpoint.Port))),
+			Configuration: *runtime.ConfigRef,
+			Credentials:   *runtime.RPCSecretRef,
+			PolicyDigest:  p.Status.Admission.PolicyDigest,
+		},
+	}
 	return out, nil
 }
 
 // authorizeOffer verifies current selection and the frozen ceiling independently of freshness snapshots.
 func (w *Worker) authorizeOffer(ctx context.Context, a admitted, offer *bitcoin.BitcoinBlockOffer) error {
-	if offer == nil || offer.Number < 1 || offer.ExpectedHeight >= offer.Ceiling || !w.Now().Before(offer.ExpiresAt.Time) || offer.Initialization != objectref.BitcoinInitialization(a.initialization) || offer.Production != productionBinding(a.initialization) || !equality.Semantic.DeepEqual(a.initialization.Status.Offer, offer) {
+	if offer == nil || offer.Number < 1 || offer.ExpectedHeight >= offer.Ceiling ||
+		!w.Now().Before(offer.ExpiresAt.Time) ||
+		offer.Initialization != objectref.BitcoinInitialization(a.initialization) ||
+		offer.Production != productionBinding(a.initialization) ||
+		!equality.Semantic.DeepEqual(a.initialization.Status.Offer, offer) {
 		return fmt.Errorf("generation opportunity is not currently authorized")
 	}
 	if err := w.authorizeTimingOverride(ctx, a, offer); err != nil {
 		return err
 	}
 	production := &api.StacksNetworkParticipant{}
-	if e := w.Reader.Get(ctx, client.ObjectKey{Namespace: a.root.Namespace, Name: offer.Production.Name}, production); e != nil {
+	if e := w.Reader.Get(
+		ctx,
+		client.ObjectKey{Namespace: a.root.Namespace, Name: offer.Production.Name},
+		production,
+	); e != nil {
 		return e
 	}
-	if production.UID != offer.Production.UID || !participantCurrent(a.root, production) || production.Spec.Kind != api.ParticipantBitcoinBlockProduction || production.Status.Admission.PolicyDigest != offer.PolicyDigest || production.Spec.Control != nil && ptr.Deref(production.Spec.Control.Paused, false) {
+	if production.UID != offer.Production.UID || !participantCurrent(a.root, production) ||
+		production.Spec.Kind != api.ParticipantBitcoinBlockProduction ||
+		production.Status.Admission.PolicyDigest != offer.PolicyDigest ||
+		production.Spec.Control != nil && ptr.Deref(production.Spec.Control.Paused, false) {
 		return fmt.Errorf("production participant is not currently authorized")
 	}
 	if err := foundation.ValidateAdmissionEligibility(ctx, w.Reader, production); err != nil {
@@ -209,7 +268,8 @@ func (w *Worker) authorizeOffer(ctx context.Context, a admitted, offer *bitcoin.
 		}
 		return baselineOfferMatches(a.initialization, offer, inputs, a.participant)
 	}
-	if offer.Mode != "" && offer.Mode != bitcoin.OfferBootstrap || a.initialization.Spec.Target.UID != a.participant.UID {
+	if offer.Mode != "" && offer.Mode != bitcoin.OfferBootstrap ||
+		a.initialization.Spec.Target.UID != a.participant.UID {
 		return fmt.Errorf("bootstrap target unavailable")
 	}
 	authority, e := currentGate(ctx, w.Reader, a.root, a.initialization)

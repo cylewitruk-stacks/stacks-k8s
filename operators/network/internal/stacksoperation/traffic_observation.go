@@ -38,14 +38,19 @@ func (r *TransferRole) observeTraffic(ctx context.Context, now time.Time) {
 	if r.includedTarget == nil || r.traffic == nil {
 		return
 	}
+	// #nosec G115 -- Applied traffic intervals are 1s..1h; their progress windows are positive and bounded.
 	r.traffic.EffectiveIntervalSeconds = uint64(r.interval / time.Second)
+	// #nosec G115 -- Applied traffic intervals are 1s..1h; their progress windows are positive and bounded.
 	r.traffic.ProgressWindowSeconds = uint64(foundation.ProgressWindow(r.interval) / time.Second)
 	if now.Before(r.nextObservation) {
 		return
 	}
 	r.nextObservation = now.Add(time.Duration(foundation.ObservationPolicy().PollIntervalSeconds) * time.Second)
 	r.traffic.Available = false
-	ctx, cancel := context.WithTimeout(ctx, time.Duration(foundation.ObservationPolicy().RPCAllowanceSeconds)*time.Second)
+	ctx, cancel := context.WithTimeout(
+		ctx,
+		time.Duration(foundation.ObservationPolicy().RPCAllowanceSeconds)*time.Second,
+	)
 	defer cancel()
 	node := r.includedTarget.Node
 	before, err := node.ChainView(ctx)
@@ -86,7 +91,11 @@ func (r *TransferRole) authorize(s stacksworker.Snapshot, prepared TransferInput
 		current, err := r.Resolve(ctx, s)
 		if err != nil {
 			if s.AppliedFallback != nil {
-				if fallback, ok := s.AppliedFallback(r.applied, err); ok && !fallback.Paused && fallback.Authorize != nil {
+				if fallback, ok := s.AppliedFallback(
+					r.applied,
+					err,
+				); ok && !fallback.Paused &&
+					fallback.Authorize != nil {
 					return fallback.Authorize(ctx)
 				}
 			}
@@ -102,5 +111,8 @@ func (r *TransferRole) authorize(s stacksworker.Snapshot, prepared TransferInput
 
 // trafficBindingEqual compares public ingress identity independently of cadence and observations.
 func trafficBindingEqual(a, b api.TrafficObservation) bool {
-	return a.TargetParticipantUID == b.TargetParticipantUID && a.TargetPodUID == b.TargetPodUID && a.TargetContainerID == b.TargetContainerID && a.TargetConfigurationDigest == b.TargetConfigurationDigest && a.GenesisUID == b.GenesisUID
+	return a.TargetParticipantUID == b.TargetParticipantUID && a.TargetPodUID == b.TargetPodUID &&
+		a.TargetContainerID == b.TargetContainerID &&
+		a.TargetConfigurationDigest == b.TargetConfigurationDigest &&
+		a.GenesisUID == b.GenesisUID
 }

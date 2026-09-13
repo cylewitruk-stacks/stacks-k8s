@@ -26,7 +26,11 @@ func TestActionViewKeepsConcreteIdentity(t *testing.T) {
 			}
 			object.SetName("request")
 			object.SetUID("request-uid")
-			if ref := view.reference(); ref != (common.Binding{Kind: string(kind), Name: "request", UID: "request-uid"}) {
+			if ref := view.reference(); ref != (common.Binding{
+				Kind: string(kind),
+				Name: "request",
+				UID:  "request-uid",
+			}) {
 				t.Fatalf("incorrect serialized reference: %#v", ref)
 			}
 			view.status.Phase = action.PhaseActive
@@ -53,8 +57,16 @@ func TestActionViewRejectsUnknownInputs(t *testing.T) {
 			t.Fatalf("kind %q returned %T, %v", kind, object, err)
 		}
 	}
-	for _, object := range []client.Object{nil, (*action.BitcoinBlockGeneration)(nil), (*action.BitcoinReorganization)(nil), &corev1.Pod{}} {
-		if view, err := actionFields(object); err == nil || view.object != nil || view.status != nil || view.kind != "" {
+	for _, object := range []client.Object{
+		nil,
+		(*action.BitcoinBlockGeneration)(nil),
+		(*action.BitcoinReorganization)(nil),
+		&corev1.Pod{},
+	} {
+		if view, err := actionFields(
+			object,
+		); err == nil || view.object != nil || view.status != nil ||
+			view.kind != "" {
 			t.Fatalf("object %T returned %#v, %v", object, view, err)
 		}
 	}

@@ -39,14 +39,22 @@ const (
 
 // ReconcileControlLifecycle observes exact control processes before releasing their evidence.
 // Call before workload mutation and after creation, including terminal paths without enrollment.
-func (r *WorkloadReconciler) ReconcileControlLifecycle(ctx context.Context, p *api.StacksNetworkParticipant, root *api.StacksNetwork) (ctrl.Result, error) {
+func (r *WorkloadReconciler) ReconcileControlLifecycle(
+	ctx context.Context,
+	p *api.StacksNetworkParticipant,
+	root *api.StacksNetwork,
+) (ctrl.Result, error) {
 	if root.UID != p.Spec.NetworkUID || !metav1.IsControlledBy(p, root) {
 		return ctrl.Result{}, fmt.Errorf("control participant ownership unavailable")
 	}
 	if p.DeletionTimestamp == nil && !controllerutil.ContainsFinalizer(p, ControlParticipantFinalizer) {
 		base := p.DeepCopy()
 		controllerutil.AddFinalizer(p, ControlParticipantFinalizer)
-		if err := r.Client.Patch(ctx, p, client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{})); err != nil {
+		if err := r.Client.Patch(
+			ctx,
+			p,
+			client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{}),
+		); err != nil {
 			return ctrl.Result{}, err
 		}
 	}
@@ -68,7 +76,13 @@ func (r *WorkloadReconciler) ReconcileControlLifecycle(ctx context.Context, p *a
 	finish := func(reason string, err error) (ctrl.Result, error) {
 		state.Reason = reason
 		if !equality.Semantic.DeepEqual(p.Status.BitcoinControl, &state) {
-			if applyErr := participantstatus.Apply(ctx, r.Client, p, api.ParticipantStatus{BitcoinControl: &state}, ControlLifecycleManager); applyErr != nil {
+			if applyErr := participantstatus.Apply(
+				ctx,
+				r.Client,
+				p,
+				api.ParticipantStatus{BitcoinControl: &state},
+				ControlLifecycleManager,
+			); applyErr != nil {
 				return ctrl.Result{}, applyErr
 			}
 		}
@@ -94,9 +108,19 @@ func (r *WorkloadReconciler) ReconcileControlLifecycle(ctx context.Context, p *a
 		deployments[ref.UID] = ref
 	}
 	var list corev1.PodList
-	selector := client.MatchingLabels{api.LabelParticipantUID: string(p.UID), api.LabelNetworkUID: string(root.UID), workerRoleLabel: workerRoleControl}
+	selector := client.MatchingLabels{
+		api.LabelParticipantUID: string(p.UID),
+		api.LabelNetworkUID:     string(root.UID),
+		workerRoleLabel:         workerRoleControl,
+	}
 	var replicas appsv1.ReplicaSetList
-	if err := r.Reader.List(ctx, &replicas, client.InNamespace(p.Namespace), selector, client.Limit(controlPodLimit+1)); err != nil {
+	if err := r.Reader.List(
+		ctx,
+		&replicas,
+		client.InNamespace(p.Namespace),
+		selector,
+		client.Limit(controlPodLimit+1),
+	); err != nil {
 		return finish(api.ReasonTerminationUnknown, err)
 	}
 	if replicas.Continue != "" || len(replicas.Items) > controlPodLimit {
@@ -115,7 +139,13 @@ func (r *WorkloadReconciler) ReconcileControlLifecycle(ctx context.Context, p *a
 		}
 		replicasQuiesced = replicasQuiesced && replicaQuiesced(replica)
 	}
-	if err := r.Reader.List(ctx, &list, client.InNamespace(p.Namespace), selector, client.Limit(controlPodLimit+1)); err != nil {
+	if err := r.Reader.List(
+		ctx,
+		&list,
+		client.InNamespace(p.Namespace),
+		selector,
+		client.Limit(controlPodLimit+1),
+	); err != nil {
 		return finish(api.ReasonTerminationUnknown, err)
 	}
 	if list.Continue != "" || len(list.Items) > controlPodLimit {
@@ -149,11 +179,13 @@ func (r *WorkloadReconciler) ReconcileControlLifecycle(ctx context.Context, p *a
 	unknown := missing
 	for uid, pod := range pods {
 		owner := metav1.GetControllerOf(pod)
-		if owner == nil || owner.APIVersion != appsv1.SchemeGroupVersion.String() || owner.Kind != common.KindReplicaSet {
+		if owner == nil || owner.APIVersion != appsv1.SchemeGroupVersion.String() ||
+			owner.Kind != common.KindReplicaSet {
 			return finish(api.ReasonOwnershipConflict, fmt.Errorf("control Pod ReplicaSet identity unavailable"))
 		}
 		known, pinned := previous[uid]
-		if pinned && (known.Pod.Name != pod.Name || known.ReplicaSet.Name != owner.Name || known.ReplicaSet.UID != owner.UID) {
+		if pinned &&
+			(known.Pod.Name != pod.Name || known.ReplicaSet.Name != owner.Name || known.ReplicaSet.UID != owner.UID) {
 			return finish(api.ReasonOwnershipConflict, fmt.Errorf("bound control Pod owner differs"))
 		}
 		var replica appsv1.ReplicaSet
@@ -170,7 +202,9 @@ func (r *WorkloadReconciler) ReconcileControlLifecycle(ctx context.Context, p *a
 				return finish(api.ReasonOwnershipConflict, fmt.Errorf("control ReplicaSet owner unavailable"))
 			}
 			ref, verified := deployments[parent.UID]
-			if !verified || replica.UID != owner.UID || !controllerMatches(&replica, common.KindDeployment, ref.Name, ref.UID) || pinned && ref != known.Deployment {
+			if !verified || replica.UID != owner.UID ||
+				!controllerMatches(&replica, common.KindDeployment, ref.Name, ref.UID) ||
+				pinned && ref != known.Deployment {
 				return finish(api.ReasonOwnershipConflict, fmt.Errorf("control ReplicaSet Deployment identity differs"))
 			}
 			deploymentRef = ref
@@ -180,7 +214,16 @@ func (r *WorkloadReconciler) ReconcileControlLifecycle(ctx context.Context, p *a
 		if pinned && known.Terminated && !terminal {
 			return finish(api.ReasonTerminationUnknown, fmt.Errorf("terminal control Pod evidence regressed"))
 		}
-		observed = append(observed, api.BitcoinControlPodStatus{UID: uid, Pod: objectref.Pod(pod), ReplicaSet: common.Binding{Kind: common.KindReplicaSet, Name: owner.Name, UID: owner.UID}, Deployment: deploymentRef, Terminated: terminal})
+		observed = append(
+			observed,
+			api.BitcoinControlPodStatus{
+				UID:        uid,
+				Pod:        objectref.Pod(pod),
+				ReplicaSet: common.Binding{Kind: common.KindReplicaSet, Name: owner.Name, UID: owner.UID},
+				Deployment: deploymentRef,
+				Terminated: terminal,
+			},
+		)
 		allTerminated = allTerminated && terminal
 		if terminal && controllerutil.ContainsFinalizer(pod, ControlPodFinalizer) {
 			release = append(release, pod)
@@ -202,15 +245,18 @@ func (r *WorkloadReconciler) ReconcileControlLifecycle(ctx context.Context, p *a
 	destroyedControllers := root.DeletionTimestamp != nil && len(replicas.Items) == 0
 	quiesced := absent && (state.DeploymentRef == nil || previouslyTerminated || destroyedControllers)
 	if !absent {
-		quiesced = ptr.Deref(deployment.Spec.Replicas, 1) == 0 && deployment.Status.ObservedGeneration >= deployment.Generation && deployment.Status.Replicas == 0
+		quiesced = ptr.Deref(deployment.Spec.Replicas, 1) == 0 &&
+			deployment.Status.ObservedGeneration >= deployment.Generation &&
+			deployment.Status.Replicas == 0
 	}
 	state.Terminated = allTerminated && !unknown && quiesced && replicasQuiesced
 	reason := api.ReasonRunning
-	if unknown || absent && !quiesced {
+	switch {
+	case unknown || absent && !quiesced:
 		reason = api.ReasonTerminationUnknown
-	} else if state.Terminated {
+	case state.Terminated:
 		reason = api.ReasonTerminated
-	} else if stopReason(root, p) != "" || !absent && ptr.Deref(deployment.Spec.Replicas, 1) == 0 {
+	case stopReason(root, p) != "" || !absent && ptr.Deref(deployment.Spec.Replicas, 1) == 0:
 		reason = api.ReasonStopping
 	}
 	result, err := finish(reason, nil)
@@ -221,14 +267,23 @@ func (r *WorkloadReconciler) ReconcileControlLifecycle(ctx context.Context, p *a
 	for _, pod := range release {
 		base := pod.DeepCopy()
 		controllerutil.RemoveFinalizer(pod, ControlPodFinalizer)
-		if err := r.Client.Patch(ctx, pod, client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{})); err != nil {
+		if err := r.Client.Patch(
+			ctx,
+			pod,
+			client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{}),
+		); err != nil {
 			return ctrl.Result{}, err
 		}
 	}
-	if state.Terminated && p.DeletionTimestamp != nil && controllerutil.ContainsFinalizer(p, ControlParticipantFinalizer) {
+	if state.Terminated && p.DeletionTimestamp != nil &&
+		controllerutil.ContainsFinalizer(p, ControlParticipantFinalizer) {
 		base := p.DeepCopy()
 		controllerutil.RemoveFinalizer(p, ControlParticipantFinalizer)
-		if err := r.Client.Patch(ctx, p, client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{})); err != nil {
+		if err := r.Client.Patch(
+			ctx,
+			p,
+			client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{}),
+		); err != nil {
 			return ctrl.Result{}, err
 		}
 	}
@@ -245,9 +300,15 @@ func controlPodUnknown(pod *corev1.Pod) bool {
 			return true
 		}
 	}
-	for _, statuses := range [][]corev1.ContainerStatus{pod.Status.ContainerStatuses, pod.Status.InitContainerStatuses, pod.Status.EphemeralContainerStatuses} {
+	for _, statuses := range [][]corev1.ContainerStatus{
+		pod.Status.ContainerStatuses,
+		pod.Status.InitContainerStatuses,
+		pod.Status.EphemeralContainerStatuses,
+	} {
 		for _, status := range statuses {
-			if status.State.Terminated != nil && status.State.Terminated.Reason == common.ReasonContainerStatusUnknown || status.State.Waiting != nil && status.State.Waiting.Reason == common.ReasonContainerStatusUnknown {
+			if status.State.Terminated != nil &&
+				status.State.Terminated.Reason == common.ReasonContainerStatusUnknown ||
+				status.State.Waiting != nil && status.State.Waiting.Reason == common.ReasonContainerStatusUnknown {
 				return true
 			}
 		}
@@ -257,32 +318,45 @@ func controlPodUnknown(pod *corev1.Pod) bool {
 
 // replicaQuiesced excludes replacement Pods from retained old Deployment epochs.
 func replicaQuiesced(replica *appsv1.ReplicaSet) bool {
-	return ptr.Deref(replica.Spec.Replicas, 1) == 0 && replica.Status.ObservedGeneration >= replica.Generation && replica.Status.Replicas == 0
+	return ptr.Deref(replica.Spec.Replicas, 1) == 0 && replica.Status.ObservedGeneration >= replica.Generation &&
+		replica.Status.Replicas == 0
 }
 
 // controlDeploymentName selects the participant's deterministic control workload.
 func controlDeploymentName(p *api.StacksNetworkParticipant) string {
-	return naming.RuntimeName(string(p.Spec.NetworkUID), string(p.UID), string(api.ParticipantBitcoinNode), p.Spec.ParticipantName, "control")
+	return naming.RuntimeName(
+		string(p.Spec.NetworkUID),
+		string(p.UID),
+		string(api.ParticipantBitcoinNode),
+		p.Spec.ParticipantName,
+		"control",
+	)
 }
 
 // controllerMatches checks the full supported workload-controller binding.
 func controllerMatches(object metav1.Object, kind, name string, uid types.UID) bool {
 	owner := metav1.GetControllerOf(object)
-	return owner != nil && owner.APIVersion == appsv1.SchemeGroupVersion.String() && owner.Kind == kind && owner.Name == name && owner.UID == uid
+	return owner != nil && owner.APIVersion == appsv1.SchemeGroupVersion.String() && owner.Kind == kind &&
+		owner.Name == name &&
+		owner.UID == uid
 }
 
 // controlPodTerminated requires kubelet exit evidence for every declared process.
 func controlPodTerminated(pod *corev1.Pod) bool {
-	if pod.DeletionTimestamp != nil && pod.Spec.NodeName == "" && len(pod.Status.ContainerStatuses) == 0 && len(pod.Status.InitContainerStatuses) == 0 && len(pod.Status.EphemeralContainerStatuses) == 0 {
+	if pod.DeletionTimestamp != nil && pod.Spec.NodeName == "" && len(pod.Status.ContainerStatuses) == 0 &&
+		len(pod.Status.InitContainerStatuses) == 0 &&
+		len(pod.Status.EphemeralContainerStatuses) == 0 {
 		return true
 	}
-	if pod.Status.Phase != corev1.PodSucceeded && pod.Status.Phase != corev1.PodFailed || len(pod.Spec.Containers) == 0 {
+	if pod.Status.Phase != corev1.PodSucceeded && pod.Status.Phase != corev1.PodFailed ||
+		len(pod.Spec.Containers) == 0 {
 		return false
 	}
 	confirmed := func(name string, statuses []corev1.ContainerStatus) bool {
 		for _, status := range statuses {
 			if status.Name == name {
-				return status.State.Terminated != nil && status.State.Terminated.Reason != common.ReasonContainerStatusUnknown
+				return status.State.Terminated != nil &&
+					status.State.Terminated.Reason != common.ReasonContainerStatusUnknown
 			}
 		}
 		return false
@@ -308,7 +382,11 @@ func controlPodTerminated(pod *corev1.Pod) bool {
 // ControlLifecycleEvents routes process evidence and acknowledged scale-down changes.
 func ControlLifecycleEvents() predicate.Predicate {
 	return predicate.Funcs{UpdateFunc: func(e event.UpdateEvent) bool {
-		if e.ObjectOld.GetUID() != e.ObjectNew.GetUID() || e.ObjectOld.GetGeneration() != e.ObjectNew.GetGeneration() || !equality.Semantic.DeepEqual(e.ObjectOld.GetDeletionTimestamp(), e.ObjectNew.GetDeletionTimestamp()) || !equality.Semantic.DeepEqual(e.ObjectOld.GetOwnerReferences(), e.ObjectNew.GetOwnerReferences()) || !equality.Semantic.DeepEqual(e.ObjectOld.GetFinalizers(), e.ObjectNew.GetFinalizers()) || !equality.Semantic.DeepEqual(e.ObjectOld.GetLabels(), e.ObjectNew.GetLabels()) {
+		if e.ObjectOld.GetUID() != e.ObjectNew.GetUID() || e.ObjectOld.GetGeneration() != e.ObjectNew.GetGeneration() ||
+			!equality.Semantic.DeepEqual(e.ObjectOld.GetDeletionTimestamp(), e.ObjectNew.GetDeletionTimestamp()) ||
+			!equality.Semantic.DeepEqual(e.ObjectOld.GetOwnerReferences(), e.ObjectNew.GetOwnerReferences()) ||
+			!equality.Semantic.DeepEqual(e.ObjectOld.GetFinalizers(), e.ObjectNew.GetFinalizers()) ||
+			!equality.Semantic.DeepEqual(e.ObjectOld.GetLabels(), e.ObjectNew.GetLabels()) {
 			return true
 		}
 		switch old := e.ObjectOld.(type) {
@@ -317,7 +395,8 @@ func ControlLifecycleEvents() predicate.Predicate {
 			return !ok || !equality.Semantic.DeepEqual(old.Status, current.Status)
 		case *appsv1.Deployment:
 			current, ok := e.ObjectNew.(*appsv1.Deployment)
-			return !ok || old.Status.ObservedGeneration != current.Status.ObservedGeneration || old.Status.Replicas != current.Status.Replicas
+			return !ok || old.Status.ObservedGeneration != current.Status.ObservedGeneration ||
+				old.Status.Replicas != current.Status.Replicas
 		}
 		return false
 	}}
@@ -332,7 +411,9 @@ func (r *WorkloadReconciler) ControlLifecycleRequests(ctx context.Context, objec
 			break
 		}
 		if owner.Kind == api.KindStacksNetworkParticipant && owner.APIVersion == api.GroupVersion.String() {
-			return []ctrl.Request{{NamespacedName: client.ObjectKey{Namespace: object.GetNamespace(), Name: owner.Name}}}
+			return []ctrl.Request{
+				{NamespacedName: client.ObjectKey{Namespace: object.GetNamespace(), Name: owner.Name}},
+			}
 		}
 		var parent client.Object
 		switch owner.Kind {
@@ -343,14 +424,24 @@ func (r *WorkloadReconciler) ControlLifecycleRequests(ctx context.Context, objec
 		default:
 			return nil
 		}
-		if owner.APIVersion != appsv1.SchemeGroupVersion.String() || r.Client.Get(ctx, client.ObjectKey{Namespace: object.GetNamespace(), Name: owner.Name}, parent) != nil || parent.GetUID() != owner.UID {
+		if owner.APIVersion != appsv1.SchemeGroupVersion.String() ||
+			r.Client.Get(ctx, client.ObjectKey{Namespace: object.GetNamespace(), Name: owner.Name}, parent) != nil ||
+			parent.GetUID() != owner.UID {
 			break
 		}
 		current = parent
 	}
 	labels := object.GetLabels()
-	if labels[workerRoleLabel] != workerRoleControl || labels[api.LabelNetworkUID] == "" || labels[api.LabelParticipant] == "" {
+	if labels[workerRoleLabel] != workerRoleControl || labels[api.LabelNetworkUID] == "" ||
+		labels[api.LabelParticipant] == "" {
 		return nil
 	}
-	return []ctrl.Request{{NamespacedName: client.ObjectKey{Namespace: object.GetNamespace(), Name: foundation.ParticipantName(labels[api.LabelNetworkUID], labels[api.LabelParticipant])}}}
+	return []ctrl.Request{
+		{
+			NamespacedName: client.ObjectKey{
+				Namespace: object.GetNamespace(),
+				Name:      foundation.ParticipantName(labels[api.LabelNetworkUID], labels[api.LabelParticipant]),
+			},
+		},
+	}
 }

@@ -58,16 +58,39 @@ func (r *Reconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 	readContext, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	if object.Spec.ExpectedInventoryDigest != "" {
-		return ctrl.Result{}, r.writeStatus(ctx, object, patchBase, inconclusiveStatus(object, now, "legacy inventory expectations are unsupported; use expectedSnapshotDigest"))
+		return ctrl.Result{}, r.writeStatus(
+			ctx,
+			object,
+			patchBase,
+			inconclusiveStatus(
+				object,
+				now,
+				"legacy inventory expectations are unsupported; use expectedSnapshotDigest",
+			),
+		)
 	}
 	expected := object.Spec.ExpectedSnapshotDigest
 	snapshot, err := observer.Observe(readContext, object.Namespace, object.Spec.NetworkRef.Name, expected)
 	if err != nil {
 		if topology.IsNotReady(err) {
 			if pendingDeadlineExceeded(object, now) {
-				return ctrl.Result{}, r.writeStatus(ctx, object, patchBase, inconclusiveStatus(object, now, "the topology did not become ready before pendingTimeoutSeconds elapsed"))
+				return ctrl.Result{}, r.writeStatus(
+					ctx,
+					object,
+					patchBase,
+					inconclusiveStatus(
+						object,
+						now,
+						"the topology did not become ready before pendingTimeoutSeconds elapsed",
+					),
+				)
 			}
-			if statusErr := r.writeStatus(ctx, object, patchBase, pendingStatus(object, now, err.Error())); statusErr != nil {
+			if statusErr := r.writeStatus(
+				ctx,
+				object,
+				patchBase,
+				pendingStatus(object, now, err.Error()),
+			); statusErr != nil {
 				return ctrl.Result{}, statusErr
 			}
 			return ctrl.Result{RequeueAfter: pendingRequeue}, nil
@@ -85,10 +108,16 @@ func (r *Reconciler) SetupWithManager(manager ctrl.Manager, concurrency int) err
 	if r.observer() == nil {
 		return fmt.Errorf("observation reconciler requires an uncached API reader")
 	}
-	if err := manager.GetFieldIndexer().IndexField(context.Background(), &observationv1alpha1.NetworkObservation{}, networkReferenceField, func(object client.Object) []string {
-		observation := object.(*observationv1alpha1.NetworkObservation)
-		return []string{observation.Spec.NetworkRef.Name}
-	}); err != nil {
+	if err := manager.GetFieldIndexer().
+		IndexField(
+			context.Background(),
+			&observationv1alpha1.NetworkObservation{},
+			networkReferenceField,
+			func(object client.Object) []string {
+				observation := object.(*observationv1alpha1.NetworkObservation)
+				return []string{observation.Spec.NetworkRef.Name}
+			},
+		); err != nil {
 		return fmt.Errorf("index observations by network reference: %w", err)
 	}
 	return ctrl.NewControllerManagedBy(manager).
@@ -100,7 +129,12 @@ func (r *Reconciler) SetupWithManager(manager ctrl.Manager, concurrency int) err
 
 func (r *Reconciler) observationsForNetwork(ctx context.Context, object client.Object) []ctrl.Request {
 	observations := &observationv1alpha1.NetworkObservationList{}
-	if err := r.List(ctx, observations, client.InNamespace(object.GetNamespace()), client.MatchingFields{networkReferenceField: object.GetName()}); err != nil {
+	if err := r.List(
+		ctx,
+		observations,
+		client.InNamespace(object.GetNamespace()),
+		client.MatchingFields{networkReferenceField: object.GetName()},
+	); err != nil {
 		ctrl.LoggerFrom(ctx).Error(err, "list observations for topology event", "network", object.GetName())
 		return nil
 	}
@@ -125,7 +159,11 @@ func (r *Reconciler) observer() TopologyObserver {
 	return topology.Reader{APIReader: r.APIReader}
 }
 
-func (r *Reconciler) writeStatus(ctx context.Context, object, patchBase *observationv1alpha1.NetworkObservation, status observationv1alpha1.NetworkObservationStatus) error {
+func (r *Reconciler) writeStatus(
+	ctx context.Context,
+	object, patchBase *observationv1alpha1.NetworkObservation,
+	status observationv1alpha1.NetworkObservationStatus,
+) error {
 	object.Status = status
 	if err := r.Status().Patch(ctx, object, client.MergeFrom(patchBase)); err != nil && !apierrors.IsNotFound(err) {
 		return err
@@ -144,7 +182,8 @@ func terminalForGeneration(object *observationv1alpha1.NetworkObservation) bool 
 	if object.Status.ObservedGeneration != object.Generation {
 		return false
 	}
-	return object.Status.Phase == observationv1alpha1.ObservationReady || object.Status.Phase == observationv1alpha1.ObservationInconclusive
+	return object.Status.Phase == observationv1alpha1.ObservationReady ||
+		object.Status.Phase == observationv1alpha1.ObservationInconclusive
 }
 
 func pendingDeadlineExceeded(object *observationv1alpha1.NetworkObservation, now time.Time) bool {
@@ -158,7 +197,11 @@ func pendingDeadlineExceeded(object *observationv1alpha1.NetworkObservation, now
 	return !now.Before(object.Status.StartedAt.Add(time.Duration(seconds) * time.Second))
 }
 
-func pendingStatus(object *observationv1alpha1.NetworkObservation, now time.Time, message string) observationv1alpha1.NetworkObservationStatus {
+func pendingStatus(
+	object *observationv1alpha1.NetworkObservation,
+	now time.Time,
+	message string,
+) observationv1alpha1.NetworkObservationStatus {
 	status := object.Status
 	status.Conditions = append([]metav1.Condition(nil), object.Status.Conditions...)
 	initializeStatus(&status, object.Generation, now)
@@ -166,11 +209,18 @@ func pendingStatus(object *observationv1alpha1.NetworkObservation, now time.Time
 	status.Binding = nil
 	status.Actors = nil
 	status.CompletedAt = nil
-	meta.SetStatusCondition(&status.Conditions, condition(object.Generation, metav1.ConditionFalse, observationv1alpha1.ReasonTopologyNotReady, message, now))
+	meta.SetStatusCondition(
+		&status.Conditions,
+		condition(object.Generation, metav1.ConditionFalse, observationv1alpha1.ReasonTopologyNotReady, message, now),
+	)
 	return status
 }
 
-func inconclusiveStatus(object *observationv1alpha1.NetworkObservation, now time.Time, message string) observationv1alpha1.NetworkObservationStatus {
+func inconclusiveStatus(
+	object *observationv1alpha1.NetworkObservation,
+	now time.Time,
+	message string,
+) observationv1alpha1.NetworkObservationStatus {
 	status := object.Status
 	status.Conditions = append([]metav1.Condition(nil), object.Status.Conditions...)
 	initializeStatus(&status, object.Generation, now)
@@ -179,11 +229,24 @@ func inconclusiveStatus(object *observationv1alpha1.NetworkObservation, now time
 	status.Actors = nil
 	completed := metav1.NewTime(now)
 	status.CompletedAt = &completed
-	meta.SetStatusCondition(&status.Conditions, condition(object.Generation, metav1.ConditionFalse, observationv1alpha1.ReasonIdentityNotEstablished, message, now))
+	meta.SetStatusCondition(
+		&status.Conditions,
+		condition(
+			object.Generation,
+			metav1.ConditionFalse,
+			observationv1alpha1.ReasonIdentityNotEstablished,
+			message,
+			now,
+		),
+	)
 	return status
 }
 
-func readyStatus(object *observationv1alpha1.NetworkObservation, snapshot topology.Snapshot, now time.Time) observationv1alpha1.NetworkObservationStatus {
+func readyStatus(
+	object *observationv1alpha1.NetworkObservation,
+	snapshot topology.Snapshot,
+	now time.Time,
+) observationv1alpha1.NetworkObservationStatus {
 	status := object.Status
 	status.Conditions = append([]metav1.Condition(nil), object.Status.Conditions...)
 	initializeStatus(&status, object.Generation, now)
@@ -192,7 +255,16 @@ func readyStatus(object *observationv1alpha1.NetworkObservation, snapshot topolo
 	status.Actors = snapshot.Actors
 	completed := metav1.NewTime(now)
 	status.CompletedAt = &completed
-	meta.SetStatusCondition(&status.Conditions, condition(object.Generation, metav1.ConditionTrue, observationv1alpha1.ReasonIdentityVerified, "Every admitted actor identity was verified through direct API reads", now))
+	meta.SetStatusCondition(
+		&status.Conditions,
+		condition(
+			object.Generation,
+			metav1.ConditionTrue,
+			observationv1alpha1.ReasonIdentityVerified,
+			"Every admitted actor identity was verified through direct API reads",
+			now,
+		),
+	)
 	return status
 }
 
@@ -205,6 +277,18 @@ func initializeStatus(status *observationv1alpha1.NetworkObservationStatus, gene
 	status.ObservedGeneration = generation
 }
 
-func condition(generation int64, status metav1.ConditionStatus, reason, message string, now time.Time) metav1.Condition {
-	return metav1.Condition{Type: observationv1alpha1.ConditionReady, Status: status, ObservedGeneration: generation, Reason: reason, Message: message, LastTransitionTime: metav1.NewTime(now)}
+func condition(
+	generation int64,
+	status metav1.ConditionStatus,
+	reason, message string,
+	now time.Time,
+) metav1.Condition {
+	return metav1.Condition{
+		Type:               observationv1alpha1.ConditionReady,
+		Status:             status,
+		ObservedGeneration: generation,
+		Reason:             reason,
+		Message:            message,
+		LastTransitionTime: metav1.NewTime(now),
+	}
 }

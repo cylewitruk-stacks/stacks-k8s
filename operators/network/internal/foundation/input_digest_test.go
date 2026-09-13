@@ -13,10 +13,51 @@ import (
 
 func TestInputDigestExcludesAllocationIdentity(t *testing.T) {
 	fixture := func(uid string) (api.StacksGenesisSpec, map[string]*candidate) {
-		p := &api.StacksNetworkParticipant{ObjectMeta: metav1.ObjectMeta{Name: ParticipantName(uid, "follower"), UID: types.UID(uid + "-participant")}, Spec: api.StacksNetworkParticipantSpec{ParticipantName: "follower", Kind: "StacksNode", NetworkUID: types.UID(uid)}}
-		a := &stacks.StacksAccount{ObjectMeta: metav1.ObjectMeta{Name: DefaultAccountName(p.Name, "identity"), UID: types.UID(uid + "-account"), OwnerReferences: []metav1.OwnerReference{{UID: p.UID, Controller: ptr.To(true)}}}}
-		c := &candidate{instance: p, source: api.Source{Generation: 8, UID: types.UID(uid + "-source")}, accounts: map[string]*stacks.StacksAccount{a.Name: a}, configuration: api.Configuration{StacksNode: &stacks.StacksNodeSpec{ActorFields: common.ActorFields{Image: ptr.To("node:v1")}, IdentityAccountRef: &common.NameRef{Name: a.Name}}}, dependencies: []common.Binding{binding("StacksAccount", a, "public-fingerprint")}}
-		return api.StacksGenesisSpec{Chain: api.Chain{Profile: "profile"}, Source: api.GenesisSource{NetworkUID: types.UID(uid), Dependencies: []common.Binding{{Kind: "StacksEpochSchedule", Name: "epochs", UID: types.UID(uid + "-epochs"), Fingerprint: "epoch-fingerprint"}}}}, map[string]*candidate{"follower": c}
+		p := &api.StacksNetworkParticipant{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: ParticipantName(uid, "follower"),
+				UID:  types.UID(uid + "-participant"),
+			},
+			Spec: api.StacksNetworkParticipantSpec{
+				ParticipantName: "follower",
+				Kind:            "StacksNode",
+				NetworkUID:      types.UID(uid),
+			},
+		}
+		a := &stacks.StacksAccount{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            DefaultAccountName(p.Name, "identity"),
+				UID:             types.UID(uid + "-account"),
+				OwnerReferences: []metav1.OwnerReference{{UID: p.UID, Controller: ptr.To(true)}},
+			},
+		}
+		c := &candidate{
+			instance: p,
+			source:   api.Source{Generation: 8, UID: types.UID(uid + "-source")},
+			accounts: map[string]*stacks.StacksAccount{a.Name: a},
+			configuration: api.Configuration{
+				StacksNode: &stacks.StacksNodeSpec{
+					ActorFields:        common.ActorFields{Image: ptr.To("node:v1")},
+					IdentityAccountRef: &common.NameRef{Name: a.Name},
+				},
+			},
+			dependencies: []common.Binding{binding("StacksAccount", a, "public-fingerprint")},
+		}
+		genesis := api.StacksGenesisSpec{
+			Chain: api.Chain{Profile: "profile"},
+			Source: api.GenesisSource{
+				NetworkUID: types.UID(uid),
+				Dependencies: []common.Binding{
+					{
+						Kind:        "StacksEpochSchedule",
+						Name:        "epochs",
+						UID:         types.UID(uid + "-epochs"),
+						Fingerprint: "epoch-fingerprint",
+					},
+				},
+			},
+		}
+		return genesis, map[string]*candidate{"follower": c}
 	}
 	first, a := fixture("first-network")
 	second, b := fixture("second-network")
@@ -24,7 +65,10 @@ func TestInputDigestExcludesAllocationIdentity(t *testing.T) {
 	if got := semanticInputDigest(second, b); got != want {
 		t.Fatalf("allocation identity changed digest: %s != %s", got, want)
 	}
-	if a["follower"].configuration.StacksNode.IdentityAccountRef.Name != DefaultAccountName(a["follower"].instance.Name, "identity") {
+	if a["follower"].configuration.StacksNode.IdentityAccountRef.Name != DefaultAccountName(
+		a["follower"].instance.Name,
+		"identity",
+	) {
 		t.Fatal("digest mutated runtime configuration")
 	}
 	for _, mutation := range []struct {

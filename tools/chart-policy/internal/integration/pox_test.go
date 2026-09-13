@@ -44,7 +44,18 @@ func decodePoX(data []byte) (poxContext, error) {
 	if json.Unmarshal(data, &p) != nil {
 		return poxContext{}, errors.New("invalid PoX response")
 	}
-	for _, value := range []*int64{p.Height, p.PrepareLength, p.RewardLength, p.CycleLength, p.Current.ID, p.Next.ID, p.Next.PrepareStart, p.Next.RewardStart, p.Next.UntilPrepare, p.Next.UntilReward} {
+	for _, value := range []*int64{
+		p.Height,
+		p.PrepareLength,
+		p.RewardLength,
+		p.CycleLength,
+		p.Current.ID,
+		p.Next.ID,
+		p.Next.PrepareStart,
+		p.Next.RewardStart,
+		p.Next.UntilPrepare,
+		p.Next.UntilReward,
+	} {
 		if value == nil {
 			return poxContext{}, errors.New("incomplete PoX cycle context")
 		}
@@ -72,7 +83,12 @@ func (p poxContext) phase() string {
 
 // TestPoXContextPreservesPhaseBoundariesAndGaps prevents fabricated zero-valued diagnostics.
 func TestPoXContextPreservesPhaseBoundariesAndGaps(t *testing.T) {
-	const raw = `{"current_burnchain_block_height":374,"prepare_phase_block_length":5,"reward_phase_block_length":15,"reward_cycle_length":20,"current_cycle":{"id":18,"is_pox_active":false},"next_cycle":{"id":19,"prepare_phase_start_block_height":375,"reward_phase_start_block_height":380,"blocks_until_prepare_phase":1,"blocks_until_reward_phase":6},"unrelated":"not retained"}`
+	const raw = `{"current_burnchain_block_height":374,"prepare_phase_block_length":5,` +
+		`"reward_phase_block_length":15,"reward_cycle_length":20,` +
+		`"current_cycle":{"id":18,"is_pox_active":false},"next_cycle":{"id":19,` +
+		`"prepare_phase_start_block_height":375,"reward_phase_start_block_height":380,` +
+		`"blocks_until_prepare_phase":1,"blocks_until_reward_phase":6},"unrelated":"not ` +
+		`retained"}`
 	p, err := decodePoX([]byte(raw))
 	if err != nil {
 		t.Fatal(err)
@@ -97,7 +113,14 @@ func TestPoXContextPreservesPhaseBoundariesAndGaps(t *testing.T) {
 	if _, found := projected["unrelated"]; found {
 		t.Fatal("unrelated response data retained")
 	}
-	for _, field := range []string{"current_burnchain_block_height", "prepare_phase_block_length", "reward_phase_block_length", "reward_cycle_length", "current_cycle", "next_cycle"} {
+	for _, field := range []string{
+		"current_burnchain_block_height",
+		"prepare_phase_block_length",
+		"reward_phase_block_length",
+		"reward_cycle_length",
+		"current_cycle",
+		"next_cycle",
+	} {
 		var fields map[string]json.RawMessage
 		if err := json.Unmarshal([]byte(raw), &fields); err != nil {
 			t.Fatal(err)
@@ -108,7 +131,12 @@ func TestPoXContextPreservesPhaseBoundariesAndGaps(t *testing.T) {
 			t.Fatalf("missing %s accepted", field)
 		}
 	}
-	for _, bad := range []string{`null`, `{}`, `{"error":"server detail"}`, `{"current_burnchain_block_height":"invalid"}`} {
+	for _, bad := range []string{
+		`null`,
+		`{}`,
+		`{"error":"server detail"}`,
+		`{"current_burnchain_block_height":"invalid"}`,
+	} {
 		if _, err := decodePoX([]byte(bad)); err == nil {
 			t.Fatal("invalid context accepted")
 		}

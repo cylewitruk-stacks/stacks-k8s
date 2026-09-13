@@ -27,7 +27,15 @@ import (
 
 // TestTrafficUnobservedInclusionStatusRemainsPublishable exercises role output against the served schema.
 func TestTrafficUnobservedInclusionStatusRemainsPublishable(t *testing.T) {
-	environment := &envtest.Environment{CRDDirectoryPaths: []string{filepath.Join("..", "..", "..", "..", "charts", "stacks-network-operator", "crds")}, ErrorIfCRDPathMissing: true, DownloadBinaryAssets: true, DownloadBinaryAssetsVersion: "1.37.0", BinaryAssetsDirectory: filepath.Join(os.TempDir(), "stacks-network-operator-envtest")}
+	environment := &envtest.Environment{
+		CRDDirectoryPaths: []string{
+			filepath.Join("..", "..", "..", "..", "charts", "stacks-network-operator", "crds"),
+		},
+		ErrorIfCRDPathMissing:       true,
+		DownloadBinaryAssets:        true,
+		DownloadBinaryAssetsVersion: "1.37.0",
+		BinaryAssetsDirectory:       filepath.Join(os.TempDir(), "stacks-network-operator-envtest"),
+	}
 	config, err := environment.Start()
 	if err != nil {
 		t.Fatal(err)
@@ -50,7 +58,15 @@ func TestTrafficUnobservedInclusionStatusRemainsPublishable(t *testing.T) {
 	must(err)
 	ctx := context.Background()
 	must(c.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "traffic-test"}}))
-	p := &api.StacksNetworkParticipant{ObjectMeta: metav1.ObjectMeta{Name: "traffic", Namespace: "traffic-test"}, Spec: api.StacksNetworkParticipantSpec{NetworkUID: "network-uid", ParticipantName: "traffic", Kind: "StacksTransactionProduction", Configuration: api.Configuration{StacksTransactionProduction: &stacks.StacksTransactionProductionSpec{}}}}
+	p := &api.StacksNetworkParticipant{
+		ObjectMeta: metav1.ObjectMeta{Name: "traffic", Namespace: "traffic-test"},
+		Spec: api.StacksNetworkParticipantSpec{
+			NetworkUID:      "network-uid",
+			ParticipantName: "traffic",
+			Kind:            "StacksTransactionProduction",
+			Configuration:   api.Configuration{StacksTransactionProduction: &stacks.StacksTransactionProductionSpec{}},
+		},
+	}
 	must(c.Create(ctx, p))
 	r, node, s, _, now := transferFixture(t)
 	for index := uint64(0); index < 2; index++ {
@@ -67,15 +83,40 @@ func TestTrafficUnobservedInclusionStatusRemainsPublishable(t *testing.T) {
 		*now = now.Add(time.Second)
 		result, err := r.Step(ctx, s)
 		must(err)
-		owned := api.ParticipantStatus{Execution: &api.WorkerExecutionStatus{PodUID: "worker-pod", ProcessNonce: "process", ProfileDigest: foundation.Digest("profile"), AppliedPolicyDigest: result.AppliedPolicyDigest, ObservedGeneration: p.Generation, NetworkGeneration: 1, Phase: "Active", Reason: result.Reason, ObservedAt: metav1.NewTime(*now), Pending: result.Pending, Transactions: result.Transactions, Traffic: result.Traffic}}
+		owned := api.ParticipantStatus{
+			Execution: &api.WorkerExecutionStatus{
+				PodUID:              "worker-pod",
+				ProcessNonce:        "process",
+				ProfileDigest:       foundation.Digest("profile"),
+				AppliedPolicyDigest: result.AppliedPolicyDigest,
+				ObservedGeneration:  p.Generation,
+				NetworkGeneration:   1,
+				Phase:               "Active",
+				Reason:              result.Reason,
+				ObservedAt:          metav1.NewTime(*now),
+				Pending:             result.Pending,
+				Transactions:        result.Transactions,
+				Traffic:             result.Traffic,
+			},
+		}
 		invalid := owned.DeepCopy()
 		invalid.Execution.Traffic = r.traffic.DeepCopy()
-		if err := participantstatus.Apply(ctx, c, p, *invalid, "stacks-network-worker-execution"); !apierrors.IsInvalid(err) {
+		if err := participantstatus.Apply(
+			ctx,
+			c,
+			p,
+			*invalid,
+			"stacks-network-worker-execution",
+		); !apierrors.IsInvalid(
+			err,
+		) {
 			t.Fatalf("schema accepted unobserved canonical evidence: %v", err)
 		}
 		must(participantstatus.Apply(ctx, c, p, owned, "stacks-network-worker-execution"))
 		must(c.Get(ctx, client.ObjectKeyFromObject(p), p))
-		if p.Status.Execution.Traffic != nil || p.Status.Execution.Transactions.Included != index+1 || uint64(node.sends) != index+1 {
+		if p.Status.Execution.Traffic != nil || p.Status.Execution.Transactions.Included != index+1 ||
+			// #nosec G115 -- Small deterministic fixture counters/values are bounded by the test setup.
+			uint64(node.sends) != index+1 {
 			t.Fatal("unobserved report lost receipt or retained obsolete traffic")
 		}
 		inclusion := p.Status.Execution.Transactions.LastInclusion.DeepCopy()
@@ -89,7 +130,11 @@ func TestTrafficUnobservedInclusionStatusRemainsPublishable(t *testing.T) {
 		owned.Execution.ObservedAt = metav1.NewTime(*now)
 		must(participantstatus.Apply(ctx, c, p, owned, "stacks-network-worker-execution"))
 		must(c.Get(ctx, client.ObjectKeyFromObject(p), p))
-		if p.Status.Execution.Traffic == nil || !p.Status.Execution.Traffic.Available || p.Status.Execution.Traffic.ObservedAt.IsZero() || !reflect.DeepEqual(inclusion, p.Status.Execution.Transactions.LastInclusion) || uint64(node.sends) != index+1 {
+		if p.Status.Execution.Traffic == nil || !p.Status.Execution.Traffic.Available ||
+			p.Status.Execution.Traffic.ObservedAt.IsZero() ||
+			!reflect.DeepEqual(inclusion, p.Status.Execution.Transactions.LastInclusion) ||
+			// #nosec G115 -- Small deterministic fixture counters/values are bounded by the test setup.
+			uint64(node.sends) != index+1 {
 			t.Fatal("native recovery changed original receipt or resubmitted")
 		}
 	}

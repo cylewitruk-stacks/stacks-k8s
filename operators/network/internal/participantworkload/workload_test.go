@@ -24,31 +24,71 @@ import (
 // participantFixture supplies an admitted standalone Bitcoin policy.
 func participantFixture() *api.StacksNetworkParticipant {
 	configuration := api.Configuration{BitcoinNode: &bitcoin.BitcoinNodeSpec{}}
-	return &api.StacksNetworkParticipant{ObjectMeta: metav1.ObjectMeta{Name: "participant", Namespace: "test", UID: "participant-uid", Generation: 1, OwnerReferences: []metav1.OwnerReference{{APIVersion: api.GroupVersion.String(), Kind: "StacksNetwork", Name: "network", UID: "network-uid", Controller: ptr.To(true)}}}, Spec: api.StacksNetworkParticipantSpec{NetworkUID: "network-uid", ParticipantName: "btc-01", Kind: "BitcoinNode", Configuration: configuration}, Status: api.ParticipantStatus{Admission: &api.Admission{Configuration: configuration, PolicyDigest: digest(configuration)}}}
+	return &api.StacksNetworkParticipant{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "participant",
+			Namespace:  "test",
+			UID:        "participant-uid",
+			Generation: 1,
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion: api.GroupVersion.String(),
+					Kind:       "StacksNetwork",
+					Name:       "network",
+					UID:        "network-uid",
+					Controller: ptr.To(true),
+				},
+			},
+		},
+		Spec: api.StacksNetworkParticipantSpec{
+			NetworkUID:      "network-uid",
+			ParticipantName: "btc-01",
+			Kind:            "BitcoinNode",
+			Configuration:   configuration,
+		},
+		Status: api.ParticipantStatus{
+			Admission: &api.Admission{Configuration: configuration, PolicyDigest: digest(configuration)},
+		},
+	}
 }
 
 // testClient registers replacement and core resources without legacy APIs.
 func testClient(t *testing.T, objects ...client.Object) client.Client {
 	t.Helper()
 	scheme := runtime.NewScheme()
-	for _, add := range []func(*runtime.Scheme) error{corev1.AddToScheme, appsv1.AddToScheme, api.AddToScheme, bitcoin.AddToScheme, stacks.AddToScheme} {
+	for _, add := range []func(*runtime.Scheme) error{
+		corev1.AddToScheme,
+		appsv1.AddToScheme,
+		api.AddToScheme,
+		bitcoin.AddToScheme,
+		stacks.AddToScheme,
+	} {
 		if err := add(scheme); err != nil {
 			t.Fatal(err)
 		}
 	}
-	return fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(&corev1.Pod{}, &appsv1.StatefulSet{}, &api.StacksNetworkParticipant{}).WithObjects(objects...).Build()
+	return fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&corev1.Pod{}, &appsv1.StatefulSet{}, &api.StacksNetworkParticipant{}).
+		WithObjects(objects...).
+		Build()
 }
 
 func TestStatefulSetStorageAndCredentialBoundary(t *testing.T) {
 	for _, retain := range []bool{false, true} {
 		p := participantFixture()
-		p.Status.Admission.Configuration.BitcoinNode.Storage = &common.Storage{Size: ptr.To("5Gi"), RetainOnDelete: ptr.To(retain), Class: ptr.To("")}
+		p.Status.Admission.Configuration.BitcoinNode.Storage = &common.Storage{
+			Size:           ptr.To("5Gi"),
+			RetainOnDelete: ptr.To(retain),
+			Class:          ptr.To(""),
+		}
 		workload, err := StatefulSet(p, "server-config", "restricted-credentials", 1)
 		if err != nil {
 			t.Fatal(err)
 		}
 		policy := workload.Spec.PersistentVolumeClaimRetentionPolicy
-		if policy.WhenScaled != appsv1.RetainPersistentVolumeClaimRetentionPolicyType || (policy.WhenDeleted == appsv1.RetainPersistentVolumeClaimRetentionPolicyType) != retain {
+		if policy.WhenScaled != appsv1.RetainPersistentVolumeClaimRetentionPolicyType ||
+			(policy.WhenDeleted == appsv1.RetainPersistentVolumeClaimRetentionPolicyType) != retain {
 			t.Fatal("incorrect PVC lifecycle")
 		}
 		claim := workload.Spec.VolumeClaimTemplates[0]
@@ -59,7 +99,9 @@ func TestStatefulSetStorageAndCredentialBoundary(t *testing.T) {
 		if len(pod.Finalizers) != 1 || pod.Finalizers[0] != PodFinalizer {
 			t.Fatal("Pod must retain termination evidence from creation")
 		}
-		if pod.Labels["network.stacks.org/role"] != "actor" || pod.Labels["network.stacks.org/participant-uid"] != string(p.UID) || ptr.Deref(pod.Spec.AutomountServiceAccountToken, true) {
+		if pod.Labels["network.stacks.org/role"] != "actor" ||
+			pod.Labels["network.stacks.org/participant-uid"] != string(p.UID) ||
+			ptr.Deref(pod.Spec.AutomountServiceAccountToken, true) {
 			t.Fatal("actor identity/API scope mismatch")
 		}
 		for _, env := range pod.Spec.Containers[0].Env {
@@ -101,7 +143,8 @@ func TestActorWritableTemporaryStorage(t *testing.T) {
 			}
 			pod := workload.Spec.Template.Spec
 			container := pod.Containers[0]
-			if !ptr.Deref(container.SecurityContext.ReadOnlyRootFilesystem, false) || ptr.Deref(pod.SecurityContext.FSGroup, 0) == 0 {
+			if !ptr.Deref(container.SecurityContext.ReadOnlyRootFilesystem, false) ||
+				ptr.Deref(pod.SecurityContext.FSGroup, 0) == 0 {
 				t.Fatal("native actor must retain read-only root and non-root volume access")
 			}
 			mounted, ephemeral := false, false
@@ -115,7 +158,8 @@ func TestActorWritableTemporaryStorage(t *testing.T) {
 					ephemeral = volume.EmptyDir != nil && volume.PersistentVolumeClaim == nil && volume.Secret == nil
 				}
 			}
-			if !mounted || !ephemeral || len(workload.Spec.VolumeClaimTemplates) != 1 || workload.Spec.VolumeClaimTemplates[0].Name != "data" {
+			if !mounted || !ephemeral || len(workload.Spec.VolumeClaimTemplates) != 1 ||
+				workload.Spec.VolumeClaimTemplates[0].Name != "data" {
 				t.Fatal("writable temporary storage must not use a retained data claim")
 			}
 		})
@@ -135,7 +179,16 @@ func TestResolverRetriesKeepExactCredentialsAndPublicReport(t *testing.T) {
 			report := &corev1.ConfigMap{ObjectMeta: objectMeta(p, "report", "support")}
 			report.UID = "report-uid"
 			base := testClient(t, config, control, actor, report)
-			input := BitcoinConfigInput{Namespace: p.Namespace, ParticipantUID: p.UID, PolicyDigest: "policy", Config: *binding("Secret", config), ControlCredentials: *binding("Secret", control), ActorCredentials: *binding("Secret", actor), Report: *binding("ConfigMap", report), Seeds: []string{"peer.test.svc"}}
+			input := BitcoinConfigInput{
+				Namespace:          p.Namespace,
+				ParticipantUID:     p.UID,
+				PolicyDigest:       "policy",
+				Config:             *binding("Secret", config),
+				ControlCredentials: *binding("Secret", control),
+				ActorCredentials:   *binding("Secret", actor),
+				Report:             *binding("ConfigMap", report),
+				Seeds:              []string{"peer.test.svc"},
+			}
 			interrupted := &lostCredentialWrite{Client: base, commit: commit}
 			ctx := context.Background()
 			if err := RunBitcoinConfigResolver(ctx, interrupted, input); err == nil {
@@ -160,7 +213,8 @@ func TestResolverRetriesKeepExactCredentialsAndPublicReport(t *testing.T) {
 				t.Fatal("RPC principals share credentials")
 			}
 			for _, secret := range []*corev1.Secret{control, actor} {
-				if strings.Contains(report.Data["report.json"], string(secret.Data["password"])) || strings.Contains(string(config.Data["bitcoin.conf"]), string(secret.Data["password"])) {
+				if strings.Contains(report.Data["report.json"], string(secret.Data["password"])) ||
+					strings.Contains(string(config.Data["bitcoin.conf"]), string(secret.Data["password"])) {
 					t.Fatal("private RPC credential escaped into public/server material")
 				}
 			}
@@ -169,15 +223,35 @@ func TestResolverRetriesKeepExactCredentialsAndPublicReport(t *testing.T) {
 				t.Fatalf("configuration rendering is not deterministic: %v", err)
 			}
 			server := string(config.Data["bitcoin.conf"])
-			if strings.Contains(actorMethods, "generatetoaddress") || strings.Contains(actorMethods, "gettxout") || !strings.Contains(controlMethods, "gettxout") || !strings.Contains(server, "rpcwhitelistdefault=1") || !strings.Contains(server, "rpcwhitelist=control:") {
+			if strings.Contains(actorMethods, "generatetoaddress") || strings.Contains(actorMethods, "gettxout") ||
+				!strings.Contains(controlMethods, "gettxout") ||
+				!strings.Contains(server, "rpcwhitelistdefault=1") ||
+				!strings.Contains(server, "rpcwhitelist=control:") {
 				t.Fatal("RPC method separation missing")
 			}
-			for _, method := range []string{"listdescriptors", "validateaddress", "getdescriptorinfo", "gettxout", "listunspent", "generatetoaddress", "createwallet", "loadwallet", "importdescriptors", "unloadwallet"} {
+			for _, method := range []string{
+				"listdescriptors",
+				"validateaddress",
+				"getdescriptorinfo",
+				"gettxout",
+				"listunspent",
+				"generatetoaddress",
+				"createwallet",
+				"loadwallet",
+				"importdescriptors",
+				"unloadwallet",
+			} {
 				if !renderedRPCAllows(server, "control", method) {
 					t.Fatalf("control profile denies required %s", method)
 				}
 			}
-			for _, method := range []string{"generatetoaddress", "createwallet", "importdescriptors", "invalidateblock", "reconsiderblock"} {
+			for _, method := range []string{
+				"generatetoaddress",
+				"createwallet",
+				"importdescriptors",
+				"invalidateblock",
+				"reconsiderblock",
+			} {
 				if renderedRPCAllows(server, "actor", method) {
 					t.Fatalf("actor profile permits managed mutation %s", method)
 				}
@@ -186,7 +260,9 @@ func TestResolverRetriesKeepExactCredentialsAndPublicReport(t *testing.T) {
 			if err := RunBitcoinConfigResolver(ctx, base, input); err != nil {
 				t.Fatal(err)
 			}
-			base.Get(ctx, client.ObjectKeyFromObject(report), report)
+			if err := base.Get(ctx, client.ObjectKeyFromObject(report), report); err != nil {
+				t.Fatal(err)
+			}
 			if report.Data["report.json"] != before {
 				t.Fatal("idempotent resolver changed report")
 			}
@@ -204,7 +280,12 @@ type lostCredentialWrite struct {
 	commit, failed bool
 }
 
-func (c *lostCredentialWrite) Patch(ctx context.Context, object client.Object, patch client.Patch, opts ...client.PatchOption) error {
+func (c *lostCredentialWrite) Patch(
+	ctx context.Context,
+	object client.Object,
+	patch client.Patch,
+	opts ...client.PatchOption,
+) error {
 	if _, ok := object.(*corev1.Secret); ok && !c.failed {
 		c.failed = true
 		if c.commit {
@@ -219,8 +300,33 @@ func (c *lostCredentialWrite) Patch(ctx context.Context, object client.Object, p
 
 func TestFreshAdmissionAndGenesisGates(t *testing.T) {
 	p := participantFixture()
-	root := &api.StacksNetwork{ObjectMeta: metav1.ObjectMeta{Name: "network", Namespace: p.Namespace, UID: p.Spec.NetworkUID}, Spec: api.StacksNetworkSpec{Operation: "Running", Participants: []api.Participant{{Name: p.Spec.ParticipantName, Kind: p.Spec.Kind}}}, Status: api.StacksNetworkStatus{Identities: []api.InstanceIdentity{{Name: p.Spec.ParticipantName, UID: p.UID}}}}
-	genesis := &api.StacksGenesis{ObjectMeta: metav1.ObjectMeta{Name: "genesis", Namespace: p.Namespace, UID: "genesis-uid", OwnerReferences: []metav1.OwnerReference{{APIVersion: api.GroupVersion.String(), Kind: "StacksNetwork", Name: root.Name, UID: root.UID, Controller: ptr.To(true)}}}, Spec: api.StacksGenesisSpec{Source: api.GenesisSource{NetworkUID: root.UID}}}
+	root := &api.StacksNetwork{
+		ObjectMeta: metav1.ObjectMeta{Name: "network", Namespace: p.Namespace, UID: p.Spec.NetworkUID},
+		Spec: api.StacksNetworkSpec{
+			Operation:    "Running",
+			Participants: []api.Participant{{Name: p.Spec.ParticipantName, Kind: p.Spec.Kind}},
+		},
+		Status: api.StacksNetworkStatus{
+			Identities: []api.InstanceIdentity{{Name: p.Spec.ParticipantName, UID: p.UID}},
+		},
+	}
+	genesis := &api.StacksGenesis{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "genesis",
+			Namespace: p.Namespace,
+			UID:       "genesis-uid",
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion: api.GroupVersion.String(),
+					Kind:       "StacksNetwork",
+					Name:       root.Name,
+					UID:        root.UID,
+					Controller: ptr.To(true),
+				},
+			},
+		},
+		Spec: api.StacksGenesisSpec{Source: api.GenesisSource{NetworkUID: root.UID}},
+	}
 	root.Status.GenesisRef = binding("StacksGenesis", genesis)
 	root.Status.GenesisDigest = digest(genesis.Spec.Chain)
 	c := testClient(t, p, root, genesis)
@@ -228,7 +334,13 @@ func TestFreshAdmissionAndGenesisGates(t *testing.T) {
 	if err := r.authorized(context.Background(), root, p); err != nil {
 		t.Fatal(err)
 	}
-	for _, mutate := range []func(*api.StacksNetwork){func(n *api.StacksNetwork) { n.Spec.Operation = "Stopped" }, func(n *api.StacksNetwork) { n.Status.GenesisRef.UID = "replacement" }, func(n *api.StacksNetwork) { n.Status.GenesisDigest = "corrupt" }, func(n *api.StacksNetwork) { n.Spec.Participants = nil }, func(n *api.StacksNetwork) { n.Status.Identities[0].Removing = true }} {
+	for _, mutate := range []func(*api.StacksNetwork){
+		func(n *api.StacksNetwork) { n.Spec.Operation = "Stopped" },
+		func(n *api.StacksNetwork) { n.Status.GenesisRef.UID = "replacement" },
+		func(n *api.StacksNetwork) { n.Status.GenesisDigest = "corrupt" },
+		func(n *api.StacksNetwork) { n.Spec.Participants = nil },
+		func(n *api.StacksNetwork) { n.Status.Identities[0].Removing = true },
+	} {
 		current := root.DeepCopy()
 		mutate(current)
 		if err := r.authorized(context.Background(), current, p); err == nil {
@@ -247,10 +359,42 @@ func TestShutdownRetainsUnknownAndSettlesTerminatedPod(t *testing.T) {
 		workload.UID = "workload-uid"
 		workload.Generation = 1
 		workload.Status.ObservedGeneration = 1
-		state := api.ParticipantRuntimeStatus{PodRef: &common.Binding{Kind: "Pod", Name: workload.Name + "-0", UID: "pod-uid"}}
+		state := api.ParticipantRuntimeStatus{
+			PodRef: &common.Binding{Kind: "Pod", Name: workload.Name + "-0", UID: "pod-uid"},
+		}
 		objects := []client.Object{workload}
 		if terminal {
-			objects = append(objects, &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: workload.Name + "-0", Namespace: p.Namespace, UID: "pod-uid", Labels: Labels(p, "actor"), Finalizers: []string{PodFinalizer}, OwnerReferences: []metav1.OwnerReference{{APIVersion: "apps/v1", Kind: "StatefulSet", Name: workload.Name, UID: workload.UID, Controller: ptr.To(true)}}}, Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "bitcoin"}}}, Status: corev1.PodStatus{Phase: corev1.PodSucceeded, ContainerStatuses: []corev1.ContainerStatus{{Name: "bitcoin", State: corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{ExitCode: 0}}}}}})
+			objects = append(
+				objects,
+				&corev1.Pod{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:       workload.Name + "-0",
+						Namespace:  p.Namespace,
+						UID:        "pod-uid",
+						Labels:     Labels(p, "actor"),
+						Finalizers: []string{PodFinalizer},
+						OwnerReferences: []metav1.OwnerReference{
+							{
+								APIVersion: "apps/v1",
+								Kind:       "StatefulSet",
+								Name:       workload.Name,
+								UID:        workload.UID,
+								Controller: ptr.To(true),
+							},
+						},
+					},
+					Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "bitcoin"}}},
+					Status: corev1.PodStatus{
+						Phase: corev1.PodSucceeded,
+						ContainerStatuses: []corev1.ContainerStatus{
+							{
+								Name:  "bitcoin",
+								State: corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{ExitCode: 0}},
+							},
+						},
+					},
+				},
+			)
 		}
 		c := testClient(t, objects...)
 		r := Reconciler{Client: c, Reader: c}
@@ -266,7 +410,10 @@ func TestShutdownRetainsUnknownAndSettlesTerminatedPod(t *testing.T) {
 
 func TestControllerInspectsSecretMetadataOnly(t *testing.T) {
 	p := participantFixture()
-	secret := &corev1.Secret{ObjectMeta: objectMeta(p, "rpc-control", "support"), Data: map[string][]byte{"password": []byte("must-not-read")}}
+	secret := &corev1.Secret{
+		ObjectMeta: objectMeta(p, "rpc-control", "support"),
+		Data:       map[string][]byte{"password": []byte("must-not-read")},
+	}
 	secret.UID = "secret-uid"
 	c := testClient(t, secret)
 	reader := &denySecretData{Client: c}
@@ -285,7 +432,12 @@ func TestControllerInspectsSecretMetadataOnly(t *testing.T) {
 // denySecretData prevents accidentally introducing private data reads in shared controllers.
 type denySecretData struct{ client.Client }
 
-func (c *denySecretData) Get(ctx context.Context, key client.ObjectKey, object client.Object, opts ...client.GetOption) error {
+func (c *denySecretData) Get(
+	ctx context.Context,
+	key client.ObjectKey,
+	object client.Object,
+	opts ...client.GetOption,
+) error {
 	if _, ok := object.(*corev1.Secret); ok {
 		return fmt.Errorf("shared controller read Secret data")
 	}
@@ -294,7 +446,11 @@ func (c *denySecretData) Get(ctx context.Context, key client.ObjectKey, object c
 
 func TestPeerSeedsUseAllocatedUIDsWithoutReadyDependencies(t *testing.T) {
 	p := participantFixture()
-	root := &api.StacksNetwork{ObjectMeta: metav1.ObjectMeta{Namespace: p.Namespace, UID: p.Spec.NetworkUID}, Spec: api.StacksNetworkSpec{Participants: []api.Participant{{Name: "btc-02", Kind: "BitcoinNode"}}}, Status: api.StacksNetworkStatus{Identities: []api.InstanceIdentity{{Name: "btc-02", UID: "peer-uid"}}}}
+	root := &api.StacksNetwork{
+		ObjectMeta: metav1.ObjectMeta{Namespace: p.Namespace, UID: p.Spec.NetworkUID},
+		Spec:       api.StacksNetworkSpec{Participants: []api.Participant{{Name: "btc-02", Kind: "BitcoinNode"}}},
+		Status:     api.StacksNetworkStatus{Identities: []api.InstanceIdentity{{Name: "btc-02", UID: "peer-uid"}}},
+	}
 	seeds, err := peerSeeds(root, p)
 	if err != nil || len(seeds) != 1 {
 		t.Fatalf("seed resolution: %v %v", seeds, err)
@@ -317,12 +473,16 @@ func TestTerminalStopWaitsForControlDrain(t *testing.T) {
 	ctx := context.Background()
 	state := api.ParticipantRuntimeStatus{}
 	ready, unavailable := false, false
-	r := Reconciler{Client: c, Reader: c, BeforeStop: func(context.Context, *api.StacksNetworkParticipant) (bool, error) {
-		if unavailable {
-			return false, fmt.Errorf("control status unavailable")
-		}
-		return ready, nil
-	}}
+	r := Reconciler{
+		Client: c,
+		Reader: c,
+		BeforeStop: func(context.Context, *api.StacksNetworkParticipant) (bool, error) {
+			if unavailable {
+				return false, fmt.Errorf("control status unavailable")
+			}
+			return ready, nil
+		},
+	}
 	for _, failed := range []bool{false, true} {
 		unavailable = failed
 		reason, err := r.stopActor(ctx, p, &state, true)
@@ -373,7 +533,15 @@ func TestActorCanObserveLoadedWalletsWithoutManagingThem(t *testing.T) {
 	if !methods["listwallets"] {
 		t.Fatal("miner cannot check its controller-loaded wallet")
 	}
-	for _, method := range []string{"loadwallet", "createwallet", "unloadwallet", "importdescriptors", "generatetoaddress", "invalidateblock", "reconsiderblock"} {
+	for _, method := range []string{
+		"loadwallet",
+		"createwallet",
+		"unloadwallet",
+		"importdescriptors",
+		"generatetoaddress",
+		"invalidateblock",
+		"reconsiderblock",
+	} {
 		if methods[method] {
 			t.Fatalf("actor gained control method %s", method)
 		}
@@ -399,15 +567,31 @@ func TestCompletedStopDoesNotDependOnGarbageCollectedDrainRecord(t *testing.T) {
 			workload.UID, workload.Generation, workload.Status.ObservedGeneration = "workload-uid", 1, 1
 			objects := []client.Object{workload}
 			if tc.podPresent {
-				objects = append(objects, &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Namespace: p.Namespace, Name: workload.Name + "-0", UID: "new-pod"}})
+				objects = append(
+					objects,
+					&corev1.Pod{
+						ObjectMeta: metav1.ObjectMeta{
+							Namespace: p.Namespace,
+							Name:      workload.Name + "-0",
+							UID:       "new-pod",
+						},
+					},
+				)
 			}
 			c := testClient(t, objects...)
 			calls := 0
-			r := Reconciler{Client: c, Reader: c, BeforeStop: func(context.Context, *api.StacksNetworkParticipant) (bool, error) {
-				calls++
-				return false, fmt.Errorf("execution record unavailable")
-			}}
-			state := api.ParticipantRuntimeStatus{PodRef: &common.Binding{Kind: "Pod", Name: workload.Name + "-0", UID: "old-pod"}, Terminated: tc.confirmed}
+			r := Reconciler{
+				Client: c,
+				Reader: c,
+				BeforeStop: func(context.Context, *api.StacksNetworkParticipant) (bool, error) {
+					calls++
+					return false, fmt.Errorf("execution record unavailable")
+				},
+			}
+			state := api.ParticipantRuntimeStatus{
+				PodRef:     &common.Binding{Kind: "Pod", Name: workload.Name + "-0", UID: "old-pod"},
+				Terminated: tc.confirmed,
+			}
 			_, err = r.stopActor(context.Background(), p, &state, true)
 			if calls != tc.wantCalls || (err != nil) != (tc.wantCalls > 0) {
 				t.Fatalf("calls=%d err=%v", calls, err)

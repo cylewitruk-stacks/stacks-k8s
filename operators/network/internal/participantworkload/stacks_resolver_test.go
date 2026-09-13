@@ -25,20 +25,70 @@ func stacksResolverFixture(t *testing.T) (client.Client, StacksConfigInput) {
 	config.UID = "config-uid"
 	event := &corev1.Secret{ObjectMeta: objectMeta(p, "event-auth", "support")}
 	event.UID = "event-uid"
-	key := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "account-key", Namespace: p.Namespace, UID: "key-uid"}, Immutable: ptr.To(true), Data: map[string][]byte{"privateKey": []byte(strings.Repeat("0", 63) + "1")}}
+	key := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "account-key", Namespace: p.Namespace, UID: "key-uid"},
+		Immutable:  ptr.To(true),
+		Data:       map[string][]byte{"privateKey": []byte(strings.Repeat("0", 63) + "1")},
+	}
 	btc := p.DeepCopy()
 	btc.UID = "bitcoin-uid"
 	btc.Spec.Kind = "BitcoinNode"
-	rpc := &corev1.Secret{ObjectMeta: objectMeta(btc, "rpc-actor", "support"), Immutable: ptr.To(true), Data: map[string][]byte{"username": []byte("actor"), "password": []byte("restricted-rpc-password")}}
+	rpc := &corev1.Secret{
+		ObjectMeta: objectMeta(btc, "rpc-actor", "support"),
+		Immutable:  ptr.To(true),
+		Data:       map[string][]byte{"username": []byte("actor"), "password": []byte("restricted-rpc-password")},
+	}
 	rpc.UID = "rpc-uid"
 	report := &corev1.ConfigMap{ObjectMeta: objectMeta(p, "report", "support")}
 	report.UID = "report-uid"
-	chain := api.Chain{PoX: api.PoX{RewardCycleLength: 20, PrepareLength: 5}, Contracts: api.ContractBindings{Deployer: "ST000000000000000000002AMW42H"}}
-	for i, name := range []string{"1.0", "2.0", "2.05", "2.1", "2.2", "2.3", "2.4", "2.5", "3.0", "3.1", "3.2", "3.3", "3.4", "4.0"} {
+	chain := api.Chain{
+		PoX:       api.PoX{RewardCycleLength: 20, PrepareLength: 5},
+		Contracts: api.ContractBindings{Deployer: "ST000000000000000000002AMW42H"},
+	}
+	for i, name := range []string{
+		"1.0",
+		"2.0",
+		"2.05",
+		"2.1",
+		"2.2",
+		"2.3",
+		"2.4",
+		"2.5",
+		"3.0",
+		"3.1",
+		"3.2",
+		"3.3",
+		"3.4",
+		"4.0",
+	} {
 		chain.Epochs = append(chain.Epochs, api.Epoch{Name: name, StartHeight: int64(i * 10)})
 	}
 	public, _ := identity.FromPrivate(string(key.Data["privateKey"]))
-	in := StacksConfigInput{Namespace: p.Namespace, ParticipantUID: p.UID, Kind: p.Spec.Kind, PolicyDigest: "sha256:policy", Genesis: common.Binding{Kind: "StacksGenesis", Name: "genesis", UID: "genesis-uid", Fingerprint: digest(chain)}, Node: stacksconfig.NodeParameters{Name: p.Spec.ParticipantName, Chain: chain, P2PAddress: "10.96.0.15", RPCHost: "node.test.svc", BitcoinHost: "btc.test.svc"}, Identity: common.PublicIdentity{Address: public.Address, PublicKey: public.PublicKey}, Key: PrivateInput{Binding: *binding("Secret", key), Key: "privateKey"}, ActorRPC: &PrivateInput{Binding: *binding("Secret", rpc), OwnerUID: btc.UID}, EventAuth: PrivateInput{Binding: *binding("Secret", event), OwnerUID: p.UID, Key: "token"}, Config: *binding("Secret", config), Report: *binding("ConfigMap", report)}
+	in := StacksConfigInput{
+		Namespace:      p.Namespace,
+		ParticipantUID: p.UID,
+		Kind:           p.Spec.Kind,
+		PolicyDigest:   "sha256:policy",
+		Genesis: common.Binding{
+			Kind:        "StacksGenesis",
+			Name:        "genesis",
+			UID:         "genesis-uid",
+			Fingerprint: digest(chain),
+		},
+		Node: stacksconfig.NodeParameters{
+			Name:        p.Spec.ParticipantName,
+			Chain:       chain,
+			P2PAddress:  "10.96.0.15",
+			RPCHost:     "node.test.svc",
+			BitcoinHost: "btc.test.svc",
+		},
+		Identity:  common.PublicIdentity{Address: public.Address, PublicKey: public.PublicKey},
+		Key:       PrivateInput{Binding: *binding("Secret", key), Key: "privateKey"},
+		ActorRPC:  &PrivateInput{Binding: *binding("Secret", rpc), OwnerUID: btc.UID},
+		EventAuth: PrivateInput{Binding: *binding("Secret", event), OwnerUID: p.UID, Key: "token"},
+		Config:    *binding("Secret", config),
+		Report:    *binding("ConfigMap", report),
+	}
 	return testClient(t, config, event, key, rpc, report), in
 }
 
@@ -50,7 +100,11 @@ func TestStacksResolverRetainsTokenAcrossRetriesAndConfigurationRolls(t *testing
 			t.Fatal("lost event-token acknowledgement not surfaced")
 		}
 		var event corev1.Secret
-		if err := base.Get(ctx, client.ObjectKey{Namespace: in.Namespace, Name: in.EventAuth.Binding.Name}, &event); err != nil {
+		if err := base.Get(
+			ctx,
+			client.ObjectKey{Namespace: in.Namespace, Name: in.EventAuth.Binding.Name},
+			&event,
+		); err != nil {
 			t.Fatal(err)
 		}
 		first := string(event.Data["token"])
@@ -64,14 +118,22 @@ func TestStacksResolverRetainsTokenAcrossRetriesAndConfigurationRolls(t *testing
 			t.Fatal("retry regenerated committed node event token")
 		}
 		var report corev1.ConfigMap
-		if err := base.Get(ctx, client.ObjectKey{Namespace: in.Namespace, Name: in.Report.Name}, &report); err != nil {
+		if err := base.Get(ctx, client.ObjectKey{
+			Namespace: in.Namespace,
+			Name:      in.Report.Name,
+		}, &report); err != nil {
 			t.Fatal(err)
 		}
-		if strings.Contains(report.Data["report.json"], string(event.Data["token"])) || strings.Contains(report.Data["report.json"], "restricted-rpc-password") {
+		if strings.Contains(report.Data["report.json"], string(event.Data["token"])) ||
+			strings.Contains(report.Data["report.json"], "restricted-rpc-password") {
 			t.Fatal("public report contains credentials")
 		}
 		var result StacksConfigReport
-		if err := json.Unmarshal([]byte(report.Data["report.json"]), &result); err != nil || !result.Verified || result.GenesisDigest != in.Genesis.Fingerprint || result.Identity != in.Identity {
+		if err := json.Unmarshal(
+			[]byte(report.Data["report.json"]),
+			&result,
+		); err != nil || !result.Verified || result.GenesisDigest != in.Genesis.Fingerprint ||
+			result.Identity != in.Identity {
 			t.Fatalf("public agreement missing: %v", err)
 		}
 		if err := RunStacksConfigResolver(ctx, base, in); err != nil {
@@ -152,7 +214,8 @@ func TestSignerResolverReadsOnlyPairedCredentialsAndNoAdministration(t *testing.
 	if err := c.Get(ctx, client.ObjectKeyFromObject(config), config); err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(config.Data["config.toml"]), "restricted-rpc-password") || strings.Contains(string(config.Data["config.toml"]), "pox") {
+	if strings.Contains(string(config.Data["config.toml"]), "restricted-rpc-password") ||
+		strings.Contains(string(config.Data["config.toml"]), "pox") {
 		t.Fatal("consensus signer received administration or Bitcoin control configuration")
 	}
 	in.Key.Binding.UID = "replacement"

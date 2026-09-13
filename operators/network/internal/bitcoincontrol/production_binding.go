@@ -20,7 +20,11 @@ func productionBinding(record *bitcoin.BitcoinInitialization) common.Binding {
 }
 
 // currentProduction resolves the sole selected producer while preserving frozen initialization.
-func (s *Scheduler) currentProduction(ctx context.Context, root *api.StacksNetwork, record *bitcoin.BitcoinInitialization) (*api.StacksNetworkParticipant, error) {
+func (s *Scheduler) currentProduction(
+	ctx context.Context,
+	root *api.StacksNetwork,
+	record *bitcoin.BitcoinInitialization,
+) (*api.StacksNetworkParticipant, error) {
 	var entry *api.Participant
 	for i := range root.Spec.Participants {
 		candidate := &root.Spec.Participants[i]
@@ -54,17 +58,21 @@ func (s *Scheduler) currentProduction(ctx context.Context, root *api.StacksNetwo
 	if e := s.Reader.Get(ctx, client.ObjectKey{Namespace: root.Namespace, Name: name}, p); e != nil {
 		return nil, e
 	}
-	if string(p.UID) != uid || !participantCurrent(root, p) || p.Spec.Kind != api.ParticipantBitcoinBlockProduction || p.Status.Admission.Configuration.BitcoinBlockProduction == nil {
+	if string(p.UID) != uid || !participantCurrent(root, p) || p.Spec.Kind != api.ParticipantBitcoinBlockProduction ||
+		p.Status.Admission.Configuration.BitcoinBlockProduction == nil {
 		return nil, fmt.Errorf("producer identity unavailable")
 	}
 	if initial := p.Status.Admission.Configuration.BitcoinBlockProduction.Initialization; initial != nil {
-		if initial.MinimumHeight != record.Spec.MinimumHeight || initial.MatureOutputsPerMiner != record.Spec.MatureOutputsPerMiner {
+		if initial.MinimumHeight != record.Spec.MinimumHeight ||
+			initial.MatureOutputsPerMiner != record.Spec.MatureOutputsPerMiner {
 			return nil, fmt.Errorf("replacement changes frozen initialization")
 		}
 		target := false
 		completed := root.Status.Initialization != nil && root.Status.Initialization.Completed
 		for _, identity := range root.Status.Identities {
-			target = target || identity.Name == initial.TargetNodeRef.Name && identity.UID == record.Spec.Target.UID && (!identity.Removing || completed)
+			target = target ||
+				identity.Name == initial.TargetNodeRef.Name && identity.UID == record.Spec.Target.UID &&
+					(!identity.Removing || completed)
 		}
 		if !target {
 			return nil, fmt.Errorf("replacement changes frozen initial target")

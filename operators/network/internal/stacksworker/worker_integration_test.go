@@ -26,7 +26,15 @@ import (
 )
 
 func TestWorkerAPIBindingPublicationAndOrderedDisposal(t *testing.T) {
-	environment := &envtest.Environment{CRDDirectoryPaths: []string{filepath.Join("..", "..", "..", "..", "charts", "stacks-network-operator", "crds")}, ErrorIfCRDPathMissing: true, DownloadBinaryAssets: true, DownloadBinaryAssetsVersion: "1.37.0", BinaryAssetsDirectory: filepath.Join(os.TempDir(), "stacks-network-operator-envtest")}
+	environment := &envtest.Environment{
+		CRDDirectoryPaths: []string{
+			filepath.Join("..", "..", "..", "..", "charts", "stacks-network-operator", "crds"),
+		},
+		ErrorIfCRDPathMissing:       true,
+		DownloadBinaryAssets:        true,
+		DownloadBinaryAssetsVersion: "1.37.0",
+		BinaryAssetsDirectory:       filepath.Join(os.TempDir(), "stacks-network-operator-envtest"),
+	}
 	config, err := environment.Start()
 	if err != nil {
 		t.Fatal(err)
@@ -63,9 +71,25 @@ func TestWorkerAPIBindingPublicationAndOrderedDisposal(t *testing.T) {
 	admission := p.Status.Admission
 	p.Status = api.ParticipantStatus{}
 	must(c.Create(ctx, p))
-	must(participantstatus.Apply(ctx, c, p, api.ParticipantStatus{Admission: admission}, participantstatus.AggregateManager))
-	configuration := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: profile.Configuration.Name, Namespace: p.Namespace}, Immutable: ptr.To(true), Data: map[string]string{"input.json": "{}"}}
-	key := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: profile.Keys[0].Secret.Name, Namespace: p.Namespace}, Immutable: ptr.To(true), Data: map[string][]byte{"privateKey": []byte("not-read-by-runtime")}}
+	must(
+		participantstatus.Apply(
+			ctx,
+			c,
+			p,
+			api.ParticipantStatus{Admission: admission},
+			participantstatus.AggregateManager,
+		),
+	)
+	configuration := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: profile.Configuration.Name, Namespace: p.Namespace},
+		Immutable:  ptr.To(true),
+		Data:       map[string]string{"input.json": "{}"},
+	}
+	key := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: profile.Keys[0].Secret.Name, Namespace: p.Namespace},
+		Immutable:  ptr.To(true),
+		Data:       map[string][]byte{"privateKey": []byte("not-read-by-runtime")},
+	}
 	must(c.Create(ctx, configuration))
 	must(c.Create(ctx, key))
 	profile.Configuration.UID = configuration.UID
@@ -82,10 +106,31 @@ func TestWorkerAPIBindingPublicationAndOrderedDisposal(t *testing.T) {
 	root.Status.Identities = []api.InstanceIdentity{{Name: p.Spec.ParticipantName, UID: p.UID}}
 	root.Status.GenesisRef = objectBinding("ConfigMap", configuration)
 	must(c.Status().Update(ctx, root))
-	state := &api.ParticipantRuntimeStatus{WorkerCandidate: &api.WorkerCandidate{Pod: podBinding(pod), ProfileDigest: profile.Digest()}}
-	must(participantstatus.Apply(ctx, c, p, api.ParticipantStatus{Runtime: state}, "stacks-network-domain-stackstransactionproduction"))
+	state := &api.ParticipantRuntimeStatus{
+		WorkerCandidate: &api.WorkerCandidate{Pod: podBinding(pod), ProfileDigest: profile.Digest()},
+	}
+	must(
+		participantstatus.Apply(
+			ctx,
+			c,
+			p,
+			api.ParticipantStatus{Runtime: state},
+			"stacks-network-domain-stackstransactionproduction",
+		),
+	)
 	role := &testRole{}
-	worker := Runtime{Client: c, Namespace: p.Namespace, ParticipantName: p.Name, NetworkUID: root.UID, ParticipantUID: p.UID, PodUID: pod.UID, PodName: pod.Name, Profile: profile, Role: role, Prerequisites: func(context.Context, Snapshot) error { return nil }}
+	worker := Runtime{
+		Client:          c,
+		Namespace:       p.Namespace,
+		ParticipantName: p.Name,
+		NetworkUID:      root.UID,
+		ParticipantUID:  p.UID,
+		PodUID:          pod.UID,
+		PodName:         pod.Name,
+		Profile:         profile,
+		Role:            role,
+		Prerequisites:   func(context.Context, Snapshot) error { return nil },
+	}
 	_, err = worker.Reconcile(ctx)
 	must(err)
 	if role.steps != 0 {
@@ -113,7 +158,24 @@ func TestWorkerAPIBindingPublicationAndOrderedDisposal(t *testing.T) {
 	}
 	// The structural schema must retain exact public traffic identity and original progress.
 	evidence := p.Status.Execution.DeepCopy()
-	evidence.Traffic = &api.TrafficObservation{Available: true, Found: true, Success: true, TxID: strings.Repeat("a", 64), BlockID: strings.Repeat("b", 64), IndexBlockID: strings.Repeat("c", 64), TargetParticipantUID: "target", TargetPodUID: "actor-pod", TargetContainerID: "containerd://actor", TargetConfigurationDigest: foundation.Digest("configuration"), GenesisUID: "genesis", SubmittedBurnHeight: 301, BurnHeight: 302, ObservedAt: metav1.NewTime(time.Unix(1000, 0)), EffectiveIntervalSeconds: 60, ProgressWindowSeconds: 190}
+	evidence.Traffic = &api.TrafficObservation{
+		Available:                 true,
+		Found:                     true,
+		Success:                   true,
+		TxID:                      strings.Repeat("a", 64),
+		BlockID:                   strings.Repeat("b", 64),
+		IndexBlockID:              strings.Repeat("c", 64),
+		TargetParticipantUID:      "target",
+		TargetPodUID:              "actor-pod",
+		TargetContainerID:         "containerd://actor",
+		TargetConfigurationDigest: foundation.Digest("configuration"),
+		GenesisUID:                "genesis",
+		SubmittedBurnHeight:       301,
+		BurnHeight:                302,
+		ObservedAt:                metav1.NewTime(time.Unix(1000, 0)),
+		EffectiveIntervalSeconds:  60,
+		ProgressWindowSeconds:     190,
+	}
 	must(worker.publish(ctx, p, evidence))
 	must(c.Get(ctx, client.ObjectKeyFromObject(p), p))
 	if p.Status.Execution.Traffic == nil || !reflect.DeepEqual(p.Status.Execution.Traffic, evidence.Traffic) {

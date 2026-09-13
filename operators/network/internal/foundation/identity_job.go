@@ -68,7 +68,11 @@ func RunKeyJob(ctx context.Context, c client.Client, in KeyJobInput) error {
 		return fmt.Errorf("incomplete identity job binding")
 	}
 	var secret corev1.Secret
-	if err := c.Get(ctx, types.NamespacedName{Namespace: in.Namespace, Name: in.CredentialsRef.Name}, &secret); err != nil {
+	if err := c.Get(
+		ctx,
+		types.NamespacedName{Namespace: in.Namespace, Name: in.CredentialsRef.Name},
+		&secret,
+	); err != nil {
 		return err
 	}
 	if secret.UID != in.CredentialsUID {
@@ -85,7 +89,11 @@ func RunKeyJob(ctx context.Context, c client.Client, in KeyJobInput) error {
 		base := secret.DeepCopy()
 		secret.Data = map[string][]byte{in.CredentialsRef.Key: []byte(scalar)}
 		secret.Immutable = ptr.To(true)
-		if err := c.Patch(ctx, &secret, client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{})); err != nil {
+		if err := c.Patch(
+			ctx,
+			&secret,
+			client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{}),
+		); err != nil {
 			return err
 		}
 	}
@@ -133,8 +141,19 @@ func ownedUID(obj metav1.Object, uid types.UID) bool {
 	return ref != nil && ref.UID == uid
 }
 
-func createOwned(ctx context.Context, c client.Client, s *runtime.Scheme, owner client.Object, obj client.Object) error {
-	if err := controllerutil.SetControllerReference(owner, obj, s, controllerutil.WithBlockOwnerDeletion(false)); err != nil {
+func createOwned(
+	ctx context.Context,
+	c client.Client,
+	s *runtime.Scheme,
+	owner client.Object,
+	obj client.Object,
+) error {
+	if err := controllerutil.SetControllerReference(
+		owner,
+		obj,
+		s,
+		controllerutil.WithBlockOwnerDeletion(false),
+	); err != nil {
 		return err
 	}
 	err := c.Create(ctx, obj)
@@ -157,12 +176,35 @@ func KeyJobRules(in KeyJobInput) []rbacv1.PolicyRule {
 	if in.Generate {
 		verbs = append(verbs, "patch")
 	}
-	return []rbacv1.PolicyRule{{APIGroups: []string{""}, Resources: []string{"secrets"}, ResourceNames: []string{in.CredentialsRef.Name}, Verbs: verbs}, {APIGroups: []string{""}, Resources: []string{"configmaps"}, ResourceNames: []string{in.ReportName}, Verbs: []string{"get", "patch"}}}
+	return []rbacv1.PolicyRule{
+		{
+			APIGroups:     []string{""},
+			Resources:     []string{"secrets"},
+			ResourceNames: []string{in.CredentialsRef.Name},
+			Verbs:         verbs,
+		},
+		{
+			APIGroups:     []string{""},
+			Resources:     []string{"configmaps"},
+			ResourceNames: []string{in.ReportName},
+			Verbs:         []string{"get", "patch"},
+		},
+	}
 }
 
-var errResolverFailed = errors.New("scoped identity resolver Job failed; inspect its status and replace the identity declaration to retry")
+var errResolverFailed = errors.New(
+	"scoped identity resolver Job failed; inspect its status and replace the identity declaration to retry",
+)
 
-func provisionKeyJob(ctx context.Context, c client.Client, reader client.Reader, s *runtime.Scheme, owner client.Object, image string, in KeyJobInput) error {
+func provisionKeyJob(
+	ctx context.Context,
+	c client.Client,
+	reader client.Reader,
+	s *runtime.Scheme,
+	owner client.Object,
+	image string,
+	in KeyJobInput,
+) error {
 	if image == "" {
 		return fmt.Errorf("resolver image is required")
 	}
@@ -170,32 +212,87 @@ func provisionKeyJob(ctx context.Context, c client.Client, reader client.Reader,
 	if err != nil {
 		return err
 	}
-	name := RuntimeName("", string(owner.GetUID()), gvk.Kind, owner.GetName(), "resolve-"+strings.TrimPrefix(Digest(in), "sha256:"))
+	name := RuntimeName(
+		"",
+		string(owner.GetUID()),
+		gvk.Kind,
+		owner.GetName(),
+		"resolve-"+strings.TrimPrefix(Digest(in), "sha256:"),
+	)
 	account := &corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: owner.GetNamespace()}}
 	if err := createOwned(ctx, c, s, owner, account); err != nil {
 		return err
 	}
-	role := &rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: owner.GetNamespace()}, Rules: KeyJobRules(in)}
+	role := &rbacv1.Role{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: owner.GetNamespace()},
+		Rules:      KeyJobRules(in),
+	}
 	if err := createOwned(ctx, c, s, owner, role); err != nil {
 		return err
 	}
-	binding := &rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: owner.GetNamespace()}, RoleRef: rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: common.KindRole, Name: name}, Subjects: []rbacv1.Subject{{Kind: common.KindServiceAccount, Name: name, Namespace: owner.GetNamespace()}}}
+	binding := &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: owner.GetNamespace()},
+		RoleRef:    rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: common.KindRole, Name: name},
+		Subjects:   []rbacv1.Subject{{Kind: common.KindServiceAccount, Name: name, Namespace: owner.GetNamespace()}},
+	}
 	if err := createOwned(ctx, c, s, owner, binding); err != nil {
 		return err
 	}
 	data, _ := json.Marshal(in)
 	job := &batchv1.Job{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: owner.GetNamespace(), Labels: map[string]string{managedByLabel: foundationManager, api.LabelRole: api.RoleSupport, api.LabelSourceUID: string(owner.GetUID()), api.LabelSourceKind: gvk.Kind}, Annotations: map[string]string{api.AnnotationSourceName: owner.GetName()}},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: owner.GetNamespace(),
+			Labels: map[string]string{
+				managedByLabel:      foundationManager,
+				api.LabelRole:       api.RoleSupport,
+				api.LabelSourceUID:  string(owner.GetUID()),
+				api.LabelSourceKind: gvk.Kind,
+			},
+			Annotations: map[string]string{api.AnnotationSourceName: owner.GetName()},
+		},
 		Spec: batchv1.JobSpec{
-			BackoffLimit: ptr.To[int32](3), ActiveDeadlineSeconds: ptr.To[int64](120),
-			Template: corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{managedByLabel: foundationManager, api.LabelRole: api.RoleSupport, api.LabelSourceUID: string(owner.GetUID()), api.LabelSourceKind: gvk.Kind}}, Spec: corev1.PodSpec{
-				ServiceAccountName: name, RestartPolicy: corev1.RestartPolicyNever,
-				SecurityContext: &corev1.PodSecurityContext{RunAsNonRoot: ptr.To(true), RunAsUser: ptr.To[int64](65532), SeccompProfile: &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault}},
-				Containers: []corev1.Container{{
-					Name: "resolver", Image: image, Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("10m"), corev1.ResourceMemory: resource.MustParse("32Mi")}, Limits: corev1.ResourceList{corev1.ResourceMemory: resource.MustParse("128Mi")}}, Command: []string{"/foundation"}, Args: []string{"--mode=" + ModeResolveKey, "--input=" + string(data)},
-					SecurityContext: &corev1.SecurityContext{AllowPrivilegeEscalation: ptr.To(false), ReadOnlyRootFilesystem: ptr.To(true), Capabilities: &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}}},
-				}},
-			}},
+			BackoffLimit:          ptr.To[int32](3),
+			ActiveDeadlineSeconds: ptr.To[int64](120),
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						managedByLabel:      foundationManager,
+						api.LabelRole:       api.RoleSupport,
+						api.LabelSourceUID:  string(owner.GetUID()),
+						api.LabelSourceKind: gvk.Kind,
+					},
+				},
+				Spec: corev1.PodSpec{
+					ServiceAccountName: name,
+					RestartPolicy:      corev1.RestartPolicyNever,
+					SecurityContext: &corev1.PodSecurityContext{
+						RunAsNonRoot:   ptr.To(true),
+						RunAsUser:      ptr.To[int64](65532),
+						SeccompProfile: &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
+					},
+					Containers: []corev1.Container{
+						{
+							Name:  "resolver",
+							Image: image,
+							Resources: corev1.ResourceRequirements{
+								Requests: corev1.ResourceList{
+									corev1.ResourceCPU:    resource.MustParse("10m"),
+									corev1.ResourceMemory: resource.MustParse("32Mi"),
+								},
+								Limits: corev1.ResourceList{corev1.ResourceMemory: resource.MustParse("128Mi")},
+							},
+							Command: []string{"/foundation"},
+							Args:    []string{"--mode=" + ModeResolveKey, "--input=" + string(data)},
+							SecurityContext: &corev1.SecurityContext{
+								AllowPrivilegeEscalation: ptr.To(false),
+								ReadOnlyRootFilesystem:   ptr.To(true),
+								Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
+							},
+						},
+					},
+				},
+			},
 		},
 	}
 	if err := createOwned(ctx, c, s, owner, job); err != nil {

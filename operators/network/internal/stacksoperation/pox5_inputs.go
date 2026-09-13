@@ -35,14 +35,24 @@ func (r PublicInputs) PoX5(ctx context.Context, snapshot stacksworker.Snapshot) 
 	for _, requirement := range genesis.Spec.Bootstrap.Requirements {
 		if requirement.Kind == api.ParticipantStacksStacker && requirement.Participant.UID == snapshot.Participant.UID {
 			for _, account := range requirement.Accounts {
-				captured = captured || account.Binding.UID == administrator.UID && account.Identity == *administrator.Status.Identity
+				captured = captured ||
+					account.Binding.UID == administrator.UID && account.Identity == *administrator.Status.Identity
 			}
 		}
 	}
 	if legacy.InitialCohort && !captured {
 		return input, errors.New("captured administrator identity unavailable")
 	}
-	input = PoX5Inputs{InitialCohort: legacy.InitialCohort, Node: node, Holder: legacy.Holder, Administrator: administrator.Status.Identity.Address, SignerPublicKey: legacy.SignerPublicKey, Amount: legacy.Amount, LockCycles: legacy.LockCycles, RenewWhenRemainingCycles: legacy.RenewWhenRemainingCycles}
+	input = PoX5Inputs{
+		InitialCohort:            legacy.InitialCohort,
+		Node:                     node,
+		Holder:                   legacy.Holder,
+		Administrator:            administrator.Status.Identity.Address,
+		SignerPublicKey:          legacy.SignerPublicKey,
+		Amount:                   legacy.Amount,
+		LockCycles:               legacy.LockCycles,
+		RenewWhenRemainingCycles: legacy.RenewWhenRemainingCycles,
+	}
 	for _, gate := range genesis.Spec.Bootstrap.Gates {
 		if gate.Name == api.GateEnrollPoX5 && gate.TargetCycle != nil && *gate.TargetCycle > 0 {
 			if legacy.InitialCohort {

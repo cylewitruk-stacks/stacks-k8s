@@ -44,11 +44,26 @@ func (c *Client) ChainView(ctx context.Context) (ChainView, error) {
 	header, err := hex.DecodeString(wire.Tip)
 	consensus, ce := hex.DecodeString(wire.Consensus)
 	burn, be := hex.DecodeString(wire.BurnConsensus)
-	if err != nil || ce != nil || be != nil || len(header) != 32 || len(consensus) != 20 || len(burn) != 20 || wire.NetworkID == nil || wire.Burn == nil || wire.Height == nil || wire.Synced == nil {
+	if err != nil || ce != nil || be != nil || len(header) != 32 || len(consensus) != 20 || len(burn) != 20 ||
+		wire.NetworkID == nil ||
+		wire.Burn == nil ||
+		wire.Height == nil ||
+		wire.Synced == nil {
 		return ChainView{}, errors.New("complete canonical node identity unavailable")
 	}
 	id := sha512.Sum512_256(append(header, consensus...))
-	return ChainView{Info: Info{NetworkID: *wire.NetworkID, BurnHeight: *wire.Burn, StacksHeight: *wire.Height, Tip: hex.EncodeToString(header)}, ConsensusHash: hex.EncodeToString(consensus), BurnConsensusHash: hex.EncodeToString(burn), IndexBlockID: hex.EncodeToString(id[:]), FullySynced: *wire.Synced}, nil
+	return ChainView{
+		Info: Info{
+			NetworkID:    *wire.NetworkID,
+			BurnHeight:   *wire.Burn,
+			StacksHeight: *wire.Height,
+			Tip:          hex.EncodeToString(header),
+		},
+		ConsensusHash:     hex.EncodeToString(consensus),
+		BurnConsensusHash: hex.EncodeToString(burn),
+		IndexBlockID:      hex.EncodeToString(id[:]),
+		FullySynced:       *wire.Synced,
+	}, nil
 }
 
 // PreparedSigner contains protocol-derived signer weight and full-width stake.
@@ -78,7 +93,13 @@ func (c *Client) StackerSet(ctx context.Context, cycle uint64, indexBlockID stri
 	if cycle > 9999999999 || !validHash(indexBlockID) {
 		return StackerSet{}, errors.New("invalid prepared-set request identity")
 	}
-	code, data, err := c.request(ctx, http.MethodGet, fmt.Sprintf("/v3/stacker_set/%d?tip=%s", cycle, indexBlockID), "application/json", nil)
+	code, data, err := c.request(
+		ctx,
+		http.MethodGet,
+		fmt.Sprintf("/v3/stacker_set/%d?tip=%s", cycle, indexBlockID),
+		"application/json",
+		nil,
+	)
 	if err != nil {
 		return StackerSet{}, err
 	}
@@ -101,20 +122,28 @@ func (c *Client) StackerSet(ctx context.Context, cycle uint64, indexBlockID stri
 			Threshold json.Number `json:"pox_ustx_threshold"`
 		} `json:"stacker_set"`
 	}
-	if code != http.StatusOK || json.Unmarshal(data, &wire) != nil || wire.Set == nil || wire.Set.Signers == nil || len(*wire.Set.Signers) > 1000 || wire.Set.Version > 1 {
+	if code != http.StatusOK || json.Unmarshal(data, &wire) != nil || wire.Set == nil || wire.Set.Signers == nil ||
+		len(*wire.Set.Signers) > 1000 ||
+		wire.Set.Version > 1 {
 		return StackerSet{}, errors.New("prepared signer set unavailable")
 	}
 	threshold, err := clarity.Uint128(wire.Set.Threshold.String())
 	if err != nil || wire.Set.Threshold.String() == "0" {
 		return StackerSet{}, errors.New("prepared signer threshold unavailable")
 	}
-	result := StackerSet{Available: true, Version: wire.Set.Version, Threshold: threshold, Signers: make([]PreparedSigner, 0, len(*wire.Set.Signers))}
+	result := StackerSet{
+		Available: true,
+		Version:   wire.Set.Version,
+		Threshold: threshold,
+		Signers:   make([]PreparedSigner, 0, len(*wire.Set.Signers)),
+	}
 	seen := map[string]bool{}
 	var weight uint64
 	for _, signer := range *wire.Set.Signers {
 		key, ke := identity.FromPublic(signer.Key)
 		amount, ae := clarity.Uint128(signer.Amount.String())
-		if ke != nil || ae != nil || signer.Weight == nil || *signer.Weight == 0 || signer.Amount.String() == "0" || seen[key.PublicKey] {
+		if ke != nil || ae != nil || signer.Weight == nil || *signer.Weight == 0 || signer.Amount.String() == "0" ||
+			seen[key.PublicKey] {
 			return StackerSet{}, errors.New("invalid prepared signer entry")
 		}
 		weight += uint64(*signer.Weight)
@@ -122,7 +151,10 @@ func (c *Client) StackerSet(ctx context.Context, cycle uint64, indexBlockID stri
 			return StackerSet{}, errors.New("prepared signer weight exceeds bound")
 		}
 		seen[key.PublicKey] = true
-		result.Signers = append(result.Signers, PreparedSigner{PublicKey: key.PublicKey, Weight: *signer.Weight, StackedAmount: amount})
+		result.Signers = append(
+			result.Signers,
+			PreparedSigner{PublicKey: key.PublicKey, Weight: *signer.Weight, StackedAmount: amount},
+		)
 	}
 	return result, nil
 }

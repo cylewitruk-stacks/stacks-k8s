@@ -1,3 +1,4 @@
+// Command action-rbac-check validates the action chart permissions.
 package main
 
 import (

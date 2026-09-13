@@ -24,13 +24,16 @@ func namedWatch(c dynamic.Interface, namespace string, ref ReadBinding) *cache.L
 	gv, _ := schema.ParseGroupVersion(ref.APIVersion)
 	resource := c.Resource(gv.WithResource(ref.Resource)).Namespace(namespace)
 	selector := fields.OneTermEqualSelector("metadata.name", ref.Name).String()
-	return &cache.ListWatch{ListWithContextFunc: func(ctx context.Context, options metav1.ListOptions) (runtime.Object, error) {
-		options.FieldSelector = selector
-		return resource.List(ctx, options)
-	}, WatchFuncWithContext: func(ctx context.Context, options metav1.ListOptions) (watch.Interface, error) {
-		options.FieldSelector = selector
-		return resource.Watch(ctx, options)
-	}}
+	return &cache.ListWatch{
+		ListWithContextFunc: func(ctx context.Context, options metav1.ListOptions) (runtime.Object, error) {
+			options.FieldSelector = selector
+			return resource.List(ctx, options)
+		},
+		WatchFuncWithContext: func(ctx context.Context, options metav1.ListOptions) (watch.Interface, error) {
+			options.FieldSelector = selector
+			return resource.Watch(ctx, options)
+		},
+	}
 }
 
 // Run keeps the role instance alive across standard informer reconnects and duplicate notifications.
@@ -53,7 +56,16 @@ func (r *Runtime) Run(ctx context.Context) error {
 		default:
 		}
 	}
-	refs := append([]ReadBinding{{APIVersion: api.GroupVersion.String(), Resource: api.ResourceStacksNetwork, Name: "network"}, {APIVersion: api.GroupVersion.String(), Resource: api.ResourceStacksNetworkParticipant, Name: r.ParticipantName}}, profile.Reads...)
+	refs := append(
+		[]ReadBinding{
+			{APIVersion: api.GroupVersion.String(), Resource: api.ResourceStacksNetwork, Name: "network"},
+			{
+				APIVersion: api.GroupVersion.String(),
+				Resource:   api.ResourceStacksNetworkParticipant,
+				Name:       r.ParticipantName,
+			},
+		},
+		profile.Reads...)
 	seen := map[ReadBinding]bool{}
 	var workers sync.WaitGroup
 	defer func() { cancel(); workers.Wait() }()
@@ -62,12 +74,19 @@ func (r *Runtime) Run(ctx context.Context) error {
 			continue
 		}
 		seen[ref] = true
-		informer := cache.NewSharedIndexInformer(namedWatch(r.Dynamic, r.Namespace, ref), &unstructured.Unstructured{}, 0, cache.Indexers{})
-		if _, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{AddFunc: func(any) { enqueue() }, UpdateFunc: func(old, current any) {
-			if namedUpdateRelevant(old, current) {
-				enqueue()
-			}
-		}, DeleteFunc: func(any) { enqueue() }}); err != nil {
+		informer := cache.NewSharedIndexInformer(
+			namedWatch(r.Dynamic, r.Namespace, ref),
+			&unstructured.Unstructured{},
+			0,
+			cache.Indexers{},
+		)
+		if _, err := informer.AddEventHandler(
+			cache.ResourceEventHandlerFuncs{AddFunc: func(any) { enqueue() }, UpdateFunc: func(old, current any) {
+				if namedUpdateRelevant(old, current) {
+					enqueue()
+				}
+			}, DeleteFunc: func(any) { enqueue() }},
+		); err != nil {
 			return err
 		}
 		workers.Add(1)
@@ -135,23 +154,23 @@ func namedUpdateRelevant(old, current any) bool {
 
 // namedWatchProjection copies informer data before removing fields owned by observation writers.
 func namedWatchProjection(object *unstructured.Unstructured) map[string]any {
-	copy := object.DeepCopy()
-	unstructured.RemoveNestedField(copy.Object, "metadata", "resourceVersion")
-	unstructured.RemoveNestedField(copy.Object, "metadata", "managedFields")
-	if copy.GetAPIVersion() == api.GroupVersion.String() && copy.GetKind() == api.KindStacksNetworkParticipant {
-		unstructured.RemoveNestedField(copy.Object, "status", "execution")
-		unstructured.RemoveNestedField(copy.Object, "status", "runtime", "protocol")
+	snapshot := object.DeepCopy()
+	unstructured.RemoveNestedField(snapshot.Object, "metadata", "resourceVersion")
+	unstructured.RemoveNestedField(snapshot.Object, "metadata", "managedFields")
+	if snapshot.GetAPIVersion() == api.GroupVersion.String() && snapshot.GetKind() == api.KindStacksNetworkParticipant {
+		unstructured.RemoveNestedField(snapshot.Object, "status", "execution")
+		unstructured.RemoveNestedField(snapshot.Object, "status", "runtime", "protocol")
 	}
-	if copy.GetAPIVersion() == api.GroupVersion.String() {
-		conditions, found, _ := unstructured.NestedSlice(copy.Object, "status", "conditions")
+	if snapshot.GetAPIVersion() == api.GroupVersion.String() {
+		conditions, found, _ := unstructured.NestedSlice(snapshot.Object, "status", "conditions")
 		if found {
 			for _, value := range conditions {
 				if condition, ok := value.(map[string]any); ok {
 					delete(condition, "lastTransitionTime")
 				}
 			}
-			_ = unstructured.SetNestedSlice(copy.Object, conditions, "status", "conditions")
+			_ = unstructured.SetNestedSlice(snapshot.Object, conditions, "status", "conditions")
 		}
 	}
-	return copy.Object
+	return snapshot.Object
 }

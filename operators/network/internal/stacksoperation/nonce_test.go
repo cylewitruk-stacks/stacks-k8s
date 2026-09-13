@@ -25,6 +25,7 @@ type memoryNode struct {
 func (n *memoryNode) Account(context.Context, string) (rpc.Account, error) {
 	return n.account, n.errorRead
 }
+
 func (n *memoryNode) Submit(context.Context, transaction.Transaction) error {
 	n.sends++
 	if n.onSubmit != nil {
@@ -32,6 +33,7 @@ func (n *memoryNode) Submit(context.Context, transaction.Transaction) error {
 	}
 	return n.submitErr
 }
+
 func (n *memoryNode) Inclusion(context.Context, string) (rpc.Inclusion, error) {
 	n.reads++
 	return n.inclusion, n.errorRead
@@ -41,8 +43,10 @@ func (n *memoryNode) Inclusion(context.Context, string) (rpc.Inclusion, error) {
 func nodeFixture() *memoryNode {
 	return &memoryNode{account: rpc.Account{Nonce: 7, Balance: clarity.Uint(100), Locked: clarity.Uint(1000)}}
 }
+
 func buildFixture(n uint64) (transaction.Transaction, error) {
-	b := []byte{byte(n), 1, 2}
+	// Synthetic transactions use the low nonce byte, including the MaxUint64 boundary case.
+	b := []byte{byte(n & 0xff), 1, 2}
 	return transaction.Transaction{Bytes: b, TxID: transaction.ID(b)}, nil
 }
 func permit(context.Context) error { return nil }
@@ -70,7 +74,9 @@ func TestUncertainSendNeverReplaysAndPinsObservationTarget(t *testing.T) {
 		t.Fatal(err)
 	}
 	facts := s.Facts()
-	if facts.Offered != 1 || facts.Accepted != 0 || facts.Uncertain != 1 || facts.Included != 1 || s.next != 8 || s.Pending() != 0 || !facts.LastInclusion.ObservedAt.Time.Equal(now) {
+	if facts.Offered != 1 || facts.Accepted != 0 || facts.Uncertain != 1 || facts.Included != 1 || s.next != 8 ||
+		s.Pending() != 0 ||
+		!facts.LastInclusion.ObservedAt.Time.Equal(now) {
 		t.Fatalf("lost receipt facts: %+v", facts)
 	}
 	facts.LastInclusion.BlockID = "tampered"
@@ -105,7 +111,9 @@ func TestUnsentFailuresDoNotReserveNonceOrSend(t *testing.T) {
 			case "read":
 				node.errorRead = errors.New("read")
 			case "build":
-				build = func(uint64) (transaction.Transaction, error) { return transaction.Transaction{}, errors.New("build") }
+				build = func(uint64) (transaction.Transaction, error) {
+					return transaction.Transaction{}, errors.New("build")
+				}
 			case "authorization":
 				authorize = func(context.Context) error { return errors.New("changed") }
 			}
@@ -126,7 +134,8 @@ func TestLastNonceAndFailedExecutionAreAccountedWithoutOverflow(t *testing.T) {
 	}
 	node.inclusion = rpc.Inclusion{Found: true, Success: false, BlockID: transaction.ID([]byte("block"))}
 	reason, err := s.Observe(context.Background(), time.Now())
-	if err != nil || reason != "ExecutionRejected" || s.Pending() != 0 || s.Facts().Included != 1 || s.Facts().LastInclusion.Success {
+	if err != nil || reason != "ExecutionRejected" || s.Pending() != 0 || s.Facts().Included != 1 ||
+		s.Facts().LastInclusion.Success {
 		t.Fatal("failed execution was not accounted")
 	}
 	_, _ = s.Offer(context.Background(), time.Now, node, big.NewInt(1), permit, buildFixture)

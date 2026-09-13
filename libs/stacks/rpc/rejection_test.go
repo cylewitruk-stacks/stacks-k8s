@@ -23,7 +23,14 @@ func TestSubmissionRejectionRequiresExactNativeEnvelope(t *testing.T) {
 	}{
 		{"fee", 400, "0x" + tx.TxID, "transaction rejected", "FeeTooLow", "FeeTooLow"},
 		{"nonce", 400, tx.TxID, "transaction rejected", "BadNonce", "BadNonce"},
-		{"conflict", 400, tx.TxID, "transaction rejected", "ConflictingNonceInMempool", "ConflictingNonceInMempool"},
+		{
+			"conflict",
+			400,
+			tx.TxID,
+			"transaction rejected",
+			"ConflictingNonceInMempool",
+			"ConflictingNonceInMempool",
+		},
 		{"funds", 400, tx.TxID, "transaction rejected", "NotEnoughFunds", "NotEnoughFunds"},
 		{"database", 400, tx.TxID, "transaction rejected", "ServerFailureDatabase", "Other"},
 		{"other", 400, tx.TxID, "transaction rejected", "private server detail", "Other"},
@@ -37,7 +44,14 @@ func TestSubmissionRejectionRequiresExactNativeEnvelope(t *testing.T) {
 		{"missing-reason", 400, tx.TxID, "transaction rejected", "", ""},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			data, _ := json.Marshal(map[string]any{"txid": test.id, "error": test.message, "reason": test.reason, "reason_data": map[string]string{"secret": "private server detail"}})
+			data, _ := json.Marshal(
+				map[string]any{
+					"txid":        test.id,
+					"error":       test.message,
+					"reason":      test.reason,
+					"reason_data": map[string]string{"secret": "private server detail"},
+				},
+			)
 			calls := 0
 			c := clientFor(t, func(w http.ResponseWriter, r *http.Request) {
 				calls++
@@ -54,7 +68,10 @@ func TestSubmissionRejectionRequiresExactNativeEnvelope(t *testing.T) {
 			if err == nil || matched != (test.want != "") || calls != 1 {
 				t.Fatalf("classification %v, calls %d", err, calls)
 			}
-			if matched && (rejection.Reason() != test.want || rejection.TxID() != tx.TxID || rejection.Definite() != (test.want != "Other")) {
+			if matched &&
+				(rejection.Reason() != test.want ||
+					rejection.TxID() != tx.TxID ||
+					rejection.Definite() != (test.want != "Other")) {
 				t.Fatalf("wrong retained identity/classification: %+v", rejection)
 			}
 			if strings.Contains(err.Error(), "private") {
@@ -62,7 +79,12 @@ func TestSubmissionRejectionRequiresExactNativeEnvelope(t *testing.T) {
 			}
 		})
 	}
-	for _, raw := range []string{"{", "null", `{"reason":1}`, `{"txid":"` + tx.TxID + `","error":"transaction rejected","reason":"BadNonce"} trailing`} {
+	for _, raw := range []string{
+		"{",
+		"null",
+		`{"reason":1}`,
+		`{"txid":"` + tx.TxID + `","error":"transaction rejected","reason":"BadNonce"} trailing`,
+	} {
 		if ClassifySubmissionRejection(400, []byte(raw), tx.TxID) != nil {
 			t.Fatal("malformed rejection classified")
 		}
@@ -72,7 +94,7 @@ func TestSubmissionRejectionRequiresExactNativeEnvelope(t *testing.T) {
 func TestOversizedRejectionRemainsUnknown(t *testing.T) {
 	tx := transaction.Transaction{Bytes: []byte{1, 2, 3}}
 	tx.TxID = transaction.ID(tx.Bytes)
-	c := clientFor(t, func(w http.ResponseWriter, r *http.Request) {
+	c := clientFor(t, func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(400)
 		_, _ = io.WriteString(w, `{"txid":"`+tx.TxID+`","error":"transaction rejected","reason":"BadNonce"}`)
 	})

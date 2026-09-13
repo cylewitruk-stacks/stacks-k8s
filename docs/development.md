@@ -11,6 +11,40 @@ No committed `go.work` is required. The modules are intentionally verified in
 isolation so local workspace state cannot hide a missing dependency or combine
 the independently versioned API, runtime, and generator dependency graphs.
 
+## Go lint and formatting
+
+Install the exact `golangci-lint` release recorded in
+[`.golangci-lint-version`](../.golangci-lint-version). Local verification and CI
+use the same [configuration](../.golangci.yml); a missing or mismatched executable
+fails with an installation/version message. Set `GOLANGCI_LINT` to an absolute
+executable path when it is not on `PATH`.
+
+| Command | Behavior |
+| --- | --- |
+| `make lint` | Check every loadable Go module, including tests and `integration,live` code; never execute tests or rewrite source. |
+| `make fmt` / `make fmt-check` | Check formatting across all modules and print diffs without changing files. |
+| `make fmt-fix` | Apply `gofumpt`, `goimports` and `golines` formatting. Review the resulting diff. |
+| `make verify` | Require lint and formatting checks alongside the existing verification gates. |
+
+Each module runs with `GOWORK=off` and the explicit root configuration. The
+`apis/network/tools` and `operators/observability/tools` modules contain only
+build-tagged generator imports; they receive formatting and module-integrity
+checks rather than package analysis. Generated sources are excluded using their
+standard generated-code marker; generator drift remains a separate check.
+Kubebuilder markers are exempt from line-length checks because each marker must
+stay on one line. Test helpers may take `testing.T` before context.
+
+Lint includes the standard analyzers plus the configured correctness, security
+and style checks. The line-length limit is 120; `golines` wraps supported Go
+syntax, while `lll` can also flag long comments or literals requiring manual
+review. A suppression must name its linter and explain the reason. CI and local
+checks report existing findings as failures; there is no baseline suppression or
+new-code-only filter. A clean lint run does not replace tests or vulnerability
+checks.
+
+For eligible automatic lint fixes, run `golangci-lint run --fix` from the module
+directory with the same root configuration, then review the diff and rerun lint.
+
 ## Domain vocabulary
 
 Keep machine-readable vocabulary with its owner. Public kinds, REST resource

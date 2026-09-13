@@ -17,7 +17,20 @@ import (
 )
 
 func TestPoX4GateRequiresEveryFrozenIdentityAndFreshObservation(t *testing.T) {
-	for _, mode := range []string{"valid", "missing", "replacement", "stale", "wrong-holder", "wrong-signer", "wrong-amount", "worker-replaced", "policy", "removed", "not-in-reward-set", "compatible-update"} {
+	for _, mode := range []string{
+		"valid",
+		"missing",
+		"replacement",
+		"stale",
+		"wrong-holder",
+		"wrong-signer",
+		"wrong-amount",
+		"worker-replaced",
+		"policy",
+		"removed",
+		"not-in-reward-set",
+		"compatible-update",
+	} {
 		t.Run(mode, func(t *testing.T) {
 			now := time.Now()
 			root, g, participants := cohortFixture(now)
@@ -70,22 +83,97 @@ func cohortFixture(now time.Time) (*api.StacksNetwork, *api.StacksGenesis, []api
 	holder := "ST000000000000000000002AMW42H"
 	pub := "02" + strings.Repeat("a", 64)
 	digest := "sha256:" + strings.Repeat("b", 64)
-	root.Spec.Participants = []api.Participant{{Name: "stacker", Kind: "StacksStacker"}, {Name: "signer", Kind: "StacksSigner"}}
-	root.Status.Identities = []api.InstanceIdentity{{Name: "stacker", UID: p.UID, Worker: &api.WorkerSession{Pod: api.WorkerPodBinding{Kind: "Pod", Name: "worker", UID: "worker-uid"}, ProfileDigest: digest}}}
-	p.Status.Admission = &api.Admission{PolicyDigest: "stacker-policy", Configuration: api.Configuration{StacksStacker: &stacks.StacksStackerSpec{AmountMicroSTX: ptr.To(common.Amount("100")), HolderAccountRef: &common.NameRef{Name: "holder"}, SignerRef: &common.NameRef{Name: "signer"}}}}
-	signer.Status.Admission = &api.Admission{PolicyDigest: "signer-policy", Configuration: api.Configuration{StacksSigner: &stacks.StacksSignerSpec{AccountRef: &common.NameRef{Name: "consensus"}}}}
-	p.Status.Conditions = []metav1.Condition{{Type: "WorkloadReady", Status: metav1.ConditionTrue, ObservedGeneration: p.Generation}}
-	p.Status.Execution = &api.WorkerExecutionStatus{PodUID: "worker-uid", ProcessNonce: "process", ProfileDigest: digest, AppliedPolicyDigest: "stacker-policy", ObservedGeneration: p.Generation, Phase: "Active", PoX4: &api.PoX4EnrollmentObservation{Holder: holder, SignerPublicKey: pub, AmountMicroSTX: "100", FirstCycle: 11, EndCycleExclusive: 17, TargetCycle: 12, TargetCycleMatched: true, ObservedAt: metav1.NewTime(now)}}
+	root.Spec.Participants = []api.Participant{
+		{Name: "stacker", Kind: "StacksStacker"},
+		{Name: "signer", Kind: "StacksSigner"},
+	}
+	root.Status.Identities = []api.InstanceIdentity{
+		{
+			Name: "stacker",
+			UID:  p.UID,
+			Worker: &api.WorkerSession{
+				Pod:           api.WorkerPodBinding{Kind: "Pod", Name: "worker", UID: "worker-uid"},
+				ProfileDigest: digest,
+			},
+		},
+	}
+	p.Status.Admission = &api.Admission{
+		PolicyDigest: "stacker-policy",
+		Configuration: api.Configuration{
+			StacksStacker: &stacks.StacksStackerSpec{
+				AmountMicroSTX:   ptr.To(common.Amount("100")),
+				HolderAccountRef: &common.NameRef{Name: "holder"},
+				SignerRef:        &common.NameRef{Name: "signer"},
+			},
+		},
+	}
+	signer.Status.Admission = &api.Admission{
+		PolicyDigest: "signer-policy",
+		Configuration: api.Configuration{
+			StacksSigner: &stacks.StacksSignerSpec{AccountRef: &common.NameRef{Name: "consensus"}},
+		},
+	}
+	p.Status.Conditions = []metav1.Condition{
+		{Type: "WorkloadReady", Status: metav1.ConditionTrue, ObservedGeneration: p.Generation},
+	}
+	p.Status.Execution = &api.WorkerExecutionStatus{
+		PodUID:              "worker-uid",
+		ProcessNonce:        "process",
+		ProfileDigest:       digest,
+		AppliedPolicyDigest: "stacker-policy",
+		ObservedGeneration:  p.Generation,
+		Phase:               "Active",
+		PoX4: &api.PoX4EnrollmentObservation{
+			Holder:             holder,
+			SignerPublicKey:    pub,
+			AmountMicroSTX:     "100",
+			FirstCycle:         11,
+			EndCycleExclusive:  17,
+			TargetCycle:        12,
+			TargetCycleMatched: true,
+			ObservedAt:         metav1.NewTime(now),
+		},
+	}
 	g.Spec.Bootstrap.Requirements = []api.BootstrapRequirement{
-		{Kind: "StacksStacker", Participant: common.Binding{Kind: "StacksNetworkParticipant", Name: p.Name, UID: p.UID}, PolicyDigest: "stacker-policy", AmountMicroSTX: ptr.To(common.Amount("100")), Dependencies: []common.Binding{{Kind: "StacksNetworkParticipant", Name: signer.Name, UID: signer.UID}}, Accounts: []api.PublicAccount{{Binding: common.Binding{Name: "holder"}, Identity: common.PublicIdentity{Address: holder}}}},
-		{Kind: "StacksSigner", Participant: common.Binding{Kind: "StacksNetworkParticipant", Name: signer.Name, UID: signer.UID}, PolicyDigest: "signer-policy", Accounts: []api.PublicAccount{{Binding: common.Binding{Name: "consensus"}, Identity: common.PublicIdentity{PublicKey: pub}}}},
+		{
+			Kind:           "StacksStacker",
+			Participant:    common.Binding{Kind: "StacksNetworkParticipant", Name: p.Name, UID: p.UID},
+			PolicyDigest:   "stacker-policy",
+			AmountMicroSTX: ptr.To(common.Amount("100")),
+			Dependencies:   []common.Binding{{Kind: "StacksNetworkParticipant", Name: signer.Name, UID: signer.UID}},
+			Accounts: []api.PublicAccount{
+				{Binding: common.Binding{Name: "holder"}, Identity: common.PublicIdentity{Address: holder}},
+			},
+		},
+		{
+			Kind:         "StacksSigner",
+			Participant:  common.Binding{Kind: "StacksNetworkParticipant", Name: signer.Name, UID: signer.UID},
+			PolicyDigest: "signer-policy",
+			Accounts: []api.PublicAccount{
+				{Binding: common.Binding{Name: "consensus"}, Identity: common.PublicIdentity{PublicKey: pub}},
+			},
+		},
 	}
 	participants := []api.StacksNetworkParticipant{*p, *signer}
 	return root, g, participants
 }
 
 func TestPoX5GateRequiresExactManagerAndCapturedCohort(t *testing.T) {
-	for _, mode := range []string{"valid", "stale", "manager", "source", "holder", "signer", "amount", "delegated", "membership", "coverage", "worker", "removed", "administrator"} {
+	for _, mode := range []string{
+		"valid",
+		"stale",
+		"manager",
+		"source",
+		"holder",
+		"signer",
+		"amount",
+		"delegated",
+		"membership",
+		"coverage",
+		"worker",
+		"removed",
+		"administrator",
+	} {
 		t.Run(mode, func(t *testing.T) {
 			now := time.Now()
 			root, g, participants := cohortFixture(now)
@@ -93,13 +181,31 @@ func TestPoX5GateRequiresExactManagerAndCapturedCohort(t *testing.T) {
 			policy := p.Status.Admission.Configuration.StacksStacker
 			policy.AdministratorAccountRef = &common.NameRef{Name: "administrator"}
 			administrator := "ST000000000000000000002AMW42H"
-			g.Spec.Bootstrap.Requirements[0].Accounts = append(g.Spec.Bootstrap.Requirements[0].Accounts, api.PublicAccount{Binding: common.Binding{Name: "administrator"}, Identity: common.PublicIdentity{Address: administrator}})
+			g.Spec.Bootstrap.Requirements[0].Accounts = append(
+				g.Spec.Bootstrap.Requirements[0].Accounts,
+				api.PublicAccount{
+					Binding:  common.Binding{Name: "administrator"},
+					Identity: common.PublicIdentity{Address: administrator},
+				},
+			)
 			old := p.Status.Execution.PoX4
 			source, err := protocolcontracts.DirectManager(old.Holder)
 			if err != nil {
 				t.Fatal(err)
 			}
-			o := &api.PoX5EnrollmentObservation{Holder: old.Holder, Manager: administrator + ".direct-signer", ManagerSourceDigest: fmt.Sprintf("sha256:%x", sha256.Sum256([]byte(source))), SignerPublicKey: old.SignerPublicKey, AmountMicroSTX: "100", DelegatedAmountMicroSTX: "100", FirstCycle: 14, EndCycleExclusive: 20, TargetCycle: 15, TargetCycleMatched: true, ObservedAt: metav1.NewTime(now)}
+			o := &api.PoX5EnrollmentObservation{
+				Holder:                  old.Holder,
+				Manager:                 administrator + ".direct-signer",
+				ManagerSourceDigest:     fmt.Sprintf("sha256:%x", sha256.Sum256([]byte(source))),
+				SignerPublicKey:         old.SignerPublicKey,
+				AmountMicroSTX:          "100",
+				DelegatedAmountMicroSTX: "100",
+				FirstCycle:              14,
+				EndCycleExclusive:       20,
+				TargetCycle:             15,
+				TargetCycleMatched:      true,
+				ObservedAt:              metav1.NewTime(now),
+			}
 			p.Status.Execution.PoX5 = o
 			switch mode {
 			case "stale":
@@ -127,7 +233,13 @@ func TestPoX5GateRequiresExactManagerAndCapturedCohort(t *testing.T) {
 			case "administrator":
 				g.Spec.Bootstrap.Requirements[0].Accounts = g.Spec.Bootstrap.Requirements[0].Accounts[:1]
 			}
-			if got := pox5CohortSatisfied(root, g, participants, api.Gate{TargetCycle: ptr.To(int64(15))}, now); got != (mode == "valid") {
+			if got := pox5CohortSatisfied(
+				root,
+				g,
+				participants,
+				api.Gate{TargetCycle: ptr.To(int64(15))},
+				now,
+			); got != (mode == "valid") {
 				t.Fatalf("accepted=%v", got)
 			}
 		})

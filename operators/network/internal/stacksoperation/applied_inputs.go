@@ -16,10 +16,18 @@ type appliedInputs[T any] struct {
 }
 
 // resolve uses cached data only through the framework's explicit applied-baseline authorization.
-func (c *appliedInputs[T]) resolve(ctx context.Context, s stacksworker.Snapshot, applied string, resolve func(context.Context, stacksworker.Snapshot) (T, error), clone func(T) T) (T, stacksworker.Snapshot, error) {
+func (c *appliedInputs[T]) resolve(
+	ctx context.Context,
+	s stacksworker.Snapshot,
+	applied string,
+	resolve func(context.Context, stacksworker.Snapshot) (T, error),
+	clone func(T) T,
+) (T, stacksworker.Snapshot, error) {
 	var zero T
 	cached := func(snapshot stacksworker.Snapshot) (T, stacksworker.Snapshot, error) {
-		if c.value == nil || snapshot.Participant == nil || snapshot.Participant.Status.Admission == nil || c.digest != applied || c.digest != snapshot.Participant.Status.Admission.PolicyDigest {
+		if c.value == nil || snapshot.Participant == nil || snapshot.Participant.Status.Admission == nil ||
+			c.digest != applied ||
+			c.digest != snapshot.Participant.Status.Admission.PolicyDigest {
 			return zero, snapshot, fmt.Errorf("applied input cache unavailable")
 		}
 		return clone(*c.value), snapshot, nil

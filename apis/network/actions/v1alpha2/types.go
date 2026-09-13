@@ -13,7 +13,13 @@ var GroupVersion = schema.GroupVersion{Group: "actions.stacks.org", Version: "v1
 
 // AddToScheme registers the supported atomic actions.
 func AddToScheme(s *runtime.Scheme) error {
-	s.AddKnownTypes(GroupVersion, &BitcoinBlockGeneration{}, &BitcoinBlockGenerationList{}, &BitcoinReorganization{}, &BitcoinReorganizationList{})
+	s.AddKnownTypes(
+		GroupVersion,
+		&BitcoinBlockGeneration{},
+		&BitcoinBlockGenerationList{},
+		&BitcoinReorganization{},
+		&BitcoinReorganizationList{},
+	)
 	metav1.AddToGroupVersion(s, GroupVersion)
 	return nil
 }

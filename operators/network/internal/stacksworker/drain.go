@@ -21,7 +21,9 @@ func CheckActorStop(ctx context.Context, reader client.Reader, actor *api.Stacks
 		return false, err
 	}
 	owner := metav1.GetControllerOf(actor)
-	if root.UID == "" || owner == nil || owner.APIVersion != api.GroupVersion.String() || owner.Kind != api.KindStacksNetwork || owner.Name != root.Name {
+	if root.UID == "" || owner == nil || owner.APIVersion != api.GroupVersion.String() ||
+		owner.Kind != api.KindStacksNetwork ||
+		owner.Name != root.Name {
 		return false, fmt.Errorf("actor root ownership unavailable")
 	}
 	if _, err := Session(root, actor); err != nil {
@@ -35,13 +37,22 @@ func CheckActorStop(ctx context.Context, reader client.Reader, actor *api.Stacks
 		if session == nil {
 			continue
 		}
-		if identity.UID == "" || identity.Name == "" || session.Pod.Kind != common.KindPod || session.Pod.Name == "" || session.Pod.UID == "" || session.ProfileDigest == "" {
+		if identity.UID == "" || identity.Name == "" || session.Pod.Kind != common.KindPod || session.Pod.Name == "" ||
+			session.Pod.UID == "" ||
+			session.ProfileDigest == "" {
 			return false, fmt.Errorf("retained worker identity unavailable")
 		}
 		if session.Disposal == nil {
 			return false, nil
 		}
-		if session.Shutdown == nil || session.Shutdown.NetworkGeneration < 1 || session.Shutdown.Reason != api.WorkerShutdownNetworkStopped && session.Shutdown.Reason != api.WorkerShutdownNetworkDeleting && session.Shutdown.Reason != api.WorkerShutdownParticipantRemoved || session.Shutdown.RequestedAt.IsZero() || session.Disposal.ObservedAt.IsZero() || session.Disposal.Outcome != api.WorkerDisposalSettled && session.Disposal.Outcome != api.WorkerDisposalUnsettled {
+		if session.Shutdown == nil || session.Shutdown.NetworkGeneration < 1 ||
+			session.Shutdown.Reason != api.WorkerShutdownNetworkStopped &&
+				session.Shutdown.Reason != api.WorkerShutdownNetworkDeleting &&
+				session.Shutdown.Reason != api.WorkerShutdownParticipantRemoved ||
+			session.Shutdown.RequestedAt.IsZero() ||
+			session.Disposal.ObservedAt.IsZero() ||
+			session.Disposal.Outcome != api.WorkerDisposalSettled &&
+				session.Disposal.Outcome != api.WorkerDisposalUnsettled {
 			return false, fmt.Errorf("retained worker disposition unavailable")
 		}
 	}

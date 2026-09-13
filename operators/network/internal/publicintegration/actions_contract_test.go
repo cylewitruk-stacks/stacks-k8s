@@ -16,22 +16,135 @@ import (
 // actionContractFixture supplies public facts only for rejection-oriented qualification tests.
 func actionContractFixture() (snapshot, actionSelection, *actions.BitcoinReorganization) {
 	now := metav1.Now()
-	target := bitcoin.BitcoinTargetIdentity{Participant: common.Binding{Kind: "StacksNetworkParticipant", Name: "compiled-bitcoin", UID: "participant"}, Pod: common.Binding{Kind: "Pod", Name: "bitcoin-0", UID: "pod"}, ContainerID: "container", Configuration: common.Binding{Kind: "ConfigMap", Name: "config", UID: "config"}, Credentials: common.Binding{Kind: "Secret", Name: "rpc", UID: "rpc"}, PolicyDigest: "policy"}
-	p := participantEvidence{Identity: identity{Name: target.Participant.Name, UID: target.Participant.UID}, Name: "bitcoin", Kind: "BitcoinNode", Status: api.ParticipantStatus{Admission: &api.Admission{PolicyDigest: "policy"}, Runtime: &api.ParticipantRuntimeStatus{PodRef: target.Pod.DeepCopy(), ContainerID: target.ContainerID, ConfigRef: target.Configuration.DeepCopy(), RPCSecretRef: target.Credentials.DeepCopy(), PolicyDigest: target.PolicyDigest}}}
-	ref := common.Binding{Kind: "BitcoinExecution", Name: "execution", UID: "execution"}
-	record := executionEvidence{Identity: identity{Name: ref.Name, UID: ref.UID}, ParticipantUID: p.Identity.UID, Status: bitcoin.BitcoinExecutionStatus{Observation: &bitcoin.BitcoinObservation{Target: target, ObservedAt: now, Height: 50, Tip: "original", Wallets: []bitcoin.BitcoinWalletObservation{{Ready: true, Address: "bcrt-public-address"}}}}}
-	s := snapshot{At: now.Time, Root: identity{UID: "root"}, Operation: "Running", Status: api.StacksNetworkStatus{Initialization: &api.InitializationStatus{Completed: true}, Bitcoin: &api.BitcoinRuntimeStatus{ExecutionRefs: []common.Binding{ref}}, ObservationPolicy: &api.ObservationPolicy{PollIntervalSeconds: 2, RPCAllowanceSeconds: 10}}, Participants: []participantEvidence{p}, Executions: []executionEvidence{record}}
-	selected := actionSelection{Participant: p, Execution: record.Identity, Target: target, Height: 50, Address: "bcrt-public-address"}
-	status := actions.BitcoinBlockGenerationStatus{Phase: "Completed", ObservedGeneration: 1, StartedAt: &now, FinishedAt: &now, LastDispatchID: "receipt", LastBlockHash: "replacement2", BlocksGenerated: 2, AdmittedNetwork: &actions.NetworkIdentity{UID: "root"}, AdmittedExecution: &ref, AdmittedTarget: &actions.TargetIdentity{UID: string(p.Identity.UID), Name: p.Identity.Name, PodUID: string(target.Pod.UID), ContainerID: target.ContainerID, Configuration: target.Configuration, Credentials: target.Credentials, SpecDigest: target.PolicyDigest}}
-	for _, name := range []string{"Admitted", "EffectObserved", "CleanupComplete"} {
-		status.Conditions = append(status.Conditions, metav1.Condition{Type: name, Status: metav1.ConditionTrue, ObservedGeneration: 1})
+	target := bitcoin.BitcoinTargetIdentity{
+		Participant: common.Binding{
+			Kind: "StacksNetworkParticipant",
+			Name: "compiled-bitcoin",
+			UID:  "participant",
+		},
+		Pod:           common.Binding{Kind: "Pod", Name: "bitcoin-0", UID: "pod"},
+		ContainerID:   "container",
+		Configuration: common.Binding{Kind: "ConfigMap", Name: "config", UID: "config"},
+		Credentials:   common.Binding{Kind: "Secret", Name: "rpc", UID: "rpc"},
+		PolicyDigest:  "policy",
 	}
-	request := &actions.BitcoinReorganization{ObjectMeta: metav1.ObjectMeta{Name: "reorganization", Generation: 1}, Status: actions.BitcoinReorganizationStatus{BitcoinBlockGenerationStatus: status, OriginalChain: &actions.BitcoinChainPoint{Hash: "original", Height: 50, PreviousBlockHash: "fork", Chainwork: "10"}, ForkParent: &actions.BitcoinChainPoint{Hash: "fork", Height: 49, Chainwork: "0f"}, FinalChain: &actions.BitcoinChainPoint{Hash: "replacement2", PreviousBlockHash: "replacement1", Height: 51, Chainwork: "11"}, InvalidatedHash: "original", ReplacementBlockHashes: []string{"replacement1", "replacement2"}, InvalidationAcknowledged: true, CleanupAcknowledged: true}}
+	p := participantEvidence{
+		Identity: identity{Name: target.Participant.Name, UID: target.Participant.UID},
+		Name:     "bitcoin",
+		Kind:     "BitcoinNode",
+		Status: api.ParticipantStatus{
+			Admission: &api.Admission{PolicyDigest: "policy"},
+			Runtime: &api.ParticipantRuntimeStatus{
+				PodRef:       target.Pod.DeepCopy(),
+				ContainerID:  target.ContainerID,
+				ConfigRef:    target.Configuration.DeepCopy(),
+				RPCSecretRef: target.Credentials.DeepCopy(),
+				PolicyDigest: target.PolicyDigest,
+			},
+		},
+	}
+	ref := common.Binding{Kind: "BitcoinExecution", Name: "execution", UID: "execution"}
+	record := executionEvidence{
+		Identity:       identity{Name: ref.Name, UID: ref.UID},
+		ParticipantUID: p.Identity.UID,
+		Status: bitcoin.BitcoinExecutionStatus{
+			Observation: &bitcoin.BitcoinObservation{
+				Target:     target,
+				ObservedAt: now,
+				Height:     50,
+				Tip:        "original",
+				Wallets:    []bitcoin.BitcoinWalletObservation{{Ready: true, Address: "bcrt-public-address"}},
+			},
+		},
+	}
+	s := snapshot{
+		At:        now.Time,
+		Root:      identity{UID: "root"},
+		Operation: "Running",
+		Status: api.StacksNetworkStatus{
+			Initialization:    &api.InitializationStatus{Completed: true},
+			Bitcoin:           &api.BitcoinRuntimeStatus{ExecutionRefs: []common.Binding{ref}},
+			ObservationPolicy: &api.ObservationPolicy{PollIntervalSeconds: 2, RPCAllowanceSeconds: 10},
+		},
+		Participants: []participantEvidence{p},
+		Executions:   []executionEvidence{record},
+	}
+	selected := actionSelection{
+		Participant: p,
+		Execution:   record.Identity,
+		Target:      target,
+		Height:      50,
+		Address:     "bcrt-public-address",
+	}
+	status := actions.BitcoinBlockGenerationStatus{
+		Phase:              "Completed",
+		ObservedGeneration: 1,
+		StartedAt:          &now,
+		FinishedAt:         &now,
+		LastDispatchID:     "receipt",
+		LastBlockHash:      "replacement2",
+		BlocksGenerated:    2,
+		AdmittedNetwork:    &actions.NetworkIdentity{UID: "root"},
+		AdmittedExecution:  &ref,
+		AdmittedTarget: &actions.TargetIdentity{
+			UID:           string(p.Identity.UID),
+			Name:          p.Identity.Name,
+			PodUID:        string(target.Pod.UID),
+			ContainerID:   target.ContainerID,
+			Configuration: target.Configuration,
+			Credentials:   target.Credentials,
+			SpecDigest:    target.PolicyDigest,
+		},
+	}
+	for _, name := range []string{"Admitted", "EffectObserved", "CleanupComplete"} {
+		status.Conditions = append(
+			status.Conditions,
+			metav1.Condition{Type: name, Status: metav1.ConditionTrue, ObservedGeneration: 1},
+		)
+	}
+	request := &actions.BitcoinReorganization{
+		ObjectMeta: metav1.ObjectMeta{Name: "reorganization", Generation: 1},
+		Status: actions.BitcoinReorganizationStatus{
+			BitcoinBlockGenerationStatus: status,
+			OriginalChain: &actions.BitcoinChainPoint{
+				Hash:              "original",
+				Height:            50,
+				PreviousBlockHash: "fork",
+				Chainwork:         "10",
+			},
+			ForkParent: &actions.BitcoinChainPoint{Hash: "fork", Height: 49, Chainwork: "0f"},
+			FinalChain: &actions.BitcoinChainPoint{
+				Hash:              "replacement2",
+				PreviousBlockHash: "replacement1",
+				Height:            51,
+				Chainwork:         "11",
+			},
+			InvalidatedHash:          "original",
+			ReplacementBlockHashes:   []string{"replacement1", "replacement2"},
+			InvalidationAcknowledged: true,
+			CleanupAcknowledged:      true,
+		},
+	}
 	return s, selected, request
 }
 
 func TestActionQualificationRejectsIncompleteOrForeignEvidence(t *testing.T) {
-	for _, mode := range []string{"valid", "failed", "network", "participant", "pod", "credential", "record", "receipt", "count", "cleanup", "fork", "replacement", "work", "generation"} {
+	for _, mode := range []string{
+		"valid",
+		"failed",
+		"network",
+		"participant",
+		"pod",
+		"credential",
+		"record",
+		"receipt",
+		"count",
+		"cleanup",
+		"fork",
+		"replacement",
+		"work",
+		"generation",
+	} {
 		t.Run(mode, func(t *testing.T) {
 			_, selected, request := actionContractFixture()
 			switch mode {
@@ -71,7 +184,18 @@ func TestActionQualificationRejectsIncompleteOrForeignEvidence(t *testing.T) {
 }
 
 func TestActionQualificationRequiresFreshCurrentNativeIdentity(t *testing.T) {
-	for _, mode := range []string{"valid", "stale", "future", "pod", "policy", "unbound", "foreign-record", "wallet", "armed", "incomplete"} {
+	for _, mode := range []string{
+		"valid",
+		"stale",
+		"future",
+		"pod",
+		"policy",
+		"unbound",
+		"foreign-record",
+		"wallet",
+		"armed",
+		"incomplete",
+	} {
 		t.Run(mode, func(t *testing.T) {
 			s, _, _ := actionContractFixture()
 			switch mode {
@@ -123,7 +247,11 @@ func TestBaselineMutationDrainDoesNotTreatExpiredUnsentOffersAsReceipts(t *testi
 // TestActionQualificationWaitsForChosenProducer rejects fallback to another healthy actor.
 func TestActionQualificationWaitsForChosenProducer(t *testing.T) {
 	s, want, _ := actionContractFixture()
-	if got, err := selectActionTargetUID(s, want.Participant.Identity.UID); err != nil || got.Participant.Identity.UID != want.Participant.Identity.UID {
+	if got, err := selectActionTargetUID(
+		s,
+		want.Participant.Identity.UID,
+	); err != nil ||
+		got.Participant.Identity.UID != want.Participant.Identity.UID {
 		t.Fatalf("chosen producer unavailable: %v", err)
 	}
 	if _, err := selectActionTargetUID(s, "different-producer"); err == nil {

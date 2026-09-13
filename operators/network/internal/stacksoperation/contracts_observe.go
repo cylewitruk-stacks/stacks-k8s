@@ -27,11 +27,13 @@ type contractState struct {
 }
 
 // contractConflict reports proven immutable-source or established-registry disagreement.
-var contractConflict = errors.New("native contract state differs from captured requirements")
+var errContractConflict = errors.New("native contract state differs from captured requirements")
 
 // registryArguments preserves native key ordering and validates public compressed identities.
 func registryArguments(in ContractInputs) ([]clarity.Value, error) {
-	if len(in.SignerPublicKeys) < 2 || len(in.SignerPublicKeys) > 100 || in.Threshold <= uint64(len(in.SignerPublicKeys)/2) || in.Threshold > uint64(len(in.SignerPublicKeys)) {
+	if len(in.SignerPublicKeys) < 2 || len(in.SignerPublicKeys) > 100 ||
+		in.Threshold <= uint64(len(in.SignerPublicKeys)/2) ||
+		in.Threshold > uint64(len(in.SignerPublicKeys)) {
 		return nil, errors.New("invalid explicit registry quorum")
 	}
 	keys := make([]clarity.Value, 0, len(in.SignerPublicKeys))
@@ -48,11 +50,20 @@ func registryArguments(in ContractInputs) ([]clarity.Value, error) {
 		return nil, errors.New("invalid registry aggregate key")
 	}
 	raw, _ := hex.DecodeString(in.AggregatePublicKey)
-	return []clarity.Value{{Type: clarity.List, Items: keys}, {Type: clarity.Buffer, Bytes: raw}, clarity.Uint(in.Threshold)}, nil
+	return []clarity.Value{
+		{Type: clarity.List, Items: keys},
+		{Type: clarity.Buffer, Bytes: raw},
+		clarity.Uint(in.Threshold),
+	}, nil
 }
 
 // observeContracts verifies all public postconditions without issuing a transaction.
-func observeContracts(ctx context.Context, in ContractInputs, sources []protocolcontracts.Source, now time.Time) (contractState, error) {
+func observeContracts(
+	ctx context.Context,
+	in ContractInputs,
+	sources []protocolcontracts.Source,
+	now time.Time,
+) (contractState, error) {
 	state := contractState{sources: map[string]bool{}}
 	before, err := in.Node.ChainView(ctx)
 	if err != nil {
@@ -91,7 +102,7 @@ func observeContracts(ctx context.Context, in ContractInputs, sources []protocol
 		}
 		if complete && !conflict {
 			if err = observeRegistry(ctx, in, &state, now); err != nil {
-				if !errors.Is(err, contractConflict) {
+				if !errors.Is(err, errContractConflict) {
 					return state, err
 				}
 				conflict = true
@@ -106,7 +117,7 @@ func observeContracts(ctx context.Context, in ContractInputs, sources []protocol
 		return contractState{}, errors.New("contract observation tip changed")
 	}
 	if conflict {
-		return state, contractConflict
+		return state, errContractConflict
 	}
 	return state, nil
 }
@@ -117,7 +128,15 @@ func observeRegistry(ctx context.Context, in ContractInputs, state *contractStat
 	if err != nil {
 		return err
 	}
-	observed, err := in.Node.ReadOnlyAt(ctx, state.info.IndexBlockID, in.Deployer, in.Deployer, "sbtc-registry", "get-current-signer-data", nil)
+	observed, err := in.Node.ReadOnlyAt(
+		ctx,
+		state.info.IndexBlockID,
+		in.Deployer,
+		in.Deployer,
+		"sbtc-registry",
+		"get-current-signer-data",
+		nil,
+	)
 	if err != nil {
 		return err
 	}
@@ -129,14 +148,23 @@ func observeRegistry(ctx context.Context, in ContractInputs, state *contractStat
 	threshold, tok := observed.Fields["current-signature-threshold"]
 	principal, pok := observed.Fields["current-signer-principal"]
 	n, err := unsigned(threshold)
-	if !kok || !aok || !tok || !pok || err != nil || keys.Type != clarity.List || aggregate.Type != clarity.Buffer || principal.Type != clarity.StandardPrincipal {
+	if !kok || !aok || !tok || !pok || err != nil || keys.Type != clarity.List || aggregate.Type != clarity.Buffer ||
+		principal.Type != clarity.StandardPrincipal {
 		return errors.New("invalid registry observation types")
 	}
 	if len(keys.Items) == 0 && bytes.Equal(aggregate.Bytes, []byte{0}) && n == 0 && principal.Text == in.Deployer {
 		state.registryEmpty = true
 		return nil
 	}
-	expected, err := in.Node.ReadOnlyAt(ctx, state.info.IndexBlockID, in.Deployer, in.Deployer, "sbtc-bootstrap-signers", "pubkeys-to-principal", []clarity.Value{args[0], args[2]})
+	expected, err := in.Node.ReadOnlyAt(
+		ctx,
+		state.info.IndexBlockID,
+		in.Deployer,
+		in.Deployer,
+		"sbtc-bootstrap-signers",
+		"pubkeys-to-principal",
+		[]clarity.Value{args[0], args[2]},
+	)
 	if err != nil {
 		return err
 	}
@@ -149,9 +177,22 @@ func observeRegistry(ctx context.Context, in ContractInputs, state *contractStat
 		return err
 	}
 	expectedKeys, _ := clarity.Encode(args[0])
-	if !bytes.Equal(actualKeys, expectedKeys) || !bytes.Equal(aggregate.Bytes, args[1].Bytes) || n != in.Threshold || principal.Text != expected.Text {
-		return contractConflict
+	if !bytes.Equal(actualKeys, expectedKeys) || !bytes.Equal(aggregate.Bytes, args[1].Bytes) || n != in.Threshold ||
+		principal.Text != expected.Text {
+		return errContractConflict
 	}
-	state.observation = &api.ContractSetObservation{Deployer: in.Deployer, Bundle: in.Bundle, SourceDigest: foundation.Digest(in.SourceHashes), SignerPublicKeys: append([]string(nil), in.SignerPublicKeys...), AggregatePublicKey: in.AggregatePublicKey, Threshold: in.Threshold, SignerPrincipal: expected.Text, Complete: true, StacksTip: state.info.IndexBlockID, BurnHeight: state.info.BurnHeight, ObservedAt: metav1.NewTime(now.UTC())}
+	state.observation = &api.ContractSetObservation{
+		Deployer:           in.Deployer,
+		Bundle:             in.Bundle,
+		SourceDigest:       foundation.Digest(in.SourceHashes),
+		SignerPublicKeys:   append([]string(nil), in.SignerPublicKeys...),
+		AggregatePublicKey: in.AggregatePublicKey,
+		Threshold:          in.Threshold,
+		SignerPrincipal:    expected.Text,
+		Complete:           true,
+		StacksTip:          state.info.IndexBlockID,
+		BurnHeight:         state.info.BurnHeight,
+		ObservedAt:         metav1.NewTime(now.UTC()),
+	}
 	return nil
 }

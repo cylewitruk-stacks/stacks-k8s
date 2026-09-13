@@ -22,23 +22,39 @@ import (
 
 // legacyEntry describes the preview's status Update ownership without emulating SSA.
 func legacyEntry(fields string) metav1.ManagedFieldsEntry {
-	return metav1.ManagedFieldsEntry{Manager: "foundation", Operation: metav1.ManagedFieldsOperationUpdate, APIVersion: api.GroupVersion.String(), Subresource: "status", FieldsType: "FieldsV1", FieldsV1: &metav1.FieldsV1{Raw: []byte(fields)}}
+	return metav1.ManagedFieldsEntry{
+		Manager:     "foundation",
+		Operation:   metav1.ManagedFieldsOperationUpdate,
+		APIVersion:  api.GroupVersion.String(),
+		Subresource: "status",
+		FieldsType:  "FieldsV1",
+		FieldsV1:    metav1.NewFieldsV1(fields),
+	}
 }
 
 func TestLegacyManagersRequireAllMatchingEntriesToBeSafe(t *testing.T) {
-	safe := legacyEntry(`{"f:status":{"f:admission":{"f:policyDigest":{}},"f:conditions":{"k:{\"type\":\"Resolved\"}":{"f:reason":{}}}}}`)
+	safe := legacyEntry(
+		`{"f:status":{"f:admission":{"f:policyDigest":{}},` +
+			`"f:conditions":{"k:{\"type\":\"Resolved\"}":{"f:reason":{}}}}}`,
+	)
 	for name, change := range map[string]func(*metav1.ManagedFieldsEntry){
-		"runtime subtree": func(e *metav1.ManagedFieldsEntry) { e.FieldsV1.Raw = []byte(`{"f:status":{"f:runtime":{}}}`) },
+		"runtime subtree": func(e *metav1.ManagedFieldsEntry) {
+			e.FieldsV1.SetRawString(`{"f:status":{"f:runtime":{}}}`)
+		},
 		"foreign condition": func(e *metav1.ManagedFieldsEntry) {
-			e.FieldsV1.Raw = []byte(`{"f:status":{"f:conditions":{"k:{\"type\":\"ConfigVerified\"}":{}}}}`)
+			e.FieldsV1.SetRawString(`{"f:status":{"f:conditions":{"k:{\"type\":\"ConfigVerified\"}":{}}}}`)
 		},
 		"mixed metadata": func(e *metav1.ManagedFieldsEntry) {
-			e.FieldsV1.Raw = []byte(`{"f:metadata":{},"f:status":{"f:admission":{}}}`)
+			e.FieldsV1.SetRawString(`{"f:metadata":{},"f:status":{"f:admission":{}}}`)
 		},
-		"malformed JSON":      func(e *metav1.ManagedFieldsEntry) { e.FieldsV1.Raw = []byte(`{`) },
-		"null status":         func(e *metav1.ManagedFieldsEntry) { e.FieldsV1.Raw = []byte(`{"f:status":null}`) },
-		"scalar admission":    func(e *metav1.ManagedFieldsEntry) { e.FieldsV1.Raw = []byte(`{"f:status":{"f:admission":3}}`) },
-		"scalar conditions":   func(e *metav1.ManagedFieldsEntry) { e.FieldsV1.Raw = []byte(`{"f:status":{"f:conditions":"bad"}}`) },
+		"malformed JSON": func(e *metav1.ManagedFieldsEntry) { e.FieldsV1.SetRawString(`{`) },
+		"null status":    func(e *metav1.ManagedFieldsEntry) { e.FieldsV1.SetRawString(`{"f:status":null}`) },
+		"scalar admission": func(e *metav1.ManagedFieldsEntry) {
+			e.FieldsV1.SetRawString(`{"f:status":{"f:admission":3}}`)
+		},
+		"scalar conditions": func(e *metav1.ManagedFieldsEntry) {
+			e.FieldsV1.SetRawString(`{"f:status":{"f:conditions":"bad"}}`)
+		},
 		"missing fields":      func(e *metav1.ManagedFieldsEntry) { e.FieldsV1 = nil },
 		"unknown fields type": func(e *metav1.ManagedFieldsEntry) { e.FieldsType = "Other" },
 		"other API version":   func(e *metav1.ManagedFieldsEntry) { e.APIVersion = "network.stacks.org/v1alpha1" },
@@ -82,10 +98,25 @@ func statusFixture() *api.StacksNetworkParticipant {
 	domain := legacyEntry(`{"f:status":{"f:conditions":{"k:{\"type\":\"WorkloadReady\"}":{"f:reason":{}}}}}`)
 	domain.Manager = "external-readiness"
 	return &api.StacksNetworkParticipant{
-		TypeMeta:   metav1.TypeMeta{APIVersion: api.GroupVersion.String(), Kind: "StacksNetworkParticipant"},
-		ObjectMeta: metav1.ObjectMeta{Name: "participant", Namespace: "lab", UID: "original", ResourceVersion: "1", ManagedFields: []metav1.ManagedFieldsEntry{legacy, spec, domain}},
-		Spec:       api.StacksNetworkParticipantSpec{Kind: "BitcoinNode", Configuration: api.Configuration{BitcoinNode: &bitcoin.BitcoinNodeSpec{}}},
-		Status:     api.ParticipantStatus{Admission: &api.Admission{PolicyDigest: "old", Configuration: api.Configuration{BitcoinNode: &bitcoin.BitcoinNodeSpec{}}}, Runtime: &api.ParticipantRuntimeStatus{PolicyDigest: "domain-policy"}},
+		TypeMeta: metav1.TypeMeta{APIVersion: api.GroupVersion.String(), Kind: "StacksNetworkParticipant"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "participant",
+			Namespace:       "lab",
+			UID:             "original",
+			ResourceVersion: "1",
+			ManagedFields:   []metav1.ManagedFieldsEntry{legacy, spec, domain},
+		},
+		Spec: api.StacksNetworkParticipantSpec{
+			Kind:          "BitcoinNode",
+			Configuration: api.Configuration{BitcoinNode: &bitcoin.BitcoinNodeSpec{}},
+		},
+		Status: api.ParticipantStatus{
+			Admission: &api.Admission{
+				PolicyDigest:  "old",
+				Configuration: api.Configuration{BitcoinNode: &bitcoin.BitcoinNodeSpec{}},
+			},
+			Runtime: &api.ParticipantRuntimeStatus{PolicyDigest: "domain-policy"},
+		},
 	}
 }
 
@@ -96,7 +127,13 @@ func statusClient(t *testing.T, live *api.StacksNetworkParticipant, hooks interc
 	if err := api.AddToScheme(scheme); err != nil {
 		t.Fatal(err)
 	}
-	return fake.NewClientBuilder().WithScheme(scheme).WithReturnManagedFields().WithStatusSubresource(&api.StacksNetworkParticipant{}).WithObjects(live.DeepCopy()).WithInterceptorFuncs(hooks).Build()
+	return fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithReturnManagedFields().
+		WithStatusSubresource(&api.StacksNetworkParticipant{}).
+		WithObjects(live.DeepCopy()).
+		WithInterceptorFuncs(hooks).
+		Build()
 }
 
 // checkMigrationPatch verifies the exact metadata-only operation scope and stale-identity guards.
@@ -116,16 +153,24 @@ func checkMigrationPatch(t *testing.T, p client.Object, patch client.Patch) {
 	var paths []string
 	for _, op := range operations {
 		var path string
-		json.Unmarshal(op["path"], &path)
+		if err := json.Unmarshal(op["path"], &path); err != nil {
+			t.Fatal(err)
+		}
 		paths = append(paths, path)
 	}
 	if !slices.Equal(paths, []string{"/metadata/uid", "/metadata/managedFields", "/metadata/resourceVersion"}) {
 		t.Fatalf("unexpected migration scope: %s", data)
 	}
 	var operation, uid, revision string
-	json.Unmarshal(operations[0]["op"], &operation)
-	json.Unmarshal(operations[0]["value"], &uid)
-	json.Unmarshal(operations[2]["value"], &revision)
+	if err := json.Unmarshal(operations[0]["op"], &operation); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(operations[0]["value"], &uid); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(operations[2]["value"], &revision); err != nil {
+		t.Fatal(err)
+	}
 	if operation != "test" || uid != string(p.GetUID()) || revision != p.GetResourceVersion() {
 		t.Fatalf("missing migration preconditions: %s", data)
 	}
@@ -138,7 +183,13 @@ func TestApplyPreservesAliasedCandidateAcrossMigrationResponse(t *testing.T) {
 	owned := api.ParticipantStatus{Admission: p.Status.Admission}
 	migrations, applies := 0, 0
 	c := statusClient(t, live, interceptor.Funcs{
-		Patch: func(ctx context.Context, c client.WithWatch, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
+		Patch: func(
+			ctx context.Context,
+			c client.WithWatch,
+			obj client.Object,
+			patch client.Patch,
+			opts ...client.PatchOption,
+		) error {
 			migrations++
 			checkMigrationPatch(t, obj, patch)
 			if err := c.Patch(ctx, obj, patch, opts...); err != nil {
@@ -150,7 +201,14 @@ func TestApplyPreservesAliasedCandidateAcrossMigrationResponse(t *testing.T) {
 			data, _ := json.Marshal(response)
 			return json.Unmarshal(data, obj)
 		},
-		SubResourcePatch: func(_ context.Context, _ client.Client, subresource string, obj client.Object, patch client.Patch, opts ...client.SubResourcePatchOption) error {
+		SubResourcePatch: func(
+			_ context.Context,
+			_ client.Client,
+			subresource string,
+			obj client.Object,
+			patch client.Patch,
+			opts ...client.SubResourcePatchOption,
+		) error {
 			applies++
 			if subresource != "status" || patch.Type() != types.ApplyPatchType {
 				t.Fatal("wrong status transport")
@@ -163,7 +221,8 @@ func TestApplyPreservesAliasedCandidateAcrossMigrationResponse(t *testing.T) {
 				t.Fatal("incorrect apply options")
 			}
 			body := obj.(*api.StacksNetworkParticipant)
-			if body.Status.Admission.PolicyDigest != "candidate" || body.Status.Runtime != nil || len(body.Status.Conditions) != 0 {
+			if body.Status.Admission.PolicyDigest != "candidate" || body.Status.Runtime != nil ||
+				len(body.Status.Conditions) != 0 {
 				t.Fatalf("migration changed or broadened candidate payload: %+v", body.Status)
 			}
 			if body.ResourceVersion == "1" || body.UID != live.UID {
@@ -187,7 +246,10 @@ func TestApplyPreservesAliasedCandidateAcrossMigrationResponse(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, original := range live.ManagedFields[1:] {
-		if !slices.ContainsFunc(persisted.ManagedFields, func(entry metav1.ManagedFieldsEntry) bool { return reflect.DeepEqual(entry, original) }) {
+		if !slices.ContainsFunc(
+			persisted.ManagedFields,
+			func(entry metav1.ManagedFieldsEntry) bool { return reflect.DeepEqual(entry, original) },
+		) {
 			t.Fatalf("migration changed unrelated manager %q/%q", original.Manager, original.Subresource)
 		}
 	}
@@ -205,21 +267,44 @@ func TestMigrationFailuresPreventStatusApply(t *testing.T) {
 			if failure == "replacement" {
 				live.UID = "replacement"
 			}
-			conflict := apierrors.NewConflict(schema.GroupResource{Group: api.GroupVersion.Group, Resource: "stacksnetworkparticipants"}, p.Name, errors.New("stale revision"))
+			conflict := apierrors.NewConflict(
+				schema.GroupResource{Group: api.GroupVersion.Group, Resource: "stacksnetworkparticipants"},
+				p.Name,
+				errors.New("stale revision"),
+			)
 			c := statusClient(t, live, interceptor.Funcs{
-				Patch: func(ctx context.Context, c client.WithWatch, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
+				Patch: func(
+					ctx context.Context,
+					c client.WithWatch,
+					obj client.Object,
+					patch client.Patch,
+					opts ...client.PatchOption,
+				) error {
 					checkMigrationPatch(t, obj, patch)
 					if failure == "conflict" {
 						return conflict
 					}
 					return c.Patch(ctx, obj, patch, opts...)
 				},
-				SubResourcePatch: func(context.Context, client.Client, string, client.Object, client.Patch, ...client.SubResourcePatchOption) error {
+				SubResourcePatch: func(
+					context.Context,
+					client.Client,
+					string,
+					client.Object,
+					client.Patch,
+					...client.SubResourcePatchOption,
+				) error {
 					applies++
 					return nil
 				},
 			})
-			err := Apply(context.Background(), c, p, api.ParticipantStatus{Admission: p.Status.Admission}, AggregateManager)
+			err := Apply(
+				context.Background(),
+				c,
+				p,
+				api.ParticipantStatus{Admission: p.Status.Admission},
+				AggregateManager,
+			)
 			if err == nil || applies != 0 {
 				t.Fatalf("migration failure reached status apply: err=%v, applies=%d", err, applies)
 			}
@@ -230,7 +315,8 @@ func TestMigrationFailuresPreventStatusApply(t *testing.T) {
 			if err := c.Get(context.Background(), client.ObjectKeyFromObject(live), &current); err != nil {
 				t.Fatal(err)
 			}
-			if current.UID != live.UID || !reflect.DeepEqual(current.Status, live.Status) || !reflect.DeepEqual(current.ManagedFields, live.ManagedFields) {
+			if current.UID != live.UID || !reflect.DeepEqual(current.Status, live.Status) ||
+				!reflect.DeepEqual(current.ManagedFields, live.ManagedFields) {
 				t.Fatal("rejected migration changed current identity/status/ownership")
 			}
 		})
@@ -243,7 +329,13 @@ func TestMigrationLostAcknowledgementRecoversFromFreshRead(t *testing.T) {
 	migrations, applies := 0, 0
 	lost := errors.New("migration response lost")
 	c := statusClient(t, live, interceptor.Funcs{
-		Patch: func(ctx context.Context, c client.WithWatch, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
+		Patch: func(
+			ctx context.Context,
+			c client.WithWatch,
+			obj client.Object,
+			patch client.Patch,
+			opts ...client.PatchOption,
+		) error {
 			migrations++
 			checkMigrationPatch(t, obj, patch)
 			if err := c.Patch(ctx, obj, patch, opts...); err != nil {
@@ -251,7 +343,14 @@ func TestMigrationLostAcknowledgementRecoversFromFreshRead(t *testing.T) {
 			}
 			return lost
 		},
-		SubResourcePatch: func(context.Context, client.Client, string, client.Object, client.Patch, ...client.SubResourcePatchOption) error {
+		SubResourcePatch: func(
+			context.Context,
+			client.Client,
+			string,
+			client.Object,
+			client.Patch,
+			...client.SubResourcePatchOption,
+		) error {
 			applies++
 			return nil
 		},

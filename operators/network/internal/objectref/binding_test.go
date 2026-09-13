@@ -19,27 +19,62 @@ import (
 // TestConcreteBindingsMatchWireAndScheme checks independent literals and registered types.
 func TestConcreteBindingsMatchWireAndScheme(t *testing.T) {
 	scheme := runtime.NewScheme()
-	for _, add := range []func(*runtime.Scheme) error{corev1.AddToScheme, appsv1.AddToScheme, api.AddToScheme, stacks.AddToScheme, bitcoin.AddToScheme} {
+	for _, add := range []func(*runtime.Scheme) error{
+		corev1.AddToScheme,
+		appsv1.AddToScheme,
+		api.AddToScheme,
+		stacks.AddToScheme,
+		bitcoin.AddToScheme,
+	} {
 		if err := add(scheme); err != nil {
 			t.Fatal(err)
 		}
 	}
-	meta := metav1.ObjectMeta{Name: "bound", Namespace: "test", UID: "uid", Labels: map[string]string{"private": "excluded"}}
+	meta := metav1.ObjectMeta{
+		Name:      "bound",
+		Namespace: "test",
+		UID:       "uid",
+		Labels:    map[string]string{"private": "excluded"},
+	}
 	cases := []struct {
 		kind   string
 		object client.Object
 		ref    common.Binding
 	}{
-		{"StacksNetworkParticipant", &api.StacksNetworkParticipant{}, Participant(&api.StacksNetworkParticipant{ObjectMeta: meta})},
+		{
+			"StacksNetworkParticipant",
+			&api.StacksNetworkParticipant{},
+			Participant(&api.StacksNetworkParticipant{ObjectMeta: meta}),
+		},
 		{"StacksNetwork", &api.StacksNetwork{}, Network(&api.StacksNetwork{ObjectMeta: meta})},
 		{"StacksGenesis", &api.StacksGenesis{}, Genesis(&api.StacksGenesis{ObjectMeta: meta})},
-		{"StacksEpochSchedule", &api.StacksEpochSchedule{}, EpochSchedule(&api.StacksEpochSchedule{ObjectMeta: meta})},
+		{
+			"StacksEpochSchedule",
+			&api.StacksEpochSchedule{},
+			EpochSchedule(&api.StacksEpochSchedule{ObjectMeta: meta}),
+		},
 		{"StacksAccount", &stacks.StacksAccount{}, Account(&stacks.StacksAccount{ObjectMeta: meta})},
 		{"BitcoinWallet", &bitcoin.BitcoinWallet{}, BitcoinWallet(&bitcoin.BitcoinWallet{ObjectMeta: meta})},
-		{"BitcoinInitialization", &bitcoin.BitcoinInitialization{}, BitcoinInitialization(&bitcoin.BitcoinInitialization{ObjectMeta: meta})},
-		{"BitcoinExecution", &bitcoin.BitcoinExecution{}, BitcoinExecution(&bitcoin.BitcoinExecution{ObjectMeta: meta})},
-		{"BitcoinBlockSchedule", &bitcoin.BitcoinBlockSchedule{}, BitcoinBlockSchedule(&bitcoin.BitcoinBlockSchedule{ObjectMeta: meta})},
-		{"BitcoinBlockScheduleOverride", &bitcoin.BitcoinBlockScheduleOverride{}, BitcoinScheduleOverride(&bitcoin.BitcoinBlockScheduleOverride{ObjectMeta: meta})},
+		{
+			"BitcoinInitialization",
+			&bitcoin.BitcoinInitialization{},
+			BitcoinInitialization(&bitcoin.BitcoinInitialization{ObjectMeta: meta}),
+		},
+		{
+			"BitcoinExecution",
+			&bitcoin.BitcoinExecution{},
+			BitcoinExecution(&bitcoin.BitcoinExecution{ObjectMeta: meta}),
+		},
+		{
+			"BitcoinBlockSchedule",
+			&bitcoin.BitcoinBlockSchedule{},
+			BitcoinBlockSchedule(&bitcoin.BitcoinBlockSchedule{ObjectMeta: meta}),
+		},
+		{
+			"BitcoinBlockScheduleOverride",
+			&bitcoin.BitcoinBlockScheduleOverride{},
+			BitcoinScheduleOverride(&bitcoin.BitcoinBlockScheduleOverride{ObjectMeta: meta}),
+		},
 		{"ConfigMap", &corev1.ConfigMap{}, ConfigMap(&corev1.ConfigMap{ObjectMeta: meta})},
 		{"Pod", &corev1.Pod{}, Pod(&corev1.Pod{ObjectMeta: meta})},
 		{"Service", &corev1.Service{}, Service(&corev1.Service{ObjectMeta: meta})},
@@ -64,7 +99,10 @@ func TestConcreteBindingsMatchWireAndScheme(t *testing.T) {
 		})
 	}
 	// A concrete object cannot be relabeled by stale or forged TypeMeta.
-	pod := &corev1.Pod{ObjectMeta: meta, TypeMeta: metav1.TypeMeta{APIVersion: "wrong/v1", Kind: "StacksAccount"}}
+	pod := &corev1.Pod{
+		ObjectMeta: meta,
+		TypeMeta:   metav1.TypeMeta{APIVersion: "wrong/v1", Kind: "StacksAccount"},
+	}
 	if ref := Pod(pod); ref.Kind != "Pod" {
 		t.Fatalf("trusted TypeMeta: %#v", ref)
 	}
@@ -72,8 +110,16 @@ func TestConcreteBindingsMatchWireAndScheme(t *testing.T) {
 
 // TestSecretMetadataRejectsUnknownTypes preserves the metadata-only identity boundary.
 func TestSecretMetadataRejectsUnknownTypes(t *testing.T) {
-	for _, typ := range []metav1.TypeMeta{{}, {APIVersion: "v1", Kind: "ConfigMap"}, {APIVersion: "wrong/v1", Kind: "Secret"}, {APIVersion: "v1", Kind: "Secret"}} {
-		object := &metav1.PartialObjectMetadata{TypeMeta: typ, ObjectMeta: metav1.ObjectMeta{Name: "secret", UID: "uid"}}
+	for _, typ := range []metav1.TypeMeta{
+		{},
+		{APIVersion: "v1", Kind: "ConfigMap"},
+		{APIVersion: "wrong/v1", Kind: "Secret"},
+		{APIVersion: "v1", Kind: "Secret"},
+	} {
+		object := &metav1.PartialObjectMetadata{
+			TypeMeta:   typ,
+			ObjectMeta: metav1.ObjectMeta{Name: "secret", UID: "uid"},
+		}
 		ref, err := SecretMetadata(object)
 		valid := typ.APIVersion == "v1" && typ.Kind == "Secret"
 		if valid {
@@ -95,13 +141,19 @@ func TestFreshObjectUsesRegisteredTypeWithoutCopyingFetchedState(t *testing.T) {
 	if err := corev1.AddToScheme(scheme); err != nil {
 		t.Fatal(err)
 	}
-	before := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "old", UID: "uid"}, Data: map[string]string{"old": "must disappear"}}
+	before := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: "old", UID: "uid"},
+		Data:       map[string]string{"old": "must disappear"},
+	}
 	before.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("ConfigMap"))
 	fresh, err := Fresh(before, scheme)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(fresh, &corev1.ConfigMap{TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "ConfigMap"}}) {
+	if !reflect.DeepEqual(fresh, &corev1.ConfigMap{TypeMeta: metav1.TypeMeta{
+		APIVersion: "v1",
+		Kind:       "ConfigMap",
+	}}) {
 		t.Fatalf("copied stale fields: %#v", fresh)
 	}
 	if before.Data["old"] != "must disappear" {
@@ -116,14 +168,18 @@ func TestFreshObjectUsesRegisteredTypeWithoutCopyingFetchedState(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := spoofed.(*corev1.Pod); !ok || spoofed.GetObjectKind().GroupVersionKind() != corev1.SchemeGroupVersion.WithKind("Pod") {
+	if _, ok := spoofed.(*corev1.Pod); !ok ||
+		spoofed.GetObjectKind().GroupVersionKind() != corev1.SchemeGroupVersion.WithKind("Pod") {
 		t.Fatalf("used forged TypeMeta: %T", spoofed)
 	}
 	if _, err := Fresh(before, nil); err == nil {
 		t.Fatal("nil scheme accepted")
 	}
 	// A concrete type registered at two versions must not silently choose an epoch.
-	scheme.AddKnownTypeWithName(schema.GroupVersionKind{Group: "other", Version: "v1", Kind: "ConfigMap"}, &corev1.ConfigMap{})
+	scheme.AddKnownTypeWithName(
+		schema.GroupVersionKind{Group: "other", Version: "v1", Kind: "ConfigMap"},
+		&corev1.ConfigMap{},
+	)
 	if _, err := Fresh(&corev1.ConfigMap{}, scheme); err == nil {
 		t.Fatal("ambiguous type accepted")
 	}

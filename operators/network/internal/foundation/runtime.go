@@ -45,9 +45,6 @@ func (r *Reconciler) reconcileRequest(ctx context.Context, request networkReques
 func (r *Reconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.Result, error) {
 	topology, topologyErr := r.reconcileTopology(ctx, request)
 	operation, operationErr := r.reconcileRuntime(ctx, request)
-	if operation.Requeue {
-		topology.Requeue = true
-	}
 	if operation.RequeueAfter > 0 && (topology.RequeueAfter == 0 || operation.RequeueAfter < topology.RequeueAfter) {
 		topology.RequeueAfter = operation.RequeueAfter
 	}
@@ -65,14 +62,23 @@ func (r *Reconciler) reconcileRuntime(ctx context.Context, request ctrl.Request)
 	}
 	base := root.DeepCopy()
 	operation, err := r.Runtime.Reconcile(ctx, &root)
-	if failed := meta.FindStatusCondition(base.Status.Conditions, api.ConditionFailed); failed != nil && failed.Status == metav1.ConditionTrue {
+	if failed := meta.FindStatusCondition(
+		base.Status.Conditions,
+		api.ConditionFailed,
+	); failed != nil &&
+		failed.Status == metav1.ConditionTrue {
 		meta.SetStatusCondition(&root.Status.Conditions, *failed)
 	}
-	if base.Status.Phase == api.NetworkPhaseFailed && !meta.IsStatusConditionTrue(root.Status.Conditions, api.ConditionFailed) {
+	if base.Status.Phase == api.NetworkPhaseFailed &&
+		!meta.IsStatusConditionTrue(root.Status.Conditions, api.ConditionFailed) {
 		root.Status.Phase = api.NetworkPhaseFailed
 	}
 	if !reflect.DeepEqual(base.Status, root.Status) {
-		err = errors.Join(err, r.Client.Status().Patch(ctx, &root, client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{})))
+		err = errors.Join(
+			err,
+			r.Client.Status().
+				Patch(ctx, &root, client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{})),
+		)
 	}
 	return operation, err
 }

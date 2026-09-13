@@ -24,7 +24,15 @@ import (
 )
 
 func TestFaucetAPIImmutabilitySSAAndUncertainAdmission(t *testing.T) {
-	environment := &envtest.Environment{CRDDirectoryPaths: []string{filepath.Join("..", "..", "..", "..", "charts", "stacks-network-operator", "crds")}, ErrorIfCRDPathMissing: true, DownloadBinaryAssets: true, DownloadBinaryAssetsVersion: "1.37.0", BinaryAssetsDirectory: filepath.Join(os.TempDir(), "stacks-network-operator-envtest")}
+	environment := &envtest.Environment{
+		CRDDirectoryPaths: []string{
+			filepath.Join("..", "..", "..", "..", "charts", "stacks-network-operator", "crds"),
+		},
+		ErrorIfCRDPathMissing:       true,
+		DownloadBinaryAssets:        true,
+		DownloadBinaryAssetsVersion: "1.37.0",
+		BinaryAssetsDirectory:       filepath.Join(os.TempDir(), "stacks-network-operator-envtest"),
+	}
 	config, err := environment.Start()
 	if err != nil {
 		t.Fatal(err)
@@ -83,18 +91,42 @@ func TestFaucetAPIImmutabilitySSAAndUncertainAdmission(t *testing.T) {
 	admission.AmountMicroSTX = request.Spec.AmountMicroSTX
 	admission.FeeMicroSTX = "3000"
 	original := request.DeepCopy()
-	lost := interceptor.NewClient(c, interceptor.Funcs{SubResourcePatch: func(ctx context.Context, base client.Client, sub string, obj client.Object, patch client.Patch, opts ...client.SubResourcePatchOption) error {
-		if err := base.SubResource(sub).Patch(ctx, obj, patch, opts...); err != nil {
-			return err
-		}
-		return errors.New("admission acknowledgement lost")
-	}})
-	if err := ApplyStatus(ctx, lost, request, stacks.FaucetRequestStatus{Admission: admission, Phase: "Pending"}, AdmissionManager); err == nil {
+	lost := interceptor.NewClient(
+		c,
+		interceptor.Funcs{
+			SubResourcePatch: func(
+				ctx context.Context,
+				base client.Client,
+				sub string,
+				obj client.Object,
+				patch client.Patch,
+				opts ...client.SubResourcePatchOption,
+			) error {
+				if err := base.SubResource(sub).Patch(ctx, obj, patch, opts...); err != nil {
+					return err
+				}
+				return errors.New("admission acknowledgement lost")
+			},
+		},
+	)
+	if err := ApplyStatus(
+		ctx,
+		lost,
+		request,
+		stacks.FaucetRequestStatus{Admission: admission, Phase: "Pending"},
+		AdmissionManager,
+	); err == nil {
 		t.Fatal("lost acknowledgement not injected")
 	}
 	// The stale negative write cannot overwrite an uncertain successful admission.
 	negative := baseAdmission(original, expiry, "Expired", "DeadlineBeforeAdmission")
-	if err := ApplyStatus(ctx, c, original, stacks.FaucetRequestStatus{Admission: negative, Phase: "Expired"}, AdmissionManager); err == nil {
+	if err := ApplyStatus(
+		ctx,
+		c,
+		original,
+		stacks.FaucetRequestStatus{Admission: negative, Phase: "Expired"},
+		AdmissionManager,
+	); err == nil {
 		t.Fatal("stale negative write erased granted authority")
 	}
 	must(c.Get(ctx, client.ObjectKeyFromObject(request), request))
@@ -102,15 +134,29 @@ func TestFaucetAPIImmutabilitySSAAndUncertainAdmission(t *testing.T) {
 	_, err = reconciler.Reconcile(ctx, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(request)})
 	must(err)
 	must(c.Get(ctx, client.ObjectKeyFromObject(request), request))
-	if request.Status.Phase != "Inconclusive" || request.Status.Admission.Decision != "Admitted" || request.Status.Admission.ExpiresAt != expiry.Format(time.RFC3339Nano) {
+	if request.Status.Phase != "Inconclusive" || request.Status.Admission.Decision != "Admitted" ||
+		request.Status.Admission.ExpiresAt != expiry.Format(time.RFC3339Nano) {
 		t.Fatalf("uncertain admission manufactured expiry: %+v", request.Status)
 	}
-	execution := &stacks.FaucetExecution{Phase: "Completed", Reason: "Included", NetworkUID: request.Spec.NetworkUID, FaucetUID: "faucet", WorkerUID: "pod", ProcessNonce: "process", Destination: admission.Destination, AmountMicroSTX: admission.AmountMicroSTX, TxID: strings.Repeat("b", 64), InclusionBlockID: strings.Repeat("c", 64), ObservedAt: metav1.Now()}
+	execution := &stacks.FaucetExecution{
+		Phase:            "Completed",
+		Reason:           "Included",
+		NetworkUID:       request.Spec.NetworkUID,
+		FaucetUID:        "faucet",
+		WorkerUID:        "pod",
+		ProcessNonce:     "process",
+		Destination:      admission.Destination,
+		AmountMicroSTX:   admission.AmountMicroSTX,
+		TxID:             strings.Repeat("b", 64),
+		InclusionBlockID: strings.Repeat("c", 64),
+		ObservedAt:       metav1.Now(),
+	}
 	must(ApplyStatus(ctx, c, request, stacks.FaucetRequestStatus{Execution: execution}, ExecutionManager))
 	_, err = reconciler.Reconcile(ctx, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(request)})
 	must(err)
 	must(c.Get(ctx, client.ObjectKeyFromObject(request), request))
-	if request.Status.Phase != "Completed" || request.Status.Execution.TxID != execution.TxID || request.Status.Admission.Destination != admission.Destination {
+	if request.Status.Phase != "Completed" || request.Status.Execution.TxID != execution.TxID ||
+		request.Status.Admission.Destination != admission.Destination {
 		t.Fatal("disjoint SSA writers lost fields")
 	}
 	managers := map[string]bool{}
@@ -124,7 +170,14 @@ func TestFaucetAPIImmutabilitySSAAndUncertainAdmission(t *testing.T) {
 	}
 
 	// Only matching, allowlisted native refusals may terminate a sent request without inclusion.
-	for _, reason := range []string{"RejectedFeeTooLow", "RejectedBadNonce", "RejectedConflictingNonceInMempool", "RejectedNotEnoughFunds", "RejectedOther", "RejectedServerFailureDatabase"} {
+	for _, reason := range []string{
+		"RejectedFeeTooLow",
+		"RejectedBadNonce",
+		"RejectedConflictingNonceInMempool",
+		"RejectedNotEnoughFunds",
+		"RejectedOther",
+		"RejectedServerFailureDatabase",
+	} {
 		refused := execution.DeepCopy()
 		refused.Phase, refused.Reason, refused.InclusionBlockID = "Rejected", reason, ""
 		err := ApplyStatus(ctx, c, request, stacks.FaucetRequestStatus{Execution: refused}, ExecutionManager)
@@ -138,7 +191,9 @@ func TestFaucetAPIImmutabilitySSAAndUncertainAdmission(t *testing.T) {
 		_, err = reconciler.Reconcile(ctx, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(request)})
 		must(err)
 		must(c.Get(ctx, client.ObjectKeyFromObject(request), request))
-		if request.Status.Phase != "Rejected" || request.Status.Execution.NoSend || request.Status.Execution.TxID != execution.TxID || request.Status.Admission.Worker.UID != "pod" {
+		if request.Status.Phase != "Rejected" || request.Status.Execution.NoSend ||
+			request.Status.Execution.TxID != execution.TxID ||
+			request.Status.Admission.Worker.UID != "pod" {
 			t.Fatalf("rejection projection lost sent evidence/admission: %+v", request.Status)
 		}
 	}
@@ -147,7 +202,13 @@ func TestFaucetAPIImmutabilitySSAAndUncertainAdmission(t *testing.T) {
 	replacement := prototype.DeepCopy()
 	replacement.Name = request.Name
 	must(c.Create(ctx, replacement))
-	if err := ApplyStatus(ctx, c, stale, stacks.FaucetRequestStatus{Execution: execution}, ExecutionManager); err == nil {
+	if err := ApplyStatus(
+		ctx,
+		c,
+		stale,
+		stacks.FaucetRequestStatus{Execution: execution},
+		ExecutionManager,
+	); err == nil {
 		t.Fatal("old worker outcome adopted replacement request")
 	}
 }

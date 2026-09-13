@@ -26,14 +26,21 @@ import (
 )
 
 // driveRoot advances real API writes without a manager or protocol runtime.
-func driveRoot(t *testing.T, ctx context.Context, c client.Client, r *foundation.Reconciler, request ctrl.Request, root *api.StacksNetwork) {
+func driveRoot(
+	t *testing.T,
+	ctx context.Context,
+	c client.Client,
+	r *foundation.Reconciler,
+	request ctrl.Request,
+	root *api.StacksNetwork,
+) {
 	t.Helper()
 	for i := 0; i < 100; i++ {
 		result, err := r.Reconcile(ctx, request)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !result.Requeue && result.RequeueAfter != time.Millisecond {
+		if result.RequeueAfter != time.Millisecond {
 			break
 		}
 	}
@@ -41,14 +48,26 @@ func driveRoot(t *testing.T, ctx context.Context, c client.Client, r *foundation
 		t.Fatal(err)
 	}
 }
-func participant(t *testing.T, ctx context.Context, c client.Client, root *api.StacksNetwork, name string) *api.StacksNetworkParticipant {
+
+func participant(
+	t *testing.T,
+	ctx context.Context,
+	c client.Client,
+	root *api.StacksNetwork,
+	name string,
+) *api.StacksNetworkParticipant {
 	t.Helper()
 	p := &api.StacksNetworkParticipant{}
-	if err := c.Get(ctx, client.ObjectKey{Namespace: root.Namespace, Name: foundation.ParticipantName(string(root.UID), name)}, p); err != nil {
+	if err := c.Get(
+		ctx,
+		client.ObjectKey{Namespace: root.Namespace, Name: foundation.ParticipantName(string(root.UID), name)},
+		p,
+	); err != nil {
 		t.Fatal(err)
 	}
 	return p
 }
+
 func requireReason(t *testing.T, p *api.StacksNetworkParticipant, reason string) {
 	t.Helper()
 	condition := meta.FindStatusCondition(p.Status.Conditions, "Resolved")
@@ -56,6 +75,7 @@ func requireReason(t *testing.T, p *api.StacksNetworkParticipant, reason string)
 		t.Fatalf("%s: wanted %s, got %+v", p.Spec.ParticipantName, reason, p.Status)
 	}
 }
+
 func updateObject(t *testing.T, ctx context.Context, c client.Client, obj client.Object) {
 	t.Helper()
 	if err := c.Update(ctx, obj); err != nil {
@@ -63,7 +83,15 @@ func updateObject(t *testing.T, ctx context.Context, c client.Client, obj client
 	}
 }
 
-func verifyFrozenPolicyUpdates(t *testing.T, ctx context.Context, c client.Client, r *foundation.Reconciler, request ctrl.Request, root *api.StacksNetwork, genesis *api.StacksGenesis) {
+func verifyFrozenPolicyUpdates(
+	t *testing.T,
+	ctx context.Context,
+	c client.Client,
+	r *foundation.Reconciler,
+	request ctrl.Request,
+	root *api.StacksNetwork,
+	genesis *api.StacksGenesis,
+) {
 	t.Helper()
 	originalSpec := *root.Spec.DeepCopy()
 	old := participant(t, ctx, c, root, "traffic")
@@ -84,16 +112,22 @@ func verifyFrozenPolicyUpdates(t *testing.T, ctx context.Context, c client.Clien
 	driveRoot(t, ctx, c, r, request, root)
 	got := participant(t, ctx, c, root, "traffic")
 	requireReason(t, got, "Admitted")
-	if got.UID != old.UID || *got.Status.Admission.Configuration.StacksTransactionProduction.Interval != "20s" || !meta.IsStatusConditionFalse(got.Status.Conditions, "PolicyDeferred") {
+	if got.UID != old.UID || *got.Status.Admission.Configuration.StacksTransactionProduction.Interval != "20s" ||
+		!meta.IsStatusConditionFalse(got.Status.Conditions, "PolicyDeferred") {
 		t.Fatal("compatible traffic cadence did not admit during bootstrap")
 	}
 	old = got.DeepCopy()
-	if *got.Spec.Configuration.StacksTransactionProduction.Interval != "20s" || got.Spec.Control == nil || !ptr.Deref(got.Spec.Control.Paused, false) {
+	if *got.Spec.Configuration.StacksTransactionProduction.Interval != "20s" || got.Spec.Control == nil ||
+		!ptr.Deref(got.Spec.Control.Paused, false) {
 		t.Fatal("candidate or independent control was lost")
 	}
 	// Add two late participants before introducing errors, so removal and admission can be checked independently.
 	extra := func(name string) api.Participant {
-		return api.Participant{Name: name, Kind: "BitcoinNode", Definition: api.Definition{Ref: &common.NameRef{Name: "btc-08"}}}
+		return api.Participant{
+			Name:       name,
+			Kind:       "BitcoinNode",
+			Definition: api.Definition{Ref: &common.NameRef{Name: "btc-08"}},
+		}
 	}
 	root.Spec.Participants = append(root.Spec.Participants, extra("remove-later"))
 	updateObject(t, ctx, c, root)
@@ -103,14 +137,19 @@ func verifyFrozenPolicyUpdates(t *testing.T, ctx context.Context, c client.Clien
 	// Wallet attachment on an already admitted late actor is mutable, without a new UID.
 	for i := range root.Spec.Participants {
 		if root.Spec.Participants[i].Name == "remove-later" {
-			root.Spec.Participants[i].Overrides = &api.Configuration{BitcoinNode: &bitcoin.BitcoinNodeSpec{WalletRefs: ptr.To([]common.NameRef{{Name: "production-wallet"}})}}
+			root.Spec.Participants[i].Overrides = &api.Configuration{
+				BitcoinNode: &bitcoin.BitcoinNodeSpec{
+					WalletRefs: ptr.To([]common.NameRef{{Name: "production-wallet"}}),
+				},
+			}
 		}
 	}
 	updateObject(t, ctx, c, root)
 	driveRoot(t, ctx, c, r, request, root)
 	attached := participant(t, ctx, c, root, "remove-later")
 	requireReason(t, attached, "Admitted")
-	if attached.UID != removed.UID || len(ptr.Deref(attached.Status.Admission.Configuration.BitcoinNode.WalletRefs, nil)) != 1 {
+	if attached.UID != removed.UID ||
+		len(ptr.Deref(attached.Status.Admission.Configuration.BitcoinNode.WalletRefs, nil)) != 1 {
 		t.Fatal("mutable wallet attachment was rejected or replaced the actor")
 	}
 
@@ -133,7 +172,9 @@ func verifyFrozenPolicyUpdates(t *testing.T, ctx context.Context, c client.Clien
 	if got.Spec.Control == nil || got.Spec.Control.Paused == nil || *got.Spec.Control.Paused {
 		t.Fatal("protected target change blocked independent control projection")
 	}
-	if !reflect.DeepEqual(got.Status.Admission, old.Status.Admission) || !meta.IsStatusConditionFalse(got.Status.Conditions, "PolicyDeferred") || root.Status.Phase == "Failed" {
+	if !reflect.DeepEqual(got.Status.Admission, old.Status.Admission) ||
+		!meta.IsStatusConditionFalse(got.Status.Conditions, "PolicyDeferred") ||
+		root.Status.Phase == "Failed" {
 		t.Fatal("protected change was deferred, admitted or made terminal")
 	}
 	requireReason(t, participant(t, ctx, c, root, "healthy-later"), "Admitted")
@@ -146,7 +187,15 @@ func verifyFrozenPolicyUpdates(t *testing.T, ctx context.Context, c client.Clien
 		entry  api.Participant
 		reason string
 	}{
-		{"resolution", api.Participant{Name: "bad-definition", Kind: "BitcoinNode", Definition: api.Definition{Ref: &common.NameRef{Name: "absent"}}}, "InputsUnavailable"},
+		{
+			"resolution",
+			api.Participant{
+				Name:       "bad-definition",
+				Kind:       "BitcoinNode",
+				Definition: api.Definition{Ref: &common.NameRef{Name: "absent"}},
+			},
+			"InputsUnavailable",
+		},
 		{"reuse", extra("remove-later"), "NameAlreadyUsed"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -155,7 +204,11 @@ func verifyFrozenPolicyUpdates(t *testing.T, ctx context.Context, c client.Clien
 			}
 			traffic.Spec = originalTraffic
 			updateObject(t, ctx, c, &traffic)
-			root.Spec.Participants = append(append([]api.Participant{}, originalSpec.Participants...), test.entry, extra("healthy-"+test.name))
+			root.Spec.Participants = append(
+				append([]api.Participant{}, originalSpec.Participants...),
+				test.entry,
+				extra("healthy-"+test.name),
+			)
 			updateObject(t, ctx, c, root)
 			driveRoot(t, ctx, c, r, request, root)
 			condition := meta.FindStatusCondition(root.Status.Conditions, "Resolved")
@@ -200,7 +253,8 @@ func verifyFrozenPolicyUpdates(t *testing.T, ctx context.Context, c client.Clien
 			if p.Spec.Control == nil || p.Spec.Control.Paused == nil || *p.Spec.Control.Paused != (field == "payout") {
 				t.Fatal("frozen Bitcoin compatibility rejection blocked independent control")
 			}
-			if !reflect.DeepEqual(p.Status.Admission, priorProduction) || meta.IsStatusConditionTrue(p.Status.Conditions, "PolicyDeferred") {
+			if !reflect.DeepEqual(p.Status.Admission, priorProduction) ||
+				meta.IsStatusConditionTrue(p.Status.Conditions, "PolicyDeferred") {
 				t.Fatal("protected Bitcoin policy changed or deferred")
 			}
 		})
@@ -238,16 +292,31 @@ func verifyFrozenPolicyUpdates(t *testing.T, ctx context.Context, c client.Clien
 	}
 }
 
-func verifyFundingOptions(t *testing.T, ctx context.Context, c client.Client, ns string, spec api.StacksNetworkSpec, step func(), root *api.StacksNetwork) {
+func verifyFundingOptions(
+	t *testing.T,
+	ctx context.Context,
+	c client.Client,
+	ns string,
+	spec api.StacksNetworkSpec,
+	step func(),
+	root *api.StacksNetwork,
+) {
 	t.Helper()
 	spec.Operation = "Running"
 	for i := range spec.Participants {
 		p := &spec.Participants[i]
+		//nolint:exhaustive // Fixture wire values remain independent of production enum constants.
 		switch p.Kind {
 		case "StacksTransactionProduction":
-			p.Overrides = &api.Configuration{StacksTransactionProduction: &stacks.StacksTransactionProductionSpec{AccountRef: &common.NameRef{Name: "sbtc-deployer"}}}
+			p.Overrides = &api.Configuration{
+				StacksTransactionProduction: &stacks.StacksTransactionProductionSpec{
+					AccountRef: &common.NameRef{Name: "sbtc-deployer"},
+				},
+			}
 		case "StacksFaucet":
-			p.Overrides = &api.Configuration{StacksFaucet: &stacks.StacksFaucetSpec{GenesisBalanceMicroSTX: ptr.To(common.Amount("0"))}}
+			p.Overrides = &api.Configuration{
+				StacksFaucet: &stacks.StacksFaucetSpec{GenesisBalanceMicroSTX: ptr.To(common.Amount("0"))},
+			}
 		}
 	}
 	fresh := &api.StacksNetwork{ObjectMeta: metav1.ObjectMeta{Name: "network", Namespace: ns}, Spec: spec}
@@ -264,12 +333,19 @@ func verifyFundingOptions(t *testing.T, ctx context.Context, c client.Client, ns
 		t.Fatalf("shared account/zero faucet prevented freeze: %+v", root.Status)
 	}
 	var artifact api.StacksGenesis
-	if err := c.Get(ctx, client.ObjectKey{Namespace: ns, Name: root.Status.GenesisRef.Name}, &artifact); err != nil {
+	if err := c.Get(ctx, client.ObjectKey{
+		Namespace: ns,
+		Name:      root.Status.GenesisRef.Name,
+	}, &artifact); err != nil {
 		t.Fatal(err)
 	}
 	faucet := participant(t, ctx, c, root, "faucet")
 	var account stacks.StacksAccount
-	if err := c.Get(ctx, client.ObjectKey{Namespace: ns, Name: faucet.Status.Admission.Configuration.StacksFaucet.AccountRef.Name}, &account); err != nil {
+	if err := c.Get(
+		ctx,
+		client.ObjectKey{Namespace: ns, Name: faucet.Status.Admission.Configuration.StacksFaucet.AccountRef.Name},
+		&account,
+	); err != nil {
 		t.Fatal(err)
 	}
 	if len(artifact.Spec.Chain.Allocations) != 18 {
@@ -282,7 +358,8 @@ func verifyFundingOptions(t *testing.T, ctx context.Context, c client.Client, ns
 	}
 	traffic := participant(t, ctx, c, root, "traffic")
 	contracts := participant(t, ctx, c, root, "sbtc")
-	if traffic.Status.Admission.Configuration.StacksTransactionProduction.AccountRef.Name != contracts.Status.Admission.Configuration.StacksContractSet.DeployerAccountRef.Name {
+	if traffic.Status.Admission.Configuration.StacksTransactionProduction.AccountRef.Name !=
+		contracts.Status.Admission.Configuration.StacksContractSet.DeployerAccountRef.Name {
 		t.Fatal("test did not admit shared sender")
 	}
 }
@@ -295,7 +372,21 @@ func verifyStoppedRemovalAndInstanceLoss(t *testing.T, ctx context.Context, c cl
 				t.Fatal(err)
 			}
 			r := &foundation.Reconciler{Client: c, Reader: c, Scheme: scheme}
-			root := &api.StacksNetwork{ObjectMeta: metav1.ObjectMeta{Name: "network", Namespace: ns}, Spec: api.StacksNetworkSpec{Operation: "Paused", Participants: []api.Participant{{Name: "core", Kind: "BitcoinNode", Definition: api.Definition{Inline: &api.Configuration{BitcoinNode: &bitcoin.BitcoinNodeSpec{}}}}}}}
+			root := &api.StacksNetwork{
+				ObjectMeta: metav1.ObjectMeta{Name: "network", Namespace: ns},
+				Spec: api.StacksNetworkSpec{
+					Operation: "Paused",
+					Participants: []api.Participant{
+						{
+							Name: "core",
+							Kind: "BitcoinNode",
+							Definition: api.Definition{
+								Inline: &api.Configuration{BitcoinNode: &bitcoin.BitcoinNodeSpec{}},
+							},
+						},
+					},
+				},
+			}
 			if err := c.Create(ctx, root); err != nil {
 				t.Fatal(err)
 			}
@@ -334,7 +425,9 @@ func verifyStoppedRemovalAndInstanceLoss(t *testing.T, ctx context.Context, c cl
 				if err := c.List(ctx, &instances, client.InNamespace(ns)); err != nil {
 					t.Fatal(err)
 				}
-				if len(instances.Items) != 0 || len(root.Status.Identities) != 1 || root.Status.Identities[0].UID != uid || !root.Status.Identities[0].Removing {
+				if len(instances.Items) != 0 || len(root.Status.Identities) != 1 ||
+					root.Status.Identities[0].UID != uid ||
+					!root.Status.Identities[0].Removing {
 					t.Fatal("stopped removal retained instance or admitted a new one")
 				}
 			}
@@ -342,13 +435,29 @@ func verifyStoppedRemovalAndInstanceLoss(t *testing.T, ctx context.Context, c cl
 	}
 }
 
-func verifyResolverFailureAndCache(t *testing.T, ctx context.Context, c client.Client, manager ctrl.Manager, ns string) {
+func verifyResolverFailureAndCache(
+	t *testing.T,
+	ctx context.Context,
+	c client.Client,
+	manager ctrl.Manager,
+	ns string,
+) {
 	t.Helper()
 	unrelated := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "unrelated", Namespace: ns}}
 	if err := c.Create(ctx, unrelated); err != nil {
 		t.Fatal(err)
 	}
-	unrelatedJob := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "unrelated", Namespace: ns}, Spec: batchv1.JobSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{RestartPolicy: corev1.RestartPolicyNever, Containers: []corev1.Container{{Name: "noop", Image: "noop"}}}}}}
+	unrelatedJob := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{Name: "unrelated", Namespace: ns},
+		Spec: batchv1.JobSpec{
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					RestartPolicy: corev1.RestartPolicyNever,
+					Containers:    []corev1.Container{{Name: "noop", Image: "noop"}},
+				},
+			},
+		},
+	}
 	if err := c.Create(ctx, unrelatedJob); err != nil {
 		t.Fatal(err)
 	}
@@ -378,7 +487,15 @@ func verifyResolverFailureAndCache(t *testing.T, ctx context.Context, c client.C
 	}
 	uid := target.UID
 	target.Status.StartTime = ptr.To(metav1.Now())
-	target.Status.Conditions = []batchv1.JobCondition{{Type: batchv1.JobFailureTarget, Status: corev1.ConditionTrue, Reason: "BackoffLimitExceeded"}, {Type: batchv1.JobFailed, Status: corev1.ConditionTrue, Reason: "BackoffLimitExceeded", Message: "raw detail must not enter account status"}}
+	target.Status.Conditions = []batchv1.JobCondition{
+		{Type: batchv1.JobFailureTarget, Status: corev1.ConditionTrue, Reason: "BackoffLimitExceeded"},
+		{
+			Type:    batchv1.JobFailed,
+			Status:  corev1.ConditionTrue,
+			Reason:  "BackoffLimitExceeded",
+			Message: "raw detail must not enter account status",
+		},
+	}
 	if err := c.Status().Update(ctx, target); err != nil {
 		t.Fatal(err)
 	}
@@ -393,12 +510,18 @@ func verifyResolverFailureAndCache(t *testing.T, ctx context.Context, c client.C
 		time.Sleep(50 * time.Millisecond)
 	}
 	condition := meta.FindStatusCondition(failed.Status.Conditions, "Resolved")
-	if condition == nil || condition.Reason != "ResolverFailed" || condition.Status != metav1.ConditionFalse || strings.Contains(condition.Message, "raw detail") {
+	if condition == nil || condition.Reason != "ResolverFailed" || condition.Status != metav1.ConditionFalse ||
+		strings.Contains(condition.Message, "raw detail") {
 		t.Fatalf("failed Job not safely surfaced: %+v", condition)
 	}
-	r := &foundation.IdentityReconciler{Client: c, Reader: c, Scheme: manager.GetScheme(), Image: "foundation:test"}
+	r := &foundation.IdentityReconciler{
+		Client: c,
+		Reader: c,
+		Scheme: manager.GetScheme(),
+		Image:  "foundation:test",
+	}
 	result, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(failed)})
-	if err != nil || result.Requeue || result.RequeueAfter != 0 {
+	if err != nil || result.RequeueAfter != 0 {
 		t.Fatalf("failed job was polled/retried: %v %v", result, err)
 	}
 	if err := c.Get(ctx, client.ObjectKeyFromObject(target), target); err != nil || target.UID != uid {
@@ -446,7 +569,12 @@ type stalePublicClient struct {
 	reads int
 }
 
-func (c *stalePublicClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+func (c *stalePublicClient) Get(
+	ctx context.Context,
+	key client.ObjectKey,
+	obj client.Object,
+	opts ...client.GetOption,
+) error {
 	if node, ok := obj.(*stacks.StacksNode); ok && key == client.ObjectKeyFromObject(c.node) {
 		*node = *c.node.DeepCopy()
 		c.reads++
@@ -455,7 +583,14 @@ func (c *stalePublicClient) Get(ctx context.Context, key client.ObjectKey, obj c
 	return c.Client.Get(ctx, key, obj, opts...)
 }
 
-func verifyFreshFreezeReads(t *testing.T, ctx context.Context, c client.Client, r *foundation.Reconciler, request ctrl.Request, root *api.StacksNetwork) {
+func verifyFreshFreezeReads(
+	t *testing.T,
+	ctx context.Context,
+	c client.Client,
+	r *foundation.Reconciler,
+	request ctrl.Request,
+	root *api.StacksNetwork,
+) {
 	t.Helper()
 	var source stacks.StacksNode
 	key := client.ObjectKey{Namespace: root.Namespace, Name: "signer-node-01"}
@@ -478,8 +613,13 @@ func verifyFreshFreezeReads(t *testing.T, ctx context.Context, c client.Client, 
 			t.Fatal(err)
 		}
 	}
-	if result.Requeue || result.RequeueAfter != time.Millisecond || cached.reads == 0 || fresh.reads == 0 {
-		t.Fatalf("fresh freeze check did not reject stale cache: %+v cached=%d fresh=%d", result, cached.reads, fresh.reads)
+	if result.RequeueAfter != time.Millisecond || cached.reads == 0 || fresh.reads == 0 {
+		t.Fatalf(
+			"fresh freeze check did not reject stale cache: %+v cached=%d fresh=%d",
+			result,
+			cached.reads,
+			fresh.reads,
+		)
 	}
 	var artifacts api.StacksGenesisList
 	if err := c.List(ctx, &artifacts, client.InNamespace(root.Namespace)); err != nil {
@@ -495,13 +635,24 @@ func verifyFreshFreezeReads(t *testing.T, ctx context.Context, c client.Client, 
 	updateObject(t, ctx, c, &source)
 }
 
-func verifyProductionReplacement(t *testing.T, ctx context.Context, c client.Client, r *foundation.Reconciler, request ctrl.Request, root *api.StacksNetwork) {
+func verifyProductionReplacement(
+	t *testing.T,
+	ctx context.Context,
+	c client.Client,
+	r *foundation.Reconciler,
+	request ctrl.Request,
+	root *api.StacksNetwork,
+) {
 	t.Helper()
 	genesisUID := root.Status.GenesisRef.UID
 	for i := range root.Spec.Participants {
 		if root.Spec.Participants[i].Kind == "BitcoinBlockProduction" {
 			root.Spec.Participants[i].Name = "replacement-blocks"
-			root.Spec.Participants[i].Overrides = &api.Configuration{BitcoinBlockProduction: &bitcoin.BitcoinBlockProductionSpec{PayoutWalletRef: &common.NameRef{Name: "miner-wallet-01"}}}
+			root.Spec.Participants[i].Overrides = &api.Configuration{
+				BitcoinBlockProduction: &bitcoin.BitcoinBlockProductionSpec{
+					PayoutWalletRef: &common.NameRef{Name: "miner-wallet-01"},
+				},
+			}
 		}
 	}
 	updateObject(t, ctx, c, root)
@@ -532,7 +683,12 @@ type countDefinitionReader struct {
 	reads int
 }
 
-func (r *countDefinitionReader) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+func (r *countDefinitionReader) Get(
+	ctx context.Context,
+	key client.ObjectKey,
+	obj client.Object,
+	opts ...client.GetOption,
+) error {
 	if _, ok := obj.(*stacks.StacksNode); ok && key == r.key {
 		r.reads++
 	}

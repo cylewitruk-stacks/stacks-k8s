@@ -33,7 +33,12 @@ type watchClient struct {
 }
 
 // Get records any unexpected event-path direct lookup.
-func (c *watchClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+func (c *watchClient) Get(
+	_ context.Context,
+	_ client.ObjectKey,
+	obj client.Object,
+	_ ...client.GetOption,
+) error {
 	c.reads++
 	err := fmt.Errorf("watch routing must use indexed public lists, got Get %T", obj)
 	c.violations = append(c.violations, err.Error())
@@ -63,13 +68,21 @@ func (c *watchClient) List(ctx context.Context, list client.ObjectList, opts ...
 func newWatchClient(t *testing.T, objects ...client.Object) *watchClient {
 	t.Helper()
 	scheme := runtime.NewScheme()
-	for _, add := range []func(*runtime.Scheme) error{corev1.AddToScheme, api.AddToScheme, stacks.AddToScheme, bitcoin.AddToScheme} {
+	for _, add := range []func(*runtime.Scheme) error{
+		corev1.AddToScheme,
+		api.AddToScheme,
+		stacks.AddToScheme,
+		bitcoin.AddToScheme,
+	} {
 		if err := add(scheme); err != nil {
 			t.Fatal(err)
 		}
 	}
 	b := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...)
-	for _, input := range append([]client.Object{&api.StacksNetwork{}, &api.StacksNetworkParticipant{}}, publicInputs()...) {
+	for _, input := range append([]client.Object{
+		&api.StacksNetwork{},
+		&api.StacksNetworkParticipant{},
+	}, publicInputs()...) {
 		b = b.WithIndex(input, inputDependencyIndex, inputReferences)
 	}
 	c := &watchClient{Client: b.Build()}
@@ -83,7 +96,10 @@ func newWatchClient(t *testing.T, objects ...client.Object) *watchClient {
 
 // watchRoot selects a named participant while leaving its inputs unresolved.
 func watchRoot(entry api.Participant) *api.StacksNetwork {
-	return &api.StacksNetwork{ObjectMeta: metav1.ObjectMeta{Name: "network", Namespace: "lab", UID: "root"}, Spec: api.StacksNetworkSpec{Participants: []api.Participant{entry}}}
+	return &api.StacksNetwork{
+		ObjectMeta: metav1.ObjectMeta{Name: "network", Namespace: "lab", UID: "root"},
+		Spec:       api.StacksNetworkSpec{Participants: []api.Participant{entry}},
+	}
 }
 
 // assertWatchRequests checks exact routing and excludes accidental namespace fan-out.
@@ -102,7 +118,18 @@ func assertWatchRequests(t *testing.T, got []reconcile.Request, names ...string)
 
 func TestAdmissionEventsIgnoreRuntimeTraffic(t *testing.T) {
 	root := watchRoot(api.Participant{Name: "btc", Kind: "BitcoinNode"})
-	p := &api.StacksNetworkParticipant{ObjectMeta: metav1.ObjectMeta{Name: ParticipantName(string(root.UID), "btc"), Namespace: root.Namespace, UID: "participant", Generation: 1}, Spec: api.StacksNetworkParticipantSpec{Kind: "BitcoinNode"}, Status: api.ParticipantStatus{Conditions: []metav1.Condition{{Type: "Resolved", Status: metav1.ConditionTrue}}}}
+	p := &api.StacksNetworkParticipant{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       ParticipantName(string(root.UID), "btc"),
+			Namespace:  root.Namespace,
+			UID:        "participant",
+			Generation: 1,
+		},
+		Spec: api.StacksNetworkParticipantSpec{Kind: "BitcoinNode"},
+		Status: api.ParticipantStatus{
+			Conditions: []metav1.Condition{{Type: "Resolved", Status: metav1.ConditionTrue}},
+		},
+	}
 	c := newWatchClient(t, root, p)
 	queue := workqueue.NewTypedRateLimitingQueue(workqueue.DefaultTypedControllerRateLimiter[reconcile.Request]())
 	defer queue.ShutDown()
@@ -113,7 +140,10 @@ func TestAdmissionEventsIgnoreRuntimeTraffic(t *testing.T) {
 		updated.ResourceVersion = fmt.Sprint(i + 2)
 		updated.Status.Runtime = &api.ParticipantRuntimeStatus{ObservedGeneration: 1, ImageID: fmt.Sprint(i)}
 		updated.Status.Conditions[0].LastTransitionTime = metav1.NewTime(time.Now())
-		updated.Status.Conditions = append(updated.Status.Conditions, metav1.Condition{Type: "WorkloadReady", Status: metav1.ConditionFalse, Reason: fmt.Sprint(i)})
+		updated.Status.Conditions = append(
+			updated.Status.Conditions,
+			metav1.Condition{Type: "WorkloadReady", Status: metav1.ConditionFalse, Reason: fmt.Sprint(i)},
+		)
 		e := event.UpdateEvent{ObjectOld: p, ObjectNew: updated}
 		if filter.Update(e) {
 			notify.Update(context.Background(), e, queue)
@@ -135,21 +165,36 @@ func TestAdmissionEventsIgnoreRuntimeTraffic(t *testing.T) {
 }
 
 func TestAdmissionEventsPreserveIdentityAndValidationTransitions(t *testing.T) {
-	p := &api.StacksNetworkParticipant{ObjectMeta: metav1.ObjectMeta{UID: "old", Generation: 1}, Status: api.ParticipantStatus{Conditions: []metav1.Condition{{Type: "Resolved", Status: metav1.ConditionTrue, Reason: "Admitted"}}}}
+	p := &api.StacksNetworkParticipant{
+		ObjectMeta: metav1.ObjectMeta{UID: "old", Generation: 1},
+		Status: api.ParticipantStatus{
+			Conditions: []metav1.Condition{{Type: "Resolved", Status: metav1.ConditionTrue, Reason: "Admitted"}},
+		},
+	}
 	for name, change := range map[string]func(*api.StacksNetworkParticipant){
-		"uid":                  func(p *api.StacksNetworkParticipant) { p.UID = "replacement" },
-		"generation":           func(p *api.StacksNetworkParticipant) { p.Generation++ },
-		"deletion":             func(p *api.StacksNetworkParticipant) { p.DeletionTimestamp = ptr.To(metav1.Now()) },
-		"owner":                func(p *api.StacksNetworkParticipant) { p.OwnerReferences = []metav1.OwnerReference{{UID: "foreign"}} },
-		"finalizer":            func(p *api.StacksNetworkParticipant) { p.Finalizers = []string{"cleanup"} },
-		"spec drift":           func(p *api.StacksNetworkParticipant) { p.Spec.Source.UID = "other" },
-		"resolution withdrawn": func(p *api.StacksNetworkParticipant) { p.Status.Conditions[0].Status = metav1.ConditionFalse },
-		"resolution removed":   func(p *api.StacksNetworkParticipant) { p.Status.Conditions = nil },
+		"uid":        func(p *api.StacksNetworkParticipant) { p.UID = "replacement" },
+		"generation": func(p *api.StacksNetworkParticipant) { p.Generation++ },
+		"deletion":   func(p *api.StacksNetworkParticipant) { p.DeletionTimestamp = ptr.To(metav1.Now()) },
+		"owner": func(p *api.StacksNetworkParticipant) {
+			p.OwnerReferences = []metav1.OwnerReference{{UID: "foreign"}}
+		},
+		"finalizer":  func(p *api.StacksNetworkParticipant) { p.Finalizers = []string{"cleanup"} },
+		"spec drift": func(p *api.StacksNetworkParticipant) { p.Spec.Source.UID = "other" },
+		"resolution withdrawn": func(p *api.StacksNetworkParticipant) {
+			p.Status.Conditions[0].Status = metav1.ConditionFalse
+		},
+		"resolution removed": func(p *api.StacksNetworkParticipant) { p.Status.Conditions = nil },
 		"policy deferred": func(p *api.StacksNetworkParticipant) {
-			p.Status.Conditions = append(p.Status.Conditions, metav1.Condition{Type: "PolicyDeferred", Status: metav1.ConditionTrue})
+			p.Status.Conditions = append(p.Status.Conditions, metav1.Condition{
+				Type:   "PolicyDeferred",
+				Status: metav1.ConditionTrue,
+			})
 		},
 		"config report": func(p *api.StacksNetworkParticipant) {
-			p.Status.Conditions = append(p.Status.Conditions, metav1.Condition{Type: "ConfigVerified", Status: metav1.ConditionFalse})
+			p.Status.Conditions = append(p.Status.Conditions, metav1.Condition{
+				Type:   "ConfigVerified",
+				Status: metav1.ConditionFalse,
+			})
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -160,18 +205,42 @@ func TestAdmissionEventsPreserveIdentityAndValidationTransitions(t *testing.T) {
 			}
 		})
 	}
-	if !admissionEvents().Create(event.CreateEvent{Object: p}) || !admissionEvents().Delete(event.DeleteEvent{Object: p}) || !admissionEvents().Generic(event.GenericEvent{Object: p}) {
+	if !admissionEvents().Create(event.CreateEvent{Object: p}) ||
+		!admissionEvents().Delete(event.DeleteEvent{Object: p}) ||
+		!admissionEvents().Generic(event.GenericEvent{Object: p}) {
 		t.Fatal("suppressed create/delete/relist repair")
 	}
 }
 
 func TestInputRoutingPreservesUnresolvedAndTransitiveDependencies(t *testing.T) {
-	root := watchRoot(api.Participant{Name: "btc", Kind: "BitcoinNode", Definition: api.Definition{Ref: &common.NameRef{Name: "core"}}})
-	node := &bitcoin.BitcoinNode{ObjectMeta: metav1.ObjectMeta{Name: "core", Namespace: "lab"}, Spec: bitcoin.BitcoinNodeSpec{WalletRefs: ptr.To([]common.NameRef{{Name: "miner-wallet"}})}}
-	wallet := &bitcoin.BitcoinWallet{ObjectMeta: metav1.ObjectMeta{Name: "miner-wallet", Namespace: "lab"}, Spec: bitcoin.BitcoinWalletSpec{KeySource: &bitcoin.WalletKeySource{StacksMinerAccountRef: &common.NameRef{Name: "miner"}}}}
-	account := &stacks.StacksAccount{ObjectMeta: metav1.ObjectMeta{Name: "miner", Namespace: "lab"}, Spec: stacks.StacksAccountSpec{Key: &common.KeySource{SecretRef: &common.SecretKeyRef{Name: "private", Key: "key"}}}}
+	root := watchRoot(
+		api.Participant{
+			Name:       "btc",
+			Kind:       "BitcoinNode",
+			Definition: api.Definition{Ref: &common.NameRef{Name: "core"}},
+		},
+	)
+	node := &bitcoin.BitcoinNode{
+		ObjectMeta: metav1.ObjectMeta{Name: "core", Namespace: "lab"},
+		Spec:       bitcoin.BitcoinNodeSpec{WalletRefs: ptr.To([]common.NameRef{{Name: "miner-wallet"}})},
+	}
+	wallet := &bitcoin.BitcoinWallet{
+		ObjectMeta: metav1.ObjectMeta{Name: "miner-wallet", Namespace: "lab"},
+		Spec: bitcoin.BitcoinWalletSpec{
+			KeySource: &bitcoin.WalletKeySource{StacksMinerAccountRef: &common.NameRef{Name: "miner"}},
+		},
+	}
+	account := &stacks.StacksAccount{
+		ObjectMeta: metav1.ObjectMeta{Name: "miner", Namespace: "lab"},
+		Spec: stacks.StacksAccountSpec{
+			Key: &common.KeySource{SecretRef: &common.SecretKeyRef{Name: "private", Key: "key"}},
+		},
+	}
 	c := newWatchClient(t, root, node, wallet, account)
-	secret := &metav1.PartialObjectMetadata{TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "Secret"}, ObjectMeta: metav1.ObjectMeta{Name: "private", Namespace: "lab"}}
+	secret := &metav1.PartialObjectMetadata{
+		TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Secret"},
+		ObjectMeta: metav1.ObjectMeta{Name: "private", Namespace: "lab"},
+	}
 	for _, input := range []client.Object{node, wallet, account, secret} {
 		t.Run(fmt.Sprintf("%T", input), func(t *testing.T) {
 			assertWatchRequests(t, enqueueInputRoots(c)(context.Background(), input), "lab/network")
@@ -193,15 +262,37 @@ func TestInputRoutingPreservesUnresolvedAndTransitiveDependencies(t *testing.T) 
 }
 
 func TestInputRoutingBeforeParticipantAdmission(t *testing.T) {
-	root := watchRoot(api.Participant{Name: "signer", Kind: "StacksSigner", Definition: api.Definition{Inline: &api.Configuration{StacksSigner: &stacks.StacksSignerSpec{AccountRef: &common.NameRef{Name: "missing"}}}}, Overrides: &api.Configuration{StacksSigner: &stacks.StacksSignerSpec{ActorFields: common.ActorFields{Config: &common.Config{SecretRef: &common.SecretKeyRef{Name: "config", Key: "config.toml"}}}}}})
-	root.Spec.Genesis = &api.GenesisInput{Allocations: []api.GenesisAllocation{{AccountRef: common.NameRef{Name: "funded"}}}}
+	root := watchRoot(
+		api.Participant{
+			Name: "signer",
+			Kind: "StacksSigner",
+			Definition: api.Definition{
+				Inline: &api.Configuration{
+					StacksSigner: &stacks.StacksSignerSpec{AccountRef: &common.NameRef{Name: "missing"}},
+				},
+			},
+			Overrides: &api.Configuration{
+				StacksSigner: &stacks.StacksSignerSpec{
+					ActorFields: common.ActorFields{
+						Config: &common.Config{SecretRef: &common.SecretKeyRef{Name: "config", Key: "config.toml"}},
+					},
+				},
+			},
+		},
+	)
+	root.Spec.Genesis = &api.GenesisInput{
+		Allocations: []api.GenesisAllocation{{AccountRef: common.NameRef{Name: "funded"}}},
+	}
 	root.Spec.EpochScheduleRef = &common.NameRef{Name: "epochs"}
 	c := newWatchClient(t, root)
 	for _, input := range []client.Object{
 		&stacks.StacksAccount{ObjectMeta: metav1.ObjectMeta{Name: "missing", Namespace: "lab"}},
 		&stacks.StacksAccount{ObjectMeta: metav1.ObjectMeta{Name: "funded", Namespace: "lab"}},
 		&api.StacksEpochSchedule{ObjectMeta: metav1.ObjectMeta{Name: "epochs", Namespace: "lab"}},
-		&metav1.PartialObjectMetadata{TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "Secret"}, ObjectMeta: metav1.ObjectMeta{Name: "config", Namespace: "lab"}},
+		&metav1.PartialObjectMetadata{
+			TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Secret"},
+			ObjectMeta: metav1.ObjectMeta{Name: "config", Namespace: "lab"},
+		},
 	} {
 		assertWatchRequests(t, enqueueInputRoots(c)(context.Background(), input), "lab/network")
 	}
@@ -209,27 +300,61 @@ func TestInputRoutingBeforeParticipantAdmission(t *testing.T) {
 
 func TestInputRoutingRetainsOldPolicyDependencies(t *testing.T) {
 	root := watchRoot(api.Participant{Name: "signer", Kind: "StacksSigner"})
-	p := &api.StacksNetworkParticipant{ObjectMeta: metav1.ObjectMeta{Name: ParticipantName(string(root.UID), "signer"), Namespace: "lab"}, Spec: api.StacksNetworkParticipantSpec{Kind: "StacksSigner", Source: api.Source{Name: "old-source"}, Configuration: api.Configuration{StacksSigner: &stacks.StacksSignerSpec{AccountRef: &common.NameRef{Name: "candidate"}}}}, Status: api.ParticipantStatus{Admission: &api.Admission{Dependencies: []common.Binding{{Kind: "Secret", Name: "retained-key"}}}}}
+	p := &api.StacksNetworkParticipant{
+		ObjectMeta: metav1.ObjectMeta{Name: ParticipantName(string(root.UID), "signer"), Namespace: "lab"},
+		Spec: api.StacksNetworkParticipantSpec{
+			Kind:   "StacksSigner",
+			Source: api.Source{Name: "old-source"},
+			Configuration: api.Configuration{
+				StacksSigner: &stacks.StacksSignerSpec{AccountRef: &common.NameRef{Name: "candidate"}},
+			},
+		},
+		Status: api.ParticipantStatus{
+			Admission: &api.Admission{Dependencies: []common.Binding{{Kind: "Secret", Name: "retained-key"}}},
+		},
+	}
 	c := newWatchClient(t, root, p)
 	for _, input := range []client.Object{
 		&stacks.StacksAccount{ObjectMeta: metav1.ObjectMeta{Name: "candidate", Namespace: "lab"}},
 		&stacks.StacksSigner{ObjectMeta: metav1.ObjectMeta{Name: "old-source", Namespace: "lab"}},
-		&metav1.PartialObjectMetadata{TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "Secret"}, ObjectMeta: metav1.ObjectMeta{Name: "retained-key", Namespace: "lab"}},
+		&metav1.PartialObjectMetadata{
+			TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Secret"},
+			ObjectMeta: metav1.ObjectMeta{Name: "retained-key", Namespace: "lab"},
+		},
 	} {
 		assertWatchRequests(t, enqueueInputRoots(c)(context.Background(), input), "lab/network")
 	}
 }
 
 func TestIdentityInputRoutingIsTargeted(t *testing.T) {
-	account := &stacks.StacksAccount{ObjectMeta: metav1.ObjectMeta{Name: "account", Namespace: "lab", UID: "account-uid"}, Spec: stacks.StacksAccountSpec{Key: &common.KeySource{SecretRef: &common.SecretKeyRef{Name: "key"}}}}
+	account := &stacks.StacksAccount{
+		ObjectMeta: metav1.ObjectMeta{Name: "account", Namespace: "lab", UID: "account-uid"},
+		Spec:       stacks.StacksAccountSpec{Key: &common.KeySource{SecretRef: &common.SecretKeyRef{Name: "key"}}},
+	}
 	other := account.DeepCopy()
 	other.Name = "unrelated"
 	other.Spec.Key.SecretRef.Name = "other"
-	wallet := &bitcoin.BitcoinWallet{ObjectMeta: metav1.ObjectMeta{Name: "derived", Namespace: "lab"}, Spec: bitcoin.BitcoinWalletSpec{KeySource: &bitcoin.WalletKeySource{StacksMinerAccountRef: &common.NameRef{Name: "account"}}}}
+	wallet := &bitcoin.BitcoinWallet{
+		ObjectMeta: metav1.ObjectMeta{Name: "derived", Namespace: "lab"},
+		Spec: bitcoin.BitcoinWalletSpec{
+			KeySource: &bitcoin.WalletKeySource{StacksMinerAccountRef: &common.NameRef{Name: "account"}},
+		},
+	}
 	c := newWatchClient(t, account, other, wallet)
-	secret := &metav1.PartialObjectMetadata{TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "Secret"}, ObjectMeta: metav1.ObjectMeta{Name: "key", Namespace: "lab"}}
-	assertWatchRequests(t, enqueueIdentityInputs(c, &stacks.StacksAccount{})(context.Background(), secret), "lab/account")
-	assertWatchRequests(t, enqueueIdentityInputs(c, &bitcoin.BitcoinWallet{})(context.Background(), account), "lab/derived")
+	secret := &metav1.PartialObjectMetadata{
+		TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Secret"},
+		ObjectMeta: metav1.ObjectMeta{Name: "key", Namespace: "lab"},
+	}
+	assertWatchRequests(
+		t,
+		enqueueIdentityInputs(c, &stacks.StacksAccount{})(context.Background(), secret),
+		"lab/account",
+	)
+	assertWatchRequests(
+		t,
+		enqueueIdentityInputs(c, &bitcoin.BitcoinWallet{})(context.Background(), account),
+		"lab/derived",
+	)
 	if c.reads != 2 {
 		t.Fatalf("identity notifications used %d reads, want 2", c.reads)
 	}
@@ -242,9 +367,13 @@ func TestInputIndexIncludesGeneratedDefaultsAndRetainedCredentials(t *testing.T)
 	if !slices.Contains(inputReferences(faucet), "StacksAccount/faucet-account") {
 		t.Fatal("missing default account before admission")
 	}
-	account := &stacks.StacksAccount{ObjectMeta: metav1.ObjectMeta{Name: "account", Namespace: "lab", UID: "a"}, Status: common.ResolutionStatus{CredentialsRef: &common.SecretKeyRef{Name: "retained"}}}
+	account := &stacks.StacksAccount{
+		ObjectMeta: metav1.ObjectMeta{Name: "account", Namespace: "lab", UID: "a"},
+		Status:     common.ResolutionStatus{CredentialsRef: &common.SecretKeyRef{Name: "retained"}},
+	}
 	keys := inputReferences(account)
-	if !slices.Contains(keys, "Secret/retained") || !slices.Contains(keys, "Secret/"+RuntimeName("", "a", "StacksAccount", "account", "key")) {
+	if !slices.Contains(keys, "Secret/retained") ||
+		!slices.Contains(keys, "Secret/"+RuntimeName("", "a", "StacksAccount", "account", "key")) {
 		t.Fatal("missing generated or retained credential notification")
 	}
 	if faucet.Spec.AccountRef != nil {
@@ -254,7 +383,11 @@ func TestInputIndexIncludesGeneratedDefaultsAndRetainedCredentials(t *testing.T)
 
 func TestGateCompletionRoutesAdmissionWithoutObservationChurn(t *testing.T) {
 	root := watchRoot(api.Participant{Name: "worker", Kind: "StacksStacker"})
-	root.Status.Initialization = &api.InitializationStatus{GenesisUID: "genesis", GenesisDigest: "digest", Gates: []api.GateObservation{{Name: "PrepareBitcoin"}}}
+	root.Status.Initialization = &api.InitializationStatus{
+		GenesisUID:    "genesis",
+		GenesisDigest: "digest",
+		Gates:         []api.GateObservation{{Name: "PrepareBitcoin"}},
+	}
 	timing := root.DeepCopy()
 	now := metav1.Now()
 	timing.Status.Initialization.Gates[0].FirstCeilingObservedAt = &now

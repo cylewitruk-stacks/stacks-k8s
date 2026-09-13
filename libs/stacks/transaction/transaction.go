@@ -12,6 +12,8 @@ import (
 	"github.com/cylewitruk-stacks/stacks-k8s/libs/stacks/clarity"
 	"github.com/cylewitruk-stacks/stacks-k8s/libs/stacks/identity"
 	"github.com/cylewitruk-stacks/stacks-k8s/libs/stacks/internal/keys"
+
+	//nolint:gosec,staticcheck // HASH160 is required by the Stacks and Bitcoin consensus address format.
 	"golang.org/x/crypto/ripemd160"
 )
 
@@ -88,6 +90,7 @@ func Call(o Options, address, contract, function string, args []clarity.Value) (
 	payload := append([]byte{2, version}, hash[:]...)
 	payload = appendName(payload, contract)
 	payload = appendName(payload, function)
+	// #nosec G115 -- Contract calls reject more than 1024 arguments before encoding.
 	payload = binary.BigEndian.AppendUint32(payload, uint32(len(args)))
 	for _, arg := range args {
 		raw, e := clarity.Encode(arg)
@@ -113,12 +116,14 @@ func Deploy(o Options, name, source string, version byte) (Transaction, error) {
 		}
 	}
 	payload := appendName([]byte{6, version}, name)
+	// #nosec G115 -- Contract publication rejects source larger than 131072 bytes.
 	payload = binary.BigEndian.AppendUint32(payload, uint32(len(source)))
 	payload = append(payload, source...)
 	return sign(o, payload)
 }
 
 // appendName appends an already validated identifier.
+// #nosec G115 -- All callers validate identifiers at 128 bytes or fewer before encoding.
 func appendName(b []byte, s string) []byte { b = append(b, byte(len(s))); return append(b, s...) }
 
 // sign serializes the initial authorization hash and replaces its empty signature.
@@ -138,6 +143,7 @@ func sign(o Options, payload []byte) (Transaction, error) {
 		encoding = 0
 	}
 	sha := sha256.Sum256(pub)
+	//nolint:gosec // HASH160 is required by the Stacks and Bitcoin consensus address format.
 	h := ripemd160.New()
 	_, _ = h.Write(sha[:])
 	b := []byte{o.Version}

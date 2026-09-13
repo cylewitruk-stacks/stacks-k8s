@@ -47,9 +47,19 @@ func (o *Options) Bind(flags *flag.FlagSet) {
 	flags.BoolVar(&o.ReorganizationEnabled, "bitcoin-reorganization-enabled", false, "Enable reorganization lifecycle.")
 	flags.StringVar(&o.MetricsAddress, "metrics-bind-address", ":8080", "Prometheus metrics address.")
 	flags.StringVar(&o.ProbeAddress, "health-probe-bind-address", ":8081", "Health probe address.")
-	flags.StringVar(&o.Namespace, "watch-namespace", os.Getenv("WATCH_NAMESPACE"), "Namespace to watch; defaults to the ServiceAccount namespace.")
+	flags.StringVar(
+		&o.Namespace,
+		"watch-namespace",
+		os.Getenv("WATCH_NAMESPACE"),
+		"Namespace to watch; defaults to the ServiceAccount namespace.",
+	)
 	flags.IntVar(&o.Concurrency, "max-concurrent-reconciles", 2, "Maximum concurrent reconciles per action kind.")
-	flags.BoolVar(&o.LeaderElection, "leader-elect", true, "Enable leader election for upgrade-safe single-writer operation.")
+	flags.BoolVar(
+		&o.LeaderElection,
+		"leader-elect",
+		true,
+		"Enable leader election for upgrade-safe single-writer operation.",
+	)
 }
 
 // New constructs a namespaced controller manager.
@@ -75,9 +85,13 @@ func (o Options) New(configuration *rest.Config, scheme *runtime.Scheme) (ctrl.M
 		return nil, fmt.Errorf("watch namespace must not be empty")
 	}
 	manager, err := ctrl.NewManager(configuration, ctrl.Options{
-		Scheme: scheme, Metrics: metricsserver.Options{BindAddress: o.MetricsAddress}, HealthProbeBindAddress: o.ProbeAddress,
-		LeaderElectionNamespace: namespace, LeaderElection: o.LeaderElection, LeaderElectionID: "stacks-action-operator.actions.stacks.org",
-		Cache: cache.Options{DefaultNamespaces: map[string]cache.Config{namespace: {}}},
+		Scheme:                  scheme,
+		Metrics:                 metricsserver.Options{BindAddress: o.MetricsAddress},
+		HealthProbeBindAddress:  o.ProbeAddress,
+		LeaderElectionNamespace: namespace,
+		LeaderElection:          o.LeaderElection,
+		LeaderElectionID:        "stacks-action-operator.actions.stacks.org",
+		Cache:                   cache.Options{DefaultNamespaces: map[string]cache.Config{namespace: {}}},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create manager: %w", err)
@@ -89,9 +103,11 @@ func (o Options) New(configuration *rest.Config, scheme *runtime.Scheme) (ctrl.M
 		ctx, cancel := context.WithTimeout(request.Context(), 2*time.Second)
 		defer cancel()
 		if o.GenerationEnabled {
-			return manager.GetAPIReader().List(ctx, &actionv2.BitcoinBlockGenerationList{}, client.InNamespace(namespace), client.Limit(1))
+			return manager.GetAPIReader().
+				List(ctx, &actionv2.BitcoinBlockGenerationList{}, client.InNamespace(namespace), client.Limit(1))
 		}
-		return manager.GetAPIReader().List(ctx, &actionv2.BitcoinReorganizationList{}, client.InNamespace(namespace), client.Limit(1))
+		return manager.GetAPIReader().
+			List(ctx, &actionv2.BitcoinReorganizationList{}, client.InNamespace(namespace), client.Limit(1))
 	}); err != nil {
 		return nil, err
 	}

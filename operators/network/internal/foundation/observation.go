@@ -8,7 +8,13 @@ import (
 
 // ObservationPolicy returns the immutable regtest release profile's timing values.
 func ObservationPolicy() api.ObservationPolicy {
-	return api.ObservationPolicy{Profile: "regtest-pox4-pox5-v1", PollIntervalSeconds: 2, RPCAllowanceSeconds: 10, HeartbeatIntervalSeconds: 5, ProgressGraceSeconds: 120}
+	return api.ObservationPolicy{
+		Profile:                  "regtest-pox4-pox5-v1",
+		PollIntervalSeconds:      2,
+		RPCAllowanceSeconds:      10,
+		HeartbeatIntervalSeconds: 5,
+		ProgressGraceSeconds:     120,
+	}
 }
 
 // ObservationFreshness is independent of production cadence and status-write frequency.
@@ -20,5 +26,10 @@ func ObservationFreshness() time.Duration {
 // ProgressWindow uses the applied cadence without refreshing a past success time.
 func ProgressWindow(cadenceUpperBound time.Duration) time.Duration {
 	p := ObservationPolicy()
-	return max(time.Duration(p.ProgressGraceSeconds)*time.Second, 3*cadenceUpperBound) + time.Duration(p.RPCAllowanceSeconds)*time.Second
+	return max(
+		time.Duration(p.ProgressGraceSeconds)*time.Second,
+		3*cadenceUpperBound,
+	) + time.Duration(
+		p.RPCAllowanceSeconds,
+	)*time.Second
 }

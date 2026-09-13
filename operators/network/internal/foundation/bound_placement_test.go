@@ -9,9 +9,15 @@ import (
 )
 
 func TestBoundWorkerPlacementRequiresReplacement(t *testing.T) {
-	for _, kind := range []api.ParticipantKind{"StacksStacker", "StacksFaucet", "StacksContractSet", "StacksTransactionProduction"} {
+	for _, kind := range []api.ParticipantKind{
+		"StacksStacker",
+		"StacksFaucet",
+		"StacksContractSet",
+		"StacksTransactionProduction",
+	} {
 		t.Run(string(kind), func(t *testing.T) {
 			c := api.Configuration{}
+			//nolint:exhaustive // Fixture wire values remain independent of production enum constants.
 			switch kind {
 			case "StacksStacker":
 				c.StacksStacker = &stacks.StacksStackerSpec{}
@@ -22,10 +28,16 @@ func TestBoundWorkerPlacementRequiresReplacement(t *testing.T) {
 			case "StacksTransactionProduction":
 				c.StacksTransactionProduction = &stacks.StacksTransactionProductionSpec{}
 			}
-			p := &api.StacksNetworkParticipant{Spec: api.StacksNetworkParticipantSpec{ParticipantName: "worker", Kind: kind}, Status: api.ParticipantStatus{Admission: &api.Admission{Configuration: c}}}
-			root := &api.StacksNetwork{Status: api.StacksNetworkStatus{Identities: []api.InstanceIdentity{{Name: "worker"}}}}
+			p := &api.StacksNetworkParticipant{
+				Spec:   api.StacksNetworkParticipantSpec{ParticipantName: "worker", Kind: kind},
+				Status: api.ParticipantStatus{Admission: &api.Admission{Configuration: c}},
+			}
+			root := &api.StacksNetwork{
+				Status: api.StacksNetworkStatus{Identities: []api.InstanceIdentity{{Name: "worker"}}},
+			}
 			next := c.DeepCopy()
 			place := &common.Placement{NodeSelector: map[string]string{"pool": "another"}}
+			//nolint:exhaustive // Fixture wire values remain independent of production enum constants.
 			switch kind {
 			case "StacksStacker":
 				next.StacksStacker.WorkerPlacement = place

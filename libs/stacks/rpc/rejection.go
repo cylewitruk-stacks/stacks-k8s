@@ -35,7 +35,10 @@ func ClassifySubmissionRejection(status int, data []byte, txid string) *Submissi
 		Error  string `json:"error"`
 		Reason string `json:"reason"`
 	}
-	if json.Unmarshal(data, &rejection) != nil || strings.TrimPrefix(rejection.TxID, "0x") != txid || rejection.Error != nativeRejectionEnvelope || rejection.Reason == "" {
+	if json.Unmarshal(data, &rejection) != nil || strings.TrimPrefix(rejection.TxID, "0x") != txid ||
+		rejection.Error != nativeRejectionEnvelope ||
+		rejection.Reason == "" {
+		//nolint:nilerr // Malformed data cannot establish a definite rejection.
 		return nil
 	}
 	reason := RejectionOther

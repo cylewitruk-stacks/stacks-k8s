@@ -54,7 +54,9 @@ func (r PublicInputs) Contracts(ctx context.Context, s stacksworker.Snapshot) (C
 		return in, errors.New("contract admission unavailable")
 	}
 	policy := s.Participant.Status.Admission.Configuration.StacksContractSet
-	if policy == nil || policy.DeployerAccountRef == nil || policy.TargetNodeRef == nil || policy.Bundle == nil || policy.Initialization == nil || policy.Initialization.Mode != stacks.RegistryInitializationExplicitTestRegistry {
+	if policy == nil || policy.DeployerAccountRef == nil || policy.TargetNodeRef == nil || policy.Bundle == nil ||
+		policy.Initialization == nil ||
+		policy.Initialization.Mode != stacks.RegistryInitializationExplicitTestRegistry {
 		return in, errors.New("contract policy incomplete")
 	}
 	deployer, err := r.account(ctx, s.Participant, policy.DeployerAccountRef.Name)
@@ -103,7 +105,8 @@ func (r PublicInputs) Contracts(ctx context.Context, s stacksworker.Snapshot) (C
 			captured = required
 		}
 	}
-	if captured == nil || captured.RegistryInitialization == nil || initial && foundation.Digest(captured.RegistryInitialization) != foundation.Digest(policy.Initialization) {
+	if captured == nil || captured.RegistryInitialization == nil ||
+		initial && foundation.Digest(captured.RegistryInitialization) != foundation.Digest(policy.Initialization) {
 		return in, errors.New("captured registry policy unavailable")
 	}
 	accountCaptured := func(name string) (string, error) {
@@ -115,7 +118,8 @@ func (r PublicInputs) Contracts(ctx context.Context, s stacksworker.Snapshot) (C
 			return account.Status.Identity.PublicKey, nil
 		}
 		for _, bound := range captured.Accounts {
-			if bound.Binding.UID == account.UID && bound.Binding.Fingerprint == account.Status.Digest && bound.Identity == *account.Status.Identity {
+			if bound.Binding.UID == account.UID && bound.Binding.Fingerprint == account.Status.Digest &&
+				bound.Identity == *account.Status.Identity {
 				return account.Status.Identity.PublicKey, nil
 			}
 		}
@@ -146,7 +150,11 @@ func (r PublicInputs) Contracts(ctx context.Context, s stacksworker.Snapshot) (C
 		}
 		return ""
 	}
-	if registry.Mode != policy.Initialization.Mode || registry.Threshold != policy.Initialization.Threshold || len(registry.SignerAccountRefs) != len(keys) || aggregate == "" || aggregate != publicKey(registry.AggregateKeyAccountRef.Name) {
+	if policy.Initialization.Threshold < 1 || registry.Mode != policy.Initialization.Mode ||
+		registry.Threshold != policy.Initialization.Threshold ||
+		len(registry.SignerAccountRefs) != len(keys) ||
+		aggregate == "" ||
+		aggregate != publicKey(registry.AggregateKeyAccountRef.Name) {
 		return in, errors.New("frozen registry public values differ")
 	}
 	for i, ref := range registry.SignerAccountRefs {
@@ -154,7 +162,15 @@ func (r PublicInputs) Contracts(ctx context.Context, s stacksworker.Snapshot) (C
 			return in, errors.New("frozen registry signer order or identity differs")
 		}
 	}
-	in = ContractInputs{Node: node, Deployer: r.Sender, Bundle: frozen.Bundle, SourceHashes: frozen.SourceHashes, SignerPublicKeys: keys, AggregatePublicKey: aggregate, Threshold: uint64(policy.Initialization.Threshold)}
+	in = ContractInputs{
+		Node:               node,
+		Deployer:           r.Sender,
+		Bundle:             frozen.Bundle,
+		SourceHashes:       frozen.SourceHashes,
+		SignerPublicKeys:   keys,
+		AggregatePublicKey: aggregate,
+		Threshold:          uint64(policy.Initialization.Threshold),
+	}
 	for _, epoch := range genesis.Spec.Chain.Epochs {
 		if epoch.Name == "3.0" && epoch.StartHeight > 0 {
 			in.Epoch3Height = uint64(epoch.StartHeight)

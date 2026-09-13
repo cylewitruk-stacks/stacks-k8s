@@ -48,9 +48,45 @@ func TestControlResourcesAPIConvergenceAndProductionOwnership(t *testing.T) {
 		p.Spec.Configuration = saved.Admission.Configuration
 		p.Status = api.ParticipantStatus{}
 		must(c.Create(ctx, p))
-		must(participantstatus.Apply(ctx, c, p, api.ParticipantStatus{Admission: saved.Admission, Conditions: []metav1.Condition{{Type: "Resolved", Status: metav1.ConditionTrue, ObservedGeneration: p.Generation, Reason: "Admitted", Message: "Admitted", LastTransitionTime: metav1.Now()}, {Type: "AdmissionReady", Status: metav1.ConditionTrue, ObservedGeneration: p.Generation, Reason: "RetainedPolicyEligible", Message: "Retained policy eligible", LastTransitionTime: metav1.Now()}}}, participantstatus.AggregateManager))
+		must(
+			participantstatus.Apply(
+				ctx,
+				c,
+				p,
+				api.ParticipantStatus{
+					Admission: saved.Admission,
+					Conditions: []metav1.Condition{
+						{
+							Type:               "Resolved",
+							Status:             metav1.ConditionTrue,
+							ObservedGeneration: p.Generation,
+							Reason:             "Admitted",
+							Message:            "Admitted",
+							LastTransitionTime: metav1.Now(),
+						},
+						{
+							Type:               "AdmissionReady",
+							Status:             metav1.ConditionTrue,
+							ObservedGeneration: p.Generation,
+							Reason:             "RetainedPolicyEligible",
+							Message:            "Retained policy eligible",
+							LastTransitionTime: metav1.Now(),
+						},
+					},
+				},
+				participantstatus.AggregateManager,
+			),
+		)
 		if saved.Runtime != nil {
-			must(participantstatus.Apply(ctx, c, p, api.ParticipantStatus{Runtime: saved.Runtime}, "stacks-network-domain-bitcoinnode"))
+			must(
+				participantstatus.Apply(
+					ctx,
+					c,
+					p,
+					api.ParticipantStatus{Runtime: saved.Runtime},
+					"stacks-network-domain-bitcoinnode",
+				),
+			)
 		}
 	}
 	record := f.record.DeepCopy()
@@ -88,7 +124,10 @@ func TestControlResourcesAPIConvergenceAndProductionOwnership(t *testing.T) {
 	initial.Status.Phase = "Preparing"
 	initial.Status.Reason = "CadenceArmed"
 	must(c.Status().Update(ctx, initial))
-	root.Status.Bitcoin = &api.BitcoinRuntimeStatus{ExecutionRefs: []common.Binding{binding("BitcoinExecution", record)}, InitializationRef: initialBinding(initial)}
+	root.Status.Bitcoin = &api.BitcoinRuntimeStatus{
+		ExecutionRefs:     []common.Binding{binding("BitcoinExecution", record)},
+		InitializationRef: initialBinding(initial),
+	}
 	must(c.Status().Update(ctx, root))
 	counter := &writeCounter{Client: c}
 	r := &WorkloadReconciler{Client: counter, Reader: c, Image: "worker:test"}
@@ -111,7 +150,10 @@ func TestControlResourcesAPIConvergenceAndProductionOwnership(t *testing.T) {
 	_, e = projection.Reconcile(ctx, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(f.production)})
 	must(e)
 	must(c.Get(ctx, client.ObjectKeyFromObject(f.production), f.production))
-	if f.production.Status.Admission == nil || !meta.IsStatusConditionTrue(f.production.Status.Conditions, "Resolved") || !meta.IsStatusConditionTrue(f.production.Status.Conditions, "WorkloadReady") || !participantstatus.Managed(f.production, ProductionFieldManager) {
+	if f.production.Status.Admission == nil ||
+		!meta.IsStatusConditionTrue(f.production.Status.Conditions, "Resolved") ||
+		!meta.IsStatusConditionTrue(f.production.Status.Conditions, "WorkloadReady") ||
+		!participantstatus.Managed(f.production, ProductionFieldManager) {
 		t.Fatal("production SSA failed to preserve admission or establish own readiness")
 	}
 	stale := record.DeepCopy()

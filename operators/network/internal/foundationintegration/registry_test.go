@@ -46,7 +46,10 @@ func verifyRegistryAdmissionGate(t *testing.T, ctx context.Context, c client.Cli
 	valid.Name = "registry-majority-validation"
 	valid.ResourceVersion = ""
 	valid.UID = ""
-	valid.Spec.Initialization.SignerAccountRefs = append(valid.Spec.Initialization.SignerAccountRefs, common.NameRef{Name: "third-public-key"})
+	valid.Spec.Initialization.SignerAccountRefs = append(
+		valid.Spec.Initialization.SignerAccountRefs,
+		common.NameRef{Name: "third-public-key"},
+	)
 	if err := c.Create(ctx, valid); err != nil {
 		t.Fatal(err)
 	}

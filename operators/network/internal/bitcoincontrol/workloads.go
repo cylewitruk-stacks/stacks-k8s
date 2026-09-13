@@ -99,7 +99,10 @@ func (r *WorkloadReconciler) Reconcile(ctx context.Context, request ctrl.Request
 	if stopReason(root, p) != "" {
 		return r.stopControlWorkload(ctx, root, p)
 	}
-	if root.Status.Bitcoin == nil || root.Status.Bitcoin.InitializationRef == nil || p.Status.Runtime == nil || p.Status.Runtime.RPCSecretRef == nil || p.Status.Runtime.ConfigRef == nil || p.Status.Runtime.PodRef == nil {
+	if root.Status.Bitcoin == nil || root.Status.Bitcoin.InitializationRef == nil || p.Status.Runtime == nil ||
+		p.Status.Runtime.RPCSecretRef == nil ||
+		p.Status.Runtime.ConfigRef == nil ||
+		p.Status.Runtime.PodRef == nil {
 		return lifecycleResult, nil
 	}
 	var record *bitcoin.BitcoinExecution
@@ -120,7 +123,11 @@ func (r *WorkloadReconciler) Reconcile(ctx context.Context, request ctrl.Request
 		return lifecycleResult, nil
 	}
 	init := &bitcoin.BitcoinInitialization{}
-	if e := r.Reader.Get(ctx, client.ObjectKey{Namespace: p.Namespace, Name: root.Status.Bitcoin.InitializationRef.Name}, init); e != nil {
+	if e := r.Reader.Get(
+		ctx,
+		client.ObjectKey{Namespace: p.Namespace, Name: root.Status.Bitcoin.InitializationRef.Name},
+		init,
+	); e != nil {
 		return ctrl.Result{}, e
 	}
 	if init.UID != root.Status.Bitcoin.InitializationRef.UID {
@@ -128,7 +135,11 @@ func (r *WorkloadReconciler) Reconcile(ctx context.Context, request ctrl.Request
 	}
 	replicas := int32(1)
 	var genesis api.StacksGenesis
-	if e := r.Reader.Get(ctx, client.ObjectKey{Namespace: p.Namespace, Name: init.Spec.Genesis.Name}, &genesis); e != nil {
+	if e := r.Reader.Get(
+		ctx,
+		client.ObjectKey{Namespace: p.Namespace, Name: init.Spec.Genesis.Name},
+		&genesis,
+	); e != nil {
 		return ctrl.Result{}, e
 	}
 	if genesis.UID != init.Spec.Genesis.UID || !metav1.IsControlledBy(&genesis, root) {
@@ -138,7 +149,17 @@ func (r *WorkloadReconciler) Reconcile(ctx context.Context, request ctrl.Request
 	if e != nil {
 		return ctrl.Result{}, e
 	}
-	objects, e := workerResourcesWithActions(p, record, init, r.Image, replicas, reads, r.ActionsEnabled, r.ReorganizationEnabled, &genesis)
+	objects, e := workerResourcesWithActions(
+		p,
+		record,
+		init,
+		r.Image,
+		replicas,
+		reads,
+		r.ActionsEnabled,
+		r.ReorganizationEnabled,
+		&genesis,
+	)
 	if e != nil {
 		return ctrl.Result{}, e
 	}
@@ -186,7 +207,11 @@ func (r *WorkloadReconciler) Reconcile(ctx context.Context, request ctrl.Request
 			got.AutomountServiceAccountToken = desired.(*corev1.ServiceAccount).AutomountServiceAccountToken
 		}
 		if !equality.Semantic.DeepEqual(base, current) {
-			if e = r.Client.Patch(ctx, current, client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{})); e != nil {
+			if e = r.Client.Patch(
+				ctx,
+				current,
+				client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{}),
+			); e != nil {
 				return ctrl.Result{}, e
 			}
 		}
@@ -195,36 +220,108 @@ func (r *WorkloadReconciler) Reconcile(ctx context.Context, request ctrl.Request
 }
 
 // WorkerResources renders exact-name permissions and one immutable credential mount.
-func WorkerResources(p *api.StacksNetworkParticipant, record *bitcoin.BitcoinExecution, init *bitcoin.BitcoinInitialization, image string, replicas int32, genesis ...*api.StacksGenesis) ([]client.Object, error) {
+func WorkerResources(
+	p *api.StacksNetworkParticipant,
+	record *bitcoin.BitcoinExecution,
+	init *bitcoin.BitcoinInitialization,
+	image string,
+	replicas int32,
+	genesis ...*api.StacksGenesis,
+) ([]client.Object, error) {
 	return workerResources(p, record, init, image, replicas, nil, genesis...)
 }
 
 // workerResources includes controller-resolved public read scope without adding secret authority.
-func workerResources(p *api.StacksNetworkParticipant, record *bitcoin.BitcoinExecution, init *bitcoin.BitcoinInitialization, image string, replicas int32, reads []common.Binding, genesis ...*api.StacksGenesis) ([]client.Object, error) {
+func workerResources(
+	p *api.StacksNetworkParticipant,
+	record *bitcoin.BitcoinExecution,
+	init *bitcoin.BitcoinInitialization,
+	image string,
+	replicas int32,
+	reads []common.Binding,
+	genesis ...*api.StacksGenesis,
+) ([]client.Object, error) {
 	return workerResourcesWithActions(p, record, init, image, replicas, reads, false, false, genesis...)
 }
 
 // workerResourcesWithActions grants only explicitly enabled finite request reads.
-func workerResourcesWithActions(p *api.StacksNetworkParticipant, record *bitcoin.BitcoinExecution, init *bitcoin.BitcoinInitialization, image string, replicas int32, reads []common.Binding, generation, reorganization bool, genesis ...*api.StacksGenesis) ([]client.Object, error) {
+func workerResourcesWithActions(
+	p *api.StacksNetworkParticipant,
+	record *bitcoin.BitcoinExecution,
+	init *bitcoin.BitcoinInitialization,
+	image string,
+	replicas int32,
+	reads []common.Binding,
+	generation, reorganization bool,
+	genesis ...*api.StacksGenesis,
+) ([]client.Object, error) {
 	rt := p.Status.Runtime
-	if rt == nil || rt.RPCSecretRef == nil || rt.ConfigRef == nil || rt.PodRef == nil || image == "" || p.Status.Admission == nil || p.Status.Admission.Configuration.BitcoinNode == nil {
+	if rt == nil || rt.RPCSecretRef == nil || rt.ConfigRef == nil || rt.PodRef == nil || image == "" ||
+		p.Status.Admission == nil ||
+		p.Status.Admission.Configuration.BitcoinNode == nil {
 		return nil, fmt.Errorf("control workload inputs unavailable")
 	}
-	name := naming.RuntimeName(string(p.Spec.NetworkUID), string(p.UID), string(api.ParticipantBitcoinNode), p.Spec.ParticipantName, "control")
-	meta := metav1.ObjectMeta{Name: name, Namespace: p.Namespace, Labels: labels(p, api.RoleSupport), OwnerReferences: []metav1.OwnerReference{{APIVersion: api.GroupVersion.String(), Kind: api.KindStacksNetworkParticipant, Name: p.Name, UID: p.UID, Controller: ptr.To(true), BlockOwnerDeletion: ptr.To(false)}}}
-	input := WorkerInput{ActionsEnabled: generation, ReorganizationEnabled: reorganization, Namespace: p.Namespace, RecordName: record.Name, RecordUID: record.UID, CredentialsName: rt.RPCSecretRef.Name, CredentialsUID: rt.RPCSecretRef.UID}
+	name := naming.RuntimeName(
+		string(p.Spec.NetworkUID),
+		string(p.UID),
+		string(api.ParticipantBitcoinNode),
+		p.Spec.ParticipantName,
+		"control",
+	)
+	meta := metav1.ObjectMeta{
+		Name:      name,
+		Namespace: p.Namespace,
+		Labels:    labels(p, api.RoleSupport),
+		OwnerReferences: []metav1.OwnerReference{
+			{
+				APIVersion:         api.GroupVersion.String(),
+				Kind:               api.KindStacksNetworkParticipant,
+				Name:               p.Name,
+				UID:                p.UID,
+				Controller:         ptr.To(true),
+				BlockOwnerDeletion: ptr.To(false),
+			},
+		},
+	}
+	input := WorkerInput{
+		ActionsEnabled:        generation,
+		ReorganizationEnabled: reorganization,
+		Namespace:             p.Namespace,
+		RecordName:            record.Name,
+		RecordUID:             record.UID,
+		CredentialsName:       rt.RPCSecretRef.Name,
+		CredentialsUID:        rt.RPCSecretRef.UID,
+	}
 	raw, _ := json.Marshal(input)
 	rules := []rbacv1.PolicyRule{}
-	for resource, enabled := range map[string]bool{action.ResourceBitcoinBlockGeneration: generation, action.ResourceBitcoinReorganization: reorganization} {
+	for resource, enabled := range map[string]bool{
+		action.ResourceBitcoinBlockGeneration: generation,
+		action.ResourceBitcoinReorganization:  reorganization,
+	} {
 		if enabled {
-			rules = append(rules, rbacv1.PolicyRule{APIGroups: []string{action.GroupVersion.Group}, Resources: []string{resource}, Verbs: []string{"get", "list"}})
+			rules = append(
+				rules,
+				rbacv1.PolicyRule{
+					APIGroups: []string{action.GroupVersion.Group},
+					Resources: []string{resource},
+					Verbs:     []string{"get", "list"},
+				},
+			)
 		}
 	}
 	sort.Slice(rules, func(i, j int) bool { return rules[i].Resources[0] < rules[j].Resources[0] })
 	rule := func(group, resource string, names []string, verbs ...string) {
 		names = sortedUnique(names)
 		if len(names) > 0 {
-			rules = append(rules, rbacv1.PolicyRule{APIGroups: []string{group}, Resources: []string{resource}, ResourceNames: names, Verbs: verbs})
+			rules = append(
+				rules,
+				rbacv1.PolicyRule{
+					APIGroups:     []string{group},
+					Resources:     []string{resource},
+					ResourceNames: names,
+					Verbs:         verbs,
+				},
+			)
 		}
 	}
 	rule(api.GroupVersion.Group, api.ResourceStacksNetwork, []string{"network"}, "get")
@@ -271,9 +368,19 @@ func workerResourcesWithActions(p *api.StacksNetworkParticipant, record *bitcoin
 	rule(bitcoin.GroupVersion.Group, bitcoin.ResourceBitcoinWallet, wallets, "get")
 
 	if active := init.Status.Override; active != nil {
-		rule(bitcoin.GroupVersion.Group, bitcoin.ResourceBitcoinBlockScheduleOverride, []string{active.Override.Name}, "get")
+		rule(
+			bitcoin.GroupVersion.Group,
+			bitcoin.ResourceBitcoinBlockScheduleOverride,
+			[]string{active.Override.Name},
+			"get",
+		)
 		if active.ScheduleRef != nil {
-			rule(bitcoin.GroupVersion.Group, bitcoin.ResourceBitcoinBlockSchedule, []string{active.ScheduleRef.Name}, "get")
+			rule(
+				bitcoin.GroupVersion.Group,
+				bitcoin.ResourceBitcoinBlockSchedule,
+				[]string{active.ScheduleRef.Name},
+				"get",
+			)
 		}
 	}
 	for _, ref := range reads {
@@ -294,10 +401,75 @@ func workerResourcesWithActions(p *api.StacksNetworkParticipant, record *bitcoin
 	}
 	sa := &corev1.ServiceAccount{ObjectMeta: meta, AutomountServiceAccountToken: ptr.To(true)}
 	role := &rbacv1.Role{ObjectMeta: meta, Rules: rules}
-	rb := &rbacv1.RoleBinding{ObjectMeta: meta, RoleRef: rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: common.KindRole, Name: name}, Subjects: []rbacv1.Subject{{Kind: common.KindServiceAccount, Name: name, Namespace: p.Namespace}}}
+	rb := &rbacv1.RoleBinding{
+		ObjectMeta: meta,
+		RoleRef:    rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: common.KindRole, Name: name},
+		Subjects:   []rbacv1.Subject{{Kind: common.KindServiceAccount, Name: name, Namespace: p.Namespace}},
+	}
 	selector := labels(p, api.RoleSupport)
 	selector[workerRoleLabel] = workerRoleControl
-	deployment := &appsv1.Deployment{ObjectMeta: meta, Spec: appsv1.DeploymentSpec{Replicas: ptr.To(replicas), Strategy: appsv1.DeploymentStrategy{Type: appsv1.RecreateDeploymentStrategyType}, Selector: &metav1.LabelSelector{MatchLabels: selector}, Template: corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: selector, Finalizers: []string{ControlPodFinalizer}, Annotations: map[string]string{controlInputAnnotation: foundation.Digest(input)}}, Spec: corev1.PodSpec{RestartPolicy: corev1.RestartPolicyAlways, DNSPolicy: corev1.DNSClusterFirst, SchedulerName: corev1.DefaultSchedulerName, ServiceAccountName: name, DeprecatedServiceAccount: name, TerminationGracePeriodSeconds: ptr.To[int64](45), SecurityContext: &corev1.PodSecurityContext{RunAsUser: ptr.To[int64](65532), RunAsGroup: ptr.To[int64](65532), RunAsNonRoot: ptr.To(true), FSGroup: ptr.To[int64](65532), SeccompProfile: &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault}}, Containers: []corev1.Container{{Name: "control", Image: image, TerminationMessagePath: corev1.TerminationMessagePathDefault, TerminationMessagePolicy: corev1.TerminationMessageReadFile, ImagePullPolicy: corev1.PullIfNotPresent, Args: []string{"--mode=" + ModeBitcoinControl, "--input=" + string(raw)}, SecurityContext: &corev1.SecurityContext{AllowPrivilegeEscalation: ptr.To(false), ReadOnlyRootFilesystem: ptr.To(true), Capabilities: &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}}}, VolumeMounts: []corev1.VolumeMount{{Name: rpcVolumeName, MountPath: "/rpc", ReadOnly: true}}}}, Volumes: []corev1.Volume{{Name: rpcVolumeName, VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: rt.RPCSecretRef.Name, DefaultMode: ptr.To[int32](0440)}}}}}}}}
+	deployment := &appsv1.Deployment{
+		ObjectMeta: meta,
+		Spec: appsv1.DeploymentSpec{
+			Replicas: ptr.To(replicas),
+			Strategy: appsv1.DeploymentStrategy{Type: appsv1.RecreateDeploymentStrategyType},
+			Selector: &metav1.LabelSelector{MatchLabels: selector},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels:      selector,
+					Finalizers:  []string{ControlPodFinalizer},
+					Annotations: map[string]string{controlInputAnnotation: foundation.Digest(input)},
+				},
+				Spec: corev1.PodSpec{
+					RestartPolicy:                 corev1.RestartPolicyAlways,
+					DNSPolicy:                     corev1.DNSClusterFirst,
+					SchedulerName:                 corev1.DefaultSchedulerName,
+					ServiceAccountName:            name,
+					DeprecatedServiceAccount:      name,
+					TerminationGracePeriodSeconds: ptr.To[int64](45),
+					SecurityContext: &corev1.PodSecurityContext{
+						RunAsUser:      ptr.To[int64](65532),
+						RunAsGroup:     ptr.To[int64](65532),
+						RunAsNonRoot:   ptr.To(true),
+						FSGroup:        ptr.To[int64](65532),
+						SeccompProfile: &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
+					},
+					Containers: []corev1.Container{
+						{
+							Name:                     "control",
+							Image:                    image,
+							TerminationMessagePath:   corev1.TerminationMessagePathDefault,
+							TerminationMessagePolicy: corev1.TerminationMessageReadFile,
+							ImagePullPolicy:          corev1.PullIfNotPresent,
+							Args: []string{
+								"--mode=" + ModeBitcoinControl,
+								"--input=" + string(raw),
+							},
+							SecurityContext: &corev1.SecurityContext{
+								AllowPrivilegeEscalation: ptr.To(false),
+								ReadOnlyRootFilesystem:   ptr.To(true),
+								Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
+							},
+							VolumeMounts: []corev1.VolumeMount{
+								{Name: rpcVolumeName, MountPath: "/rpc", ReadOnly: true},
+							},
+						},
+					},
+					Volumes: []corev1.Volume{
+						{
+							Name: rpcVolumeName,
+							VolumeSource: corev1.VolumeSource{
+								Secret: &corev1.SecretVolumeSource{
+									SecretName:  rt.RPCSecretRef.Name,
+									DefaultMode: ptr.To[int32](0o440),
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
 	if placement := p.Status.Admission.Configuration.BitcoinNode.WorkerPlacement; placement != nil {
 		deployment.Spec.Template.Spec.NodeSelector = placement.NodeSelector
 		deployment.Spec.Template.Spec.Tolerations = ptr.Deref(placement.Tolerations, nil)
@@ -318,10 +490,18 @@ func sortedUnique(values []string) []string {
 }
 
 // stopControlWorkload changes only replica intent after acknowledgement, without re-rendering inputs.
-func (r *WorkloadReconciler) stopControlWorkload(ctx context.Context, root *api.StacksNetwork, p *api.StacksNetworkParticipant) (ctrl.Result, error) {
+func (r *WorkloadReconciler) stopControlWorkload(
+	ctx context.Context,
+	root *api.StacksNetwork,
+	p *api.StacksNetworkParticipant,
+) (ctrl.Result, error) {
 	result := ctrl.Result{RequeueAfter: 2 * time.Second}
 	var deployment appsv1.Deployment
-	if err := r.Reader.Get(ctx, client.ObjectKey{Namespace: p.Namespace, Name: controlDeploymentName(p)}, &deployment); err != nil {
+	if err := r.Reader.Get(
+		ctx,
+		client.ObjectKey{Namespace: p.Namespace, Name: controlDeploymentName(p)},
+		&deployment,
+	); err != nil {
 		return result, client.IgnoreNotFound(err)
 	}
 	if !metav1.IsControlledBy(&deployment, p) {
@@ -336,5 +516,9 @@ func (r *WorkloadReconciler) stopControlWorkload(ctx context.Context, root *api.
 	}
 	base := deployment.DeepCopy()
 	deployment.Spec.Replicas = ptr.To[int32](0)
-	return result, r.Client.Patch(ctx, &deployment, client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{}))
+	return result, r.Client.Patch(
+		ctx,
+		&deployment,
+		client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{}),
+	)
 }
