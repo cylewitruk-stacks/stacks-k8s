@@ -432,12 +432,22 @@ func (h *harness) qualifyActors(ctx context.Context, before snapshot) (snapshot,
 	}
 	const first = "qualification-follower-a"
 	const second = "qualification-follower-b"
+	var storageBefore storageInventory
+	if os.Getenv("STACKS_PUBLIC_FRESH_JOIN") == "1" {
+		storageBefore, err = h.captureStorageInventory(ctx)
+		if err != nil {
+			return before, err
+		}
+	}
 	if err := h.addLateFollower(ctx, first, true); err != nil {
 		return before, err
 	}
 	joined, original, err := h.waitFollower(ctx, "actor-late-joined", first, minimum, guard)
 	if err != nil {
 		return joined, err
+	}
+	if os.Getenv("STACKS_PUBLIC_FRESH_JOIN") == "1" {
+		return h.qualifyFreshFollower(ctx, joined, first, original, guard, storageBefore)
 	}
 	if image := os.Getenv("STACKS_PUBLIC_UPGRADE_IMAGE"); image != "" {
 		joined, original, err = h.qualifyActorImage(ctx, first, image, joined, original, guard)

@@ -32,13 +32,16 @@ ends normal qualification and starts bounded cleanup.
 
 Install the replacement operator and required images in the selected cluster first.
 The harness does not install or reconfigure the operator. Use an explicit kubeconfig,
-context, unused namespace and actor image versions:
+context, unused namespace, actor image versions and the exact operator Deployment identity:
 
 ```bash
 STACKS_PUBLIC_LIVE=1 \
 STACKS_PUBLIC_KUBECONFIG="$KUBECONFIG" \
 STACKS_PUBLIC_CONTEXT=kind-stacks-k8s \
 STACKS_PUBLIC_NAMESPACE=public-live-unique \
+STACKS_PUBLIC_OPERATOR_NAMESPACE=stacks-network-system \
+STACKS_PUBLIC_OPERATOR_NAME="$OPERATOR_DEPLOYMENT" \
+STACKS_PUBLIC_OPERATOR_UID="$OPERATOR_DEPLOYMENT_UID" \
 STACKS_PUBLIC_BITCOIN_IMAGE=bitcoin/bitcoin:31.1 \
 STACKS_PUBLIC_STACKS_IMAGE=stacks-core:iteration2-f9b022 \
 STACKS_PUBLIC_CADENCE=5s \
@@ -57,6 +60,7 @@ operator selects its fixed worker image; this test does not change that profile.
 | `STACKS_PUBLIC_ACTIONS` | Disabled | Set `1` to qualify bounded native actions after optional faucet checks. |
 | `STACKS_PUBLIC_CHAOS` | Disabled | Set `1` to qualify native delay/partition after optional actor/action checks. |
 | `STACKS_PUBLIC_ACTORS` | Disabled | Set `1` for a late follower lifecycle/storage check in either variant. |
+| `STACKS_PUBLIC_FRESH_JOIN` | Disabled | Set `1` for a new-storage follower joining after PoX-5 initialization, matching the cohort's canonical tip and advancing in the same process. Exclusive with the actor lifecycle/upgrade options. |
 | `STACKS_PUBLIC_VARIANT` | `minimal14` | Select `minimal14` or `full30`. |
 | `STACKS_PUBLIC_FIXTURE` | Documented YAML | Optional YAML or Kubernetes JSON `List`; `/tmp/stacks-iteration2-first-fixture.json` is supported when present. |
 | `STACKS_PUBLIC_CADENCE` | `5s` | Explicit fixed Bitcoin cadence; no automatic acceleration. |
@@ -67,9 +71,17 @@ operator selects its fixed worker image; this test does not change that profile.
 | `STACKS_PUBLIC_EVIDENCE_DIR` | New temporary directory | Public stage snapshots, latest observation and `events.jsonl`. |
 | `STACKS_PUBLIC_NODE_MAP` | Unchanged fixture placement | JSON map from example hostnames to selected cluster hostnames. |
 
-For an operator restart check, additionally supply all three:
-`STACKS_PUBLIC_OPERATOR_NAMESPACE`, `STACKS_PUBLIC_OPERATOR_NAME` and
-`STACKS_PUBLIC_OPERATOR_UID`. The test checks that exact Deployment, changes only
+Every run requires `STACKS_PUBLIC_OPERATOR_NAMESPACE`, `STACKS_PUBLIC_OPERATOR_NAME`
+and `STACKS_PUBLIC_OPERATOR_UID` for read-only evidence capture before fixture creation.
+`operator-artifact` records the Deployment identity/requested images and the owned
+ReplicaSet/Pod/container identities, including runtime-reported image IDs. Environment
+variables and mounted data are excluded. Image IDs are reported observations, not
+proof of source provenance; concurrent rollout may expose multiple image versions.
+`genesis-artifact` records the exact frozen genesis UID/digest and bootstrap gates
+as soon as the root publishes the artifact. Both events are saved in `events.jsonl`.
+
+For an operator restart check, additionally set `STACKS_PUBLIC_OPERATOR_RESTART=1`.
+Selecting its identity alone never requests a rollout. The test changes only
 one Pod-template annotation, requires rollout readiness, and rejects changes to
 its container configuration. It does not execute a shell command or change images.
 

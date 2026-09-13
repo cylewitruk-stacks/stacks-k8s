@@ -190,11 +190,62 @@ while Bitcoin was held at the ceiling. These symptoms do not establish the cause
 no fault or action had been injected. The rejection, faucet, operator-restart,
 pause/resume and eviction checks scheduled after initialization did not execute.
 Public snapshots and bounded logs are under `/tmp/stacks-iteration2-followup3-evidence/`
-and `/tmp/stacks-iteration2-followup3-diagnostics/`. The final corrected image has no
-successful end-to-end native run in this correction pass. Earlier measured stages
+and `/tmp/stacks-iteration2-followup3-diagnostics/`. That correction pass ended
+without a successful end-to-end native run on its
+final image. Earlier measured stages
 remain evidence for their recorded image and profile only. The run exited 1 after
 1699 seconds; normal Stop, background root deletion and namespace cleanup completed
 at 18:50:10 UTC without administrative intervention.
+
+### Bootstrap convergence investigation
+
+The unchanged `iteration2-followup2` image subsequently initialized the same
+`minimal14`/fixed-5-second profile without intervention in
+`bootstrap-diagnosis-20260912`. It passed native progress and pause/resume; normal
+cleanup completed at 19:46:18 UTC on 2026-09-12 (exit 0, 1690 seconds). Captured
+PoX-5 RPC/source were available at Bitcoin height 283 and Stacks height 91. The
+prior enrollment failure was not reproduced; its exact cause remains unisolated.
+
+Source inspection identified an avoidable premature hold: epoch activation plus
+two Bitcoin blocks does not establish that a Stacks tenure has instantiated the
+new epoch. Newly compiled genesis now permits normal confirmation opportunities
+through height 294, immediately before the first PoX-5 enrollment cutoff at 295.
+Existing frozen artifacts retain their recorded ceilings. Tests exercise both
+limits with unavailable protocol observations, exact receipt accounting and no
+funding replay. This correction does not establish the cause of the earlier run.
+
+The corrected image `stacks-network-operator:bootstrap-convergence1`
+(`sha256:134f688dd809e15b89f33cea709623f71db773707ce6e986bd34fa5ecc960fc2`)
+was tested in `bootstrap-convergence-20260912` on the shared three-node kind cluster.
+It used `minimal14`, fixed 5-second Bitcoin cadence, the pinned Core/sBTC artifacts
+above and only the focused fresh-follower exercise. No manual initialization,
+extra block generation or protocol intervention was used.
+
+| Stage | Observed result on 2026-09-12 UTC |
+| --- | --- |
+| Initialization | 20:17:08: `Initialized`, `Running` and `Operational` True; cohort Bitcoin 303 / Stacks 108, PoX-5 |
+| Fresh follower | New bound PVC/PV identities, no clone/snapshot source; first synchronization at 20:17:41 |
+| Continued canonical progress | 20:17:53: follower and all cohort nodes at Bitcoin 312 / Stacks 119 with identical index block ID |
+| Pause/resume | Cooperative pause held; fresh progress after resume at 20:18:32 |
+| Disposal | Stop acknowledged 20:19:34; root deletion retained reusable declarations; namespace removed 20:19:51 |
+
+Enrollment completed around Bitcoin height 285, before the new ceiling was reached.
+This run did not exercise a hold at 294, its 120-second deadline expiry, or native
+enrollment at height 294. The extended-window boundary has source and unit-test
+evidence only; no additional live boundary qualification is claimed.
+
+The follower was added after initialization, without a restored chain snapshot.
+Its participant/Pod/container identities remained unchanged after first successful
+synchronization; the frozen genesis and unrelated actor processes were unchanged.
+This proves one fresh-storage catch-up on this local profile, not uninterrupted
+startup, reliable repetition, arbitrary storage-provider behavior or all previous
+failed sequences. The small topology is a qualification fixture, not a product mode
+or an external bootstrap prerequisite. The correction's full isolated-snapshot
+`make verify` and generated-drift checks passed. Evidence is under
+`/tmp/stacks-bootstrap-convergence-evidence/` and
+`/tmp/stacks-bootstrap-convergence-rpc/`; the live log is
+`/tmp/stacks-bootstrap-convergence-live.log` (exit 0, 1741 seconds). The shared
+cluster remains running; both investigation namespaces were removed.
 
 ### Bootstrap receipt accounting
 

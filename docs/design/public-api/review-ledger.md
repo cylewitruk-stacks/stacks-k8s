@@ -1,6 +1,8 @@
 # Public API review ledger
 
-Date: 2026-09-10. Status: proposed design, not implemented or live-qualified.
+Design-review snapshot: 2026-09-10. The findings below describe that review boundary;
+see the [package overview](README.md) for current implementation status and the
+[runtime qualification record](../../network-operator/public-api-qualification.md) for live evidence.
 Read the [package](README.md) and [review prompt](fable-prompt.md).
 
 ## Boundary
@@ -86,7 +88,7 @@ has 19 allocations totaling 17012000000000000 microSTX. The worked reuse excerpt
 is separate from those counts.
 
 Protocol source/gates are unchanged: Core f9b022bff5550d1e9938e1f40805ea354381a59e,
-ceilings 234/251/281/284/299 and first waterfall 300. No external source derivation,
+ceilings 234/251/281/294/299 and first waterfall 300. No external source derivation,
 new schema admission, live GC or protocol qualification is claimed. Implementation
 must test freeze/update races, retained requirements after controller restart,
 Operational truth/freshness cases, long-source metadata and native fault selectors.

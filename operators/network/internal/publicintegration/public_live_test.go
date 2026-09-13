@@ -57,7 +57,7 @@ func TestPublicBaselineLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if config.operatorName != "" {
+	if config.restartOperatorEnabled {
 		progressing, err = h.restartOperator(ctx, progressing)
 		if err != nil {
 			t.Fatal(err)
@@ -99,7 +99,7 @@ func TestPublicBaselineLifecycle(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if os.Getenv("STACKS_PUBLIC_ACTORS") == "1" && os.Getenv("STACKS_PUBLIC_ACTORS_FIRST") != "1" {
+	if (os.Getenv("STACKS_PUBLIC_ACTORS") == "1" && os.Getenv("STACKS_PUBLIC_ACTORS_FIRST") != "1") || os.Getenv("STACKS_PUBLIC_FRESH_JOIN") == "1" {
 		progressing, err = h.qualifyActors(ctx, progressing)
 		if err != nil {
 			t.Fatal(err)

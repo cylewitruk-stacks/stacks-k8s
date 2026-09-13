@@ -5,7 +5,8 @@ The composable `v1alpha2` API is implemented by the
 specifies its resource relationships, ownership, lifecycle and protocol boundaries.
 The [generated schemas](../../../charts/stacks-network-operator/crds/) define served
 validation; qualification is limited to the profiles and outcomes recorded in the
-runtime review ledger. Examples require compatible images and cluster placement.
+[runtime qualification record](../../network-operator/public-api-qualification.md). Examples
+require compatible images and cluster placement.
 
 ## Read this package
 
@@ -119,18 +120,18 @@ No historical-run registry, automatic replay or credential-distribution controll
 
 ## Implementation boundary
 
-This proposal changes no current runtime, charts or generated APIs and promises no
-in-place conversion. Go implements controllers, tooling and scoped protocol workers.
+The served v1alpha2 API has no in-place conversion from the retired API.
+Go implements controllers, tooling and scoped protocol workers.
 The network aggregate alone owns participant admission and resolution/policy
 projections; domain controllers own validation reports and workload/runtime facts.
 Workers use native CR list/watch and write only execution status. Shared status uses
 minimal server-side apply payloads with disjoint field/condition ownership; ConfigMaps
 hold configuration, not command queues.
 
-[libs/stacks](operations.md#go-protocol-library-and-runtime-boundary) is a proposed
+[libs/stacks](operations.md#go-protocol-library-and-runtime-boundary) is an
 independent Go module for native RPC, encoding and signing. Selective source reuse
 requires attribution; Stacks.js 7.6.0 is a test-only oracle, not a runtime dependency.
-Update AGENTS.md's language/directory guidance when implementing that boundary.
+AGENTS.md defines the repository's language and module boundary.
 
 ## Common vocabulary and bounds
 

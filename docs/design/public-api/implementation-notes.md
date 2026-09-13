@@ -1,13 +1,13 @@
 # Implementation notes
 
-Status: proposed constraints for implementing the public contract. The user-facing
+These constraints define the public contract's implementation boundaries. The user-facing
 [operators guide](operations.md) describes visible workloads, status and permissions.
-No implementation or qualification is claimed by these formulas and requirements.
+Formulas and requirements do not establish live qualification.
 
 ## Shared status apply contract
 
-Migrate aggregate participant status writes to server-side apply before enabling a
-second writer. Every writer of a shared status object, including faucet requests,
+Aggregate participant status writes use server-side apply alongside domain writers. Every writer
+of a shared status object, including faucet requests,
 uses the status subresource and constructs a minimal apply object from its assigned
 fields. Include apiVersion, kind, metadata.name/namespace and current UID/resourceVersion
 preconditions; do not apply a fetched object's whole status or metadata. A failed
@@ -149,10 +149,10 @@ source kind/UID enter provenance labels. Verify metadata generation with legal s
 names longer than 63 characters. Do not truncate a source name into an ambiguous label
 or impose the participant-name limit on reusable definitions.
 
-## Chaos profile transition
+## Chaos profile validation
 
-The [current profile template](../../../charts/stacks-chaos-profile/templates/profile.yaml)
-uses network-name/actor-name selectors. Version its creation rules, rendered checks
-and examples for the proposed UID/role contract while preserving legacy fault
-status/finalizer/deletion operations. Existing live evidence does not qualify these
-new selectors; qualify both endpoints and control-path exclusions together.
+The [profile template](../../../charts/stacks-chaos-profile/templates/profile.yaml)
+requires exact network/participant UIDs and actor-role selectors on both endpoints.
+Creation rules preserve legacy fault status/finalizer/deletion operations.
+[Qualification records](../../network-operator/public-api-qualification.md) scope the
+measured endpoint and control-path behavior; selector validation alone is not live evidence.

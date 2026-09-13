@@ -1,6 +1,6 @@
 # Resolution, execution and destruction
 
-Status: proposed public contract, not runtime qualification. Read
+This lifecycle contract does not establish runtime qualification. Read
 [composition](composition.md) for definitions, instances and reference meanings.
 
 ## Namespace scope and singleton

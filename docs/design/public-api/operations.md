@@ -1,8 +1,9 @@
 # Operators, workloads and visible interfaces
 
-Status: proposed. Names below define required products/artifact roles, not a claim
-that the new versions or images have been built. No per-network Helm release is
-required. Install shared controllers once, then apply namespaced declarations.
+This contract defines product and artifact responsibilities.
+[Qualification records](../../network-operator/public-api-qualification.md) identify tested images
+and behavior. No per-network Helm release is required. Install shared controllers once, then
+apply namespaced declarations.
 
 ## Installed products
 
@@ -374,7 +375,7 @@ not themselves authorize deleting/reinitializing actors or resetting genesis. No
 StatefulSet process replacement remains part of actor behavior. Removing a participant
 withdraws its workload; a fault does not retain membership or recreate the actor.
 
-The proposed profile requires spec.target and same-namespace selectors on both ends.
+The profile requires spec.target and same-namespace selectors on both ends.
 Both the primary selector and target.selector must contain exact network-uid,
 participant-uid and role=actor labels under network.stacks.org/. participant-kind may
 further constrain selection; it never substitutes for participant-uid. Correlation
@@ -391,8 +392,8 @@ A selector matching no current Pod is a no-op, not proof of complete network hea
 static admission does not validate live membership. See [upstream selector semantics](https://chaos-mesh.org/docs/define-chaos-experiment-scope/).
 
 The profile's selector admission, delay/partition bounds and control-path exclusions
-require joint qualification. [Implementation notes](implementation-notes.md#chaos-profile-transition)
-cover the selector transition and legacy-object cleanup.
+require joint qualification. [Implementation notes](implementation-notes.md#chaos-profile-validation)
+cover selector validation and legacy-object cleanup.
 
 Protocol partitions must preserve worker→actor RPC, worker→Kubernetes API and consensus
 support paths that are outside the intended fault. Separate Services do not isolate

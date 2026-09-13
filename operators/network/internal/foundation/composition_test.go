@@ -31,7 +31,7 @@ func TestGateWindows(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for i, want := range []int64{203, 234, 251, 281, 284, 299} {
+	for i, want := range []int64{203, 234, 251, 281, 294, 299} {
 		if got[i].BitcoinCeiling != want {
 			t.Fatalf("gate %d: %v", i, got[i])
 		}
@@ -45,6 +45,23 @@ func TestGateWindows(t *testing.T) {
 	bad[5].Name = "4.0"
 	if validateEpochs(bad) == nil {
 		t.Fatal("accepted unordered epochs")
+	}
+}
+
+func TestPoX5GateUsesEnrollmentCutoffRatherThanActivationOffset(t *testing.T) {
+	for _, activation := range []int64{282, 286, 292, 293} {
+		epochs := DefaultEpochs()
+		epochs[13].StartHeight = activation
+		got, err := gates(epochs, api.PoX{RewardCycleLength: 20, PrepareLength: 5})
+		if activation == 293 {
+			if err == nil {
+				t.Fatal("accepted activation without the minimum confirmation window")
+			}
+			continue
+		}
+		if err != nil || got[4].BitcoinCeiling != 294 || *got[4].TargetCycle != 15 || got[5].BitcoinCeiling != 299 {
+			t.Fatalf("activation %d: gates=%+v error=%v", activation, got, err)
+		}
 	}
 }
 func TestRuntimeNamesBindUIDsAndRespectBounds(t *testing.T) {

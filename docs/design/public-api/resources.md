@@ -1,6 +1,6 @@
 # Public resource reference
 
-Status: proposed, not installed APIs. Read [common
+Read [common
 rules](README.md#common-vocabulary-and-bounds) and [lifecycle](lifecycle.md) before treating
 an example as a complete environment. YAML in this reference is an excerpt; the [full
 example](examples/30-actors.yaml) contains every required input object. Shown `status` fields
@@ -20,7 +20,7 @@ Controls live on the network entry's control field. Direct account, wallet and s
 resources keep their own independent resolution status.
 
 Actors accept image, imagePullPolicy (IfNotPresent), resources, placement and storage. Root
-defaults are immutable in the proposed v1 policy; definition/entry overrides may select
+defaults are immutable in the v1 policy; definition/entry overrides may select
 supported live updates. Listed default values are resolution fallbacks, not API-server
 insertion into definitions/inline branches; see [composition](composition.md).
 placement.nodeSelector is a label map; spreadAcrossNodes requests preferred same-kind
@@ -688,7 +688,7 @@ contracts remain on-chain. Deleting the network preserves the reusable declarati
 follows PVC retention. A fresh network starts a fresh chain and deploys the contracts again.
 Real sBTC daemon handoff is **not enabled**: a future mutually exclusive authority mode must
 prove the same contract identities and explicit handoff, not race this initializer. No real
-bridge signer API/image is required for the proposed 30 actors.
+bridge signer API/image is required for the 30-actor example.
 
 ## StacksFaucet and StacksFaucetRequest
 

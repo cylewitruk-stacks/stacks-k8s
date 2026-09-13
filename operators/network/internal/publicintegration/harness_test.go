@@ -34,12 +34,16 @@ type liveConfig struct {
 	kubeconfig, kubecontext, evidence                     string
 	operatorNamespace, operatorName                       string
 	operatorUID                                           types.UID
+	restartOperatorEnabled                                bool
 	timeout, progressTimeout, cleanupTimeout, pauseWindow time.Duration
 }
 
 // readConfig refuses implicit cluster or environment selection.
 func readConfig() (liveConfig, error) {
 	c := liveConfig{fixtureOptions: fixtureOptions{path: envDefault("STACKS_PUBLIC_FIXTURE", defaultFixture), namespace: os.Getenv("STACKS_PUBLIC_NAMESPACE"), variant: envDefault("STACKS_PUBLIC_VARIANT", "minimal14"), bitcoinImage: os.Getenv("STACKS_PUBLIC_BITCOIN_IMAGE"), stacksImage: os.Getenv("STACKS_PUBLIC_STACKS_IMAGE"), signerImage: os.Getenv("STACKS_PUBLIC_SIGNER_IMAGE")}, kubeconfig: os.Getenv("STACKS_PUBLIC_KUBECONFIG"), kubecontext: os.Getenv("STACKS_PUBLIC_CONTEXT"), evidence: os.Getenv("STACKS_PUBLIC_EVIDENCE_DIR"), operatorNamespace: os.Getenv("STACKS_PUBLIC_OPERATOR_NAMESPACE"), operatorName: os.Getenv("STACKS_PUBLIC_OPERATOR_NAME"), operatorUID: types.UID(os.Getenv("STACKS_PUBLIC_OPERATOR_UID"))}
+	if os.Getenv("STACKS_PUBLIC_FRESH_JOIN") == "1" && (os.Getenv("STACKS_PUBLIC_ACTORS") == "1" || os.Getenv("STACKS_PUBLIC_ACTORS_FIRST") == "1" || os.Getenv("STACKS_PUBLIC_UPGRADE_IMAGE") != "") {
+		return c, fmt.Errorf("fresh-join qualification is separate from the actor lifecycle/upgrade exercise")
+	}
 	if c.kubeconfig == "" || c.kubecontext == "" || c.namespace == "" || c.bitcoinImage == "" || c.stacksImage == "" {
 		return c, fmt.Errorf("explicit STACKS_PUBLIC_KUBECONFIG, CONTEXT, NAMESPACE, BITCOIN_IMAGE and STACKS_IMAGE required")
 	}
@@ -64,11 +68,10 @@ func readConfig() (liveConfig, error) {
 			return c, fmt.Errorf("STACKS_PUBLIC_NODE_MAP must be a JSON hostname map")
 		}
 	}
-	if c.operatorNamespace != "" || c.operatorName != "" || c.operatorUID != "" {
-		if c.operatorNamespace == "" || c.operatorName == "" || c.operatorUID == "" {
-			return c, fmt.Errorf("operator restart requires explicit namespace, name and UID together")
-		}
+	if c.operatorNamespace == "" || c.operatorName == "" || c.operatorUID == "" {
+		return c, fmt.Errorf("operator evidence requires explicit STACKS_PUBLIC_OPERATOR_NAMESPACE, NAME and UID")
 	}
+	c.restartOperatorEnabled = os.Getenv("STACKS_PUBLIC_OPERATOR_RESTART") == "1"
 	return c, nil
 }
 
@@ -126,6 +129,7 @@ type harness struct {
 	declared                               declarations
 	namespaceUID, rootUID                  types.UID
 	evidence                               string
+	recordedGenesisUID                     types.UID
 	createdNamespace, createdRoot, cleaned bool
 }
 
@@ -160,6 +164,9 @@ func newHarness(t *testing.T, config liveConfig, declared declarations) (*harnes
 
 // create requires a fresh namespace, creates reusable declarations, then activates the root.
 func (h *harness) create(ctx context.Context) error {
+	if err := h.recordOperator(ctx); err != nil {
+		return err
+	}
 	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: h.config.namespace, Labels: map[string]string{"network.stacks.org/public-qualification": "true"}}}
 	if err := h.c.Create(ctx, ns); err != nil {
 		return fmt.Errorf("fresh namespace create failed; existing namespaces are never adopted: %w", err)
@@ -184,7 +191,20 @@ func (h *harness) create(ctx context.Context) error {
 	}
 	h.createdRoot = true
 	h.rootUID = h.declared.root.GetUID()
-	return h.event("declarations-created", map[string]any{"namespace": h.config.namespace, "namespaceUID": h.namespaceUID, "networkUID": h.rootUID, "variant": h.config.variant, "cadence": h.config.cadence.String(), "bitcoinImage": h.config.bitcoinImage, "stacksImage": h.config.stacksImage, "signerImage": h.config.signerImage})
+	if err := h.event("declarations-created", map[string]any{"namespace": h.config.namespace, "namespaceUID": h.namespaceUID, "networkUID": h.rootUID, "variant": h.config.variant, "cadence": h.config.cadence.String(), "bitcoinImage": h.config.bitcoinImage, "stacksImage": h.config.stacksImage, "signerImage": h.config.signerImage}); err != nil {
+		return err
+	}
+	_, err := h.wait(ctx, "genesis-captured", h.config.timeout, true, func(s snapshot) (bool, error) {
+		if s.Status.GenesisRef == nil {
+			return false, nil
+		}
+		root := &api.StacksNetwork{ObjectMeta: metav1.ObjectMeta{Name: s.Root.Name, Namespace: h.config.namespace, UID: s.Root.UID}, Status: s.Status}
+		if err := h.recordGenesis(ctx, root); err != nil {
+			return false, err
+		}
+		return true, nil
+	})
+	return err
 }
 
 // rootUnavailable identifies definitive loss of the exact root, never a collection read error.

@@ -87,7 +87,8 @@ wallet without creating a second key or requiring a wallet lease.
    conservative ceiling 234; bounded Bitcoin opportunities permit legacy inclusion.
 5. Observe the prepared cycle-12 signer set before epoch 3.0 at 252 (ceiling 251).
    Deploy real sBTC prerequisites before 4.0 at 282 (ceiling 281).
-6. After PoX-5 activation hold at 284 for managers/enrollment, then observe the
+6. After PoX-5 activation allow confirmation through 294 for managers/enrollment,
+   then observe the
    prepared cycle-15 set before releasing 299→300. Fresh canonical inclusion after
    that boundary sets Initialized=True. See [timing](protocol-timing.md).
 
@@ -119,8 +120,8 @@ kubectl apply -f docs/design/public-api/examples/30-actors.yaml
 ```
 
 Root deletion can also be requested directly from Running; it performs shutdown
-before destruction. These commands describe proposed APIs, not today's installed
-resources. Reapplying the baseline requests operation Paused and reapplies its entire
+before destruction. These commands require the installed v1alpha2 CRDs and operator. Reapplying
+the baseline requests operation Paused and reapplies its entire
 participant list and reusable definitions. After the late JSON patch, client-side
 kubectl apply of that older baseline drops the added entries: **their removal destroys
 runtime and consumes their single-use names**. Keep every desired entry in the managed
@@ -208,7 +209,7 @@ network/participant labels connect the views without runtime status on definitio
 
 [optional.yaml](examples/optional.yaml) is a menu, not a playbook to apply as one
 experiment. Replace its `${NETWORK_UID}` placeholders with the current root UID. Actions use
-proposed actions.stacks.org/v1alpha2 with immutable networkUID.
+actions.stacks.org/v1alpha2 with immutable networkUID.
 Telemetry/export need the optional operator and administrator-provided observation-store
 Secret/backend, the one declared external dependency in that file. Update its sample
 absolute time window. Native Chaos Mesh uses the existing qualified profile adapted
