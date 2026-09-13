@@ -59,7 +59,7 @@ func (w *Worker) authorize(ctx context.Context, record *bitcoin.BitcoinExecution
 	if err != nil {
 		return admitted{}, err
 	}
-	if a.root.Spec.Operation == "Paused" {
+	if a.root.Spec.Operation == api.NetworkOperationPaused {
 		return admitted{}, fmt.Errorf("network is paused")
 	}
 	if err := foundation.ValidateAdmissionEligibility(ctx, w.Reader, a.participant); err != nil {
@@ -80,17 +80,17 @@ func (w *Worker) resolveActor(ctx context.Context, record *bitcoin.BitcoinExecut
 	if e := w.Reader.Get(ctx, client.ObjectKey{Namespace: w.Input.Namespace, Name: "network"}, root); e != nil {
 		return out, e
 	}
-	if root.UID != record.Spec.NetworkUID || root.Status.Bitcoin == nil || !hasBinding(root.Status.Bitcoin.ExecutionRefs, record.Name, record.UID) || root.Status.Bitcoin.InitializationRef == nil || !metav1.IsControlledBy(record, root) || record.DeletionTimestamp != nil || (!cleanup && (root.Spec.Operation == "Stopped" || failed(root))) {
+	if root.UID != record.Spec.NetworkUID || root.Status.Bitcoin == nil || !hasBinding(root.Status.Bitcoin.ExecutionRefs, record.Name, record.UID) || root.Status.Bitcoin.InitializationRef == nil || !metav1.IsControlledBy(record, root) || record.DeletionTimestamp != nil || (!cleanup && (root.Spec.Operation == api.NetworkOperationStopped || failed(root))) {
 		return out, fmt.Errorf("network has not authorized this execution record")
 	}
 	p := &api.StacksNetworkParticipant{}
 	if e := w.Reader.Get(ctx, client.ObjectKey{Namespace: record.Namespace, Name: record.Spec.Participant.Name}, p); e != nil {
 		return out, e
 	}
-	if p.UID != record.Spec.Participant.UID || p.Spec.Kind != "BitcoinNode" || !participantIdentity(root, p) || p.Spec.Control != nil && ptr.Deref(p.Spec.Control.Suspended, false) {
+	if p.UID != record.Spec.Participant.UID || p.Spec.Kind != api.ParticipantBitcoinNode || !participantIdentity(root, p) || p.Spec.Control != nil && ptr.Deref(p.Spec.Control.Suspended, false) {
 		return out, fmt.Errorf("Bitcoin participant is not currently admitted")
 	}
-	if config := p.Status.Admission.Configuration.BitcoinNode; config == nil || config.Config != nil && ptr.Deref(config.Config.Compatibility, "Managed") == "Unverified" {
+	if config := p.Status.Admission.Configuration.BitcoinNode; config == nil || config.Config != nil && ptr.Deref(config.Config.Compatibility, common.CompatibilityManaged) == common.CompatibilityUnverified {
 		return out, fmt.Errorf("managed Bitcoin configuration unavailable")
 	}
 	runtime := p.Status.Runtime
@@ -113,7 +113,7 @@ func (w *Worker) resolveActor(ctx context.Context, record *bitcoin.BitcoinExecut
 	if e := w.Reader.Get(ctx, client.ObjectKey{Namespace: p.Namespace, Name: runtime.PodRef.Name}, &pod); e != nil {
 		return out, e
 	}
-	if pod.UID != runtime.PodRef.UID || pod.DeletionTimestamp != nil || pod.Status.PodIP == "" || pod.Labels["network.stacks.org/participant-uid"] != string(p.UID) || pod.Labels["network.stacks.org/network-uid"] != string(root.UID) {
+	if pod.UID != runtime.PodRef.UID || pod.DeletionTimestamp != nil || pod.Status.PodIP == "" || pod.Labels[api.LabelParticipantUID] != string(p.UID) || pod.Labels[api.LabelNetworkUID] != string(root.UID) {
 		return out, fmt.Errorf("actor Pod identity differs")
 	}
 	owner := metav1.GetControllerOf(&pod)
@@ -150,7 +150,7 @@ func (w *Worker) resolveActor(ctx context.Context, record *bitcoin.BitcoinExecut
 	if e := w.Reader.Get(ctx, client.ObjectKey{Namespace: p.Namespace, Name: parts[0]}, &service); e != nil {
 		return out, e
 	}
-	if !metav1.IsControlledBy(&service, p) || service.DeletionTimestamp != nil || service.Spec.Selector["network.stacks.org/participant-uid"] != string(p.UID) || service.Spec.Selector["network.stacks.org/network-uid"] != string(root.UID) {
+	if !metav1.IsControlledBy(&service, p) || service.DeletionTimestamp != nil || service.Spec.Selector[api.LabelParticipantUID] != string(p.UID) || service.Spec.Selector[api.LabelNetworkUID] != string(root.UID) {
 		return out, fmt.Errorf("RPC Service binding differs")
 	}
 	for k, v := range service.Spec.Selector {
@@ -189,13 +189,13 @@ func (w *Worker) authorizeOffer(ctx context.Context, a admitted, offer *bitcoin.
 	if e := w.Reader.Get(ctx, client.ObjectKey{Namespace: a.root.Namespace, Name: offer.Production.Name}, production); e != nil {
 		return e
 	}
-	if production.UID != offer.Production.UID || !participantCurrent(a.root, production) || production.Spec.Kind != "BitcoinBlockProduction" || production.Status.Admission.PolicyDigest != offer.PolicyDigest || production.Spec.Control != nil && ptr.Deref(production.Spec.Control.Paused, false) {
+	if production.UID != offer.Production.UID || !participantCurrent(a.root, production) || production.Spec.Kind != api.ParticipantBitcoinBlockProduction || production.Status.Admission.PolicyDigest != offer.PolicyDigest || production.Spec.Control != nil && ptr.Deref(production.Spec.Control.Paused, false) {
 		return fmt.Errorf("production participant is not currently authorized")
 	}
 	if err := foundation.ValidateAdmissionEligibility(ctx, w.Reader, production); err != nil {
 		return err
 	}
-	if offer.Mode == "Baseline" {
+	if offer.Mode == bitcoin.OfferBaseline {
 		if err := foundation.ValidatePublicParticipantAdmission(ctx, w.Reader, a.root, a.participant); err != nil {
 			return err
 		}
@@ -208,7 +208,7 @@ func (w *Worker) authorizeOffer(ctx context.Context, a admitted, offer *bitcoin.
 		}
 		return baselineOfferMatches(a.initialization, offer, inputs, a.participant)
 	}
-	if offer.Mode != "" && offer.Mode != "Bootstrap" || a.initialization.Spec.Target.UID != a.participant.UID {
+	if offer.Mode != "" && offer.Mode != bitcoin.OfferBootstrap || a.initialization.Spec.Target.UID != a.participant.UID {
 		return fmt.Errorf("bootstrap target unavailable")
 	}
 	authority, e := currentGate(ctx, w.Reader, a.root, a.initialization)
@@ -224,7 +224,7 @@ func (w *Worker) authorizeOffer(ctx context.Context, a admitted, offer *bitcoin.
 
 // failed preserves the root failure latch independently of condition projection timing.
 func failed(root *api.StacksNetwork) bool {
-	if root.Status.Phase == "Failed" {
+	if root.Status.Phase == api.NetworkPhaseFailed {
 		return true
 	}
 	for _, condition := range root.Status.Conditions {

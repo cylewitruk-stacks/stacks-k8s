@@ -121,7 +121,7 @@ func (r *Reconciler) observeStacksProtocol(ctx context.Context, root *api.Stacks
 	var cycle *uint64
 	// Observe the next unfinished prepared-set gate; the cycle always comes from frozen genesis.
 	for _, gate := range genesis.Spec.Bootstrap.Gates {
-		if gate.Name != "PrepareNakamoto" && gate.Name != "PrepareWaterfall" {
+		if gate.Name != api.GatePrepareNakamoto && gate.Name != api.GatePrepareWaterfall {
 			continue
 		}
 		completed := false
@@ -165,7 +165,7 @@ func (r *Reconciler) observeStacksProtocol(ctx context.Context, root *api.Stacks
 	}
 	currentState := api.ParticipantRuntimeStatus{}
 	observePod(&currentState, &current)
-	if current.UID != pod.UID || current.Status.PodIP != pod.Status.PodIP || current.DeletionTimestamp != nil || !podReady(&current) || currentState.ContainerID != state.ContainerID || current.Annotations["network.stacks.org/configuration-digest"] != state.ConfigurationDigest {
+	if current.UID != pod.UID || current.Status.PodIP != pod.Status.PodIP || current.DeletionTimestamp != nil || !podReady(&current) || currentState.ContainerID != state.ContainerID || current.Annotations[api.AnnotationConfigurationDigest] != state.ConfigurationDigest {
 		return fmt.Errorf("protocol target process changed")
 	}
 	observed.PodUID = pod.UID

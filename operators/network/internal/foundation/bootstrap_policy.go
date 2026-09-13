@@ -12,7 +12,7 @@ func BootstrapPolicyCompatible(required api.BootstrapRequirement, policy api.Con
 		return false
 	}
 	switch required.Kind {
-	case "BitcoinNode":
+	case api.ParticipantBitcoinNode:
 		if policy.BitcoinNode == nil {
 			return false
 		}
@@ -28,16 +28,16 @@ func BootstrapPolicyCompatible(required api.BootstrapRequirement, policy api.Con
 				return false
 			}
 		}
-	case "BitcoinBlockProduction":
+	case api.ParticipantBitcoinBlockProduction:
 		p := policy.BitcoinBlockProduction
 		return p != nil && required.BitcoinPayoutWallet != nil && p.PayoutWalletRef != nil && p.PayoutWalletRef.Name == required.BitcoinPayoutWallet.Name && equal(p.Initialization, required.BitcoinInitialization)
-	case "StacksNode":
+	case api.ParticipantStacksNode:
 		p := policy.StacksNode
 		return p != nil && required.MiningEnabled != nil && ptr.Deref(required.MiningEnabled, false) == (p.Mining != nil && ptr.Deref(p.Mining.Enabled, false))
-	case "StacksStacker":
+	case api.ParticipantStacksStacker:
 		p := policy.StacksStacker
 		return p != nil && equal(p.AmountMicroSTX, required.AmountMicroSTX) && equal(p.LockCycles, required.LockCycles) && equal(p.RenewWhenRemainingCycles, required.RenewWhenRemainingCycles)
-	case "StacksContractSet":
+	case api.ParticipantStacksContractSet:
 		p := policy.StacksContractSet
 		return p != nil && equal(p.Initialization, required.RegistryInitialization)
 	}
@@ -45,19 +45,19 @@ func BootstrapPolicyCompatible(required api.BootstrapRequirement, policy api.Con
 }
 
 // bootstrapPolicyPending retains only requirements whose last affected frozen gate is unfinished.
-func bootstrapPolicyPending(completed map[string]bool, required api.BootstrapRequirement) bool {
-	last := "PrepareWaterfall"
+func bootstrapPolicyPending(completed map[api.GateName]bool, required api.BootstrapRequirement) bool {
+	last := api.GatePrepareWaterfall
 	switch required.Kind {
-	case "BitcoinNode", "BitcoinBlockProduction":
-		last = "PrepareBitcoin"
-	case "StacksContractSet":
-		last = "PreparePoX5"
+	case api.ParticipantBitcoinNode, api.ParticipantBitcoinBlockProduction:
+		last = api.GatePrepareBitcoin
+	case api.ParticipantStacksContractSet:
+		last = api.GatePreparePoX5
 	}
 	return !completed[last]
 }
 
 // bootstrapCompletedGates verifies progress once per admission pass before releasing captured policies.
-func bootstrapCompletedGates(root *api.StacksNetwork, genesis *api.StacksGenesis) map[string]bool {
+func bootstrapCompletedGates(root *api.StacksNetwork, genesis *api.StacksGenesis) map[api.GateName]bool {
 	if genesis == nil {
 		return nil
 	}
@@ -66,7 +66,7 @@ func bootstrapCompletedGates(root *api.StacksNetwork, genesis *api.StacksGenesis
 	if ref == nil || ref.UID != genesis.UID || ref.Fingerprint != Digest(genesis.Spec) || root.Status.GenesisDigest != Digest(genesis.Spec.Chain) || state == nil || state.GenesisUID != genesis.UID || state.GenesisDigest != root.Status.GenesisDigest || len(gates) == 0 || len(state.Gates) != len(gates) || state.GateIndex < 0 || int(state.GateIndex) > len(gates) || state.Completed != (int(state.GateIndex) == len(gates)) {
 		return nil
 	}
-	completed := map[string]bool{}
+	completed := map[api.GateName]bool{}
 	for i, gate := range gates {
 		if state.Gates[i].Name != gate.Name || i > 0 && gate.BitcoinCeiling <= gates[i-1].BitcoinCeiling || (state.Gates[i].CompletedAt != nil) != (i < int(state.GateIndex)) {
 			return nil

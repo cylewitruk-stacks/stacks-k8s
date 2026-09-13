@@ -114,7 +114,7 @@ type executionEvidence struct {
 type snapshot struct {
 	At           time.Time               `json:"at"`
 	Root         identity                `json:"root"`
-	Operation    string                  `json:"operation"`
+	Operation    api.NetworkOperation    `json:"operation"`
 	Deleting     bool                    `json:"deleting,omitempty"`
 	Status       api.StacksNetworkStatus `json:"status"`
 	Participants []participantEvidence   `json:"participants,omitempty"`
@@ -339,13 +339,13 @@ func stopped(s snapshot) bool { return s.Operation == "Stopped" || s.Deleting }
 
 // failed recognizes either terminal root failure representation.
 func failed(s snapshot) bool {
-	return s.Status.Phase == "Failed" || meta.IsStatusConditionTrue(s.Status.Conditions, "Failed")
+	return string(s.Status.Phase) == "Failed" || meta.IsStatusConditionTrue(s.Status.Conditions, "Failed")
 }
 func failureReason(s snapshot) string {
 	if c := meta.FindStatusCondition(s.Status.Conditions, "Failed"); c != nil {
 		return c.Reason
 	}
-	return s.Status.Phase
+	return string(s.Status.Phase)
 }
 func condition(s snapshot, kind string, status metav1.ConditionStatus) bool {
 	c := meta.FindStatusCondition(s.Status.Conditions, kind)
@@ -353,7 +353,7 @@ func condition(s snapshot, kind string, status metav1.ConditionStatus) bool {
 }
 
 // setOperation patches only the current root with optimistic concurrency.
-func (h *harness) setOperation(ctx context.Context, operation string) error {
+func (h *harness) setOperation(ctx context.Context, operation api.NetworkOperation) error {
 	for range 5 {
 		var root api.StacksNetwork
 		if err := h.c.Get(ctx, client.ObjectKey{Namespace: h.config.namespace, Name: "network"}, &root); err != nil {

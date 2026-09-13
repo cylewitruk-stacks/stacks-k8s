@@ -80,7 +80,7 @@ func (r *WorkloadReconciler) Reconcile(ctx context.Context, request ctrl.Request
 	if e := r.Reader.Get(ctx, request.NamespacedName, p); e != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(e)
 	}
-	if p.Spec.Kind != "BitcoinNode" {
+	if p.Spec.Kind != api.ParticipantBitcoinNode {
 		return ctrl.Result{}, nil
 	}
 	root := &api.StacksNetwork{}
@@ -208,7 +208,7 @@ func workerResourcesWithActions(p *api.StacksNetworkParticipant, record *bitcoin
 	if rt == nil || rt.RPCSecretRef == nil || rt.ConfigRef == nil || rt.PodRef == nil || image == "" || p.Status.Admission == nil || p.Status.Admission.Configuration.BitcoinNode == nil {
 		return nil, fmt.Errorf("control workload inputs unavailable")
 	}
-	name := naming.RuntimeName(string(p.Spec.NetworkUID), string(p.UID), "BitcoinNode", p.Spec.ParticipantName, "control")
+	name := naming.RuntimeName(string(p.Spec.NetworkUID), string(p.UID), string(api.ParticipantBitcoinNode), p.Spec.ParticipantName, "control")
 	meta := metav1.ObjectMeta{Name: name, Namespace: p.Namespace, Labels: labels(p, "support"), OwnerReferences: []metav1.OwnerReference{{APIVersion: api.GroupVersion.String(), Kind: "StacksNetworkParticipant", Name: p.Name, UID: p.UID, Controller: ptr.To(true), BlockOwnerDeletion: ptr.To(false)}}}
 	input := WorkerInput{ActionsEnabled: generation, ReorganizationEnabled: reorganization, Namespace: p.Namespace, RecordName: record.Name, RecordUID: record.UID, CredentialsName: rt.RPCSecretRef.Name, CredentialsUID: rt.RPCSecretRef.UID}
 	raw, _ := json.Marshal(input)
@@ -278,9 +278,9 @@ func workerResourcesWithActions(p *api.StacksNetworkParticipant, record *bitcoin
 		switch ref.Kind {
 		case "StacksNetworkParticipant":
 			rule(api.GroupVersion.Group, "stacksnetworkparticipants", []string{ref.Name}, "get")
-		case "BitcoinNode":
+		case string(api.ParticipantBitcoinNode):
 			rule(bitcoin.GroupVersion.Group, "bitcoinnodes", []string{ref.Name}, "get")
-		case "BitcoinBlockProduction":
+		case string(api.ParticipantBitcoinBlockProduction):
 			rule(bitcoin.GroupVersion.Group, "bitcoinblockproductions", []string{ref.Name}, "get")
 		case "BitcoinBlockSchedule":
 			rule(bitcoin.GroupVersion.Group, "bitcoinblockschedules", []string{ref.Name}, "get")
@@ -294,7 +294,7 @@ func workerResourcesWithActions(p *api.StacksNetworkParticipant, record *bitcoin
 	role := &rbacv1.Role{ObjectMeta: meta, Rules: rules}
 	rb := &rbacv1.RoleBinding{ObjectMeta: meta, RoleRef: rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: "Role", Name: name}, Subjects: []rbacv1.Subject{{Kind: "ServiceAccount", Name: name, Namespace: p.Namespace}}}
 	selector := labels(p, "support")
-	selector["network.stacks.org/worker-role"] = "bitcoin-control"
+	selector[workerRoleLabel] = "bitcoin-control"
 	deployment := &appsv1.Deployment{ObjectMeta: meta, Spec: appsv1.DeploymentSpec{Replicas: ptr.To(replicas), Strategy: appsv1.DeploymentStrategy{Type: appsv1.RecreateDeploymentStrategyType}, Selector: &metav1.LabelSelector{MatchLabels: selector}, Template: corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: selector, Finalizers: []string{ControlPodFinalizer}, Annotations: map[string]string{"network.stacks.org/control-input": foundation.Digest(input)}}, Spec: corev1.PodSpec{RestartPolicy: corev1.RestartPolicyAlways, DNSPolicy: corev1.DNSClusterFirst, SchedulerName: corev1.DefaultSchedulerName, ServiceAccountName: name, DeprecatedServiceAccount: name, TerminationGracePeriodSeconds: ptr.To[int64](45), SecurityContext: &corev1.PodSecurityContext{RunAsUser: ptr.To[int64](65532), RunAsGroup: ptr.To[int64](65532), RunAsNonRoot: ptr.To(true), FSGroup: ptr.To[int64](65532), SeccompProfile: &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault}}, Containers: []corev1.Container{{Name: "control", Image: image, TerminationMessagePath: corev1.TerminationMessagePathDefault, TerminationMessagePolicy: corev1.TerminationMessageReadFile, ImagePullPolicy: corev1.PullIfNotPresent, Args: []string{"--mode=bitcoin-control", "--input=" + string(raw)}, SecurityContext: &corev1.SecurityContext{AllowPrivilegeEscalation: ptr.To(false), ReadOnlyRootFilesystem: ptr.To(true), Capabilities: &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}}}, VolumeMounts: []corev1.VolumeMount{{Name: "rpc", MountPath: "/rpc", ReadOnly: true}}}}, Volumes: []corev1.Volume{{Name: "rpc", VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: rt.RPCSecretRef.Name, DefaultMode: ptr.To[int32](0440)}}}}}}}}
 	if placement := p.Status.Admission.Configuration.BitcoinNode.WorkerPlacement; placement != nil {
 		deployment.Spec.Template.Spec.NodeSelector = placement.NodeSelector

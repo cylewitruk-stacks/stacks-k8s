@@ -13,7 +13,7 @@ import (
 func contractCohortSatisfied(root *api.StacksNetwork, g *api.StacksGenesis, participants []api.StacksNetworkParticipant, now time.Time) bool {
 	found := false
 	for _, requirement := range g.Spec.Bootstrap.Requirements {
-		if requirement.Kind != "StacksContractSet" {
+		if requirement.Kind != api.ParticipantStacksContractSet {
 			continue
 		}
 		found = true

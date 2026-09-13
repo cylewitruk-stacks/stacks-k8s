@@ -18,7 +18,7 @@ func preparedCohortSatisfied(root *api.StacksNetwork, g *api.StacksGenesis, part
 	expected := map[string]bool{}
 	nodes := []*api.StacksNetworkParticipant{}
 	for _, requirement := range g.Spec.Bootstrap.Requirements {
-		if requirement.Kind != "StacksNode" && requirement.Kind != "StacksSigner" {
+		if requirement.Kind != api.ParticipantStacksNode && requirement.Kind != api.ParticipantStacksSigner {
 			continue
 		}
 		var p *api.StacksNetworkParticipant
@@ -40,7 +40,7 @@ func preparedCohortSatisfied(root *api.StacksNetwork, g *api.StacksGenesis, part
 		if !selected {
 			return false
 		}
-		if requirement.Kind == "StacksNode" {
+		if requirement.Kind == api.ParticipantStacksNode {
 			nodes = append(nodes, p)
 			continue
 		}

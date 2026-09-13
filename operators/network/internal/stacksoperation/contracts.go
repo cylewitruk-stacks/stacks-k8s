@@ -17,8 +17,9 @@ import (
 
 // contractGoal retains one exact public postcondition and original ingress until settlement.
 type contractGoal struct {
-	input      ContractInputs
-	kind, name string
+	input ContractInputs
+	kind  api.PostconditionKind
+	name  string
 }
 
 // ContractRole deploys pinned real sBTC and converges the explicit registry with one nonce stream.
@@ -112,11 +113,11 @@ func (r *ContractRole) Step(ctx context.Context, snapshot stacksworker.Snapshot)
 		return r.result("AwaitingClarity3"), nil
 	}
 	if snapshot.Paused {
-		return r.result("Paused"), nil
+		return r.result(reasonPaused), nil
 	}
 	for _, source := range r.sources {
 		if !state.sources[source.Name] {
-			return r.offer(ctx, snapshot, in, "ContractDeployment", source)
+			return r.offer(ctx, snapshot, in, api.PostconditionContractDeployment, source)
 		}
 	}
 	if state.observation != nil {
@@ -125,18 +126,18 @@ func (r *ContractRole) Step(ctx context.Context, snapshot stacksworker.Snapshot)
 	if !state.registryEmpty {
 		return r.result("RegistryObservationUnavailable"), nil
 	}
-	return r.offer(ctx, snapshot, in, "RegistryInitialization", protocolcontracts.Source{})
+	return r.offer(ctx, snapshot, in, api.PostconditionRegistryInitialization, protocolcontracts.Source{})
 }
 
 // offer signs once with explicit fee and preserves the original operation across uncertain sends.
-func (r *ContractRole) offer(ctx context.Context, s stacksworker.Snapshot, in ContractInputs, kind string, source protocolcontracts.Source) (stacksworker.RoleResult, error) {
+func (r *ContractRole) offer(ctx context.Context, s stacksworker.Snapshot, in ContractInputs, kind api.PostconditionKind, source protocolcontracts.Source) (stacksworker.RoleResult, error) {
 	fee := uint64(3000)
-	if kind == "ContractDeployment" {
+	if kind == api.PostconditionContractDeployment {
 		fee += uint64(len(source.Source)) * 10
 	}
 	reason, _ := r.stream.Offer(ctx, r.now, in.Node, new(big.Int).SetUint64(fee), s.Authorize, func(nonce uint64) (transaction.Transaction, error) {
 		options := transaction.Options{Version: transaction.Testnet, ChainID: 0x80000000, Nonce: nonce, Fee: fee, PostConditionMode: transaction.Deny, PrivateKey: r.key}
-		if kind == "ContractDeployment" {
+		if kind == api.PostconditionContractDeployment {
 			return transaction.Deploy(options, source.Name, source.Source, byte(source.ClarityVersion))
 		}
 		args, err := registryArguments(in)
@@ -168,15 +169,15 @@ func (r *ContractRole) observeGoal(ctx context.Context) string {
 		return "ContractObservationUnavailable"
 	}
 	r.current = state.observation
-	if goal.kind == "ContractDeployment" && !state.sources[goal.name] || goal.kind == "RegistryInitialization" && state.observation == nil {
+	if goal.kind == api.PostconditionContractDeployment && !state.sources[goal.name] || goal.kind == api.PostconditionRegistryInitialization && state.observation == nil {
 		return "AwaitingContractPostcondition"
 	}
 	if r.stream.Pending() != 0 {
 		proof := struct {
 			Kind, Deployer, Contract, SourceHash string
 			Registry                             *api.ContractSetObservation
-		}{Kind: goal.kind, Deployer: goal.input.Deployer, Contract: goal.name, SourceHash: goal.input.SourceHashes[goal.name]}
-		if goal.kind == "RegistryInitialization" {
+		}{Kind: string(goal.kind), Deployer: goal.input.Deployer, Contract: goal.name, SourceHash: goal.input.SourceHashes[goal.name]}
+		if goal.kind == api.PostconditionRegistryInitialization {
 			proof.Registry = state.observation.DeepCopy()
 			proof.Registry.ObservedAt = metav1.Time{}
 		}
@@ -187,7 +188,7 @@ func (r *ContractRole) observeGoal(ctx context.Context) string {
 		}
 	}
 	r.goal = nil
-	if reason == "Idle" {
+	if reason == reasonIdle {
 		return "ContractPostconditionObserved"
 	}
 	return reason

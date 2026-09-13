@@ -43,7 +43,7 @@ func (r *ProductionStatusReconciler) SetupWithManager(m ctrl.Manager) error {
 		root := obj.(*api.StacksNetwork)
 		out := []ctrl.Request{}
 		for _, entry := range root.Spec.Participants {
-			if entry.Kind == "BitcoinBlockProduction" {
+			if entry.Kind == api.ParticipantBitcoinBlockProduction {
 				out = append(out, ctrl.Request{NamespacedName: client.ObjectKey{Namespace: root.Namespace, Name: foundation.ParticipantName(string(root.UID), entry.Name)}})
 			}
 		}
@@ -57,7 +57,7 @@ func (r *ProductionStatusReconciler) Reconcile(ctx context.Context, request ctrl
 	if e := r.Reader.Get(ctx, request.NamespacedName, p); e != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(e)
 	}
-	if p.Spec.Kind != "BitcoinBlockProduction" {
+	if p.Spec.Kind != api.ParticipantBitcoinBlockProduction {
 		return ctrl.Result{}, nil
 	}
 	root := &api.StacksNetwork{}
@@ -67,9 +67,9 @@ func (r *ProductionStatusReconciler) Reconcile(ctx context.Context, request ctrl
 	if root.UID != p.Spec.NetworkUID || !metav1.IsControlledBy(p, root) {
 		return ctrl.Result{}, fmt.Errorf("production root binding unavailable")
 	}
-	phase, reason := "Waiting", "SchedulerNotEnrolled"
+	phase, reason := bitcoin.InitializationWaiting, "SchedulerNotEnrolled"
 	if stopReason(root, p) != "" {
-		phase, reason = "Abandoned", "DesiredStop"
+		phase, reason = bitcoin.InitializationAbandoned, "DesiredStop"
 	} else if root.Status.Bitcoin != nil && root.Status.Bitcoin.InitializationRef != nil {
 		ref := root.Status.Bitcoin.InitializationRef
 		initial := &bitcoin.BitcoinInitialization{}
@@ -90,20 +90,20 @@ func (r *ProductionStatusReconciler) Reconcile(ctx context.Context, request ctrl
 }
 
 // productionStatus constructs only domain-owned fields and preserves condition transitions.
-func productionStatus(p *api.StacksNetworkParticipant, phase, reason string) api.ParticipantStatus {
-	runtime := &api.ParticipantRuntimeStatus{ObservedGeneration: p.Generation, Terminated: phase == "Abandoned"}
+func productionStatus(p *api.StacksNetworkParticipant, phase bitcoin.InitializationPhase, reason string) api.ParticipantStatus {
+	runtime := &api.ParticipantRuntimeStatus{ObservedGeneration: p.Generation, Terminated: phase == bitcoin.InitializationAbandoned}
 	if p.Status.Admission != nil {
 		runtime.PolicyDigest = p.Status.Admission.PolicyDigest
 	}
 	conditions := productionConditions(p.Status.Conditions)
 	ready := metav1.ConditionFalse
-	if phase == "Preparing" || phase == "Paused" || phase == "Held" {
+	if phase == bitcoin.InitializationPreparing || phase == bitcoin.InitializationPaused || phase == bitcoin.InitializationHeld {
 		ready = metav1.ConditionTrue
 	}
 	if reason == "" {
 		reason = "SchedulerWaiting"
 	}
-	meta.SetStatusCondition(&conditions, metav1.Condition{Type: "WorkloadReady", Status: ready, Reason: reason, Message: "Bitcoin production scheduler state: " + phase, ObservedGeneration: p.Generation})
+	meta.SetStatusCondition(&conditions, metav1.Condition{Type: "WorkloadReady", Status: ready, Reason: reason, Message: "Bitcoin production scheduler state: " + string(phase), ObservedGeneration: p.Generation})
 	return api.ParticipantStatus{Runtime: runtime, Conditions: conditions}
 }
 

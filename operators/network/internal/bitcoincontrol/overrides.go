@@ -33,7 +33,7 @@ func (s *Scheduler) reconcileOverride(ctx context.Context, root *api.StacksNetwo
 		}
 		current := err == nil && request.UID == active.Override.UID
 		production, productionErr := s.currentProduction(ctx, root, record)
-		valid := current && request.DeletionTimestamp == nil && !overrideTerminal(request.Status.Phase) && root.DeletionTimestamp == nil && !failed(root) && root.Spec.Operation != "Stopped" && productionErr == nil && binding("StacksNetworkParticipant", production) == active.Production && s.Now().Before(active.ExpiresAt.Time)
+		valid := current && request.DeletionTimestamp == nil && !overrideTerminal(request.Status.Phase) && root.DeletionTimestamp == nil && !failed(root) && root.Spec.Operation != api.NetworkOperationStopped && productionErr == nil && binding("StacksNetworkParticipant", production) == active.Production && s.Now().Before(active.ExpiresAt.Time)
 		if valid {
 			schedule, pin, err := s.overrideSchedule(ctx, root.Namespace, request)
 			valid = err == nil && equality.Semantic.DeepEqual(schedule, &active.Schedule) && equality.Semantic.DeepEqual(pin, active.ScheduleRef)
@@ -54,7 +54,7 @@ func (s *Scheduler) reconcileOverride(ctx context.Context, root *api.StacksNetwo
 		s.withdrawTiming(record)
 		return true, s.Client.Status().Update(ctx, record)
 	}
-	if root.DeletionTimestamp != nil || failed(root) || root.Spec.Operation == "Stopped" {
+	if root.DeletionTimestamp != nil || failed(root) || root.Spec.Operation == api.NetworkOperationStopped {
 		return false, nil
 	}
 	production, err := s.currentProduction(ctx, root, record)
@@ -123,8 +123,8 @@ func (s *Scheduler) overrideSchedule(ctx context.Context, namespace string, requ
 }
 
 // overrideTerminal distinguishes closed requests from activation candidates.
-func overrideTerminal(phase string) bool {
-	return phase == "Completed" || phase == "Expired" || phase == "Cancelled"
+func overrideTerminal(phase bitcoin.OverridePhase) bool {
+	return phase == bitcoin.OverrideCompleted || phase == bitcoin.OverrideExpired || phase == bitcoin.OverrideCancelled
 }
 
 // effectiveSchedule keeps temporary timing separate from the latest complete baseline admission.

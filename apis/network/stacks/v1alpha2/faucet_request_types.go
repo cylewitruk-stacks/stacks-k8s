@@ -75,7 +75,7 @@ type FaucetBinding struct {
 type FaucetAdmission struct {
 	// Decision separates waiting from granted or permanently refused execution authority.
 	// +kubebuilder:validation:Enum=Pending;Admitted;Rejected;Expired
-	Decision string `json:"decision"`
+	Decision FaucetDecision `json:"decision"`
 	// Reason is a bounded controller classification.
 	// +kubebuilder:validation:MaxLength=64
 	Reason string `json:"reason"`
@@ -121,7 +121,7 @@ type FaucetAdmission struct {
 type FaucetExecution struct {
 	// Phase reports dispatch and exact native outcomes independently of projection.
 	// +kubebuilder:validation:Enum=Submitted;Completed;Rejected;Expired;Inconclusive
-	Phase string `json:"phase"`
+	Phase FaucetExecutionPhase `json:"phase"`
 	// Reason classifies the observed outcome without raw RPC bodies.
 	// +kubebuilder:validation:MaxLength=64
 	Reason string `json:"reason"`
@@ -167,7 +167,7 @@ type FaucetRequestStatus struct {
 	Admission *FaucetAdmission `json:"admission,omitempty"`
 	// Phase is a projection, never independent transaction evidence.
 	// +kubebuilder:validation:Enum=Pending;Submitted;Completed;Rejected;Inconclusive;Expired
-	Phase string `json:"phase,omitempty"`
+	Phase FaucetPhase `json:"phase,omitempty"`
 	// Conditions belong solely to the request controller.
 	// +listType=map
 	// +listMapKey=type

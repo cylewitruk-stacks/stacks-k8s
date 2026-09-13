@@ -8,6 +8,7 @@ import (
 
 	action "github.com/cylewitruk-stacks/stacks-k8s/apis/network/actions/v1alpha2"
 	bitcoin "github.com/cylewitruk-stacks/stacks-k8s/apis/network/bitcoin/v1alpha2"
+	api "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha2"
 	"k8s.io/apimachinery/pkg/api/equality"
 )
 
@@ -190,10 +191,10 @@ func (w *Worker) stepReorganization(ctx context.Context, record *bitcoin.Bitcoin
 		return err
 	}
 	if !equality.Semantic.DeepEqual(a.target, state.Runtime) {
-		return w.stopAction(ctx, record, "IdentityDiverged", true)
+		return w.stopAction(ctx, record, action.ReasonIdentityDiverged, true)
 	}
 	if state.InvalidationAcknowledged && !state.CleanupAcknowledged && !w.Now().Before(state.ExpiresAt.Add(30*time.Second)) {
-		return w.stopAction(ctx, record, "CleanupDeadlineExceeded", true)
+		return w.stopAction(ctx, record, action.ReasonCleanupDeadlineExceeded, true)
 	}
 	if state.InvalidationAcknowledged && state.StopReason == "" {
 		changed, err := w.verifyReplacement(ctx, a, record)
@@ -231,18 +232,18 @@ func (w *Worker) stepReorganization(ctx context.Context, record *bitcoin.Bitcoin
 		return w.Client.Status().Update(ctx, record)
 	}
 	if cleanup {
-		return w.arm(ctx, record, a, bitcoin.BitcoinArmedRPC{Method: "ReconsiderBlock", Action: state.Request.DeepCopy(), BlockHash: state.InvalidatedHash})
+		return w.arm(ctx, record, a, bitcoin.BitcoinArmedRPC{Method: bitcoin.RPCReconsiderBlock, Action: state.Request.DeepCopy(), BlockHash: state.InvalidatedHash})
 	}
-	if !same || !actionAdmissionAcknowledged(view, record) || a.root.Spec.Operation == "Paused" {
+	if !same || !actionAdmissionAcknowledged(view, record) || a.root.Spec.Operation == api.NetworkOperationPaused {
 		return nil
 	}
 	if !state.InvalidationAcknowledged {
-		return w.armReorganization(ctx, record, a, bitcoin.BitcoinArmedRPC{Method: "InvalidateBlock", Action: state.Request.DeepCopy(), BlockHash: state.InvalidatedHash})
+		return w.armReorganization(ctx, record, a, bitcoin.BitcoinArmedRPC{Method: bitcoin.RPCInvalidateBlock, Action: state.Request.DeepCopy(), BlockHash: state.InvalidatedHash})
 	}
 	if state.NextDispatchAt != nil && w.Now().Before(state.NextDispatchAt.Time) {
 		return nil
 	}
-	return w.armReorganization(ctx, record, a, bitcoin.BitcoinArmedRPC{Method: "Generate", Action: state.Request.DeepCopy(), Address: state.Reorganization.Address})
+	return w.armReorganization(ctx, record, a, bitcoin.BitcoinArmedRPC{Method: bitcoin.RPCGenerate, Action: state.Request.DeepCopy(), Address: state.Reorganization.Address})
 }
 
 // armReorganization records proven ancestry divergence without classifying failed reads as evidence.

@@ -53,7 +53,7 @@ type WorkerShutdown struct {
 	NetworkGeneration int64 `json:"networkGeneration"`
 	// Reason explains the intentional terminal control.
 	// +kubebuilder:validation:Enum=NetworkStopped;NetworkDeleting;ParticipantRemoved
-	Reason string `json:"reason"`
+	Reason WorkerShutdownReason `json:"reason"`
 	// RequestedAt bounds settlement without claiming chain inclusion or server quiescence.
 	RequestedAt metav1.Time `json:"requestedAt"`
 }
@@ -62,7 +62,7 @@ type WorkerShutdown struct {
 type WorkerDisposal struct {
 	// Outcome distinguishes settled submission accounting from retained uncertainty.
 	// +kubebuilder:validation:Enum=Settled;Unsettled
-	Outcome string `json:"outcome"`
+	Outcome WorkerDisposalOutcome `json:"outcome"`
 	// ProcessNonce identifies the acknowledging process when an acknowledgement exists.
 	// +kubebuilder:validation:MaxLength=64
 	ProcessNonce string `json:"processNonce,omitempty"`
@@ -96,7 +96,7 @@ type WorkerExecutionStatus struct {
 	NetworkGeneration int64 `json:"networkGeneration"`
 	// Phase reports process-local execution without claiming protocol completion.
 	// +kubebuilder:validation:Enum=Inactive;Active;Paused;Blocked;Draining;Settled;Unsettled;Unknown;Failed
-	Phase string `json:"phase"`
+	Phase WorkerPhase `json:"phase"`
 	// Reason is a bounded public classification without private error contents.
 	// +kubebuilder:validation:MaxLength=128
 	Reason string `json:"reason,omitempty"`

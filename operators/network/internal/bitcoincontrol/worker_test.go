@@ -276,7 +276,7 @@ func TestWalletMutationsUseSameAuthority(t *testing.T) {
 		}
 		eventually(t, func() bool {
 			r := f.readRecord(t)
-			return r.Status.LastReceipt != nil && r.Status.LastReceipt.Request.Method == method && r.Status.Armed == nil
+			return r.Status.LastReceipt != nil && string(r.Status.LastReceipt.Request.Method) == method && r.Status.Armed == nil
 		})
 	}
 	if e := f.worker.Step(context.Background()); e != nil {

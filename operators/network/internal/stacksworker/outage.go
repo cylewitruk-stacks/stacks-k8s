@@ -12,7 +12,7 @@ func TransientAPIError(err error) bool { return foundation.TransientAPIError(err
 
 // baselineKind excludes request-driven workers from cached send authority and summary coalescing.
 func baselineKind(kind api.ParticipantKind) bool {
-	return kind == "StacksTransactionProduction" || kind == "StacksStacker" || kind == "StacksContractSet"
+	return kind == api.ParticipantStacksTransactionProduction || kind == api.ParticipantStacksStacker || kind == api.ParticipantStacksContractSet
 }
 
 // copySnapshot preserves only public observations; callbacks are supplied for each invocation.
@@ -34,7 +34,7 @@ func controlAllows(s Snapshot) bool {
 
 // observePartialRoot invalidates cached authority even if a later API read in this pass fails.
 func (r *Runtime) observePartialRoot(root *api.StacksNetwork) {
-	if root.UID != r.NetworkUID || root.DeletionTimestamp != nil || root.Spec.Operation != "Running" || failed(root) {
+	if root.UID != r.NetworkUID || root.DeletionTimestamp != nil || root.Spec.Operation != api.NetworkOperationRunning || failed(root) {
 		r.cacheHeld = true
 		return
 	}

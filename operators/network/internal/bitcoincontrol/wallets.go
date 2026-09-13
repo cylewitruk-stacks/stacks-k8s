@@ -83,7 +83,7 @@ func (w *Worker) observe(ctx context.Context, a admitted, record *bitcoin.Bitcoi
 		}
 		for _, name := range loaded {
 			if name == removal.Name {
-				pending = &bitcoin.BitcoinArmedRPC{Method: "UnloadWallet", Wallet: removal.DeepCopy()}
+				pending = &bitcoin.BitcoinArmedRPC{Method: bitcoin.RPCUnloadWallet, Wallet: removal.DeepCopy()}
 			}
 		}
 		if pending == nil {
@@ -135,7 +135,7 @@ func (w *Worker) observe(ctx context.Context, a admitted, record *bitcoin.Bitcoi
 			// Keep every detached identity while the shared slot settles one unload at a time.
 			observation.Wallets = append(observation.Wallets, old)
 			if pending == nil {
-				pending = &bitcoin.BitcoinArmedRPC{Method: "UnloadWallet", Wallet: &bitcoin.BitcoinWalletOperation{Wallet: old.Wallet, Name: old.Name}}
+				pending = &bitcoin.BitcoinArmedRPC{Method: bitcoin.RPCUnloadWallet, Wallet: &bitcoin.BitcoinWalletOperation{Wallet: old.Wallet, Name: old.Name}}
 			}
 		}
 	}
@@ -145,7 +145,7 @@ func (w *Worker) observe(ctx context.Context, a admitted, record *bitcoin.Bitcoi
 // observeWallet plans named watch-only wallet convergence without issuing mutations.
 func (w *Worker) observeWallet(ctx context.Context, endpoint string, wallet bitcoin.FrozenBitcoinWallet) (bitcoin.BitcoinWalletObservation, *bitcoin.BitcoinArmedRPC, error) {
 	state := bitcoin.BitcoinWalletObservation{Wallet: wallet.Wallet, Name: wallet.Name, Address: wallet.Address}
-	operation := func(method, descriptor string) *bitcoin.BitcoinArmedRPC {
+	operation := func(method bitcoin.RPCMethod, descriptor string) *bitcoin.BitcoinArmedRPC {
 		return &bitcoin.BitcoinArmedRPC{Method: method, Wallet: &bitcoin.BitcoinWalletOperation{Wallet: wallet.Wallet, Name: wallet.Name, Descriptor: descriptor}}
 	}
 	var loaded []string
@@ -167,10 +167,10 @@ func (w *Worker) observeWallet(ctx context.Context, endpoint string, wallet bitc
 		}
 		for _, item := range directory.Wallets {
 			if item.Name == wallet.Name {
-				return state, operation("LoadWallet", ""), nil
+				return state, operation(bitcoin.RPCLoadWallet, ""), nil
 			}
 		}
-		return state, operation("CreateWallet", ""), nil
+		return state, operation(bitcoin.RPCCreateWallet, ""), nil
 	}
 	local := endpoint + "/wallet/" + url.PathEscape(wallet.Name)
 	var info struct {
@@ -207,7 +207,7 @@ func (w *Worker) observeWallet(ctx context.Context, endpoint string, wallet bitc
 		found = found || item.Desc == descriptor.Descriptor
 	}
 	if !found {
-		return state, operation("ImportDescriptor", descriptor.Descriptor), nil
+		return state, operation(bitcoin.RPCImportDescriptor, descriptor.Descriptor), nil
 	}
 	var outputs []struct {
 		Address       string `json:"address"`
@@ -245,12 +245,12 @@ func (w *Worker) observeWallet(ctx context.Context, endpoint string, wallet bitc
 
 // mutate performs exactly one supported native mutation; any error retains Armed.
 func (w *Worker) mutate(ctx context.Context, request bitcoin.BitcoinArmedRPC) (string, error) {
-	if request.Method == "InvalidateBlock" || request.Method == "ReconsiderBlock" {
+	if request.Method == bitcoin.RPCInvalidateBlock || request.Method == bitcoin.RPCReconsiderBlock {
 		if request.Action == nil || !hashValid(request.BlockHash) {
 			return "", fmt.Errorf("invalid finite marker inputs")
 		}
 		method := "invalidateblock"
-		if request.Method == "ReconsiderBlock" {
+		if request.Method == bitcoin.RPCReconsiderBlock {
 			method = "reconsiderblock"
 		}
 		var result json.RawMessage
@@ -262,7 +262,7 @@ func (w *Worker) mutate(ctx context.Context, request bitcoin.BitcoinArmedRPC) (s
 		}
 		return "", nil
 	}
-	if request.Method == "Generate" {
+	if request.Method == bitcoin.RPCGenerate {
 		if request.Action != nil {
 			return w.RPC.Generate(ctx, request.Target.Endpoint, request.Address, request.ID)
 		}
@@ -277,9 +277,9 @@ func (w *Worker) mutate(ctx context.Context, request bitcoin.BitcoinArmedRPC) (s
 	wallet := request.Wallet
 	endpoint := request.Target.Endpoint
 	switch request.Method {
-	case "CreateWallet", "LoadWallet":
+	case bitcoin.RPCCreateWallet, bitcoin.RPCLoadWallet:
 		method, args := "loadwallet", []any{wallet.Name, true}
-		if request.Method == "CreateWallet" {
+		if request.Method == bitcoin.RPCCreateWallet {
 			method, args = "createwallet", []any{wallet.Name, true, true, "", false, true, true}
 		}
 		var result struct {
@@ -291,7 +291,7 @@ func (w *Worker) mutate(ctx context.Context, request bitcoin.BitcoinArmedRPC) (s
 		if result.Name != wallet.Name {
 			return "", fmt.Errorf("wallet receipt name differs")
 		}
-	case "ImportDescriptor":
+	case bitcoin.RPCImportDescriptor:
 		var imported []struct {
 			Success bool `json:"success"`
 		}
@@ -301,7 +301,7 @@ func (w *Worker) mutate(ctx context.Context, request bitcoin.BitcoinArmedRPC) (s
 		if len(imported) != 1 || !imported[0].Success {
 			return "", fmt.Errorf("descriptor import receipt incomplete")
 		}
-	case "UnloadWallet":
+	case bitcoin.RPCUnloadWallet:
 		var result map[string]any
 		if e := w.RPC.Call(ctx, endpoint, request.ID, "unloadwallet", []any{wallet.Name, false}, &result); e != nil {
 			return "", e

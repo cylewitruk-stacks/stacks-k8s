@@ -41,7 +41,7 @@ func (r PublicInputs) PoX4(ctx context.Context, s stacksworker.Snapshot) (PoX4In
 	}
 	selected := false
 	for _, entry := range s.Network.Spec.Participants {
-		selected = selected || entry.Kind == "StacksSigner" && entry.Name == policy.SignerRef.Name
+		selected = selected || entry.Kind == api.ParticipantStacksSigner && entry.Name == policy.SignerRef.Name
 	}
 	allocated := false
 	for _, id := range s.Network.Status.Identities {
@@ -56,7 +56,7 @@ func (r PublicInputs) PoX4(ctx context.Context, s stacksworker.Snapshot) (PoX4In
 	if err = r.Reader.Get(ctx, client.ObjectKey{Namespace: s.Participant.Namespace, Name: signerBinding.Name}, &signer); err != nil {
 		return input, err
 	}
-	if signer.UID != signerBinding.UID || signer.Spec.NetworkUID != s.Network.UID || signer.Spec.Kind != "StacksSigner" || signer.Spec.ParticipantName != policy.SignerRef.Name || signer.DeletionTimestamp != nil || !metav1.IsControlledBy(&signer, s.Network) || signer.Status.Admission == nil || signer.Status.Admission.Configuration.StacksSigner == nil || signer.Status.Admission.Configuration.StacksSigner.AccountRef == nil {
+	if signer.UID != signerBinding.UID || signer.Spec.NetworkUID != s.Network.UID || signer.Spec.Kind != api.ParticipantStacksSigner || signer.Spec.ParticipantName != policy.SignerRef.Name || signer.DeletionTimestamp != nil || !metav1.IsControlledBy(&signer, s.Network) || signer.Status.Admission == nil || signer.Status.Admission.Configuration.StacksSigner == nil || signer.Status.Admission.Configuration.StacksSigner.AccountRef == nil {
 		return input, errors.New("PoX signer identity unavailable")
 	}
 	consensus, err := r.account(ctx, &signer, signer.Status.Admission.Configuration.StacksSigner.AccountRef.Name)
@@ -81,7 +81,7 @@ func (r PublicInputs) PoX4(ctx context.Context, s stacksworker.Snapshot) (PoX4In
 	if !ok || amount.Sign() <= 0 || amount.BitLen() > 128 {
 		return input, errors.New("PoX amount invalid")
 	}
-	genesis, err := r.inputGenesis(ctx, s, "StacksStacker")
+	genesis, err := r.inputGenesis(ctx, s, api.ParticipantStacksStacker)
 	if err != nil {
 		return input, err
 	}
@@ -91,7 +91,7 @@ func (r PublicInputs) PoX4(ctx context.Context, s stacksworker.Snapshot) (PoX4In
 	}
 	captured := false
 	for _, required := range genesis.Spec.Bootstrap.Requirements {
-		if required.Kind != "StacksStacker" || required.Participant.UID != s.Participant.UID {
+		if required.Kind != api.ParticipantStacksStacker || required.Participant.UID != s.Participant.UID {
 			continue
 		}
 		holderMatched, signerMatched := false, false
@@ -105,7 +105,7 @@ func (r PublicInputs) PoX4(ctx context.Context, s stacksworker.Snapshot) (PoX4In
 	}
 	signerCaptured := false
 	for _, required := range genesis.Spec.Bootstrap.Requirements {
-		if required.Kind == "StacksSigner" && required.Participant.UID == signer.UID {
+		if required.Kind == api.ParticipantStacksSigner && required.Participant.UID == signer.UID {
 			for _, account := range required.Accounts {
 				signerCaptured = signerCaptured || account.Binding.UID == consensus.UID && account.Identity == *consensus.Status.Identity
 			}
@@ -116,7 +116,7 @@ func (r PublicInputs) PoX4(ctx context.Context, s stacksworker.Snapshot) (PoX4In
 	}
 	input = PoX4Inputs{InitialCohort: initial != nil, Node: node, Holder: r.Sender, SignerPublicKey: consensus.Status.Identity.PublicKey, Amount: amount, LockCycles: uint64(*policy.LockCycles), RenewWhenRemainingCycles: uint64(*policy.RenewWhenRemainingCycles)}
 	for _, gate := range genesis.Spec.Bootstrap.Gates {
-		if gate.Name == "EnrollPoX4" && gate.TargetCycle != nil && *gate.TargetCycle >= 0 && gate.BitcoinCeiling > 0 {
+		if gate.Name == api.GateEnrollPoX4 && gate.TargetCycle != nil && *gate.TargetCycle >= 0 && gate.BitcoinCeiling > 0 {
 			if initial != nil {
 				input.TargetCycle = uint64(*gate.TargetCycle)
 			}

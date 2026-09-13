@@ -68,7 +68,7 @@ type BitcoinActiveOverride struct {
 type BitcoinBlockScheduleOverrideStatus struct {
 	// Phase reports deterministic contention and bounded activation.
 	// +kubebuilder:validation:Enum=Pending;Active;Completed;Expired;Cancelled
-	Phase string `json:"phase,omitempty"`
+	Phase OverridePhase `json:"phase,omitempty"`
 	// ObservedGeneration identifies the immutable request evaluated.
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 	// Admission preserves the actual retained scheduler activation.

@@ -42,7 +42,7 @@ func TestActorStopRequiresEveryRetainedDisposition(t *testing.T) {
 				}
 				now := metav1.Now()
 				root.Status.Identities[0].Worker.Shutdown = &api.WorkerShutdown{NetworkGeneration: root.Generation, Reason: "NetworkStopped", RequestedAt: now}
-				root.Status.Identities[0].Worker.Disposal = &api.WorkerDisposal{Outcome: outcome, ObservedAt: now, Terminated: false}
+				root.Status.Identities[0].Worker.Disposal = &api.WorkerDisposal{Outcome: api.WorkerDisposalOutcome(outcome), ObservedAt: now, Terminated: false}
 				if err := c.Status().Update(ctx, root); err != nil {
 					t.Fatal(err)
 				}
@@ -74,7 +74,7 @@ func TestActorStopNeverBoundAndIndividualControls(t *testing.T) {
 	}
 	for _, operation := range []string{"Running", "Paused"} {
 		root, actor := stopFixture(t)
-		root.Spec.Operation = operation
+		root.Spec.Operation = api.NetworkOperation(operation)
 		root.Status.Identities[1].Removing = true
 		actor.DeletionTimestamp = &metav1.Time{Time: time.Now()}
 		if ready, err := CheckActorStop(context.Background(), fakeClient(t, root), actor); !ready || err != nil {

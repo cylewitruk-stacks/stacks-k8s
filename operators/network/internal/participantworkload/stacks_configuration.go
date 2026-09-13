@@ -54,7 +54,7 @@ func (r *Reconciler) stacksConfiguration(ctx context.Context, root *api.StacksNe
 		if len(raw) > 4096 || json.Unmarshal([]byte(raw), &result) != nil || result.InputDigest != digest(in) || result.GenesisDigest != in.Genesis.Fingerprint || result.Identity != in.Identity || !strings.HasPrefix(result.ConfigDigest, "sha256:") {
 			return false, false, fmt.Errorf("invalid public Stacks configuration report")
 		}
-		if !result.Verified && (in.Customization == nil || ptr.Deref(in.Customization.Compatibility, "Managed") != "Unverified") {
+		if !result.Verified && (in.Customization == nil || ptr.Deref(in.Customization.Compatibility, common.CompatibilityManaged) != common.CompatibilityUnverified) {
 			return false, false, fmt.Errorf("managed configuration agreement unavailable")
 		}
 		state.ConfigRef.Fingerprint = result.ConfigDigest
@@ -114,10 +114,10 @@ func (r *Reconciler) stacksInput(ctx context.Context, root *api.StacksNetwork, p
 	}
 	in.Customization = fields.Config
 	var accountRef *common.NameRef
-	if p.Spec.Kind == "StacksNode" {
+	if p.Spec.Kind == api.ParticipantStacksNode {
 		node := p.Status.Admission.Configuration.StacksNode
 		accountRef = node.IdentityAccountRef
-		btc, err := r.boundParticipant(ctx, root, p, node.BitcoinNodeRef, "BitcoinNode")
+		btc, err := r.boundParticipant(ctx, root, p, node.BitcoinNodeRef, api.ParticipantBitcoinNode)
 		if err != nil {
 			return in, err
 		}
@@ -174,7 +174,7 @@ func (r *Reconciler) stacksInput(ctx context.Context, root *api.StacksNetwork, p
 	} else {
 		signer := p.Status.Admission.Configuration.StacksSigner
 		accountRef = signer.AccountRef
-		node, err := r.boundParticipant(ctx, root, p, signer.NodeRef, "StacksNode")
+		node, err := r.boundParticipant(ctx, root, p, signer.NodeRef, api.ParticipantStacksNode)
 		if err != nil {
 			return in, err
 		}
@@ -335,7 +335,7 @@ func (r *Reconciler) customServiceHosts(ctx context.Context, root *api.StacksNet
 			return nil, fmt.Errorf("duplicate or empty Service alias")
 		}
 		kind := api.ParticipantKind(ref.Kind)
-		if !((kind == "BitcoinNode" || kind == "StacksNode") && (ref.Endpoint == "rpc" || ref.Endpoint == "p2p") || kind == "StacksSigner" && ref.Endpoint == "events") {
+		if !((kind == api.ParticipantBitcoinNode || kind == api.ParticipantStacksNode) && (ref.Endpoint == "rpc" || ref.Endpoint == "p2p") || kind == api.ParticipantStacksSigner && ref.Endpoint == "events") {
 			return nil, fmt.Errorf("unsupported Service endpoint")
 		}
 		target, err := r.boundParticipant(ctx, root, p, &common.NameRef{Name: ref.Name}, kind)
@@ -351,7 +351,7 @@ func (r *Reconciler) customServiceHosts(ctx context.Context, root *api.StacksNet
 func (r *Reconciler) pairedSignerHost(ctx context.Context, root *api.StacksNetwork, p *api.StacksNetworkParticipant) (string, error) {
 	host := ""
 	for _, entry := range root.Spec.Participants {
-		if entry.Kind != "StacksSigner" {
+		if entry.Kind != api.ParticipantStacksSigner {
 			continue
 		}
 		var signer api.StacksNetworkParticipant
@@ -362,7 +362,7 @@ func (r *Reconciler) pairedSignerHost(ctx context.Context, root *api.StacksNetwo
 			continue
 		}
 		ref := signer.Status.Admission.Configuration.StacksSigner.NodeRef
-		if cfg := signer.Status.Admission.Configuration.StacksSigner.Config; cfg != nil && ptr.Deref(cfg.Compatibility, "Managed") == "Unverified" {
+		if cfg := signer.Status.Admission.Configuration.StacksSigner.Config; cfg != nil && ptr.Deref(cfg.Compatibility, common.CompatibilityManaged) == common.CompatibilityUnverified {
 			continue
 		}
 		if ref == nil || ref.Name != p.Spec.ParticipantName {
@@ -409,7 +409,7 @@ func (r *Reconciler) stacksSeedSnapshot(ctx context.Context, root *api.StacksNet
 		}
 	} else {
 		for _, entry := range root.Spec.Participants {
-			if entry.Kind == "StacksNode" {
+			if entry.Kind == api.ParticipantStacksNode {
 				wanted[entry.Name] = true
 			}
 		}
@@ -426,7 +426,7 @@ func (r *Reconciler) stacksSeedSnapshot(ctx context.Context, root *api.StacksNet
 		if err := r.readConfigurationParticipant(ctx, client.ObjectKey{Namespace: p.Namespace, Name: foundation.ParticipantName(string(root.UID), name)}, &peer); err != nil {
 			return nil, err
 		}
-		if peer.Spec.Kind != "StacksNode" || peer.DeletionTimestamp != nil || !selected(root, &peer) {
+		if peer.Spec.Kind != api.ParticipantStacksNode || peer.DeletionTimestamp != nil || !selected(root, &peer) {
 			continue
 		}
 		if peer.Status.Admission == nil || peer.Status.Admission.Configuration.StacksNode == nil {

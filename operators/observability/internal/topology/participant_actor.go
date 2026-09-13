@@ -51,7 +51,7 @@ func observeActor(ctx context.Context, reads *directRead, p *api.StacksNetworkPa
 	if !podReady(pod) {
 		return observation.ObservedActorIdentity{}, &NotReadyError{Reason: "actor Pod is not ready"}
 	}
-	expectedLabels := map[string]string{"network.stacks.org/network-uid": string(p.Spec.NetworkUID), "network.stacks.org/participant": p.Spec.ParticipantName, "network.stacks.org/participant-uid": string(p.UID), "network.stacks.org/participant-kind": string(p.Spec.Kind), "network.stacks.org/role": "actor"}
+	expectedLabels := map[string]string{api.LabelNetworkUID: string(p.Spec.NetworkUID), api.LabelParticipant: p.Spec.ParticipantName, api.LabelParticipantUID: string(p.UID), api.LabelParticipantKind: string(p.Spec.Kind), api.LabelRole: "actor"}
 	for _, labels := range []map[string]string{pod.Labels, workload.Labels, workload.Spec.Template.Labels} {
 		for key, value := range expectedLabels {
 			if labels[key] != value {
@@ -79,11 +79,11 @@ func observeActor(ctx context.Context, reads *directRead, p *api.StacksNetworkPa
 		if annotations[policyAnnotation] != state.PolicyDigest {
 			return invalid("actor Pod admitted policy annotation differs")
 		}
-		if p.Spec.Kind != "BitcoinNode" && (state.ConfigurationDigest == "" || annotations[configurationAnnotation] != state.ConfigurationDigest) {
+		if p.Spec.Kind != api.ParticipantBitcoinNode && (state.ConfigurationDigest == "" || annotations[configurationAnnotation] != state.ConfigurationDigest) {
 			return invalid("actor Pod public configuration annotation differs")
 		}
 	}
-	containerName := actorContainerV2(string(p.Spec.Kind))
+	containerName := actorContainerV2(p.Spec.Kind)
 	for _, spec := range []*corev1.PodSpec{&pod.Spec, &workload.Spec.Template.Spec} {
 		if err := verifyActorSpec(spec, containerName, *fields.Image, state.ConfigRef.Name); err != nil {
 			return invalid(err.Error())
@@ -126,11 +126,11 @@ func admittedActor(p *api.StacksNetworkParticipant) (*common.ActorFields, string
 	var fields *common.ActorFields
 	role := ""
 	switch p.Spec.Kind {
-	case "BitcoinNode":
+	case api.ParticipantBitcoinNode:
 		if c.BitcoinNode != nil {
 			fields = &c.BitcoinNode.ActorFields
 		}
-	case "StacksNode":
+	case api.ParticipantStacksNode:
 		if c.StacksNode != nil {
 			fields = &c.StacksNode.ActorFields
 			role = "follower"
@@ -138,7 +138,7 @@ func admittedActor(p *api.StacksNetworkParticipant) (*common.ActorFields, string
 				role = "miner"
 			}
 		}
-	case "StacksSigner":
+	case api.ParticipantStacksSigner:
 		if c.StacksSigner != nil {
 			fields = &c.StacksSigner.ActorFields
 			role = "signer"
@@ -183,9 +183,9 @@ func verifyActorSpec(spec *corev1.PodSpec, containerName, image, configuration s
 func observeServices(ctx context.Context, reads *directRead, p *api.StacksNetworkParticipant, pod *corev1.Pod, expectedLabels map[string]string) ([]observation.ObservedServiceIdentity, error) {
 	services := []observation.ObservedServiceIdentity{}
 	ports := map[string]int32{"p2p": 18444, "rpc": 18443}
-	if p.Spec.Kind == "StacksNode" {
+	if p.Spec.Kind == api.ParticipantStacksNode {
 		ports = map[string]int32{"p2p": 20444, "rpc": 20443}
-	} else if p.Spec.Kind == "StacksSigner" {
+	} else if p.Spec.Kind == api.ParticipantStacksSigner {
 		ports = map[string]int32{"events": 30000}
 	}
 	if len(p.Status.Runtime.Endpoints) != len(ports) {

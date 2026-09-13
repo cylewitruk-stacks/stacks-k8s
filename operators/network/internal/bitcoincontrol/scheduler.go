@@ -76,7 +76,7 @@ func (s *Scheduler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.R
 		return ctrl.Result{RequeueAfter: schedulerDelay(record, s.Now())}, nil
 	}
 	before := record.DeepCopy()
-	report := func(phase, reason string) (ctrl.Result, error) {
+	report := func(phase bitcoin.InitializationPhase, reason string) (ctrl.Result, error) {
 		record.Status.Phase, record.Status.Reason = phase, reason
 		if !equality.Semantic.DeepEqual(before.Status, record.Status) {
 			if e := s.Client.Status().Update(ctx, record); e != nil {
@@ -89,41 +89,41 @@ func (s *Scheduler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.R
 		return s.reconcileBaseline(ctx, root, record)
 	}
 	if failed(root) {
-		return report("Blocked", "NetworkFailed")
+		return report(bitcoin.InitializationBlocked, "NetworkFailed")
 	}
-	if root.DeletionTimestamp != nil || root.Spec.Operation == "Stopped" {
+	if root.DeletionTimestamp != nil || root.Spec.Operation == api.NetworkOperationStopped {
 		record.Status.NextOpportunityAt = nil
-		return report("Abandoned", "NetworkStopped")
+		return report(bitcoin.InitializationAbandoned, "NetworkStopped")
 	}
 	if record.Status.PreparedAt == nil && record.Status.FirstCeilingObservedAt != nil && !s.Now().Before(record.Status.FirstCeilingObservedAt.Add(120*time.Second)) {
 		record.Status.NextOpportunityAt = nil
-		return report("Blocked", "PrepareBitcoinObservationDeadline")
+		return report(bitcoin.InitializationBlocked, "PrepareBitcoinObservationDeadline")
 	}
 	authority, e := currentGate(ctx, s.Reader, root, record)
 	if e != nil {
-		return report("Held", "BootstrapGateAuthorityUnavailable")
+		return report(bitcoin.InitializationHeld, "BootstrapGateAuthorityUnavailable")
 	}
 	production, e := s.currentProduction(ctx, root, record)
 	if e != nil {
-		return report("Blocked", "ProductionIdentityUnavailable")
+		return report(bitcoin.InitializationBlocked, "ProductionIdentityUnavailable")
 	}
 	currentBinding := binding("StacksNetworkParticipant", production)
 	if record.Status.Production == nil || *record.Status.Production != currentBinding {
 		record.Status.Production = &currentBinding
 		record.Status.NextOpportunityAt = nil
 	}
-	if root.Spec.Operation == "Paused" || production.Spec.Control != nil && ptr.Deref(production.Spec.Control.Paused, false) {
+	if root.Spec.Operation == api.NetworkOperationPaused || production.Spec.Control != nil && ptr.Deref(production.Spec.Control.Paused, false) {
 		record.Status.NextOpportunityAt = nil
-		return report("Paused", "DesiredPause")
+		return report(bitcoin.InitializationPaused, "DesiredPause")
 	}
 	allRecords := make(map[string]*bitcoin.BitcoinExecution, len(root.Status.Bitcoin.ExecutionRefs))
 	for _, ref := range root.Status.Bitcoin.ExecutionRefs {
 		candidate := &bitcoin.BitcoinExecution{}
 		if e := s.Reader.Get(ctx, client.ObjectKey{Namespace: root.Namespace, Name: ref.Name}, candidate); e != nil {
-			return report("Blocked", "ExecutionRecordUnavailable")
+			return report(bitcoin.InitializationBlocked, "ExecutionRecordUnavailable")
 		}
 		if candidate.UID != ref.UID {
-			return report("Blocked", "ExecutionRecordReplaced")
+			return report(bitcoin.InitializationBlocked, "ExecutionRecordReplaced")
 		}
 		allRecords[string(candidate.Spec.Participant.UID)] = candidate
 	}
@@ -149,21 +149,21 @@ func (s *Scheduler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.R
 	for _, node := range nodes {
 		execution := allRecords[string(node.UID)]
 		if execution == nil || execution.Spec.NetworkUID != root.UID || !metav1.IsControlledBy(execution, root) {
-			return report("Blocked", "ExecutionBindingUnavailable")
+			return report(bitcoin.InitializationBlocked, "ExecutionBindingUnavailable")
 		}
 		if node.UID == record.Spec.Target.UID {
 			target = execution
 		}
 		if execution.Status.Armed != nil {
-			return report("Waiting", "RPCOutstanding")
+			return report(bitcoin.InitializationWaiting, "RPCOutstanding")
 		}
 		observation := execution.Status.Observation
 		if observation == nil || s.Now().Sub(observation.ObservedAt.Time) > s.Freshness || observation.ObservedAt.After(s.Now()) {
-			return report("Waiting", "NodeObservationUnavailable")
+			return report(bitcoin.InitializationWaiting, "NodeObservationUnavailable")
 		}
 		p := &api.StacksNetworkParticipant{}
 		if e := s.Reader.Get(ctx, client.ObjectKey{Namespace: root.Namespace, Name: node.Name}, p); e != nil || p.UID != node.UID || !participantCurrent(root, p) || p.Status.Runtime == nil || p.Status.Runtime.PodRef == nil || p.Status.Runtime.PodRef.UID != observation.Target.Pod.UID || p.Status.Runtime.ContainerID != observation.Target.ContainerID || p.Status.Admission.PolicyDigest != observation.Target.PolicyDigest || p.Status.Runtime.ConfigRef == nil || *p.Status.Runtime.ConfigRef != observation.Target.Configuration || p.Status.Runtime.RPCSecretRef == nil || *p.Status.Runtime.RPCSecretRef != observation.Target.Credentials {
-			return report("Waiting", "NodeObservationIdentityChanged")
+			return report(bitcoin.InitializationWaiting, "NodeObservationIdentityChanged")
 		}
 		if node.UID == record.Spec.Target.UID && observation.Height >= record.Spec.MinimumHeight && record.Status.FirstCeilingObservedAt == nil {
 			observed := observation.ObservedAt
@@ -172,11 +172,11 @@ func (s *Scheduler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.R
 		if height < 0 {
 			height, tip = observation.Height, observation.Tip
 		} else if height != observation.Height || tip != observation.Tip {
-			return report("Waiting", "CoreViewsDiverged")
+			return report(bitcoin.InitializationWaiting, "CoreViewsDiverged")
 		}
 		expectedWallets := ptr.Deref(p.Status.Admission.Configuration.BitcoinNode.WalletRefs, nil)
 		if len(observation.Wallets) != len(expectedWallets) {
-			return report("Waiting", "WalletInventoryIncomplete")
+			return report(bitcoin.InitializationWaiting, "WalletInventoryIncomplete")
 		}
 		for _, ref := range expectedWallets {
 			found := false
@@ -186,12 +186,12 @@ func (s *Scheduler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.R
 				}
 			}
 			if !found {
-				return report("Waiting", "WalletIdentityUnavailable")
+				return report(bitcoin.InitializationWaiting, "WalletIdentityUnavailable")
 			}
 		}
 		for _, wallet := range observation.Wallets {
 			if !wallet.Ready {
-				return report("Waiting", "WalletsPreparing")
+				return report(bitcoin.InitializationWaiting, "WalletsPreparing")
 			}
 			if wallet.MatureOutputs > mature[string(wallet.Wallet.UID)] {
 				mature[string(wallet.Wallet.UID)] = wallet.MatureOutputs
@@ -199,14 +199,14 @@ func (s *Scheduler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.R
 		}
 	}
 	if target == nil || height < 0 {
-		return report("Blocked", "InitializationTargetUnavailable")
+		return report(bitcoin.InitializationBlocked, "InitializationTargetUnavailable")
 	}
 	if height > authority.gate.BitcoinCeiling {
-		return report("Blocked", "FrozenCeilingExceeded")
+		return report(bitcoin.InitializationBlocked, "FrozenCeilingExceeded")
 	}
 	if authority.index == 0 && height >= record.Spec.MinimumHeight {
 		if height != record.Spec.MinimumHeight {
-			return report("Blocked", "FrozenCeilingExceeded")
+			return report(bitcoin.InitializationBlocked, "FrozenCeilingExceeded")
 		}
 		if record.Status.FirstCeilingObservedAt == nil {
 			now := metav1.NewTime(s.Now().UTC())
@@ -222,31 +222,31 @@ func (s *Scheduler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.R
 		}
 		record.Status.NextOpportunityAt = nil
 		if !prepared && s.Now().Sub(record.Status.FirstCeilingObservedAt.Time) >= 120*time.Second {
-			return report("Blocked", "PrepareBitcoinObservationDeadline")
+			return report(bitcoin.InitializationBlocked, "PrepareBitcoinObservationDeadline")
 		}
 		if !prepared {
-			return report("Held", "MinerMaturityUnconfirmed")
+			return report(bitcoin.InitializationHeld, "MinerMaturityUnconfirmed")
 		}
-		return report("Held", "NextGateNotImplemented")
+		return report(bitcoin.InitializationHeld, "NextGateNotImplemented")
 	}
 	if record.Status.PreparedAt != nil && height < record.Spec.MinimumHeight {
-		return report("Blocked", "PreparedChainRegressed")
+		return report(bitcoin.InitializationBlocked, "PreparedChainRegressed")
 	}
 	if height >= authority.gate.BitcoinCeiling {
 		record.Status.NextOpportunityAt = nil
-		return report("Held", "FrozenGateReached")
+		return report(bitcoin.InitializationHeld, "FrozenGateReached")
 	}
 	if err := foundation.ValidateAdmissionEligibility(ctx, s.Reader, production); err != nil {
 		record.Status.NextOpportunityAt = nil
 		record.Status.Offer = nil
-		return report("Blocked", "ProductionSourceUnavailable")
+		return report(bitcoin.InitializationBlocked, "ProductionSourceUnavailable")
 	}
 	ready, e := advancementReady(ctx, s.Reader, root, record, authority, height, s.Now())
 	if e != nil {
-		return report("Waiting", "StacksReadinessUnavailable")
+		return report(bitcoin.InitializationWaiting, "StacksReadinessUnavailable")
 	}
 	if !ready {
-		return report("Waiting", "AwaitingEnrollmentDemand")
+		return report(bitcoin.InitializationWaiting, "AwaitingEnrollmentDemand")
 	}
 	if offer := record.Status.Offer; offer != nil && offer.Number > record.Status.LastAccountedOffer && s.Now().Before(offer.ExpiresAt.Time) {
 		if !equality.Semantic.DeepEqual(target.Spec.Offer, offer) {
@@ -255,22 +255,22 @@ func (s *Scheduler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.R
 				return ctrl.Result{}, e
 			}
 		}
-		return report("Preparing", "OpportunityOutstanding")
+		return report(bitcoin.InitializationPreparing, "OpportunityOutstanding")
 	}
 	if record.Status.NextOpportunityAt != nil && s.Now().Before(record.Status.NextOpportunityAt.Time) {
-		return report("Preparing", "CadenceWaiting")
+		return report(bitcoin.InitializationPreparing, "CadenceWaiting")
 	}
 	interval, e := s.interval(effectiveSchedule(record, production.Status.Admission.Configuration.BitcoinBlockProduction.Schedule))
 	if e != nil {
-		return report("Blocked", "CadenceUnavailable")
+		return report(bitcoin.InitializationBlocked, "CadenceUnavailable")
 	}
 	if record.Status.NextOpportunityAt == nil {
 		next := metav1.NewTime(s.Now().Add(interval).UTC())
 		record.Status.NextOpportunityAt = &next
-		return report("Preparing", "CadenceArmed")
+		return report(bitcoin.InitializationPreparing, "CadenceArmed")
 	}
 	if s.Now().Before(record.Status.NextOpportunityAt.Time) {
-		return report("Preparing", "CadenceWaiting")
+		return report(bitcoin.InitializationPreparing, "CadenceWaiting")
 	}
 	wallet := record.Spec.PayoutWallet
 	for _, candidate := range record.Spec.MinerWallets {
@@ -296,13 +296,13 @@ func (s *Scheduler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.R
 		number = max(number, target.Spec.Offer.Number)
 	}
 	if number == math.MaxInt64 {
-		return report("Blocked", "OpportunityCounterExhausted")
+		return report(bitcoin.InitializationBlocked, "OpportunityCounterExhausted")
 	}
 	number++
 	next := metav1.NewTime(s.Now().Add(interval).UTC())
 	record.Status.NextOpportunityAt = &next
 	record.Status.Offer = &bitcoin.BitcoinBlockOffer{Override: overrideBinding(record), Initialization: binding("BitcoinInitialization", record), Production: binding("StacksNetworkParticipant", production), PolicyDigest: production.Status.Admission.PolicyDigest, Number: number, Address: wallet.Address, Wallet: wallet.Wallet, ExpectedHeight: height, ExpectedTip: tip, Ceiling: authority.gate.BitcoinCeiling, ExpiresAt: next}
-	result, e := report("Preparing", "OpportunitySelected")
+	result, e := report(bitcoin.InitializationPreparing, "OpportunitySelected")
 	result.RequeueAfter = time.Millisecond
 	return result, e
 }
@@ -339,14 +339,14 @@ func cadenceBounds(schedule *bitcoin.BitcoinBlockScheduleSpec) (time.Duration, t
 		return d, nil
 	}
 	cadence := schedule.Cadence
-	if cadence.Mode == "Fixed" {
+	if cadence.Mode == bitcoin.CadenceFixed {
 		if cadence.MinimumInterval != nil || cadence.MaximumInterval != nil {
 			return 0, 0, fmt.Errorf("fixed cadence fields conflict")
 		}
 		d, err := parse(cadence.Interval)
 		return d, d, err
 	}
-	if cadence.Mode != "Uniform" || cadence.Interval != nil {
+	if cadence.Mode != bitcoin.CadenceUniform || cadence.Interval != nil {
 		return 0, 0, fmt.Errorf("unsupported cadence mode")
 	}
 	low, err := parse(cadence.MinimumInterval)

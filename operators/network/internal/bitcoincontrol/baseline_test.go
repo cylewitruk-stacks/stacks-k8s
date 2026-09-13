@@ -452,7 +452,7 @@ func TestBaselineTerminalRootStillAccountsExistingReceipt(t *testing.T) {
 					t.Fatal(err)
 				}
 			} else {
-				root.Spec.Operation = operation
+				root.Spec.Operation = api.NetworkOperation(operation)
 				if err := f.c.Update(ctx, root); err != nil {
 					t.Fatal(err)
 				}

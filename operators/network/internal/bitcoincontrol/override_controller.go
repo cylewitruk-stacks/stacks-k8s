@@ -64,28 +64,28 @@ func (r *OverrideReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	status.PendingExpiresAt = &pending
 	if active != nil {
 		status.Admission = active
-		status.Phase = "Active"
+		status.Phase = bitcoin.OverrideActive
 		status.Reason = "Activated"
 		if request.DeletionTimestamp != nil {
-			status.Phase = "Cancelled"
+			status.Phase = bitcoin.OverrideCancelled
 			status.Reason = "CancellationRequested"
 		} else if !r.Now().Before(active.ExpiresAt.Time) {
-			status.Phase = "Completed"
+			status.Phase = bitcoin.OverrideCompleted
 			status.Reason = "DurationElapsed"
 		}
 	} else if !overrideTerminal(status.Phase) {
 		switch {
 		case status.Admission != nil:
-			status.Phase = "Cancelled"
+			status.Phase = bitcoin.OverrideCancelled
 			status.Reason = "ActivationWithdrawn"
 		case request.DeletionTimestamp != nil:
-			status.Phase = "Cancelled"
+			status.Phase = bitcoin.OverrideCancelled
 			status.Reason = "CancelledBeforeActivation"
 		case !r.Now().Before(pending.Time):
-			status.Phase = "Expired"
+			status.Phase = bitcoin.OverrideExpired
 			status.Reason = "PendingDeadline"
 		default:
-			status.Phase = "Pending"
+			status.Phase = bitcoin.OverridePending
 			status.Reason = "WaitingForActivation"
 		}
 	}

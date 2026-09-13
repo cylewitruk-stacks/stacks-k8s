@@ -94,7 +94,7 @@ type BitcoinBaselineStatus struct {
 	SelectedTarget *common.Binding `json:"selectedTarget,omitempty"`
 	// Stage records durable selection, publication or final non-execution disposition.
 	// +kubebuilder:validation:Enum=Selected;Offered;Assigned;Skipped;Unassigned
-	Stage string `json:"stage,omitempty"`
+	Stage BaselineStage `json:"stage,omitempty"`
 	// Receipts retains accounting cursors for network-owned execution records after target removal.
 	// +kubebuilder:validation:MaxItems=1000
 	// +listType=map

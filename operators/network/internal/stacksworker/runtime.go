@@ -266,7 +266,7 @@ func (r *Runtime) authorizeInvocation(ctx context.Context, expected Snapshot, ca
 		r.cacheHeld = true
 		return fmt.Errorf("complete admitted worker policy unavailable")
 	}
-	if execution := snapshot.Participant.Status.Execution; execution == nil || execution.PodUID != r.PodUID || execution.ProcessNonce != r.nonce || execution.ProfileDigest != r.Profile.Digest() || execution.Phase == "Failed" {
+	if execution := snapshot.Participant.Status.Execution; execution == nil || execution.PodUID != r.PodUID || execution.ProcessNonce != r.nonce || execution.ProfileDigest != r.Profile.Digest() || execution.Phase == api.WorkerPhaseFailed {
 		r.cacheHeld = true
 		return fmt.Errorf("worker process acknowledgement unavailable")
 	}
@@ -332,10 +332,10 @@ func (r *Runtime) Reconcile(ctx context.Context) (Result, error) {
 	if err != nil {
 		return Result{RequeueAfter: time.Second}, err
 	}
-	if previous := p.Status.Execution; previous != nil && previous.ProcessNonce != "" && previous.ProcessNonce != r.nonce && !(previous.PodUID != r.PodUID && previous.Phase == "Inactive" && (id.Worker == nil || id.Worker.Pod.UID == r.PodUID)) {
+	if previous := p.Status.Execution; previous != nil && previous.ProcessNonce != "" && previous.ProcessNonce != r.nonce && !(previous.PodUID != r.PodUID && previous.Phase == api.WorkerPhaseInactive && (id.Worker == nil || id.Worker.Pod.UID == r.PodUID)) {
 		return Result{Exit: true}, fmt.Errorf("worker process restart cannot recover a prior execution session")
 	}
-	status := api.WorkerExecutionStatus{PodUID: r.PodUID, ProcessNonce: r.nonce, ProfileDigest: r.Profile.Digest(), ObservedGeneration: p.Generation, NetworkGeneration: root.Generation, ObservedAt: metav1.NewTime(r.now().UTC().Truncate(time.Second)), Phase: "Inactive"}
+	status := api.WorkerExecutionStatus{PodUID: r.PodUID, ProcessNonce: r.nonce, ProfileDigest: r.Profile.Digest(), ObservedGeneration: p.Generation, NetworkGeneration: root.Generation, ObservedAt: metav1.NewTime(r.now().UTC().Truncate(time.Second)), Phase: api.WorkerPhaseInactive}
 	previousEvidence := p.Status.Execution
 	if r.pendingReport != nil {
 		previousEvidence = r.pendingReport
@@ -380,14 +380,14 @@ func (r *Runtime) Reconcile(ctx context.Context) (Result, error) {
 		}
 	}
 	if stoppedReason(root, p, id) != "" && id.Worker.Shutdown == nil {
-		status.Phase, status.Reason = "Blocked", "AwaitingShutdownRecord"
+		status.Phase, status.Reason = api.WorkerPhaseBlocked, "AwaitingShutdownRecord"
 		return Result{RequeueAfter: time.Second}, r.publish(ctx, p, &status)
 	}
 	if id.Worker.Shutdown != nil {
 		if r.acknowledged != nil {
 			return Result{RequeueAfter: time.Second}, r.publish(ctx, p, r.acknowledged)
 		}
-		status.Phase, status.Reason = "Draining", id.Worker.Shutdown.Reason
+		status.Phase, status.Reason = api.WorkerPhaseDraining, string(id.Worker.Shutdown.Reason)
 		status.NetworkGeneration = id.Worker.Shutdown.NetworkGeneration
 		deadline := id.Worker.Shutdown.RequestedAt.Add(ShutdownBound)
 		drainCtx, cancel := context.WithDeadline(ctx, deadline)
@@ -419,15 +419,15 @@ func (r *Runtime) Reconcile(ctx context.Context) (Result, error) {
 			status.Transactions = outcome.Transactions.DeepCopy()
 		}
 		if drainErr == nil && outcome.Done || !time.Now().Before(deadline) {
-			status.Phase = "Unsettled"
+			status.Phase = api.WorkerPhaseUnsettled
 			if drainErr == nil && outcome.Done && outcome.Settled && outcome.Pending == 0 {
-				status.Phase = "Settled"
+				status.Phase = api.WorkerPhaseSettled
 			}
 			r.acknowledged = status.DeepCopy()
 		}
 		return Result{RequeueAfter: time.Second}, r.publish(ctx, p, &status)
 	}
-	if previousEvidence != nil && previousEvidence.Phase == "Failed" {
+	if previousEvidence != nil && previousEvidence.Phase == api.WorkerPhaseFailed {
 		return Result{RequeueAfter: 5 * time.Second}, nil
 	}
 	// Persist this process identity before exposing an authorization callback to a role.
@@ -443,16 +443,16 @@ func (r *Runtime) Reconcile(ctx context.Context) (Result, error) {
 	if result.Pending < 0 || result.Pending > 1000 || len(result.Reason) > 128 || len(result.AppliedPolicyDigest) > 128 {
 		return Result{Exit: true}, fmt.Errorf("role execution summary exceeds bound")
 	}
-	status.Phase = "Active"
+	status.Phase = api.WorkerPhaseActive
 	if result.Blocked {
-		status.Phase = "Blocked"
+		status.Phase = api.WorkerPhaseBlocked
 	}
 	if snapshot.Paused {
-		status.Phase = "Paused"
+		status.Phase = api.WorkerPhasePaused
 	}
 	if result.Failed {
 		r.cacheHeld = true
-		status.Phase = "Failed"
+		status.Phase = api.WorkerPhaseFailed
 	}
 	status.Reason = result.Reason
 	status.Pending = result.Pending
@@ -484,7 +484,7 @@ func (r *Runtime) Reconcile(ctx context.Context) (Result, error) {
 	}
 	delay := result.RequeueAfter
 	if err != nil {
-		status.Phase, status.Reason = "Unknown", "RoleObservationUnavailable"
+		status.Phase, status.Reason = api.WorkerPhaseUnknown, "RoleObservationUnavailable"
 		delay = time.Second
 	}
 	if delay <= 0 {

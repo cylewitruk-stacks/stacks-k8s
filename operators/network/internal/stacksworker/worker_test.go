@@ -96,7 +96,7 @@ func TestOrderedDisposalRetainsUnsettledAndExactTermination(t *testing.T) {
 			if !fact.Changed || session.Shutdown == nil || session.Disposal != nil {
 				t.Fatal("shutdown must be recorded before acknowledgement")
 			}
-			phase, pending := "Unsettled", int32(1)
+			phase, pending := api.WorkerPhaseUnsettled, int32(1)
 			if settled {
 				phase, pending = "Settled", 0
 			}

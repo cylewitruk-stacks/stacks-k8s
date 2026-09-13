@@ -104,7 +104,7 @@ func workloadRequests(root *api.StacksNetwork) []ctrl.Request {
 	out := []ctrl.Request{}
 	seen := map[string]bool{}
 	for _, entry := range root.Spec.Participants {
-		if entry.Kind != "BitcoinNode" {
+		if entry.Kind != api.ParticipantBitcoinNode {
 			continue
 		}
 		name := foundation.ParticipantName(string(root.UID), entry.Name)

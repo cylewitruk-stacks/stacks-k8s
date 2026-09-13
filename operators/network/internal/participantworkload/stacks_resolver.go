@@ -104,7 +104,7 @@ func runStacksConfigResolver(ctx context.Context, c client.Client, in StacksConf
 	if in.Namespace == "" || in.ParticipantUID == "" || in.PolicyDigest == "" || !validGenesis || !strings.HasPrefix(in.Genesis.Fingerprint, "sha256:") {
 		return fmt.Errorf("incomplete Stacks configuration binding")
 	}
-	if in.Kind != "StacksNode" && in.Kind != "StacksSigner" {
+	if in.Kind != api.ParticipantStacksNode && in.Kind != api.ParticipantStacksSigner {
 		return fmt.Errorf("unsupported Stacks actor kind")
 	}
 	key, err := readPrivateInput(ctx, c, in.Namespace, in.Key)
@@ -119,7 +119,7 @@ func runStacksConfigResolver(ctx context.Context, c client.Client, in StacksConf
 		return fmt.Errorf("node-owned event authentication is required")
 	}
 	var event *corev1.Secret
-	if in.Kind == "StacksNode" {
+	if in.Kind == api.ParticipantStacksNode {
 		if in.EventAuth.OwnerUID != in.ParticipantUID {
 			return fmt.Errorf("event authentication owner differs from node")
 		}
@@ -137,7 +137,7 @@ func runStacksConfigResolver(ctx context.Context, c client.Client, in StacksConf
 		return fmt.Errorf("invalid immutable event authentication")
 	}
 	var generated []byte
-	if in.Kind == "StacksNode" {
+	if in.Kind == api.ParticipantStacksNode {
 		if in.ActorRPC == nil || in.ActorRPC.OwnerUID == "" || digest(in.Node.Chain) != in.Genesis.Fingerprint {
 			return fmt.Errorf("node genesis or Bitcoin credential binding is incomplete")
 		}
@@ -268,7 +268,7 @@ func writePublicConfigReport(ctx context.Context, c client.Client, namespace str
 func StacksConfigRules(in StacksConfigInput) []rbacv1.PolicyRule {
 	read := []string{in.Key.Binding.Name}
 	write := []string{in.Config.Name}
-	if in.Kind == "StacksNode" {
+	if in.Kind == api.ParticipantStacksNode {
 		write = append(write, in.EventAuth.Binding.Name)
 	} else {
 		read = append(read, in.EventAuth.Binding.Name)

@@ -51,7 +51,7 @@ type Reconciler struct {
 // kind preserves Bitcoin registration compatibility while allowing explicit actor domains.
 func (r *Reconciler) kind() api.ParticipantKind {
 	if r.Kind == "" {
-		return "BitcoinNode"
+		return api.ParticipantBitcoinNode
 	}
 	return r.Kind
 }
@@ -63,7 +63,7 @@ func (r *Reconciler) fieldManager() string {
 
 // finalizer scopes terminal actor lifecycle to its corresponding domain controller.
 func (r *Reconciler) finalizer() string {
-	if r.kind() == "BitcoinNode" {
+	if r.kind() == api.ParticipantBitcoinNode {
 		return Finalizer
 	}
 	return "network.stacks.org/" + strings.ToLower(string(r.kind())) + "-workload"
@@ -83,7 +83,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 		state = *p.Status.Runtime.DeepCopy()
 		state.ObservedGeneration = p.Generation
 	}
-	if p.Spec.Kind == "StacksNode" && state.Protocol != nil {
+	if p.Spec.Kind == api.ParticipantStacksNode && state.Protocol != nil {
 		state.Protocol.Available = false
 		state.Protocol.Reason = "ActorUnavailable"
 	}
@@ -92,7 +92,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 		meta.SetStatusCondition(&conditions, metav1.Condition{Type: "WorkloadReady", Status: status, Reason: reason, Message: message, ObservedGeneration: p.Generation})
 		out := api.ParticipantStatus{Runtime: &state, Conditions: conditions}
 		result := ctrl.Result{}
-		if p.Spec.Kind == "StacksNode" && reason == "Ready" {
+		if p.Spec.Kind == api.ParticipantStacksNode && reason == "Ready" {
 			result.RequeueAfter = protocolPollInterval
 			if state.Protocol != nil && state.Protocol.Available {
 				due := time.Until(state.Protocol.ObservedAt.Add(protocolHeartbeatInterval))
@@ -115,7 +115,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 		return finish(metav1.ConditionUnknown, "ControlUnavailable", "Current network state could not be read")
 	}
 	removing := p.DeletionTimestamp != nil || apierrors.IsNotFound(err) || root.UID != p.Spec.NetworkUID || root.DeletionTimestamp != nil || !selected(&root, &p)
-	stopping := removing || root.Spec.Operation == "Stopped"
+	stopping := removing || root.Spec.Operation == api.NetworkOperationStopped
 	suspended := false
 	for _, entry := range root.Spec.Participants {
 		if entry.Name == p.Spec.ParticipantName && entry.Control != nil {
@@ -163,7 +163,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 	if err := r.authorized(ctx, &root, &p); err != nil {
 		return finish(metav1.ConditionFalse, "AdmissionUnavailable", err.Error())
 	}
-	if root.Spec.Operation == "Paused" && len(state.WorkloadRefs) == 0 {
+	if root.Spec.Operation == api.NetworkOperationPaused && len(state.WorkloadRefs) == 0 {
 		var existing appsv1.StatefulSet
 		err := r.Reader.Get(ctx, client.ObjectKey{Namespace: p.Namespace, Name: Name(&p, "actor")}, &existing)
 		if apierrors.IsNotFound(err) {
@@ -178,13 +178,13 @@ func (r *Reconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 		return finish(metav1.ConditionFalse, "RequiresReplacement", "Established placement failure requires a new participant name")
 	}
 	var ready bool
-	if p.Spec.Kind == "BitcoinNode" {
+	if p.Spec.Kind == api.ParticipantBitcoinNode {
 		ready, err = r.configuration(ctx, &root, &p, &state)
 		status, reason, message := metav1.ConditionUnknown, "ResolvingConfiguration", "Waiting for scoped native configuration agreement"
 		if ready {
 			status, reason, message = metav1.ConditionTrue, "Verified", "Native syntax and required managed settings agree; Core startup validates semantic compatibility"
-			if cfg := p.Status.Admission.Configuration.BitcoinNode.Config; cfg != nil && ptr.Deref(cfg.Compatibility, "Managed") == "Unverified" {
-				status, reason, message = metav1.ConditionFalse, "Unverified", "Experimental custom actor is excluded from protocol prerequisites and mutation ingress"
+			if cfg := p.Status.Admission.Configuration.BitcoinNode.Config; cfg != nil && ptr.Deref(cfg.Compatibility, common.CompatibilityManaged) == common.CompatibilityUnverified {
+				status, reason, message = metav1.ConditionFalse, common.CompatibilityUnverified, "Experimental custom actor is excluded from protocol prerequisites and mutation ingress"
 			}
 		}
 		meta.SetStatusCondition(&conditions, metav1.Condition{Type: "ConfigVerified", Status: status, Reason: reason, Message: message, ObservedGeneration: p.Generation})
@@ -201,7 +201,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 			if verified {
 				status, reason, message = metav1.ConditionTrue, "Verified", "Native configuration matches frozen genesis and admitted bindings"
 			} else {
-				status, reason, message = metav1.ConditionFalse, "Unverified", "Experimental custom actor is excluded from protocol prerequisites and mutation ingress"
+				status, reason, message = metav1.ConditionFalse, common.CompatibilityUnverified, "Experimental custom actor is excluded from protocol prerequisites and mutation ingress"
 			}
 		}
 		meta.SetStatusCondition(&conditions, metav1.Condition{Type: "ConfigVerified", Status: status, Reason: reason, Message: message, ObservedGeneration: p.Generation})
@@ -228,7 +228,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 		return finish(metav1.ConditionFalse, "AdmissionUnavailable", err.Error())
 	}
 	p = current
-	if p.Spec.Kind != "BitcoinNode" {
+	if p.Spec.Kind != api.ParticipantBitcoinNode {
 		captured := state
 		latest, err := r.stacksInput(ctx, &currentRoot, &p, &captured)
 		if err != nil {
@@ -281,7 +281,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 		return ctrl.Result{}, err
 	}
 	for _, condition := range pod.Status.Conditions {
-		if condition.Type == corev1.PodScheduled && condition.Status == corev1.ConditionFalse && condition.Reason == "Unschedulable" {
+		if condition.Type == corev1.PodScheduled && condition.Status == corev1.ConditionFalse && condition.Reason == corev1.PodReasonUnschedulable {
 			meta.SetStatusCondition(&conditions, metav1.Condition{Type: "PlacementReady", Status: metav1.ConditionFalse, Reason: "PlacementError", Message: condition.Message, ObservedGeneration: p.Generation})
 			return finish(metav1.ConditionFalse, "PlacementError", condition.Message)
 		}
@@ -300,8 +300,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 			return finish(metav1.ConditionFalse, "InvalidConfiguration", "Selected actor image rejected its native configuration; private validation output is suppressed")
 		}
 	}
-	if podReady(pod) && pod.Annotations["network.stacks.org/policy-digest"] == state.PolicyDigest && (p.Spec.Kind == "BitcoinNode" || pod.Annotations["network.stacks.org/configuration-digest"] == state.ConfigurationDigest) {
-		if p.Spec.Kind == "StacksNode" {
+	if podReady(pod) && pod.Annotations[api.AnnotationPolicyDigest] == state.PolicyDigest && (p.Spec.Kind == api.ParticipantBitcoinNode || pod.Annotations[api.AnnotationConfigurationDigest] == state.ConfigurationDigest) {
+		if p.Spec.Kind == api.ParticipantStacksNode {
 			if err := r.observeStacksProtocol(ctx, &currentRoot, &p, pod, &state); err != nil && state.Protocol != nil {
 				state.Protocol.Available = false
 				state.Protocol.Reason = "ObservationUnavailable"
@@ -331,7 +331,7 @@ func selected(root *api.StacksNetwork, p *api.StacksNetworkParticipant) bool {
 
 // authorized verifies current lifecycle, admission and published genesis identities.
 func (r *Reconciler) authorized(ctx context.Context, root *api.StacksNetwork, p *api.StacksNetworkParticipant) error {
-	if root.UID != p.Spec.NetworkUID || root.DeletionTimestamp != nil || root.Spec.Operation == "Stopped" || (root.Status.Phase == "Failed" || meta.IsStatusConditionTrue(root.Status.Conditions, "Failed")) || p.DeletionTimestamp != nil {
+	if root.UID != p.Spec.NetworkUID || root.DeletionTimestamp != nil || root.Spec.Operation == api.NetworkOperationStopped || (root.Status.Phase == api.NetworkPhaseFailed || meta.IsStatusConditionTrue(root.Status.Conditions, "Failed")) || p.DeletionTimestamp != nil {
 		return fmt.Errorf("network lifecycle withdraws actor activation")
 	}
 	if err := foundation.ValidateParticipantAdmission(ctx, r.Reader, root, p); err != nil {
@@ -381,7 +381,7 @@ func (r *Reconciler) SetupWithManager(manager ctrl.Manager) error {
 	rootChanges := predicate.Funcs{UpdateFunc: func(e event.UpdateEvent) bool {
 		old, oldOK := e.ObjectOld.(*api.StacksNetwork)
 		current, currentOK := e.ObjectNew.(*api.StacksNetwork)
-		return !oldOK || !currentOK || old.Generation != current.Generation || old.UID != current.UID || !reflect.DeepEqual(old.DeletionTimestamp, current.DeletionTimestamp) || !reflect.DeepEqual(old.Status.GenesisRef, current.Status.GenesisRef) || old.Status.GenesisDigest != current.Status.GenesisDigest || (old.Status.Phase == "Failed") != (current.Status.Phase == "Failed") || !reflect.DeepEqual(old.Status.Identities, current.Status.Identities) || !reflect.DeepEqual(meta.FindStatusCondition(old.Status.Conditions, "Failed"), meta.FindStatusCondition(current.Status.Conditions, "Failed"))
+		return !oldOK || !currentOK || old.Generation != current.Generation || old.UID != current.UID || !reflect.DeepEqual(old.DeletionTimestamp, current.DeletionTimestamp) || !reflect.DeepEqual(old.Status.GenesisRef, current.Status.GenesisRef) || old.Status.GenesisDigest != current.Status.GenesisDigest || (old.Status.Phase == api.NetworkPhaseFailed) != (current.Status.Phase == api.NetworkPhaseFailed) || !reflect.DeepEqual(old.Status.Identities, current.Status.Identities) || !reflect.DeepEqual(meta.FindStatusCondition(old.Status.Conditions, "Failed"), meta.FindStatusCondition(current.Status.Conditions, "Failed"))
 	}}
 	rootMap := handler.EnqueueRequestsFromMapFunc(func(_ context.Context, object client.Object) []reconcile.Request {
 		root, ok := object.(*api.StacksNetwork)
@@ -396,13 +396,13 @@ func (r *Reconciler) SetupWithManager(manager ctrl.Manager) error {
 	})
 	podMap := handler.EnqueueRequestsFromMapFunc(func(_ context.Context, object client.Object) []reconcile.Request {
 		labels := object.GetLabels()
-		if labels["network.stacks.org/participant-kind"] != string(r.kind()) {
+		if labels[api.LabelParticipantKind] != string(r.kind()) {
 			return nil
 		}
-		return []reconcile.Request{{NamespacedName: client.ObjectKey{Namespace: object.GetNamespace(), Name: foundation.ParticipantName(labels["network.stacks.org/network-uid"], labels["network.stacks.org/participant"])}}}
+		return []reconcile.Request{{NamespacedName: client.ObjectKey{Namespace: object.GetNamespace(), Name: foundation.ParticipantName(labels[api.LabelNetworkUID], labels[api.LabelParticipant])}}}
 	})
 	controller := ctrl.NewControllerManagedBy(manager).Named("participant-"+strings.ToLower(string(r.kind()))+"-workload").For(&api.StacksNetworkParticipant{}, builder.WithPredicates(participantChanges)).Owns(&appsv1.StatefulSet{}).Owns(&corev1.Service{}).Owns(&corev1.ConfigMap{}).Owns(&batchv1.Job{}).Watches(&corev1.Pod{}, podMap).Watches(&api.StacksNetwork{}, rootMap, builder.WithPredicates(rootChanges))
-	if r.kind() != "BitcoinNode" {
+	if r.kind() != api.ParticipantBitcoinNode {
 		dependencies := handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, object client.Object) []reconcile.Request {
 			var participants api.StacksNetworkParticipantList
 			if err := r.Reader.List(ctx, &participants, client.InNamespace(object.GetNamespace())); err != nil {

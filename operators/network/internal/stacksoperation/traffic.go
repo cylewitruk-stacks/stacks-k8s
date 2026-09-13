@@ -101,7 +101,7 @@ func (r *TransferRole) Step(ctx context.Context, snapshot stacksworker.Snapshot)
 		return r.result(reason, time.Second), nil
 	}
 	if snapshot.Paused {
-		return r.result("Paused", time.Second), nil
+		return r.result(reasonPaused, time.Second), nil
 	}
 	if r.Resolve == nil || snapshot.Participant == nil || snapshot.Participant.Status.Admission == nil {
 		return r.result("PolicyUnavailable", time.Second), nil
@@ -123,7 +123,7 @@ func (r *TransferRole) Step(ctx context.Context, snapshot stacksworker.Snapshot)
 		r.next = now
 	}
 	if now.Before(r.next) {
-		reason := "WaitingCadence"
+		reason := reasonWaitingCadence
 		if r.stream.rejectionReason != "" {
 			reason = r.stream.rejectionReason
 		}
@@ -171,7 +171,7 @@ func (r *TransferRole) Drain(ctx context.Context, _ stacksworker.Snapshot) (stac
 func (r *TransferRole) result(reason string, delay time.Duration) stacksworker.RoleResult {
 	blocked := true
 	switch reason {
-	case "Paused", "WaitingCadence", "Accepted", "Included", "Idle", "AwaitingInclusion":
+	case reasonPaused, reasonWaitingCadence, reasonAccepted, reasonIncluded, reasonIdle, reasonAwaitingInclusion:
 		blocked = false
 	}
 	return stacksworker.RoleResult{AppliedPolicyDigest: r.applied, Pending: r.stream.Pending(), Reason: reason, Blocked: blocked, RequeueAfter: delay, Transactions: r.stream.Facts()}

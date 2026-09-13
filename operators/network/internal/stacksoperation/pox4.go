@@ -23,7 +23,7 @@ const PoX4Fee uint64 = 3000
 // pox4Goal retains the exact public outcome selected before the sole submission attempt.
 type pox4Goal struct {
 	input                     PoX4Inputs
-	kind                      string
+	kind                      api.PostconditionKind
 	first, end, target, nonce uint64
 }
 
@@ -121,7 +121,7 @@ func (r *PoX4Role) Step(ctx context.Context, snapshot stacksworker.Snapshot) (st
 		r.initialDone = true
 	}
 	if snapshot.Paused {
-		return r.result("Paused"), nil
+		return r.result(reasonPaused), nil
 	}
 	if !state.exists {
 		if r.initialDone {
@@ -148,7 +148,7 @@ func (r *PoX4Role) Step(ctx context.Context, snapshot stacksworker.Snapshot) (st
 		if !input.InitialCohort {
 			target = first
 		}
-		return r.offer(ctx, snapshot, input, state, "PoX4Enrollment", input.LockCycles, first, first+input.LockCycles, target)
+		return r.offer(ctx, snapshot, input, state, api.PostconditionPoX4Enrollment, input.LockCycles, first, first+input.LockCycles, target)
 	}
 	if state.observation == nil {
 		return r.result("EnrollmentStateMismatch"), nil
@@ -157,7 +157,7 @@ func (r *PoX4Role) Step(ctx context.Context, snapshot stacksworker.Snapshot) (st
 		return r.result("AwaitingRequiredCycle"), nil
 	}
 	if state.info.BurnHeight < input.Epoch3Height {
-		return r.result("PoX4EnrollmentObserved"), nil
+		return r.result(reasonPoX4EnrollmentObserved), nil
 	}
 	if state.pox.RewardCycle >= state.end {
 		r.failed = true
@@ -165,24 +165,24 @@ func (r *PoX4Role) Step(ctx context.Context, snapshot stacksworker.Snapshot) (st
 	}
 	remaining := state.end - state.pox.RewardCycle
 	if remaining > input.RenewWhenRemainingCycles || state.pox.BlocksUntilPrepare <= 0 {
-		return r.result("PoX4EnrollmentObserved"), nil
+		return r.result(reasonPoX4EnrollmentObserved), nil
 	}
 	first := state.first
 	if state.pox.RewardCycle > first {
 		first = state.pox.RewardCycle
 	}
 	if state.end-first >= input.LockCycles {
-		return r.result("PoX4EnrollmentObserved"), nil
+		return r.result(reasonPoX4EnrollmentObserved), nil
 	}
 	extend := input.LockCycles - (state.end - first)
 	if state.end > math.MaxUint64-extend {
 		return r.result("InvalidPoXCycle"), nil
 	}
-	return r.offer(ctx, snapshot, input, state, "PoX4Extension", extend, first, state.end+extend, state.end)
+	return r.offer(ctx, snapshot, input, state, api.PostconditionPoX4Extension, extend, first, state.end+extend, state.end)
 }
 
 // offer constructs explicit SIP-018 authorization and sends through the shared nonce stream once.
-func (r *PoX4Role) offer(ctx context.Context, snapshot stacksworker.Snapshot, input PoX4Inputs, state pox4State, kind string, cycles, first, end, target uint64) (stacksworker.RoleResult, error) {
+func (r *PoX4Role) offer(ctx context.Context, snapshot stacksworker.Snapshot, input PoX4Inputs, state pox4State, kind api.PostconditionKind, cycles, first, end, target uint64) (stacksworker.RoleResult, error) {
 	payout, err := pox4Payout(input.Holder)
 	if err != nil {
 		return r.result("InvalidHolder"), nil
@@ -192,14 +192,14 @@ func (r *PoX4Role) offer(ctx context.Context, snapshot stacksworker.Snapshot, in
 		return r.result("InvalidAmount"), nil
 	}
 	required := new(big.Int).SetUint64(PoX4Fee)
-	if kind == "PoX4Enrollment" {
+	if kind == api.PostconditionPoX4Enrollment {
 		required.Add(required, input.Amount)
 	}
 	var nonceUsed uint64
 	reason, err := r.stream.Offer(ctx, r.now, input.Node, required, snapshot.Authorize, func(nonce uint64) (transaction.Transaction, error) {
 		nonceUsed = nonce
 		topic := "stack-stx"
-		if kind == "PoX4Extension" {
+		if kind == api.PostconditionPoX4Extension {
 			topic = "stack-extend"
 		}
 		signature, err := signing.PoX(r.signerKey, signing.PoXAuthorization{Address: payout, RewardCycle: state.pox.RewardCycle, Topic: topic, Period: cycles, MaxAmount: amount, AuthID: clarity.Uint(nonce), ChainID: 0x80000000})
@@ -208,7 +208,7 @@ func (r *PoX4Role) offer(ctx context.Context, snapshot stacksworker.Snapshot, in
 		}
 		authorization := signing.SignerArguments{Signature: signature[:], PublicKey: r.signerPublic, MaxAmount: amount, AuthID: clarity.Uint(nonce)}
 		var args []clarity.Value
-		if kind == "PoX4Enrollment" {
+		if kind == api.PostconditionPoX4Enrollment {
 			args, err = signing.StackSTXArguments(amount, payout, state.pox.BurnHeight, cycles, authorization)
 		} else {
 			args, err = signing.StackExtendArguments(payout, cycles, authorization)
@@ -253,12 +253,12 @@ func (r *PoX4Role) observeGoal(ctx context.Context) string {
 			return reason
 		}
 	}
-	if goal.kind == "PoX4Enrollment" {
+	if goal.kind == api.PostconditionPoX4Enrollment {
 		r.initialDone = true
 	}
 	r.goal = nil
-	if reason == "Idle" {
-		return "PoX4EnrollmentObserved"
+	if reason == reasonIdle {
+		return reasonPoX4EnrollmentObserved
 	}
 	return reason
 }

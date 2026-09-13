@@ -90,7 +90,7 @@ func (r *Reconciler) configuration(ctx context.Context, root *api.StacksNetwork,
 		if len(raw) > 4096 || json.Unmarshal([]byte(raw), &result) != nil || result.InputDigest != digest(in) || !strings.HasPrefix(result.ConfigDigest, "sha256:") {
 			return false, fmt.Errorf("invalid Bitcoin configuration report")
 		}
-		if !result.Verified && in.Customization != nil && ptr.Deref(in.Customization.Compatibility, "Managed") != "Unverified" {
+		if !result.Verified && in.Customization != nil && ptr.Deref(in.Customization.Compatibility, common.CompatibilityManaged) != common.CompatibilityUnverified {
 			return false, fmt.Errorf("Bitcoin configuration agreement missing")
 		}
 		state.ConfigurationDigest = digest(in)
@@ -129,7 +129,7 @@ func peerSeeds(root *api.StacksNetwork, p *api.StacksNetworkParticipant) ([]stri
 	node := p.Status.Admission.Configuration.BitcoinNode
 	selected := map[string]api.InstanceIdentity{}
 	for _, entry := range root.Spec.Participants {
-		if entry.Kind != "BitcoinNode" || entry.Name == p.Spec.ParticipantName {
+		if entry.Kind != api.ParticipantBitcoinNode || entry.Name == p.Spec.ParticipantName {
 			continue
 		}
 		for _, identity := range root.Status.Identities {
@@ -157,7 +157,7 @@ func peerSeeds(root *api.StacksNetwork, p *api.StacksNetworkParticipant) ([]stri
 	sort.Strings(names)
 	seeds := make([]string, 0, len(names))
 	for _, name := range names {
-		seeds = append(seeds, foundation.RuntimeName(string(root.UID), string(selected[name].UID), "BitcoinNode", name, "p2p")+"."+root.Namespace+".svc")
+		seeds = append(seeds, foundation.RuntimeName(string(root.UID), string(selected[name].UID), string(api.ParticipantBitcoinNode), name, "p2p")+"."+root.Namespace+".svc")
 	}
 	return seeds, nil
 }

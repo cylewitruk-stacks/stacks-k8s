@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	common "github.com/cylewitruk-stacks/stacks-k8s/apis/network/common/v1alpha2"
+	api "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha2"
 	"github.com/cylewitruk-stacks/stacks-k8s/libs/stacks/identity"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -184,10 +185,10 @@ func provisionKeyJob(ctx context.Context, c client.Client, reader client.Reader,
 	}
 	data, _ := json.Marshal(in)
 	job := &batchv1.Job{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: owner.GetNamespace(), Labels: map[string]string{managedByLabel: foundationManager, "network.stacks.org/role": "support", "network.stacks.org/source-uid": string(owner.GetUID()), "network.stacks.org/source-kind": gvk.Kind}, Annotations: map[string]string{"network.stacks.org/source-name": owner.GetName()}},
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: owner.GetNamespace(), Labels: map[string]string{managedByLabel: foundationManager, api.LabelRole: "support", api.LabelSourceUID: string(owner.GetUID()), api.LabelSourceKind: gvk.Kind}, Annotations: map[string]string{api.AnnotationSourceName: owner.GetName()}},
 		Spec: batchv1.JobSpec{
 			BackoffLimit: ptr.To[int32](3), ActiveDeadlineSeconds: ptr.To[int64](120),
-			Template: corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{managedByLabel: foundationManager, "network.stacks.org/role": "support", "network.stacks.org/source-uid": string(owner.GetUID()), "network.stacks.org/source-kind": gvk.Kind}}, Spec: corev1.PodSpec{
+			Template: corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{managedByLabel: foundationManager, api.LabelRole: "support", api.LabelSourceUID: string(owner.GetUID()), api.LabelSourceKind: gvk.Kind}}, Spec: corev1.PodSpec{
 				ServiceAccountName: name, RestartPolicy: corev1.RestartPolicyNever,
 				SecurityContext: &corev1.PodSecurityContext{RunAsNonRoot: ptr.To(true), RunAsUser: ptr.To[int64](65532), SeccompProfile: &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault}},
 				Containers: []corev1.Container{{

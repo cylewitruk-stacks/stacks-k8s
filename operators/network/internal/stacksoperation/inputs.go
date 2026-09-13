@@ -56,7 +56,7 @@ func (r PublicInputs) target(ctx context.Context, s stacksworker.Snapshot, name 
 	}
 	selected := false
 	for _, entry := range s.Network.Spec.Participants {
-		if entry.Name == name && entry.Kind == "StacksNode" {
+		if entry.Name == name && entry.Kind == api.ParticipantStacksNode {
 			selected = true
 		}
 	}
@@ -78,7 +78,7 @@ func (r PublicInputs) target(ctx context.Context, s stacksworker.Snapshot, name 
 	if err := r.Reader.Get(ctx, client.ObjectKey{Namespace: s.Participant.Namespace, Name: binding.Name}, &target); err != nil {
 		return nil, err
 	}
-	if target.UID != binding.UID || target.Spec.ParticipantName != name || target.Spec.Kind != "StacksNode" || target.Spec.NetworkUID != s.Network.UID || !metav1.IsControlledBy(&target, s.Network) || target.DeletionTimestamp != nil || target.Status.Admission == nil || target.Status.Runtime == nil {
+	if target.UID != binding.UID || target.Spec.ParticipantName != name || target.Spec.Kind != api.ParticipantStacksNode || target.Spec.NetworkUID != s.Network.UID || !metav1.IsControlledBy(&target, s.Network) || target.DeletionTimestamp != nil || target.Status.Admission == nil || target.Status.Runtime == nil {
 		return nil, fmt.Errorf("target identity unavailable")
 	}
 	runtime := target.Status.Runtime

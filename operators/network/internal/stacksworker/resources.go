@@ -94,7 +94,7 @@ func Name(p *api.StacksNetworkParticipant) string {
 
 // labels identifies support workloads without exposing them as fault actor Pods.
 func labels(p *api.StacksNetworkParticipant) map[string]string {
-	return map[string]string{"app.kubernetes.io/managed-by": "stacks-network-operator", "network.stacks.org/network-uid": string(p.Spec.NetworkUID), "network.stacks.org/participant": p.Spec.ParticipantName, "network.stacks.org/participant-uid": string(p.UID), "network.stacks.org/participant-kind": string(p.Spec.Kind), "network.stacks.org/role": "support", "network.stacks.org/workload": "stacks-worker"}
+	return map[string]string{api.LabelManagedBy: "stacks-network-operator", api.LabelNetworkUID: string(p.Spec.NetworkUID), api.LabelParticipant: p.Spec.ParticipantName, api.LabelParticipantUID: string(p.UID), api.LabelParticipantKind: string(p.Spec.Kind), api.LabelRole: "support", workloadLabel: "stacks-worker"}
 }
 
 // metadata sets the exact participant owner on standalone worker support resources.
@@ -105,13 +105,13 @@ func metadata(p *api.StacksNetworkParticipant) metav1.ObjectMeta {
 // ownedPod checks participant ownership independently of name and labels.
 func ownedPod(pod *corev1.Pod, p *api.StacksNetworkParticipant) bool {
 	owner := metav1.GetControllerOf(pod)
-	return owner != nil && owner.APIVersion == api.GroupVersion.String() && owner.Kind == "StacksNetworkParticipant" && owner.Name == p.Name && owner.UID == p.UID && pod.Labels["network.stacks.org/network-uid"] == string(p.Spec.NetworkUID) && pod.Labels["network.stacks.org/participant-uid"] == string(p.UID)
+	return owner != nil && owner.APIVersion == api.GroupVersion.String() && owner.Kind == "StacksNetworkParticipant" && owner.Name == p.Name && owner.UID == p.UID && pod.Labels[api.LabelNetworkUID] == string(p.Spec.NetworkUID) && pod.Labels[api.LabelParticipantUID] == string(p.UID)
 }
 
 // Rules grants named public observations and only this worker's execution status patch.
 func Rules(p *api.StacksNetworkParticipant, profile Profile) []rbacv1.PolicyRule {
 	rules := []rbacv1.PolicyRule{{APIGroups: []string{api.GroupVersion.Group}, Resources: []string{"stacksnetworks"}, ResourceNames: []string{"network"}, Verbs: []string{"get", "list", "watch"}}, {APIGroups: []string{api.GroupVersion.Group}, Resources: []string{"stacksnetworkparticipants"}, ResourceNames: []string{p.Name}, Verbs: []string{"get", "list", "watch"}}, {APIGroups: []string{api.GroupVersion.Group}, Resources: []string{"stacksnetworkparticipants/status"}, ResourceNames: []string{p.Name}, Verbs: []string{"patch"}}, {APIGroups: []string{""}, Resources: []string{"pods"}, ResourceNames: []string{Name(p)}, Verbs: []string{"get"}}}
-	if p.Spec.Kind == "StacksFaucet" {
+	if p.Spec.Kind == api.ParticipantStacksFaucet {
 		rules = append(rules,
 			rbacv1.PolicyRule{APIGroups: []string{"stacks.stacks.org"}, Resources: []string{"stacksfaucetrequests"}, Verbs: []string{"get", "list", "watch"}},
 			rbacv1.PolicyRule{APIGroups: []string{"stacks.stacks.org"}, Resources: []string{"stacksfaucetrequests/status"}, Verbs: []string{"patch"}},
@@ -136,7 +136,7 @@ func Pod(p *api.StacksNetworkParticipant, profile Profile) (*corev1.Pod, error) 
 	}
 	meta := metadata(p)
 	meta.Finalizers = []string{PodFinalizer}
-	meta.Annotations = map[string]string{profileLabel: profile.Digest(), "network.stacks.org/worker-profile-json": string(raw)}
+	meta.Annotations = map[string]string{profileLabel: profile.Digest(), profileJSONAnnotation: string(raw)}
 	pod := &corev1.Pod{ObjectMeta: meta, Spec: corev1.PodSpec{RestartPolicy: corev1.RestartPolicyNever, ServiceAccountName: Name(p), TerminationGracePeriodSeconds: ptr.To[int64](35), SecurityContext: &corev1.PodSecurityContext{RunAsNonRoot: ptr.To(true), RunAsUser: ptr.To[int64](65532), RunAsGroup: ptr.To[int64](65532), FSGroup: ptr.To[int64](65532), SeccompProfile: &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault}}, Containers: []corev1.Container{{Name: "worker", Image: profile.Image, Command: []string{"/stacks-worker"}, Args: []string{"--role=" + string(p.Spec.Kind), "--namespace=" + p.Namespace, "--participant=" + p.Name, "--participant-uid=" + string(p.UID), "--network-uid=" + string(p.Spec.NetworkUID), "--profile=" + string(raw)}, Env: []corev1.EnvVar{{Name: "POD_NAME", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{APIVersion: "v1", FieldPath: "metadata.name"}}}, {Name: "POD_UID", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{APIVersion: "v1", FieldPath: "metadata.uid"}}}}, Resources: profile.Resources, SecurityContext: &corev1.SecurityContext{AllowPrivilegeEscalation: ptr.To(false), ReadOnlyRootFilesystem: ptr.To(true), Capabilities: &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}}}, VolumeMounts: []corev1.VolumeMount{{Name: "configuration", MountPath: "/configuration", ReadOnly: true}}}}, Volumes: []corev1.Volume{{Name: "configuration", VolumeSource: corev1.VolumeSource{ConfigMap: &corev1.ConfigMapVolumeSource{LocalObjectReference: corev1.LocalObjectReference{Name: profile.Configuration.Name}, DefaultMode: ptr.To[int32](0440)}}}}}}
 	for _, key := range profile.Keys {
 		name := "key-" + key.Role
@@ -149,7 +149,7 @@ func Pod(p *api.StacksNetworkParticipant, profile Profile) (*corev1.Pod, error) 
 			pod.Spec.Tolerations = *profile.Placement.Tolerations
 		}
 		if ptr.Deref(profile.Placement.SpreadAcrossNodes, false) {
-			pod.Spec.Affinity = &corev1.Affinity{PodAntiAffinity: &corev1.PodAntiAffinity{PreferredDuringSchedulingIgnoredDuringExecution: []corev1.WeightedPodAffinityTerm{{Weight: 100, PodAffinityTerm: corev1.PodAffinityTerm{TopologyKey: "kubernetes.io/hostname", LabelSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"network.stacks.org/network-uid": string(p.Spec.NetworkUID), "network.stacks.org/participant-kind": string(p.Spec.Kind), "network.stacks.org/workload": "stacks-worker"}}}}}}}
+			pod.Spec.Affinity = &corev1.Affinity{PodAntiAffinity: &corev1.PodAntiAffinity{PreferredDuringSchedulingIgnoredDuringExecution: []corev1.WeightedPodAffinityTerm{{Weight: 100, PodAffinityTerm: corev1.PodAffinityTerm{TopologyKey: corev1.LabelHostname, LabelSelector: &metav1.LabelSelector{MatchLabels: map[string]string{api.LabelNetworkUID: string(p.Spec.NetworkUID), api.LabelParticipantKind: string(p.Spec.Kind), workloadLabel: "stacks-worker"}}}}}}}
 		}
 	}
 	return pod, nil

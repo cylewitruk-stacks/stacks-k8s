@@ -68,8 +68,8 @@ func (r *Reconciler) reconcileRuntime(ctx context.Context, request ctrl.Request)
 	if failed := meta.FindStatusCondition(base.Status.Conditions, "Failed"); failed != nil && failed.Status == metav1.ConditionTrue {
 		meta.SetStatusCondition(&root.Status.Conditions, *failed)
 	}
-	if base.Status.Phase == "Failed" && !meta.IsStatusConditionTrue(root.Status.Conditions, "Failed") {
-		root.Status.Phase = "Failed"
+	if base.Status.Phase == api.NetworkPhaseFailed && !meta.IsStatusConditionTrue(root.Status.Conditions, "Failed") {
+		root.Status.Phase = api.NetworkPhaseFailed
 	}
 	if !reflect.DeepEqual(base.Status, root.Status) {
 		err = errors.Join(err, r.Client.Status().Patch(ctx, &root, client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{})))

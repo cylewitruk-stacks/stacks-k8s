@@ -59,7 +59,7 @@ func (s *NonceStream) Pending() int32 {
 // Observe inspects only the original target and never resubmits or infers inclusion from a nonce.
 func (s *NonceStream) Observe(ctx context.Context, now time.Time) (string, error) {
 	if s.pending == nil {
-		return "Idle", nil
+		return reasonIdle, nil
 	}
 	p := s.pending
 	inclusion, err := p.node.Inclusion(ctx, p.transaction.TxID)
@@ -67,7 +67,7 @@ func (s *NonceStream) Observe(ctx context.Context, now time.Time) (string, error
 		return "InclusionUnavailable", err
 	}
 	if !inclusion.Found {
-		return "AwaitingInclusion", nil
+		return reasonAwaitingInclusion, nil
 	}
 	if s.facts.Included == math.MaxUint64 {
 		return "CounterExhausted", errors.New("transaction counter exhausted")
@@ -82,7 +82,7 @@ func (s *NonceStream) Observe(ctx context.Context, now time.Time) (string, error
 	if !inclusion.Success {
 		return "ExecutionRejected", nil
 	}
-	return "Included", nil
+	return reasonIncluded, nil
 }
 
 // Offer initializes from canonical account state and submits one explicitly authorized transaction.
@@ -90,7 +90,7 @@ func (s *NonceStream) Observe(ctx context.Context, now time.Time) (string, error
 // Clock is sampled again after a refusal so submission latency cannot consume its backoff.
 func (s *NonceStream) Offer(ctx context.Context, clock func() time.Time, node Node, amount *big.Int, authorize func(context.Context) error, build func(uint64) (transaction.Transaction, error)) (string, error) {
 	if s.pending != nil {
-		return "AwaitingInclusion", nil
+		return reasonAwaitingInclusion, nil
 	}
 	if clock == nil {
 		return "InvalidInputs", errors.New("missing transaction clock")
@@ -153,7 +153,7 @@ func (s *NonceStream) Offer(ctx context.Context, clock func() time.Time, node No
 		return "SubmissionUncertain", nil
 	}
 	s.facts.Accepted++
-	return "Accepted", nil
+	return reasonAccepted, nil
 }
 
 // SettleObserved advances only the exact pending nonce after caller-verified canonical state.
@@ -166,7 +166,7 @@ func (s *NonceStream) SettleObserved(txid string, nextNonce uint64, observation 
 	if s.pending.nonce == math.MaxUint64 || nextNonce != s.pending.nonce+1 {
 		return "NonceMismatch", nil
 	}
-	if observation.Kind != "PoX4Enrollment" && observation.Kind != "PoX4Extension" && observation.Kind != "ContractDeployment" && observation.Kind != "RegistryInitialization" && observation.Kind != "ManagerDeployment" && observation.Kind != "SignerRegistration" && observation.Kind != "PoX5Enrollment" && observation.Kind != "PoX5Extension" {
+	if observation.Kind != api.PostconditionPoX4Enrollment && observation.Kind != api.PostconditionPoX4Extension && observation.Kind != api.PostconditionContractDeployment && observation.Kind != api.PostconditionRegistryInitialization && observation.Kind != api.PostconditionManagerDeployment && observation.Kind != api.PostconditionSignerRegistration && observation.Kind != api.PostconditionPoX5Enrollment && observation.Kind != api.PostconditionPoX5Extension {
 		return "ObservationMismatch", errors.New("unsupported postcondition")
 	}
 	if !strings.HasPrefix(observation.StateDigest, "sha256:") || !canonicalHash(strings.TrimPrefix(observation.StateDigest, "sha256:")) || !canonicalHash(observation.StacksTip) || observation.ObservedAt.IsZero() {
@@ -179,7 +179,7 @@ func (s *NonceStream) SettleObserved(txid string, nextNonce uint64, observation 
 	s.facts.LastPostcondition = observation.DeepCopy()
 	s.next = nextNonce
 	s.pending = nil
-	return "StateObserved", nil
+	return reasonStateObserved, nil
 }
 
 // canonicalHash validates a lowercase unprefixed 32-byte observation digest.

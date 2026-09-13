@@ -25,7 +25,7 @@ func TestFiniteLifecycleKeepsUnknownAndWaitsForWithdrawal(t *testing.T) {
 			}
 			status := &action.BitcoinBlockGenerationStatus{}
 			project(status, state, record, now, nil)
-			if status.Phase != tc.want {
+			if string(status.Phase) != tc.want {
 				t.Fatalf("phase %s want%s", status.Phase, tc.want)
 			}
 			if tc.armed {

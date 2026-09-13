@@ -63,7 +63,7 @@ func requiredWorker(root *api.StacksNetwork, requirement api.BootstrapRequiremen
 		}
 	}
 	execution := p.Status.Execution
-	if session == nil || session.Shutdown != nil || session.Disposal != nil || execution == nil || execution.PodUID != session.Pod.UID || execution.ProfileDigest != session.ProfileDigest || execution.ProcessNonce == "" || execution.AppliedPolicyDigest != p.Status.Admission.PolicyDigest || execution.Phase == "Failed" || execution.Phase == "Unknown" || execution.ObservedGeneration != p.Generation {
+	if session == nil || session.Shutdown != nil || session.Disposal != nil || execution == nil || execution.PodUID != session.Pod.UID || execution.ProfileDigest != session.ProfileDigest || execution.ProcessNonce == "" || execution.AppliedPolicyDigest != p.Status.Admission.PolicyDigest || execution.Phase == api.WorkerPhaseFailed || execution.Phase == api.WorkerPhaseUnknown || execution.ObservedGeneration != p.Generation {
 		return nil
 	}
 	ready := meta.FindStatusCondition(p.Status.Conditions, "WorkloadReady")
@@ -90,7 +90,7 @@ func capturedSigner(root *api.StacksNetwork, g *api.StacksGenesis, requirement a
 		return false
 	}
 	for _, required := range g.Spec.Bootstrap.Requirements {
-		if required.Kind != "StacksSigner" {
+		if required.Kind != api.ParticipantStacksSigner {
 			continue
 		}
 		signer := requiredParticipant(root, required, participants)
@@ -118,7 +118,7 @@ func pox4CohortSatisfied(root *api.StacksNetwork, g *api.StacksGenesis, particip
 	}
 	found := false
 	for _, requirement := range g.Spec.Bootstrap.Requirements {
-		if requirement.Kind != "StacksStacker" {
+		if requirement.Kind != api.ParticipantStacksStacker {
 			continue
 		}
 		found = true
@@ -149,7 +149,7 @@ func pox5CohortSatisfied(root *api.StacksNetwork, g *api.StacksGenesis, particip
 	}
 	found := false
 	for _, requirement := range g.Spec.Bootstrap.Requirements {
-		if requirement.Kind != "StacksStacker" {
+		if requirement.Kind != api.ParticipantStacksStacker {
 			continue
 		}
 		found = true

@@ -4,6 +4,8 @@ import (
 	"context"
 	"time"
 
+	vocabulary "github.com/cylewitruk-stacks/stacks-k8s/apis/network/bitcoin/v1alpha2"
+	common "github.com/cylewitruk-stacks/stacks-k8s/apis/network/common/v1alpha2"
 	api "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha2"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/bitcoincontrol"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/foundation"
@@ -59,7 +61,7 @@ func capabilityPaused(root *api.StacksNetwork, p *api.StacksNetworkParticipant) 
 // currentWorker requires a current execution observation from the bound surviving process.
 func currentWorker(root *api.StacksNetwork, p *api.StacksNetworkParticipant, now time.Time) bool {
 	e := p.Status.Execution
-	if e == nil || e.ProcessNonce == "" || e.ObservedGeneration != p.Generation || e.NetworkGeneration != root.Generation || !fresh(e.ObservedAt, now) || e.Phase == "Inactive" || e.Phase == "Failed" || e.Phase == "Unknown" || e.Phase == "Draining" || e.Phase == "Settled" || e.Phase == "Unsettled" {
+	if e == nil || e.ProcessNonce == "" || e.ObservedGeneration != p.Generation || e.NetworkGeneration != root.Generation || !fresh(e.ObservedAt, now) || e.Phase == api.WorkerPhaseInactive || e.Phase == api.WorkerPhaseFailed || e.Phase == api.WorkerPhaseUnknown || e.Phase == api.WorkerPhaseDraining || e.Phase == api.WorkerPhaseSettled || e.Phase == api.WorkerPhaseUnsettled {
 		return false
 	}
 	for _, id := range root.Status.Identities {
@@ -72,7 +74,7 @@ func currentWorker(root *api.StacksNetwork, p *api.StacksNetworkParticipant, now
 
 // bitcoinOperational separates fresh target availability from original receipt progress.
 func bitcoinOperational(root *api.StacksNetwork, participants []api.StacksNetworkParticipant, now time.Time) predicate {
-	p, result := selectedMember(root, "BitcoinBlockProduction", participants)
+	p, result := selectedMember(root, api.ParticipantBitcoinBlockProduction, participants)
 	if p == nil {
 		return result
 	}
@@ -89,11 +91,11 @@ func bitcoinOperational(root *api.StacksNetwork, participants []api.StacksNetwor
 	var bound time.Duration
 	var err error
 	switch s.Schedule.Cadence.Mode {
-	case "Fixed":
+	case vocabulary.CadenceFixed:
 		if s.Schedule.Cadence.Interval != nil {
 			bound, err = time.ParseDuration(string(*s.Schedule.Cadence.Interval))
 		}
-	case "Uniform":
+	case vocabulary.CadenceUniform:
 		if s.Schedule.Cadence.MaximumInterval != nil {
 			bound, err = time.ParseDuration(string(*s.Schedule.Cadence.MaximumInterval))
 		}
@@ -111,16 +113,16 @@ func bitcoinOperational(root *api.StacksNetwork, participants []api.StacksNetwor
 func minerOperational(root *api.StacksNetwork, participants []api.StacksNetworkParticipant) predicate {
 	waiting := false
 	for _, entry := range root.Spec.Participants {
-		if entry.Kind != "StacksNode" || entry.Control != nil && ptr.Deref(entry.Control.Suspended, false) {
+		if entry.Kind != api.ParticipantStacksNode || entry.Control != nil && ptr.Deref(entry.Control.Suspended, false) {
 			continue
 		}
 		for i := range participants {
 			p := &participants[i]
-			if p.Spec.ParticipantName != entry.Name || !selectedInstance(root, p) || p.Spec.Kind != "StacksNode" || p.Status.Admission == nil || p.DeletionTimestamp != nil || !metav1.IsControlledBy(p, root) || p.Spec.Control != nil && ptr.Deref(p.Spec.Control.Suspended, false) {
+			if p.Spec.ParticipantName != entry.Name || !selectedInstance(root, p) || p.Spec.Kind != api.ParticipantStacksNode || p.Status.Admission == nil || p.DeletionTimestamp != nil || !metav1.IsControlledBy(p, root) || p.Spec.Control != nil && ptr.Deref(p.Spec.Control.Suspended, false) {
 				continue
 			}
 			policy := p.Status.Admission.Configuration.StacksNode
-			if policy == nil || policy.Mining == nil || !ptr.Deref(policy.Mining.Enabled, false) || policy.Config != nil && ptr.Deref(policy.Config.Compatibility, "") == "Unverified" {
+			if policy == nil || policy.Mining == nil || !ptr.Deref(policy.Mining.Enabled, false) || policy.Config != nil && ptr.Deref(policy.Config.Compatibility, "") == common.CompatibilityUnverified {
 				continue
 			}
 			if currentActorReady(p) {
@@ -140,7 +142,7 @@ func minerOperational(root *api.StacksNetwork, participants []api.StacksNetworkP
 
 // trafficOperational requires current canonical inclusion, exact original ingress, and recent progress.
 func trafficOperational(root *api.StacksNetwork, g *api.StacksGenesis, participants []api.StacksNetworkParticipant, now time.Time) predicate {
-	p, result := selectedMember(root, "StacksTransactionProduction", participants)
+	p, result := selectedMember(root, api.ParticipantStacksTransactionProduction, participants)
 	if p == nil {
 		return result
 	}
@@ -160,7 +162,7 @@ func trafficOperational(root *api.StacksNetwork, g *api.StacksGenesis, participa
 	ingress := false
 	for i := range participants {
 		target := &participants[i]
-		if target.UID != o.TargetParticipantUID || !selectedInstance(root, target) || target.Spec.Kind != "StacksNode" || target.Spec.NetworkUID != root.UID || !metav1.IsControlledBy(target, root) || target.DeletionTimestamp != nil || !currentActorReady(target) {
+		if target.UID != o.TargetParticipantUID || !selectedInstance(root, target) || target.Spec.Kind != api.ParticipantStacksNode || target.Spec.NetworkUID != root.UID || !metav1.IsControlledBy(target, root) || target.DeletionTimestamp != nil || !currentActorReady(target) {
 			continue
 		}
 		for _, entry := range root.Spec.Participants {
@@ -185,7 +187,7 @@ func trafficOperational(root *api.StacksNetwork, g *api.StacksGenesis, participa
 
 // contractsOperational uses current membership and frozen public contract inputs without replaying gates.
 func contractsOperational(root *api.StacksNetwork, g *api.StacksGenesis, participants []api.StacksNetworkParticipant, now time.Time) predicate {
-	p, result := selectedMember(root, "StacksContractSet", participants)
+	p, result := selectedMember(root, api.ParticipantStacksContractSet, participants)
 	if p == nil {
 		return result
 	}
@@ -201,7 +203,7 @@ func contractsOperational(root *api.StacksNetwork, g *api.StacksGenesis, partici
 		return predicate{metav1.ConditionUnknown, "ContractAdmissionUnavailable"}
 	}
 	for _, req := range g.Spec.Bootstrap.Requirements {
-		if req.Kind == "StacksContractSet" && foundation.Digest(req.RegistryInitialization) == foundation.Digest(policy.Initialization) && contractObservationMatches(o, g, req, now) {
+		if req.Kind == api.ParticipantStacksContractSet && foundation.Digest(req.RegistryInitialization) == foundation.Digest(policy.Initialization) && contractObservationMatches(o, g, req, now) {
 			return predicate{metav1.ConditionTrue, "ContractsObserved"}
 		}
 	}
@@ -240,14 +242,14 @@ func (r *Reconciler) projectOperation(ctx context.Context, root *api.StacksNetwo
 		}
 		set(root, "Initialized", metav1.ConditionTrue, "BootstrapCompleted", "Frozen gates and post-waterfall canonical production are observed")
 	}
-	if root.Spec.Operation != "Running" {
+	if root.Spec.Operation != api.NetworkOperationRunning {
 		return nil
 	}
-	root.Status.Phase = "Running"
+	root.Status.Phase = api.NetworkPhaseRunning
 	set(root, "Running", metav1.ConditionTrue, "Running", "Initialization is complete and running operation is requested")
 	bitcoin := bitcoinOperational(root, participants, now)
 	if bitcoin.status == metav1.ConditionTrue {
-		production, _ := selectedMember(root, "BitcoinBlockProduction", participants)
+		production, _ := selectedMember(root, api.ParticipantBitcoinBlockProduction, participants)
 		if err := bitcoincontrol.ValidateSchedulingOverride(ctx, r.Reader, root, production, production.Status.Scheduling, now); err != nil {
 			bitcoin = predicate{metav1.ConditionUnknown, "BitcoinTimingUnavailable"}
 		}
@@ -264,13 +266,13 @@ func postWaterfallObserved(root *api.StacksNetwork, g *api.StacksGenesis, partic
 		return false
 	}
 	boundary := uint64(gates[len(gates)-1].BitcoinCeiling + 1)
-	traffic, _ := selectedMember(root, "StacksTransactionProduction", participants)
+	traffic, _ := selectedMember(root, api.ParticipantStacksTransactionProduction, participants)
 	if traffic == nil || traffic.Status.Execution == nil || traffic.Status.Execution.Traffic == nil || traffic.Status.Execution.Traffic.SubmittedBurnHeight < boundary {
 		return false
 	}
 	found := false
 	for _, req := range g.Spec.Bootstrap.Requirements {
-		if req.Kind != "StacksNode" {
+		if req.Kind != api.ParticipantStacksNode {
 			continue
 		}
 		found = true

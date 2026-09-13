@@ -33,7 +33,7 @@ func TestStopRequiresCurrentTerminationEvidence(t *testing.T) {
 			if _, err := r.Reconcile(context.Background(), root); err != nil {
 				t.Fatal(err)
 			}
-			if root.Status.Phase != tc.want || !meta.IsStatusConditionFalse(root.Status.Conditions, "Running") {
+			if string(root.Status.Phase) != tc.want || !meta.IsStatusConditionFalse(root.Status.Conditions, "Running") {
 				t.Fatalf("incorrect shutdown state: %+v", root.Status)
 			}
 		})
@@ -120,7 +120,7 @@ func TestStoppedRequiresAcknowledgementWithoutPublishedWorkloadBinding(t *testin
 		if ack {
 			want = "Stopped"
 		}
-		if root.Status.Phase != want {
+		if string(root.Status.Phase) != want {
 			t.Fatalf("termination acknowledgement=%v phase=%s", ack, root.Status.Phase)
 		}
 	}

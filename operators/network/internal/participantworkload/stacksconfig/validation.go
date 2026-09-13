@@ -25,7 +25,7 @@ var signerProtected = []string{"stacks_private_key", "node_host", "endpoint", "n
 
 // ValidateCustomization checks public structure and protected paths before private rendering.
 func ValidateCustomization(kind api.ParticipantKind, config *common.Config) error {
-	if kind != "StacksNode" && kind != "StacksSigner" {
+	if kind != api.ParticipantStacksNode && kind != api.ParticipantStacksSigner {
 		return fmt.Errorf("unsupported configuration kind")
 	}
 	if config == nil {
@@ -34,7 +34,7 @@ func ValidateCustomization(kind api.ParticipantKind, config *common.Config) erro
 	if config.SecretRef != nil && config.Overrides != nil {
 		return fmt.Errorf("configuration sources are exclusive")
 	}
-	if config.Compatibility != nil && *config.Compatibility != "Managed" && *config.Compatibility != "Unverified" {
+	if config.Compatibility != nil && *config.Compatibility != common.CompatibilityManaged && *config.Compatibility != common.CompatibilityUnverified {
 		return fmt.Errorf("unsupported configuration compatibility")
 	}
 	if config.SecretRef != nil && (len(validation.IsDNS1123Subdomain(config.SecretRef.Name)) != 0 || len(validation.IsConfigMapKey(config.SecretRef.Key)) != 0) {
@@ -45,7 +45,7 @@ func ValidateCustomization(kind api.ParticipantKind, config *common.Config) erro
 		if ref.Alias == "" || len(ref.Alias) > 63 || aliases[ref.Alias] || len(validation.IsDNS1123Label(ref.Name)) != 0 {
 			return fmt.Errorf("invalid or duplicate Service alias %s", ref.Alias)
 		}
-		if !((ref.Kind == "BitcoinNode" || ref.Kind == "StacksNode") && (ref.Endpoint == "rpc" || ref.Endpoint == "p2p") || ref.Kind == "StacksSigner" && ref.Endpoint == "events") {
+		if !((ref.Kind == string(api.ParticipantBitcoinNode) || ref.Kind == string(api.ParticipantStacksNode)) && (ref.Endpoint == "rpc" || ref.Endpoint == "p2p") || ref.Kind == string(api.ParticipantStacksSigner) && ref.Endpoint == "events") {
 			return fmt.Errorf("unsupported Service endpoint for alias %s", ref.Alias)
 		}
 		aliases[ref.Alias] = true
@@ -79,7 +79,7 @@ func customOverrides(kind api.ParticipantKind, config *common.Config) (map[strin
 		return nil, err
 	}
 	protected := nodeProtected
-	if kind == "StacksSigner" {
+	if kind == api.ParticipantStacksSigner {
 		protected = signerProtected
 	}
 	overrides := converted.(map[string]any)
@@ -96,9 +96,9 @@ func Apply(kind api.ParticipantKind, generated, custom []byte, config *common.Co
 		return nil, false, err
 	}
 	protected := nodeProtected
-	if kind == "StacksSigner" {
+	if kind == api.ParticipantStacksSigner {
 		protected = signerProtected
-	} else if kind != "StacksNode" {
+	} else if kind != api.ParticipantStacksNode {
 		return nil, false, fmt.Errorf("unsupported configuration kind")
 	}
 	base, err := document(generated)
@@ -127,7 +127,7 @@ func Apply(kind api.ParticipantKind, generated, custom []byte, config *common.Co
 		if err != nil {
 			return nil, false, err
 		}
-		unverified := config.Compatibility != nil && *config.Compatibility == "Unverified"
+		unverified := config.Compatibility != nil && *config.Compatibility == common.CompatibilityUnverified
 		if !unverified {
 			for _, path := range protected {
 				expected, exists := at(base, path)
@@ -153,7 +153,7 @@ func Apply(kind api.ParticipantKind, generated, custom []byte, config *common.Co
 	if _, err := document(data); err != nil {
 		return nil, false, err
 	}
-	return data, config.Compatibility == nil || *config.Compatibility != "Unverified", nil
+	return data, config.Compatibility == nil || *config.Compatibility != common.CompatibilityUnverified, nil
 }
 
 // document validates bounded TOML without exposing source text through parser errors.

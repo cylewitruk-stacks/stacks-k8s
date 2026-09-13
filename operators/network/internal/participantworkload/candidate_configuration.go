@@ -45,7 +45,7 @@ func (r *Reconciler) ValidateConfiguration(ctx context.Context, in foundation.Ca
 	}
 	local.candidateConfiguration = &snapshot
 	wanted := snapshot.Participants[name]
-	if wanted == nil || (wanted.Spec.Kind != "StacksNode" && wanted.Spec.Kind != "StacksSigner" && wanted.Spec.Kind != "BitcoinNode") {
+	if wanted == nil || (wanted.Spec.Kind != api.ParticipantStacksNode && wanted.Spec.Kind != api.ParticipantStacksSigner && wanted.Spec.Kind != api.ParticipantBitcoinNode) {
 		return false, fmt.Errorf("unsupported candidate configuration kind")
 	}
 	needed := map[string]bool{}
@@ -60,19 +60,19 @@ func (r *Reconciler) ValidateConfiguration(ctx context.Context, in foundation.Ca
 		}
 		needed[name] = true
 		configuration := p.Status.Admission.Configuration
-		if p.Spec.Kind == "StacksNode" {
+		if p.Spec.Kind == api.ParticipantStacksNode {
 			if configuration.StacksNode == nil || configuration.StacksNode.BitcoinNodeRef == nil {
 				return fmt.Errorf("candidate Bitcoin dependency unavailable")
 			}
 			return require(configuration.StacksNode.BitcoinNodeRef.Name)
 		}
-		if p.Spec.Kind == "StacksSigner" {
+		if p.Spec.Kind == api.ParticipantStacksSigner {
 			if configuration.StacksSigner == nil || configuration.StacksSigner.NodeRef == nil {
 				return fmt.Errorf("candidate signer node unavailable")
 			}
 			return require(configuration.StacksSigner.NodeRef.Name)
 		}
-		if p.Spec.Kind != "BitcoinNode" {
+		if p.Spec.Kind != api.ParticipantBitcoinNode {
 			return fmt.Errorf("unsupported candidate actor dependency")
 		}
 		return nil
@@ -97,7 +97,7 @@ func (r *Reconciler) ValidateConfiguration(ctx context.Context, in foundation.Ca
 			}
 		}
 	}
-	for _, kind := range []api.ParticipantKind{"BitcoinNode", "StacksNode", "StacksSigner"} {
+	for _, kind := range []api.ParticipantKind{api.ParticipantBitcoinNode, api.ParticipantStacksNode, api.ParticipantStacksSigner} {
 		for _, name := range names {
 			p := snapshot.Participants[name]
 			if p.Spec.Kind != kind {
@@ -109,7 +109,7 @@ func (r *Reconciler) ValidateConfiguration(ctx context.Context, in foundation.Ca
 			}
 			var ready bool
 			var err error
-			if kind == "BitcoinNode" {
+			if kind == api.ParticipantBitcoinNode {
 				ready, err = local.configuration(ctx, in.Root, p, &state)
 			} else {
 				ready, _, err = local.stacksConfiguration(ctx, in.Root, p, &state)
@@ -128,7 +128,7 @@ func (r *Reconciler) ValidateConfiguration(ctx context.Context, in foundation.Ca
 	}
 	// Bitcoin validation is syntax and managed-setting agreement inside its resolver.
 	// Core semantic compatibility remains an actor startup/readiness check.
-	if wanted.Spec.Kind == "BitcoinNode" {
+	if wanted.Spec.Kind == api.ParticipantBitcoinNode {
 		return true, nil
 	}
 	return local.validateCandidateImage(ctx, snapshot.Participants[name], candidateConfigurationDigest(snapshot))
@@ -233,7 +233,7 @@ func (r *Reconciler) validateCandidateImage(ctx context.Context, p *api.StacksNe
 			},
 		},
 	}
-	job.Annotations = map[string]string{"network.stacks.org/candidate-config": revision}
+	job.Annotations = map[string]string{candidateConfigurationAnnotation: revision}
 	if r.candidateConfiguration != nil && r.candidateConfiguration.Root.Spec.Defaults != nil {
 		applyPlacement(&job.Spec.Template.Spec, r.candidateConfiguration.Root.Spec.Defaults.WorkerPlacement, Labels(p, "support"))
 	}
@@ -244,7 +244,7 @@ func (r *Reconciler) validateCandidateImage(ctx context.Context, p *api.StacksNe
 	if err := r.Reader.Get(ctx, client.ObjectKeyFromObject(job), &actual); err != nil {
 		return false, err
 	}
-	if actual.Annotations["network.stacks.org/candidate-config"] != revision || len(actual.Spec.Template.Spec.Containers) != 1 || actual.Spec.Template.Spec.Containers[0].Image != *fields.Image || !equality.Semantic.DeepEqual(actual.Spec.Template.Spec.Containers[0].Command, job.Spec.Template.Spec.Containers[0].Command) || !equality.Semantic.DeepEqual(actual.Spec.Template.Spec.Volumes, job.Spec.Template.Spec.Volumes) {
+	if actual.Annotations[candidateConfigurationAnnotation] != revision || len(actual.Spec.Template.Spec.Containers) != 1 || actual.Spec.Template.Spec.Containers[0].Image != *fields.Image || !equality.Semantic.DeepEqual(actual.Spec.Template.Spec.Containers[0].Command, job.Spec.Template.Spec.Containers[0].Command) || !equality.Semantic.DeepEqual(actual.Spec.Template.Spec.Volumes, job.Spec.Template.Spec.Volumes) {
 		return false, fmt.Errorf("candidate image validation identity changed")
 	}
 	if err := r.privateMetadata(ctx, p.Namespace, *state.ConfigRef, p.UID); err != nil {

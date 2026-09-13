@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	common "github.com/cylewitruk-stacks/stacks-k8s/apis/network/common/v1alpha2"
+	api "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha2"
 	"k8s.io/apimachinery/pkg/util/validation"
 )
 
@@ -61,7 +62,7 @@ func ValidateCustomization(config *common.Config) error {
 	if config.SecretRef != nil && config.Overrides != nil {
 		return fmt.Errorf("configuration sources are exclusive")
 	}
-	if config.Compatibility != nil && *config.Compatibility != "Managed" && *config.Compatibility != "Unverified" {
+	if config.Compatibility != nil && *config.Compatibility != common.CompatibilityManaged && *config.Compatibility != common.CompatibilityUnverified {
 		return fmt.Errorf("unsupported configuration compatibility")
 	}
 	if ref := config.SecretRef; ref != nil && (len(validation.IsDNS1123Subdomain(ref.Name)) != 0 || len(validation.IsConfigMapKey(ref.Key)) != 0) {
@@ -72,7 +73,7 @@ func ValidateCustomization(config *common.Config) error {
 		if len(validation.IsDNS1123Label(ref.Alias)) != 0 || aliases[ref.Alias] || len(validation.IsDNS1123Label(ref.Name)) != 0 {
 			return fmt.Errorf("invalid or duplicate Service alias")
 		}
-		if !((ref.Kind == "BitcoinNode" || ref.Kind == "StacksNode") && (ref.Endpoint == "rpc" || ref.Endpoint == "p2p") || ref.Kind == "StacksSigner" && ref.Endpoint == "events") {
+		if !((ref.Kind == string(api.ParticipantBitcoinNode) || ref.Kind == string(api.ParticipantStacksNode)) && (ref.Endpoint == "rpc" || ref.Endpoint == "p2p") || ref.Kind == string(api.ParticipantStacksSigner) && ref.Endpoint == "events") {
 			return fmt.Errorf("unsupported Service endpoint")
 		}
 		aliases[ref.Alias] = true
@@ -96,7 +97,7 @@ func Apply(generated, custom []byte, config *common.Config, services map[string]
 	if config == nil {
 		return generated, true, nil
 	}
-	verified := config.Compatibility == nil || *config.Compatibility != "Unverified"
+	verified := config.Compatibility == nil || *config.Compatibility != common.CompatibilityUnverified
 	if config.SecretRef != nil {
 		text := string(custom)
 		for _, ref := range config.ServiceRefs {

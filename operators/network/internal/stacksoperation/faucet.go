@@ -140,7 +140,7 @@ func (r *FaucetRole) Step(ctx context.Context, s stacksworker.Snapshot) (stacksw
 		r.putEntry(entry)
 	}
 	if entry.request.DeletionTimestamp != nil {
-		r.noSend(entry, "Expired", "DeletedBeforeSend")
+		r.noSend(entry, stacks.FaucetExecutionExpired, "DeletedBeforeSend")
 		_ = r.flush(ctx, s)
 		return r.result("RequestExpired"), nil
 	}
@@ -149,15 +149,15 @@ func (r *FaucetRole) Step(ctx context.Context, s stacksworker.Snapshot) (stacksw
 		return r.result("InvalidRequestDeadline"), nil
 	}
 	if !r.now().Before(deadline) {
-		r.noSend(entry, "Expired", "DeadlineBeforeSend")
+		r.noSend(entry, stacks.FaucetExecutionExpired, "DeadlineBeforeSend")
 		_ = r.flush(ctx, s)
 		return r.result("RequestExpired"), nil
 	}
 	if s.Paused || s.CachedApplied {
-		return r.result("Paused"), nil
+		return r.result(reasonPaused), nil
 	}
 	if r.stream.Pending() != 0 {
-		return r.result("AwaitingInclusion"), nil
+		return r.result(reasonAwaitingInclusion), nil
 	}
 	input, err := r.Resolve(ctx, s, entry.request.Status.Admission)
 	if err != nil || input.Node == nil {
@@ -184,27 +184,27 @@ func (r *FaucetRole) Step(ctx context.Context, s stacksworker.Snapshot) (stacksw
 	})
 	if r.stream.Pending() != 0 {
 		r.pendingUID = entry.request.UID
-		entry.outcome = r.execution(entry, "Submitted", reason, false)
+		entry.outcome = r.execution(entry, stacks.FaucetExecutionSubmitted, reason, false)
 		entry.outcome.TxID = r.stream.pending.transaction.TxID
-		if reason != "Accepted" {
-			entry.outcome.Phase = "Inconclusive"
+		if reason != reasonAccepted {
+			entry.outcome.Phase = stacks.FaucetExecutionInconclusive
 		}
 	} else {
 		switch {
 		case strings.HasPrefix(reason, "Rejected") && rpc.ValidationRejectionReason(strings.TrimPrefix(reason, "Rejected")):
-			entry.outcome = r.execution(entry, "Rejected", reason, false)
+			entry.outcome = r.execution(entry, stacks.FaucetExecutionRejected, reason, false)
 			entry.outcome.TxID = r.stream.facts.LastTxID
 			r.increment(&r.summary.Rejected)
 		case errors.Is(offerErr, errFaucetDeadline):
-			r.noSend(entry, "Expired", "DeadlineBeforeSend")
+			r.noSend(entry, stacks.FaucetExecutionExpired, "DeadlineBeforeSend")
 		case errors.Is(offerErr, errFaucetDeleted):
-			r.noSend(entry, "Expired", "DeletedBeforeSend")
+			r.noSend(entry, stacks.FaucetExecutionExpired, "DeletedBeforeSend")
 		case errors.Is(offerErr, errFaucetTerminal):
 			r.forgetEntry(entry.request.UID)
 		case reason == "InsufficientFunds":
-			r.noSend(entry, "Rejected", "InsufficientFunds")
+			r.noSend(entry, stacks.FaucetExecutionRejected, "InsufficientFunds")
 		case reason == "ConstructionFailed":
-			r.noSend(entry, "Rejected", "ConstructionFailed")
+			r.noSend(entry, stacks.FaucetExecutionRejected, "ConstructionFailed")
 		}
 	}
 	if err := r.flush(ctx, s); err != nil {
@@ -216,7 +216,7 @@ func (r *FaucetRole) Step(ctx context.Context, s stacksworker.Snapshot) (stacksw
 // matches verifies immutable request admission independently of informer delivery.
 func (r *FaucetRole) matches(request *stacks.StacksFaucetRequest, s stacksworker.Snapshot) bool {
 	a := request.Status.Admission
-	if a == nil || a.Decision != "Admitted" || a.Faucet == nil || a.Worker == nil || a.SourceAccount == nil || a.Target == nil || a.NetworkUID != request.Spec.NetworkUID || a.NetworkUID != s.Network.UID || a.Faucet.UID != r.ParticipantUID || a.Faucet.Name != s.Participant.Name || a.Worker.UID != r.PodUID || request.Namespace != r.Namespace || a.AmountMicroSTX != request.Spec.AmountMicroSTX || !faucetrequest.ValidAddress(a.Destination) {
+	if a == nil || a.Decision != stacks.FaucetDecisionAdmitted || a.Faucet == nil || a.Worker == nil || a.SourceAccount == nil || a.Target == nil || a.NetworkUID != request.Spec.NetworkUID || a.NetworkUID != s.Network.UID || a.Faucet.UID != r.ParticipantUID || a.Faucet.Name != s.Participant.Name || a.Worker.UID != r.PodUID || request.Namespace != r.Namespace || a.AmountMicroSTX != request.Spec.AmountMicroSTX || !faucetrequest.ValidAddress(a.Destination) {
 		return false
 	}
 	deadline, err := faucetrequest.Deadline(request)
@@ -251,7 +251,7 @@ func (r *FaucetRole) authorize(ctx context.Context, s stacksworker.Snapshot, ent
 	if !r.matches(&current, s) || !equality.Semantic.DeepEqual(current.Status.Admission, entry.request.Status.Admission) {
 		return errors.New("faucet admission changed")
 	}
-	if current.Status.Execution != nil || current.Status.Phase == "Completed" || current.Status.Phase == "Rejected" || current.Status.Phase == "Expired" {
+	if current.Status.Execution != nil || current.Status.Phase == stacks.FaucetCompleted || current.Status.Phase == stacks.FaucetRejected || current.Status.Phase == stacks.FaucetExpired {
 		return errFaucetTerminal
 	}
 	deadline, err := faucetrequest.Deadline(&current)
@@ -281,10 +281,10 @@ func (r *FaucetRole) ObservePending(ctx context.Context) error {
 			r.failed = true
 			return errors.New("faucet inclusion identity differs")
 		}
-		entry.outcome.Phase = "Completed"
-		entry.outcome.Reason = "Included"
+		entry.outcome.Phase = stacks.FaucetExecutionCompleted
+		entry.outcome.Reason = reasonIncluded
 		if !inclusion.Success {
-			entry.outcome.Phase = "Rejected"
+			entry.outcome.Phase = stacks.FaucetExecutionRejected
 			entry.outcome.Reason = "ExecutionRejected"
 			r.increment(&r.summary.Rejected)
 		} else {
@@ -296,8 +296,8 @@ func (r *FaucetRole) ObservePending(ctx context.Context) error {
 		return nil
 	}
 	deadline, _ := faucetrequest.Deadline(entry.request)
-	if !r.now().Before(deadline) && entry.outcome.Phase != "Inconclusive" {
-		entry.outcome.Phase = "Inconclusive"
+	if !r.now().Before(deadline) && entry.outcome.Phase != stacks.FaucetExecutionInconclusive {
+		entry.outcome.Phase = stacks.FaucetExecutionInconclusive
 		entry.outcome.Reason = "DeadlineOutcomeUnknown"
 		entry.outcome.ObservedAt = metav1.NewTime(r.now().UTC())
 	}
@@ -306,18 +306,18 @@ func (r *FaucetRole) ObservePending(ctx context.Context) error {
 }
 
 // execution binds every outcome to this process and the original immutable transfer inputs.
-func (r *FaucetRole) execution(entry *faucetEntry, phase, reason string, noSend bool) *stacks.FaucetExecution {
+func (r *FaucetRole) execution(entry *faucetEntry, phase stacks.FaucetExecutionPhase, reason string, noSend bool) *stacks.FaucetExecution {
 	a := entry.request.Status.Admission
 	return &stacks.FaucetExecution{Phase: phase, Reason: reason, NetworkUID: a.NetworkUID, FaucetUID: r.ParticipantUID, WorkerUID: r.PodUID, ProcessNonce: r.processNonce, NoSend: noSend, Destination: a.Destination, AmountMicroSTX: a.AmountMicroSTX, ObservedAt: metav1.NewTime(r.now().UTC())}
 }
 
 // noSend records affirmative process-local refusal, never an inference from a failed balance read.
-func (r *FaucetRole) noSend(entry *faucetEntry, phase, reason string) {
+func (r *FaucetRole) noSend(entry *faucetEntry, phase stacks.FaucetExecutionPhase, reason string) {
 	if entry.outcome != nil {
 		return
 	}
 	entry.outcome = r.execution(entry, phase, reason, true)
-	if phase == "Expired" {
+	if phase == stacks.FaucetExecutionExpired {
 		r.increment(&r.summary.Expired)
 	} else {
 		r.increment(&r.summary.Rejected)
@@ -401,7 +401,7 @@ func (r *FaucetRole) Drain(ctx context.Context, s stacksworker.Snapshot) (stacks
 	_ = r.ObservePending(ctx)
 	for _, entry := range r.entries {
 		if entry.outcome == nil {
-			r.noSend(entry, "Expired", "WorkerStoppedBeforeSend")
+			r.noSend(entry, stacks.FaucetExecutionExpired, "WorkerStoppedBeforeSend")
 		}
 	}
 	err := r.flush(ctx, s)
@@ -430,7 +430,7 @@ func (r *FaucetRole) Drain(ctx context.Context, s stacksworker.Snapshot) (stacks
 		}
 		entry := &faucetEntry{request: request.DeepCopy()}
 		r.putEntry(entry)
-		r.noSend(entry, "Expired", "WorkerStoppedBeforeSend")
+		r.noSend(entry, stacks.FaucetExecutionExpired, "WorkerStoppedBeforeSend")
 		err = r.flush(ctx, s)
 	}
 	result := r.result("Draining")

@@ -10,7 +10,7 @@ import (
 // ManagementKind identifies Stacks participants with non-restarting mutation workers.
 func ManagementKind(kind api.ParticipantKind) bool {
 	switch kind {
-	case "StacksStacker", "StacksContractSet", "StacksFaucet", "StacksTransactionProduction":
+	case api.ParticipantStacksStacker, api.ParticipantStacksContractSet, api.ParticipantStacksFaucet, api.ParticipantStacksTransactionProduction:
 		return true
 	}
 	return false

@@ -22,7 +22,7 @@ import (
 // pox5Goal retains the exact operation selected before its sole send attempt.
 type pox5Goal struct {
 	input              PoX5Inputs
-	kind               string
+	kind               api.PostconditionKind
 	first, end, target uint64
 	administrator      bool
 }
@@ -91,7 +91,7 @@ func (r *StackerRole) Step(ctx context.Context, snapshot stacksworker.Snapshot) 
 			inclusion := r.legacy.stream.facts.LastInclusion
 			if e == nil && pox.Contract == PoX5Contract && inclusion != nil && inclusion.Success && inclusion.TxID == r.legacy.stream.facts.LastTxID {
 				r.legacy.goal = nil
-				result = r.legacy.result("PoX4InclusionObservedAtTransition")
+				result = r.legacy.result(reasonPoX4InclusionObservedAtTransition)
 			}
 		}
 		return result, err
@@ -147,16 +147,16 @@ func (r *StackerRole) Step(ctx context.Context, snapshot stacksworker.Snapshot) 
 		return r.result("BootstrapWindowMissed"), nil
 	}
 	if snapshot.Paused {
-		return r.result("Paused"), nil
+		return r.result(reasonPaused), nil
 	}
 	if !state.sourceFound {
-		return r.offer(ctx, snapshot, input, state, "ManagerDeployment", 0, 0, target)
+		return r.offer(ctx, snapshot, input, state, api.PostconditionManagerDeployment, 0, 0, target)
 	}
 	if !state.registered || !state.granted {
-		return r.offer(ctx, snapshot, input, state, "SignerRegistration", 0, 0, target)
+		return r.offer(ctx, snapshot, input, state, api.PostconditionSignerRegistration, 0, 0, target)
 	}
 	if state.prepare {
-		return r.result("AwaitingMaintenanceWindow"), nil
+		return r.result(reasonAwaitingMaintenanceWindow), nil
 	}
 	if !state.exists {
 		if state.pox.RewardCycle == math.MaxUint64 || state.pox.RewardCycle+1 > math.MaxUint64-input.LockCycles {
@@ -173,7 +173,7 @@ func (r *StackerRole) Step(ctx context.Context, snapshot stacksworker.Snapshot) 
 		if r.initialDone || !input.InitialCohort {
 			target = first
 		}
-		return r.offer(ctx, snapshot, input, state, "PoX5Enrollment", first, first+input.LockCycles, target)
+		return r.offer(ctx, snapshot, input, state, api.PostconditionPoX5Enrollment, first, first+input.LockCycles, target)
 	}
 	if state.amount.Cmp(input.Amount) != 0 {
 		return r.result("AwaitingUnlockForAmountChange"), nil
@@ -186,7 +186,7 @@ func (r *StackerRole) Step(ctx context.Context, snapshot stacksworker.Snapshot) 
 	}
 	remaining := state.end - state.pox.RewardCycle
 	if remaining > input.RenewWhenRemainingCycles {
-		return r.result("PoX5EnrollmentObserved"), nil
+		return r.result(reasonPoX5EnrollmentObserved), nil
 	}
 	firstNext := state.pox.RewardCycle + 1
 	if firstNext > math.MaxUint64-input.LockCycles {
@@ -194,25 +194,25 @@ func (r *StackerRole) Step(ctx context.Context, snapshot stacksworker.Snapshot) 
 	}
 	end := firstNext + input.LockCycles
 	if end <= state.end {
-		return r.result("PoX5EnrollmentObserved"), nil
+		return r.result(reasonPoX5EnrollmentObserved), nil
 	}
-	return r.offer(ctx, snapshot, input, state, "PoX5Extension", state.first, end, state.end)
+	return r.offer(ctx, snapshot, input, state, api.PostconditionPoX5Extension, state.first, end, state.end)
 }
 
 // offer constructs a single explicit manager or direct-stake operation.
-func (r *StackerRole) offer(ctx context.Context, snapshot stacksworker.Snapshot, input PoX5Inputs, state pox5State, kind string, first, end, target uint64) (stacksworker.RoleResult, error) {
-	admin := kind == "ManagerDeployment" || kind == "SignerRegistration"
+func (r *StackerRole) offer(ctx context.Context, snapshot stacksworker.Snapshot, input PoX5Inputs, state pox5State, kind api.PostconditionKind, first, end, target uint64) (stacksworker.RoleResult, error) {
+	admin := kind == api.PostconditionManagerDeployment || kind == api.PostconditionSignerRegistration
 	stream, key := &r.legacy.stream, r.legacy.holderKey
 	if admin {
 		stream, key = r.administrator, r.administratorKey
 	}
 	required := new(big.Int).SetUint64(PoX4Fee)
-	if kind == "PoX5Enrollment" {
+	if kind == api.PostconditionPoX5Enrollment {
 		required.Add(required, input.Amount)
 	}
 	reason, _ := stream.Offer(ctx, r.now, input.Node, required, snapshot.Authorize, func(nonce uint64) (transaction.Transaction, error) {
 		options := transaction.Options{Version: transaction.Testnet, ChainID: 0x80000000, Nonce: nonce, Fee: PoX4Fee, PostConditionMode: transaction.Deny, PrivateKey: key}
-		if kind == "ManagerDeployment" {
+		if kind == api.PostconditionManagerDeployment {
 			source, err := protocolcontracts.DirectManager(input.Holder)
 			if err != nil {
 				return transaction.Transaction{}, err
@@ -223,7 +223,7 @@ func (r *StackerRole) offer(ctx context.Context, snapshot stacksworker.Snapshot,
 		if err != nil {
 			return transaction.Transaction{}, err
 		}
-		if kind == "SignerRegistration" {
+		if kind == api.PostconditionSignerRegistration {
 			sig, err := signing.SignerGrant(r.legacy.signerKey, input.manager(), clarity.Uint(nonce), 0x80000000)
 			if err != nil {
 				return transaction.Transaction{}, err
@@ -236,7 +236,7 @@ func (r *StackerRole) offer(ctx context.Context, snapshot stacksworker.Snapshot,
 		}
 		// The selected profile explicitly permits the direct native STX lock.
 		options.PostConditionMode = transaction.Allow
-		if kind == "PoX5Enrollment" {
+		if kind == api.PostconditionPoX5Enrollment {
 			amount, err := clarity.Uint128(input.Amount.String())
 			if err != nil {
 				return transaction.Transaction{}, err
@@ -274,11 +274,11 @@ func (r *StackerRole) observeGoal(ctx context.Context) string {
 	}
 	var proof any
 	switch goal.kind {
-	case "ManagerDeployment":
+	case api.PostconditionManagerDeployment:
 		if state.sourceFound {
 			proof = struct{ Manager, SourceDigest string }{goal.input.manager(), sourceDigest(state.source)}
 		}
-	case "SignerRegistration":
+	case api.PostconditionSignerRegistration:
 		if state.sourceFound && state.registered && state.granted {
 			proof = struct{ Manager, SourceDigest, Key string }{goal.input.manager(), sourceDigest(state.source), goal.input.SignerPublicKey}
 		}
@@ -303,12 +303,12 @@ func (r *StackerRole) observeGoal(ctx context.Context) string {
 			return reason
 		}
 	}
-	if goal.kind == "PoX5Enrollment" {
+	if goal.kind == api.PostconditionPoX5Enrollment {
 		r.initialDone = true
 	}
 	r.goal = nil
-	if reason == "Idle" {
-		return "PoX5PostconditionObserved"
+	if reason == reasonIdle {
+		return reasonPoX5PostconditionObserved
 	}
 	return reason
 }

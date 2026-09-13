@@ -234,7 +234,7 @@ func admissionEvents() predicate.Predicate {
 			return !ok || !equal(old.Spec, current.Spec) || !equal(old.Status.Admission, current.Status.Admission) || !equal(admissionConditions(old.Status.Conditions), admissionConditions(current.Status.Conditions))
 		case *api.StacksNetwork:
 			current, ok := b.(*api.StacksNetwork)
-			return !ok || !equal(old.Spec, current.Spec) || !equal(old.Status.Identities, current.Status.Identities) || !equal(old.Status.GenesisRef, current.Status.GenesisRef) || !equal(gateCompletion(old.Status.Initialization), gateCompletion(current.Status.Initialization)) || (old.Status.Phase != current.Status.Phase && (old.Status.Phase == "Failed" || current.Status.Phase == "Failed")) || meta.IsStatusConditionTrue(old.Status.Conditions, "Failed") != meta.IsStatusConditionTrue(current.Status.Conditions, "Failed")
+			return !ok || !equal(old.Spec, current.Spec) || !equal(old.Status.Identities, current.Status.Identities) || !equal(old.Status.GenesisRef, current.Status.GenesisRef) || !equal(gateCompletion(old.Status.Initialization), gateCompletion(current.Status.Initialization)) || (old.Status.Phase != current.Status.Phase && (old.Status.Phase == api.NetworkPhaseFailed || current.Status.Phase == api.NetworkPhaseFailed)) || meta.IsStatusConditionTrue(old.Status.Conditions, "Failed") != meta.IsStatusConditionTrue(current.Status.Conditions, "Failed")
 		case *api.StacksGenesis:
 			current, ok := b.(*api.StacksGenesis)
 			return !ok || !equal(old.Spec, current.Spec)

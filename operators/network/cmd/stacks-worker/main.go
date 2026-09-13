@@ -58,7 +58,7 @@ func main() {
 
 // run creates only scoped Kubernetes clients; signing keys remain in this worker process.
 func run(ctx context.Context, args arguments) error {
-	if args.role != "StacksTransactionProduction" && args.role != "StacksStacker" && args.role != "StacksContractSet" && args.role != "StacksFaucet" {
+	if args.role != string(api.ParticipantStacksTransactionProduction) && args.role != string(api.ParticipantStacksStacker) && args.role != string(api.ParticipantStacksContractSet) && args.role != string(api.ParticipantStacksFaucet) {
 		return fmt.Errorf("unsupported worker role")
 	}
 	if args.namespace == "" || args.participant == "" || args.participantUID == "" || args.networkUID == "" || os.Getenv("POD_UID") == "" || os.Getenv("POD_NAME") == "" {
@@ -94,7 +94,7 @@ func run(ctx context.Context, args arguments) error {
 	if err != nil {
 		return err
 	}
-	role, prerequisites, err := protocolRole(args.role, normalized, c)
+	role, prerequisites, err := protocolRole(api.ParticipantKind(args.role), normalized, c)
 	if err != nil {
 		return err
 	}
@@ -126,7 +126,7 @@ func mountedKey(path string) (string, error) {
 }
 
 // protocolRole binds mounted private inputs to the role's public identity resolver.
-func protocolRole(kind string, profile stacksworker.Profile, reader client.Client) (stacksworker.Role, func(context.Context, stacksworker.Snapshot) error, error) {
+func protocolRole(kind api.ParticipantKind, profile stacksworker.Profile, reader client.Client) (stacksworker.Role, func(context.Context, stacksworker.Snapshot) error, error) {
 	read := func(role string) (string, error) {
 		for _, key := range profile.Keys {
 			if key.Role == role {
@@ -136,9 +136,9 @@ func protocolRole(kind string, profile stacksworker.Profile, reader client.Clien
 		return "", fmt.Errorf("required signing key mount is missing")
 	}
 	senderRole := "sender"
-	if kind == "StacksStacker" {
+	if kind == api.ParticipantStacksStacker {
 		senderRole = "holder"
-	} else if kind == "StacksContractSet" {
+	} else if kind == api.ParticipantStacksContractSet {
 		senderRole = "deployer"
 	}
 	key, err := read(senderRole)
@@ -151,7 +151,7 @@ func protocolRole(kind string, profile stacksworker.Profile, reader client.Clien
 	}
 	inputs := stacksoperation.PublicInputs{Reader: reader, Sender: public.Address}
 	switch kind {
-	case "StacksFaucet":
+	case api.ParticipantStacksFaucet:
 		role, err := stacksoperation.NewFaucetRole(key, public.Address)
 		if err != nil {
 			return nil, nil, err
@@ -159,7 +159,7 @@ func protocolRole(kind string, profile stacksworker.Profile, reader client.Clien
 		role.Client, role.Resolve = reader, inputs.Faucet
 		// Requests carry their own fresh prerequisites; an idle faucet may activate.
 		return role, func(context.Context, stacksworker.Snapshot) error { return nil }, nil
-	case "StacksTransactionProduction":
+	case api.ParticipantStacksTransactionProduction:
 		role, err := stacksoperation.NewTransferRole(key, public.Address)
 		if err != nil {
 			return nil, nil, err
@@ -169,7 +169,7 @@ func protocolRole(kind string, profile stacksworker.Profile, reader client.Clien
 			_, err := inputs.Transfer(ctx, s)
 			return err
 		}, nil
-	case "StacksStacker":
+	case api.ParticipantStacksStacker:
 		consensus, err := read("consensus")
 		if err != nil {
 			return nil, nil, err
@@ -192,7 +192,7 @@ func protocolRole(kind string, profile stacksworker.Profile, reader client.Clien
 		}
 		role.ResolvePoX4, role.ResolvePoX5 = inputs.PoX4, inputs.PoX5
 		return role, func(ctx context.Context, s stacksworker.Snapshot) error { _, err := inputs.PoX5(ctx, s); return err }, nil
-	case "StacksContractSet":
+	case api.ParticipantStacksContractSet:
 		role, err := stacksoperation.NewContractRole(key, public.Address, "/protocol/sbtc")
 		if err != nil {
 			return nil, nil, err

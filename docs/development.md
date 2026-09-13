@@ -11,6 +11,20 @@ No committed `go.work` is required. The modules are intentionally verified in
 isolation so local workspace state cannot hide a missing dependency or combine
 the independently versioned API, runtime, and generator dependency graphs.
 
+## Domain vocabulary
+
+Public kind, lifecycle and cadence constants live with their API types in
+`apis/network`; runtime-only metadata stays with its owning controller package.
+Use typed values through domain helpers and convert to strings at generic
+Kubernetes, CLI, naming or document boundaries. Use concrete object switches
+for supported action dispatch and return errors for unknown or nil inputs.
+
+Keep schema enums, YAML examples and wire-test expectations independent of
+implementation constants. A constant refactor must preserve serialized values
+and generated schemas; a named Go string type does not validate external input
+or make switches exhaustive. Condition reasons remain extensible strings, with
+shared constants for reasons that coordinate execution across controllers.
+
 ## Kubernetes compatibility
 
 The development target is Kubernetes **1.37.0**. API and runtime modules pin

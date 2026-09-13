@@ -76,12 +76,12 @@ func (r *Reconciler) projectGates(ctx context.Context, root *api.StacksNetwork, 
 	gate := genesis.Spec.Bootstrap.Gates[state.GateIndex]
 	observation := &state.Gates[state.GateIndex]
 	now := time.Now()
-	if gate.Name != "PrepareBitcoin" && gate.Name != "EnrollPoX4" && gate.Name != "PrepareNakamoto" && gate.Name != "PreparePoX5" && gate.Name != "EnrollPoX5" && gate.Name != "PrepareWaterfall" {
+	if gate.Name != api.GatePrepareBitcoin && gate.Name != api.GateEnrollPoX4 && gate.Name != api.GatePrepareNakamoto && gate.Name != api.GatePreparePoX5 && gate.Name != api.GateEnrollPoX5 && gate.Name != api.GatePrepareWaterfall {
 		set(root, "Initialized", metav1.ConditionFalse, "GateRuntimeNotImplemented", "The next frozen protocol gate is not implemented yet")
 		return false, nil
 	}
 	// The first gate owns its own exact observation boundary in its execution record.
-	if gate.Name == "PrepareBitcoin" && record.Status.FirstCeilingObservedAt != nil && observation.FirstCeilingObservedAt == nil {
+	if gate.Name == api.GatePrepareBitcoin && record.Status.FirstCeilingObservedAt != nil && observation.FirstCeilingObservedAt == nil {
 		observation.FirstCeilingObservedAt = record.Status.FirstCeilingObservedAt.DeepCopy()
 	}
 	height, known, err := r.initializationHeight(ctx, root, record, now)
@@ -89,7 +89,7 @@ func (r *Reconciler) projectGates(ctx context.Context, root *api.StacksNetwork, 
 		return false, err
 	}
 	if known && height > gate.BitcoinCeiling {
-		root.Status.Phase = "Failed"
+		root.Status.Phase = api.NetworkPhaseFailed
 		set(root, "Failed", metav1.ConditionTrue, "FrozenCeilingExceeded", "The frozen initialization ceiling was exceeded; recreate the network")
 		return true, nil
 	}
@@ -97,25 +97,25 @@ func (r *Reconciler) projectGates(ctx context.Context, root *api.StacksNetwork, 
 		at := metav1.NewTime(now)
 		observation.FirstCeilingObservedAt = &at
 	}
-	preparedInTime := gate.Name == "PrepareBitcoin" && record.Status.PreparedAt != nil && !record.Status.PreparedAt.Time.After(now) && (record.Status.FirstCeilingObservedAt == nil || record.Status.PreparedAt.Time.Before(record.Status.FirstCeilingObservedAt.Add(120*time.Second)))
+	preparedInTime := gate.Name == api.GatePrepareBitcoin && record.Status.PreparedAt != nil && !record.Status.PreparedAt.Time.After(now) && (record.Status.FirstCeilingObservedAt == nil || record.Status.PreparedAt.Time.Before(record.Status.FirstCeilingObservedAt.Add(120*time.Second)))
 	if !preparedInTime && observation.FirstCeilingObservedAt != nil && !now.Before(observation.FirstCeilingObservedAt.Add(120*time.Second)) {
-		root.Status.Phase = "Failed"
+		root.Status.Phase = api.NetworkPhaseFailed
 		set(root, "Failed", metav1.ConditionTrue, "BootstrapObservationDeadline", "The frozen gate observation deadline expired; recreate the network")
 		return true, nil
 	}
 	complete := false
 	switch gate.Name {
-	case "PrepareBitcoin":
+	case api.GatePrepareBitcoin:
 		complete = preparedInTime
-	case "EnrollPoX4":
+	case api.GateEnrollPoX4:
 		complete = known && pox4CohortSatisfied(root, genesis, participants, gate, now)
-	case "PrepareNakamoto":
+	case api.GatePrepareNakamoto:
 		complete = known && pox4CohortSatisfied(root, genesis, participants, gate, now) && preparedCohortSatisfied(root, genesis, participants, gate, now)
-	case "PreparePoX5":
+	case api.GatePreparePoX5:
 		complete = known && contractCohortSatisfied(root, genesis, participants, now)
-	case "EnrollPoX5":
+	case api.GateEnrollPoX5:
 		complete = known && pox5CohortSatisfied(root, genesis, participants, gate, now)
-	case "PrepareWaterfall":
+	case api.GatePrepareWaterfall:
 		complete = known && pox5CohortSatisfied(root, genesis, participants, gate, now) && preparedCohortSatisfied(root, genesis, participants, gate, now)
 	default:
 		set(root, "Initialized", metav1.ConditionFalse, "GateRuntimeNotImplemented", "The next frozen protocol gate is not implemented yet")

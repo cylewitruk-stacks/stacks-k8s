@@ -42,12 +42,12 @@ const foundationFinalizer = "network.stacks.org/foundation"
 func condition(conditions *[]metav1.Condition, generation int64, kind string, status metav1.ConditionStatus, reason, message string) {
 	meta.SetStatusCondition(conditions, metav1.Condition{Type: kind, Status: status, Reason: reason, Message: message, ObservedGeneration: generation})
 }
-func (r *Reconciler) report(ctx context.Context, root *api.StacksNetwork, base *api.StacksNetwork, phase, reason, message string) (ctrl.Result, error) {
-	failed := root.Status.Phase == "Failed" || meta.IsStatusConditionTrue(root.Status.Conditions, "Failed")
-	if phase == "Failed" || (!failed && (r.Runtime == nil || root.Status.GenesisRef == nil)) {
+func (r *Reconciler) report(ctx context.Context, root *api.StacksNetwork, base *api.StacksNetwork, phase api.NetworkPhase, reason, message string) (ctrl.Result, error) {
+	failed := root.Status.Phase == api.NetworkPhaseFailed || meta.IsStatusConditionTrue(root.Status.Conditions, "Failed")
+	if phase == api.NetworkPhaseFailed || (!failed && (r.Runtime == nil || root.Status.GenesisRef == nil)) {
 		root.Status.Phase = phase
 	}
-	if phase == "Failed" {
+	if phase == api.NetworkPhaseFailed {
 		condition(&root.Status.Conditions, root.Generation, "Failed", metav1.ConditionTrue, reason, message)
 	}
 	if r.Runtime == nil {
@@ -56,7 +56,7 @@ func (r *Reconciler) report(ctx context.Context, root *api.StacksNetwork, base *
 		condition(&root.Status.Conditions, root.Generation, "Operational", metav1.ConditionFalse, "RuntimeNotImplemented", "Protocol health is not asserted")
 	}
 	resolvedStatus := metav1.ConditionUnknown
-	if phase == "ResolutionError" || phase == "Failed" {
+	if phase == api.NetworkPhaseResolutionError || phase == api.NetworkPhaseFailed {
 		resolvedStatus = metav1.ConditionFalse
 	} else if reason == "PausedBeforeInitialization" || reason == "GenesisCaptured" {
 		resolvedStatus = metav1.ConditionTrue
@@ -69,7 +69,7 @@ func (r *Reconciler) report(ctx context.Context, root *api.StacksNetwork, base *
 	}
 	// Successful continuation must not accumulate error backoff across participant allocations.
 	// Retry unresolved inputs; settled states advance through watches only.
-	if phase == "ResolutionError" {
+	if phase == api.NetworkPhaseResolutionError {
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 	if reason == "Allocating" || reason == "Withdrawing" || reason == "GenesisRecovered" {
@@ -110,7 +110,7 @@ func (r *Reconciler) reconcileTopology(ctx context.Context, req ctrl.Request) (c
 		id := &root.Status.Identities[i]
 		if _, ok := selected[id.Name]; !ok && !id.Removing {
 			id.Removing = true
-			return r.report(ctx, &root, base, "Resolving", "Withdrawing", "Participant removal recorded before destructive cleanup")
+			return r.report(ctx, &root, base, api.NetworkPhaseResolving, "Withdrawing", "Participant removal recorded before destructive cleanup")
 		}
 		if id.Removing {
 			if err := r.deleteParticipant(ctx, &root, *id); err != nil {
@@ -121,7 +121,7 @@ func (r *Reconciler) reconcileTopology(ctx context.Context, req ctrl.Request) (c
 			}
 		}
 	}
-	if root.Status.Phase == "Failed" || meta.IsStatusConditionTrue(root.Status.Conditions, "Failed") {
+	if root.Status.Phase == api.NetworkPhaseFailed || meta.IsStatusConditionTrue(root.Status.Conditions, "Failed") {
 		return ctrl.Result{}, nil
 	}
 	if root.Status.GenesisRef == nil {
@@ -130,7 +130,7 @@ func (r *Reconciler) reconcileTopology(ctx context.Context, req ctrl.Request) (c
 		err := r.Reader.Get(ctx, key, existing)
 		if err == nil {
 			if !ownedUID(existing, root.UID) || existing.Spec.Source.NetworkUID != root.UID || existing.DeletionTimestamp != nil {
-				return r.report(ctx, &root, base, "Failed", "GenesisUnavailable", "Existing genesis is foreign or being removed")
+				return r.report(ctx, &root, base, api.NetworkPhaseFailed, "GenesisUnavailable", "Existing genesis is foreign or being removed")
 			}
 			for _, required := range existing.Spec.Bootstrap.Requirements {
 				var p api.StacksNetworkParticipant
@@ -138,16 +138,16 @@ func (r *Reconciler) reconcileTopology(ctx context.Context, req ctrl.Request) (c
 					if !apierrors.IsNotFound(err) {
 						return ctrl.Result{}, err
 					}
-					return r.report(ctx, &root, base, "Failed", "BootstrapPolicyUnavailable", "Captured participant unavailable; recreate the network")
+					return r.report(ctx, &root, base, api.NetworkPhaseFailed, "BootstrapPolicyUnavailable", "Captured participant unavailable; recreate the network")
 				}
 				if p.UID != required.Participant.UID || p.Status.Admission == nil || p.Status.Admission.PolicyDigest != required.PolicyDigest {
-					return r.report(ctx, &root, base, "Failed", "BootstrapPolicyUnavailable", "Captured initial policy unavailable; recreate the network")
+					return r.report(ctx, &root, base, api.NetworkPhaseFailed, "BootstrapPolicyUnavailable", "Captured initial policy unavailable; recreate the network")
 				}
 			}
 			root.Status.GenesisRef = ptrBinding(binding("StacksGenesis", existing, Digest(existing.Spec)))
 			root.Status.GenesisDigest = Digest(existing.Spec.Chain)
 			root.Status.InputDigest = existing.Spec.Source.InputDigest
-			return r.report(ctx, &root, base, "Initializing", "GenesisRecovered", "Recovered the immutable capture; current intent still requires resolution")
+			return r.report(ctx, &root, base, api.NetworkPhaseInitializing, "GenesisRecovered", "Recovered the immutable capture; current intent still requires resolution")
 		}
 		if !apierrors.IsNotFound(err) {
 			return ctrl.Result{}, err
@@ -161,14 +161,14 @@ func (r *Reconciler) reconcileTopology(ctx context.Context, req ctrl.Request) (c
 			if !apierrors.IsNotFound(err) {
 				return ctrl.Result{}, err
 			}
-			return r.report(ctx, &root, base, "Failed", "GenesisUnavailable", "Published genesis disappeared; recreate the network")
+			return r.report(ctx, &root, base, api.NetworkPhaseFailed, "GenesisUnavailable", "Published genesis disappeared; recreate the network")
 		}
 		if frozen.UID != root.Status.GenesisRef.UID || !ownedUID(frozen, root.UID) || frozen.DeletionTimestamp != nil || Digest(frozen.Spec) != root.Status.GenesisRef.Fingerprint {
-			return r.report(ctx, &root, base, "Failed", "GenesisUnavailable", "Published genesis identity or content changed; recreate the network")
+			return r.report(ctx, &root, base, api.NetworkPhaseFailed, "GenesisUnavailable", "Published genesis identity or content changed; recreate the network")
 		}
 	}
-	if root.Spec.Operation == "Stopped" {
-		return r.report(ctx, &root, base, "Stopped", "Stopped", "Terminal stop; participant removals remain destructive")
+	if root.Spec.Operation == api.NetworkOperationStopped {
+		return r.report(ctx, &root, base, api.NetworkPhaseStopped, "Stopped", "Terminal stop; participant removals remain destructive")
 	}
 	all := map[string]*candidate{}
 	instances := map[string]*api.StacksNetworkParticipant{}
@@ -185,7 +185,7 @@ func (r *Reconciler) reconcileTopology(ctx context.Context, req ctrl.Request) (c
 		err := r.Reader.Get(ctx, types.NamespacedName{Namespace: root.Namespace, Name: name}, instance)
 		if apierrors.IsNotFound(err) {
 			if id != nil {
-				return r.report(ctx, &root, base, "Failed", "InstanceLost", "Recorded participant disappeared; replacement requires a fresh network")
+				return r.report(ctx, &root, base, api.NetworkPhaseFailed, "InstanceLost", "Recorded participant disappeared; replacement requires a fresh network")
 			}
 			if len(root.Status.Identities) >= 1000 {
 				issue("InstanceLimit", "Network lifetime participant allocation limit reached")
@@ -201,7 +201,7 @@ func (r *Reconciler) reconcileTopology(ctx context.Context, req ctrl.Request) (c
 			return ctrl.Result{}, err
 		}
 		if !ownedUID(instance, root.UID) || instance.Spec.NetworkUID != root.UID || instance.Spec.ParticipantName != entry.Name || instance.DeletionTimestamp != nil || id != nil && id.UID != instance.UID {
-			return r.report(ctx, &root, base, "Failed", "InstanceIdentityChanged", "Participant identity changed or is foreign; recreate the network")
+			return r.report(ctx, &root, base, api.NetworkPhaseFailed, "InstanceIdentityChanged", "Participant identity changed or is foreign; recreate the network")
 		}
 		if instance.Spec.Kind != entry.Kind {
 			const message = "Participant kind is immutable while its entry exists"
@@ -213,10 +213,10 @@ func (r *Reconciler) reconcileTopology(ctx context.Context, req ctrl.Request) (c
 		}
 		if id == nil {
 			if ManagementKind(entry.Kind) && !PendingWorkerAllocation(&root, instance) {
-				return r.report(ctx, &root, base, "Failed", "WorkerIdentityLost", "Participant worker history exists without its identity ledger; recreate the network")
+				return r.report(ctx, &root, base, api.NetworkPhaseFailed, "WorkerIdentityLost", "Participant worker history exists without its identity ledger; recreate the network")
 			}
 			root.Status.Identities = append(root.Status.Identities, api.InstanceIdentity{Name: entry.Name, UID: instance.UID})
-			return r.report(ctx, &root, base, "Resolving", "Allocating", "Participant identity recorded before resolving instance-owned inputs")
+			return r.report(ctx, &root, base, api.NetworkPhaseResolving, "Allocating", "Participant identity recorded before resolving instance-owned inputs")
 		}
 		instances[entry.Name] = instance
 		// Controls are independent of candidate policy validity, including composition errors.
@@ -309,7 +309,7 @@ func (r *Reconciler) reconcileTopology(ctx context.Context, req ctrl.Request) (c
 		}
 		if prior := c.instance.Status.Admission; prior != nil && (!sameIdentities(prior.Dependencies, admission.Dependencies) || !sameProtectedConfiguration(c.instance.Spec.Kind, prior.Configuration, admission.Configuration) || !sameBoundPlacement(&root, c.instance, admission.Configuration)) {
 			message := "A protected binding changed; use a new participant name"
-			if c.instance.Spec.Kind == "BitcoinBlockProduction" {
+			if c.instance.Spec.Kind == api.ParticipantBitcoinBlockProduction {
 				message = "Bitcoin payout or initialization binding changes require a fresh network"
 			}
 			issue("RequiresReplacement", entry.Name+": "+message)
@@ -322,7 +322,7 @@ func (r *Reconciler) reconcileTopology(ctx context.Context, req ctrl.Request) (c
 			for _, required := range frozen.Spec.Bootstrap.Requirements {
 				if required.Participant.UID == c.instance.UID && bootstrapPolicyPending(completedGates, required) {
 					if c.instance.Status.Admission == nil || Digest(c.instance.Status.Admission.Configuration) != c.instance.Status.Admission.PolicyDigest || !BootstrapPolicyCompatible(required, c.instance.Status.Admission.Configuration) {
-						return r.report(ctx, &root, base, "Failed", "BootstrapPolicyUnavailable", "Captured initial policy unavailable; recreate the network")
+						return r.report(ctx, &root, base, api.NetworkPhaseFailed, "BootstrapPolicyUnavailable", "Captured initial policy unavailable; recreate the network")
 					}
 					if !BootstrapPolicyCompatible(required, admission.Configuration) {
 						admission = c.instance.Status.Admission
@@ -365,21 +365,21 @@ func (r *Reconciler) reconcileTopology(ctx context.Context, req ctrl.Request) (c
 		}
 	}
 	if resolutionErr != nil {
-		return r.report(ctx, &root, base, "ResolutionError", resolutionReason, resolutionErr.Error())
+		return r.report(ctx, &root, base, api.NetworkPhaseResolutionError, resolutionReason, resolutionErr.Error())
 	}
 	if frozen != nil {
-		return r.report(ctx, &root, base, "Initializing", "GenesisCaptured", "Immutable genesis captured; admitted participants may converge toward declared operation")
+		return r.report(ctx, &root, base, api.NetworkPhaseInitializing, "GenesisCaptured", "Immutable genesis captured; admitted participants may converge toward declared operation")
 	}
 	spec, err := compileGenesis(ctx, r.Client, &root, all)
 	if err != nil {
-		return r.report(ctx, &root, base, "ResolutionError", "GenesisInputsUnavailable", err.Error())
+		return r.report(ctx, &root, base, api.NetworkPhaseResolutionError, "GenesisInputsUnavailable", err.Error())
 	}
 	root.Status.InputDigest = spec.Source.InputDigest
 	if root.Spec.ExpectedInputDigest != nil && *root.Spec.ExpectedInputDigest != spec.Source.InputDigest {
-		return r.report(ctx, &root, base, "ResolutionError", "InputDigestMismatch", "Resolved inputs differ from the expected digest")
+		return r.report(ctx, &root, base, api.NetworkPhaseResolutionError, "InputDigestMismatch", "Resolved inputs differ from the expected digest")
 	}
-	if root.Spec.Operation == "Paused" {
-		return r.report(ctx, &root, base, "Resolving", "PausedBeforeInitialization", "Inputs resolved; pause prevents genesis capture")
+	if root.Spec.Operation == api.NetworkOperationPaused {
+		return r.report(ctx, &root, base, api.NetworkPhaseResolving, "PausedBeforeInitialization", "Inputs resolved; pause prevents genesis capture")
 	}
 	// Re-resolve public inputs with uncached reads immediately before freezing.
 	fresh := map[string]*candidate{}
@@ -415,16 +415,16 @@ func (r *Reconciler) reconcileTopology(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{RequeueAfter: time.Millisecond}, nil
 	}
 	for name, err := range r.configurationResults(ctx, &root, fresh, nil, true) {
-		return r.report(ctx, &root, base, "ResolutionError", "ConfigurationValidation", name+": "+err.Error())
+		return r.report(ctx, &root, base, api.NetworkPhaseResolutionError, "ConfigurationValidation", name+": "+err.Error())
 	}
 	// A fresh boundary check must not reuse the earlier admission observations.
 	captureDependencies := newDependencyCheck(r.Reader, &root)
 	if err := captureDependencies.validate(ctx, currentSpec.Source.Dependencies); err != nil {
-		return r.report(ctx, &root, base, "ResolutionError", "DependencyUnavailable", err.Error())
+		return r.report(ctx, &root, base, api.NetworkPhaseResolutionError, "DependencyUnavailable", err.Error())
 	}
 	for _, required := range currentSpec.Bootstrap.Requirements {
 		if err := captureDependencies.validate(ctx, required.Dependencies); err != nil {
-			return r.report(ctx, &root, base, "ResolutionError", "DependencyUnavailable", err.Error())
+			return r.report(ctx, &root, base, api.NetworkPhaseResolutionError, "DependencyUnavailable", err.Error())
 		}
 	}
 	// Recheck the current root revision immediately before the one-way create.
@@ -447,13 +447,13 @@ func (r *Reconciler) reconcileTopology(ctx context.Context, req ctrl.Request) (c
 			return ctrl.Result{}, err
 		}
 		if !ownedUID(observed, root.UID) || observed.DeletionTimestamp != nil || !equal(observed.Spec, spec) {
-			return r.report(ctx, &root, base, "Failed", "BootstrapPolicyUnavailable", "Existing freeze artifact differs from available initial policy; recreate the network")
+			return r.report(ctx, &root, base, api.NetworkPhaseFailed, "BootstrapPolicyUnavailable", "Existing freeze artifact differs from available initial policy; recreate the network")
 		}
 		artifact = observed
 	}
 	root.Status.GenesisRef = ptrBinding(binding("StacksGenesis", artifact, Digest(artifact.Spec)))
 	root.Status.GenesisDigest = Digest(artifact.Spec.Chain)
-	return r.report(ctx, &root, base, "Initializing", "GenesisCaptured", "Immutable genesis captured; admitted participants may converge toward declared operation")
+	return r.report(ctx, &root, base, api.NetworkPhaseInitializing, "GenesisCaptured", "Immutable genesis captured; admitted participants may converge toward declared operation")
 }
 
 // bitcoinBootstrapCompatible preserves network-wide initialization identity across instance replacement.
@@ -501,14 +501,14 @@ func sameIdentities(a, b []common.Binding) bool {
 // sameProtectedConfiguration excludes mutable peer hints, schedules and target selection.
 func sameProtectedConfiguration(kind api.ParticipantKind, old, current api.Configuration) bool {
 	paths := map[api.ParticipantKind][]string{
-		"BitcoinNode":                 {"storage"},
-		"BitcoinBlockProduction":      {"payoutWalletRef", "initialization"},
-		"StacksNode":                  {"identityAccountRef", "bitcoinNodeRef", "mining.bitcoinWalletRef", "storage"},
-		"StacksSigner":                {"accountRef", "nodeRef", "storage"},
-		"StacksStacker":               {"holderAccountRef", "administratorAccountRef", "signerRef", "targetNodeRef"},
-		"StacksFaucet":                {"accountRef", "targetNodeRef"},
-		"StacksContractSet":           {"deployerAccountRef", "targetNodeRef"},
-		"StacksTransactionProduction": {"accountRef", "targetNodeRef", "recipient"},
+		api.ParticipantBitcoinNode:                 {"storage"},
+		api.ParticipantBitcoinBlockProduction:      {"payoutWalletRef", "initialization"},
+		api.ParticipantStacksNode:                  {"identityAccountRef", "bitcoinNodeRef", "mining.bitcoinWalletRef", "storage"},
+		api.ParticipantStacksSigner:                {"accountRef", "nodeRef", "storage"},
+		api.ParticipantStacksStacker:               {"holderAccountRef", "administratorAccountRef", "signerRef", "targetNodeRef"},
+		api.ParticipantStacksFaucet:                {"accountRef", "targetNodeRef"},
+		api.ParticipantStacksContractSet:           {"deployerAccountRef", "targetNodeRef"},
+		api.ParticipantStacksTransactionProduction: {"accountRef", "targetNodeRef", "recipient"},
 	}
 	oldMap, _ := objectMap(old)
 	currentMap, _ := objectMap(current)

@@ -24,7 +24,7 @@ func (r *Reconciler) currentBitcoinObservation(ctx context.Context, root *api.St
 	if err := r.observations().Get(ctx, client.ObjectKey{Namespace: root.Namespace, Name: record.Spec.Participant.Name}, &p); err != nil {
 		return false, err
 	}
-	if p.UID != record.Spec.Participant.UID || p.Spec.Kind != "BitcoinNode" || !selectedInstance(root, &p) || !currentActorReady(&p) {
+	if p.UID != record.Spec.Participant.UID || p.Spec.Kind != api.ParticipantBitcoinNode || !selectedInstance(root, &p) || !currentActorReady(&p) {
 		return false, nil
 	}
 	state := p.Status.Runtime
@@ -48,7 +48,7 @@ func (r *Reconciler) currentBitcoinObservation(ctx context.Context, root *api.St
 	if err := r.observations().Get(ctx, client.ObjectKey{Namespace: root.Namespace, Name: target.Pod.Name}, &pod); err != nil {
 		return false, err
 	}
-	if pod.UID != target.Pod.UID || pod.DeletionTimestamp != nil || pod.Status.PodIP == "" || pod.Labels["network.stacks.org/network-uid"] != string(root.UID) || pod.Labels["network.stacks.org/participant-uid"] != string(p.UID) {
+	if pod.UID != target.Pod.UID || pod.DeletionTimestamp != nil || pod.Status.PodIP == "" || pod.Labels[api.LabelNetworkUID] != string(root.UID) || pod.Labels[api.LabelParticipantUID] != string(p.UID) {
 		return false, nil
 	}
 	owner := metav1.GetControllerOf(&pod)

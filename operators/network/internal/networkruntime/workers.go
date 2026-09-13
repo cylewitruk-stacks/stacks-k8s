@@ -44,7 +44,7 @@ func (r *Reconciler) projectWorkers(ctx context.Context, root *api.StacksNetwork
 		}
 		if fact.Failed {
 			set(root, "Failed", metav1.ConditionTrue, fact.Reason, "A bound management worker cannot continue; recreate the network")
-			root.Status.Phase = "Failed"
+			root.Status.Phase = api.NetworkPhaseFailed
 		}
 		if (fact.Unknown && !unstarted[p.UID]) || fact.Changed {
 			pending = true
@@ -79,7 +79,7 @@ func workersPaused(root *api.StacksNetwork, participants []api.StacksNetworkPart
 			return false
 		}
 		e := p.Status.Execution
-		if e.PodUID != id.Worker.Pod.UID || e.ProfileDigest != id.Worker.ProfileDigest || e.ProcessNonce == "" || e.ObservedGeneration != p.Generation || e.NetworkGeneration != root.Generation || e.Phase != "Paused" || !fresh(e.ObservedAt, now) {
+		if e.PodUID != id.Worker.Pod.UID || e.ProfileDigest != id.Worker.ProfileDigest || e.ProcessNonce == "" || e.ObservedGeneration != p.Generation || e.NetworkGeneration != root.Generation || e.Phase != api.WorkerPhasePaused || !fresh(e.ObservedAt, now) {
 			return false
 		}
 	}

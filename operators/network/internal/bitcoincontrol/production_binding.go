@@ -24,7 +24,7 @@ func (s *Scheduler) currentProduction(ctx context.Context, root *api.StacksNetwo
 	var entry *api.Participant
 	for i := range root.Spec.Participants {
 		candidate := &root.Spec.Participants[i]
-		if candidate.Kind == "BitcoinBlockProduction" {
+		if candidate.Kind == api.ParticipantBitcoinBlockProduction {
 			if entry != nil {
 				return nil, fmt.Errorf("multiple selected Bitcoin producers")
 			}
@@ -54,7 +54,7 @@ func (s *Scheduler) currentProduction(ctx context.Context, root *api.StacksNetwo
 	if e := s.Reader.Get(ctx, client.ObjectKey{Namespace: root.Namespace, Name: name}, p); e != nil {
 		return nil, e
 	}
-	if string(p.UID) != uid || !participantCurrent(root, p) || p.Spec.Kind != "BitcoinBlockProduction" || p.Status.Admission.Configuration.BitcoinBlockProduction == nil {
+	if string(p.UID) != uid || !participantCurrent(root, p) || p.Spec.Kind != api.ParticipantBitcoinBlockProduction || p.Status.Admission.Configuration.BitcoinBlockProduction == nil {
 		return nil, fmt.Errorf("producer identity unavailable")
 	}
 	if initial := p.Status.Admission.Configuration.BitcoinBlockProduction.Initialization; initial != nil {

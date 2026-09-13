@@ -59,7 +59,7 @@ func ValidAddress(address string) bool {
 // MatchingExecution rejects evidence belonging to another admission or worker incarnation.
 func MatchingExecution(request *stacks.StacksFaucetRequest) bool {
 	a, e := request.Status.Admission, request.Status.Execution
-	return a != nil && a.Decision == "Admitted" && a.Faucet != nil && a.Worker != nil && e != nil && e.NetworkUID == a.NetworkUID && e.FaucetUID == a.Faucet.UID && e.WorkerUID == a.Worker.UID && e.ProcessNonce != "" && e.Destination == a.Destination && e.AmountMicroSTX == a.AmountMicroSTX
+	return a != nil && a.Decision == stacks.FaucetDecisionAdmitted && a.Faucet != nil && a.Worker != nil && e != nil && e.NetworkUID == a.NetworkUID && e.FaucetUID == a.Faucet.UID && e.WorkerUID == a.Worker.UID && e.ProcessNonce != "" && e.Destination == a.Destination && e.AmountMicroSTX == a.AmountMicroSTX
 }
 
 // TerminalExecution requires no-send, classified native refusal, or exact inclusion evidence.
@@ -68,43 +68,43 @@ func TerminalExecution(execution *stacks.FaucetExecution) bool {
 		return false
 	}
 	switch execution.Phase {
-	case "Completed":
+	case stacks.FaucetExecutionCompleted:
 		return !execution.NoSend && len(execution.TxID) == 64 && len(execution.InclusionBlockID) == 64
-	case "Rejected":
+	case stacks.FaucetExecutionRejected:
 		return execution.NoSend && execution.TxID == "" || !execution.NoSend && len(execution.TxID) == 64 && (len(execution.InclusionBlockID) == 64 || strings.HasPrefix(execution.Reason, "Rejected") && rpc.ValidationRejectionReason(strings.TrimPrefix(execution.Reason, "Rejected")))
-	case "Expired":
+	case stacks.FaucetExecutionExpired:
 		return execution.NoSend && execution.TxID == ""
 	}
 	return false
 }
 
 // ProjectPhase never interprets absent admitted execution as proof that no send occurred.
-func ProjectPhase(request *stacks.StacksFaucetRequest, now time.Time) (string, string) {
+func ProjectPhase(request *stacks.StacksFaucetRequest, now time.Time) (stacks.FaucetPhase, string) {
 	a := request.Status.Admission
 	if a == nil {
-		return "Pending", "AdmissionPending"
+		return stacks.FaucetPending, "AdmissionPending"
 	}
-	if a.Decision == "Rejected" || a.Decision == "Expired" {
-		return a.Decision, a.Reason
+	if a.Decision == stacks.FaucetDecisionRejected || a.Decision == stacks.FaucetDecisionExpired {
+		return stacks.FaucetPhase(a.Decision), a.Reason
 	}
-	if a.Decision != "Admitted" {
-		return "Pending", a.Reason
+	if a.Decision != stacks.FaucetDecisionAdmitted {
+		return stacks.FaucetPending, a.Reason
 	}
 	if MatchingExecution(request) {
 		e := request.Status.Execution
 		if TerminalExecution(e) {
-			return e.Phase, e.Reason
+			return stacks.FaucetPhase(e.Phase), e.Reason
 		}
 	}
 	deadline, err := Deadline(request)
 	if err != nil || !now.Before(deadline) {
-		return "Inconclusive", "DeadlineOutcomeUnknown"
+		return stacks.FaucetInconclusive, "DeadlineOutcomeUnknown"
 	}
-	if MatchingExecution(request) && request.Status.Execution.Phase == "Submitted" {
-		return "Submitted", request.Status.Execution.Reason
+	if MatchingExecution(request) && request.Status.Execution.Phase == stacks.FaucetExecutionSubmitted {
+		return stacks.FaucetSubmitted, request.Status.Execution.Reason
 	}
-	if MatchingExecution(request) && request.Status.Execution.Phase == "Inconclusive" {
-		return "Inconclusive", request.Status.Execution.Reason
+	if MatchingExecution(request) && request.Status.Execution.Phase == stacks.FaucetExecutionInconclusive {
+		return stacks.FaucetInconclusive, request.Status.Execution.Reason
 	}
-	return "Pending", "AwaitingWorkerEvidence"
+	return stacks.FaucetPending, "AwaitingWorkerEvidence"
 }

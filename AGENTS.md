@@ -102,6 +102,11 @@ integrity. See the
 
 - Follow idiomatic Go, SOLID/DRY principles, and `controller-runtime`
   conventions.
+- Use domain-owned typed string constants for closed discriminators and lifecycle
+  values. Prefer concrete Go types when an object is already available; use GVK
+  at Kubernetes identity boundaries. Validate unknown values explicitly; Go
+  constants do not make an exhaustive enum. Keep independent wire expectations
+  literal in tests, and avoid constants for ordinary diagnostic prose.
 - Make reconciliation idempotent, level-based, ownership-aware, and safe under
   retries, conflicts, deletion, and eventually consistent caches.
 - Use uncached API reads where correctness depends on current admitted

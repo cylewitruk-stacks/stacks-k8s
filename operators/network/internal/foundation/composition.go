@@ -24,21 +24,21 @@ import (
 // DefinitionObject returns the typed declaration for a supported kind.
 func DefinitionObject(kind api.ParticipantKind) client.Object {
 	switch kind {
-	case "BitcoinNode":
+	case api.ParticipantBitcoinNode:
 		return &bitcoin.BitcoinNode{}
-	case "StacksNode":
+	case api.ParticipantStacksNode:
 		return &stacks.StacksNode{}
-	case "StacksSigner":
+	case api.ParticipantStacksSigner:
 		return &stacks.StacksSigner{}
-	case "StacksStacker":
+	case api.ParticipantStacksStacker:
 		return &stacks.StacksStacker{}
-	case "StacksFaucet":
+	case api.ParticipantStacksFaucet:
 		return &stacks.StacksFaucet{}
-	case "StacksContractSet":
+	case api.ParticipantStacksContractSet:
 		return &stacks.StacksContractSet{}
-	case "StacksTransactionProduction":
+	case api.ParticipantStacksTransactionProduction:
 		return &stacks.StacksTransactionProduction{}
-	case "BitcoinBlockProduction":
+	case api.ParticipantBitcoinBlockProduction:
 		return &bitcoin.BitcoinBlockProduction{}
 	default:
 		return nil
@@ -157,12 +157,12 @@ func Compose(root *api.StacksNetwork, entry api.Participant, source any) (api.Co
 	out := map[string]any{}
 	if root.Spec.Defaults != nil {
 		defaults, _ := objectMap(root.Spec.Defaults)
-		if entry.Kind == "BitcoinNode" || entry.Kind == "StacksNode" || entry.Kind == "StacksSigner" {
+		if entry.Kind == api.ParticipantBitcoinNode || entry.Kind == api.ParticipantStacksNode || entry.Kind == api.ParticipantStacksSigner {
 			if v, ok := defaults["storage"]; ok {
 				out["storage"] = v
 			}
 			imageKey := key
-			if entry.Kind == "BitcoinNode" {
+			if entry.Kind == api.ParticipantBitcoinNode {
 				imageKey = "bitcoin"
 			}
 			if images, ok := defaults["images"].(map[string]any); ok {
@@ -176,7 +176,7 @@ func Compose(root *api.StacksNetwork, entry api.Participant, source any) (api.Co
 				}
 			}
 		}
-		if entry.Kind == "BitcoinNode" || strings.HasPrefix(key, "stacks") && entry.Kind != "StacksNode" && entry.Kind != "StacksSigner" {
+		if entry.Kind == api.ParticipantBitcoinNode || strings.HasPrefix(key, "stacks") && entry.Kind != api.ParticipantStacksNode && entry.Kind != api.ParticipantStacksSigner {
 			if v, ok := defaults["workerPlacement"]; ok {
 				out["workerPlacement"] = v
 			}
@@ -191,9 +191,9 @@ func Compose(root *api.StacksNetwork, entry api.Participant, source any) (api.Co
 		out = merge(out, overrides[key].(map[string]any))
 	}
 	switch entry.Kind {
-	case "BitcoinNode", "StacksNode", "StacksSigner":
+	case api.ParticipantBitcoinNode, api.ParticipantStacksNode, api.ParticipantStacksSigner:
 		image := "stacks-core:4.0.1-pox5"
-		if entry.Kind == "BitcoinNode" {
+		if entry.Kind == api.ParticipantBitcoinNode {
 			image = "bitcoin/bitcoin:31.1"
 		}
 		fill(out, map[string]any{"image": image, "imagePullPolicy": "IfNotPresent"})
@@ -205,20 +205,20 @@ func Compose(root *api.StacksNetwork, entry api.Participant, source any) (api.Co
 		if storage["ephemeral"] != true {
 			fill(storage, map[string]any{"size": "2Gi", "retainOnDelete": false})
 		}
-		if entry.Kind != "StacksSigner" && out["peers"] == nil {
+		if entry.Kind != api.ParticipantStacksSigner && out["peers"] == nil {
 			fill(out, map[string]any{"peers": map[string]any{"discovery": "Network"}})
 		}
-	case "StacksStacker":
+	case api.ParticipantStacksStacker:
 		fill(out, map[string]any{"lockCycles": json.Number("6"), "renewWhenRemainingCycles": json.Number("3")})
-	case "StacksFaucet":
+	case api.ParticipantStacksFaucet:
 		fill(out, map[string]any{"genesisBalanceMicroSTX": "1000000000000", "maxRequestMicroSTX": "1000000000000"})
-	case "StacksTransactionProduction":
+	case api.ParticipantStacksTransactionProduction:
 		fill(out, map[string]any{"amountMicroSTX": "1", "feeMicroSTX": "1000", "interval": "10s"})
-	case "StacksContractSet":
+	case api.ParticipantStacksContractSet:
 		fill(out, map[string]any{"bundle": "sbtc-regtest-v1"})
-	case "BitcoinBlockProduction":
+	case api.ParticipantBitcoinBlockProduction:
 		if out["schedule"] == nil && out["scheduleRef"] == nil {
-			out["schedule"] = map[string]any{"cadence": map[string]any{"mode": "Fixed", "interval": "5s"}}
+			out["schedule"] = map[string]any{"cadence": map[string]any{"mode": string(bitcoin.CadenceFixed), "interval": "5s"}}
 		}
 	}
 	var result api.Configuration
@@ -256,13 +256,13 @@ func duration(value common.Duration) (time.Duration, error) {
 func validateSchedule(s bitcoin.BitcoinBlockScheduleSpec) error {
 	c := s.Cadence
 	switch c.Mode {
-	case "Fixed":
+	case bitcoin.CadenceFixed:
 		if c.Interval == nil || c.MinimumInterval != nil || c.MaximumInterval != nil {
 			return fmt.Errorf("invalid fixed cadence")
 		}
 		_, err := duration(*c.Interval)
 		return err
-	case "Uniform":
+	case bitcoin.CadenceUniform:
 		if c.Interval != nil || c.MinimumInterval == nil || c.MaximumInterval == nil {
 			return fmt.Errorf("invalid uniform cadence")
 		}

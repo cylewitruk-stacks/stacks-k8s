@@ -40,7 +40,7 @@ func currentGate(ctx context.Context, reader client.Reader, root *api.StacksNetw
 	}
 	gates := genesis.Spec.Bootstrap.Gates
 	if state == nil {
-		if len(gates) == 0 || gates[0].Name != "PrepareBitcoin" || gates[0].BitcoinCeiling != initial.Spec.MinimumHeight {
+		if len(gates) == 0 || gates[0].Name != api.GatePrepareBitcoin || gates[0].BitcoinCeiling != initial.Spec.MinimumHeight {
 			return authority, errors.New("initial frozen gate unavailable")
 		}
 		return gateAuthority{genesis: &genesis, gate: gates[0], index: 0}, nil
@@ -49,7 +49,7 @@ func currentGate(ctx context.Context, reader client.Reader, root *api.StacksNetw
 		return authority, errors.New("bootstrap gate authority unavailable")
 	}
 	index := int(state.GateIndex)
-	if index < 0 || index >= len(gates) || len(state.Gates) != len(gates) || gates[index].BitcoinCeiling != state.AuthorizedCeiling || len(gates) == 0 || gates[0].Name != "PrepareBitcoin" || gates[0].BitcoinCeiling != initial.Spec.MinimumHeight {
+	if index < 0 || index >= len(gates) || len(state.Gates) != len(gates) || gates[index].BitcoinCeiling != state.AuthorizedCeiling || len(gates) == 0 || gates[0].Name != api.GatePrepareBitcoin || gates[0].BitcoinCeiling != initial.Spec.MinimumHeight {
 		return authority, errors.New("bootstrap ceiling differs from frozen requirements")
 	}
 	for i, gate := range gates {
@@ -93,7 +93,7 @@ func advancementReady(ctx context.Context, reader client.Reader, root *api.Stack
 			return false, errors.New("captured participant role differs")
 		}
 		switch required.Kind {
-		case "StacksNode", "StacksSigner":
+		case api.ParticipantStacksNode, api.ParticipantStacksSigner:
 			rt := p.Status.Runtime
 			if p.Spec.Control != nil && ptr.Deref(p.Spec.Control.Suspended, false) || rt == nil || rt.ObservedGeneration != p.Generation || rt.PolicyDigest != p.Status.Admission.PolicyDigest || rt.PodRef == nil || rt.PodRef.UID == "" || rt.ConfigRef == nil || rt.ConfigRef.UID == "" || rt.ContainerID == "" || rt.Terminated {
 				return false, errors.New("captured Stacks actor is not ready")
@@ -104,7 +104,7 @@ func advancementReady(ctx context.Context, reader client.Reader, root *api.Stack
 					return false, errors.New("captured Stacks actor is not verified")
 				}
 			}
-			if p.Spec.Kind == "StacksNode" {
+			if p.Spec.Kind == api.ParticipantStacksNode {
 				if view := rt.Protocol; view != nil && root.Status.GenesisRef != nil && view.GenesisUID == root.Status.GenesisRef.UID && (view.HighestStacksHeight > 0 || view.StacksHeight > 0) {
 					establishedChain = true
 				}
@@ -112,12 +112,12 @@ func advancementReady(ctx context.Context, reader client.Reader, root *api.Stack
 					firstAnchor = true
 				}
 			}
-		case "StacksStacker":
+		case api.ParticipantStacksStacker:
 			if p.Spec.Control != nil && ptr.Deref(p.Spec.Control.Paused, false) {
 				continue
 			}
 			execution := p.Status.Execution
-			if execution == nil || execution.Pending < 1 || execution.ProcessNonce == "" || execution.Phase != "Active" || execution.ObservedGeneration != p.Generation || execution.NetworkGeneration != root.Generation || execution.AppliedPolicyDigest != p.Status.Admission.PolicyDigest || now.Sub(execution.ObservedAt.Time) > 10*time.Second || execution.ObservedAt.After(now) || execution.Transactions == nil || execution.Transactions.Offered < 1 || !hashValid(execution.Transactions.LastTxID) {
+			if execution == nil || execution.Pending < 1 || execution.ProcessNonce == "" || execution.Phase != api.WorkerPhaseActive || execution.ObservedGeneration != p.Generation || execution.NetworkGeneration != root.Generation || execution.AppliedPolicyDigest != p.Status.Admission.PolicyDigest || now.Sub(execution.ObservedAt.Time) > 10*time.Second || execution.ObservedAt.After(now) || execution.Transactions == nil || execution.Transactions.Offered < 1 || !hashValid(execution.Transactions.LastTxID) {
 				continue
 			}
 			for _, identity := range root.Status.Identities {
@@ -127,7 +127,7 @@ func advancementReady(ctx context.Context, reader client.Reader, root *api.Stack
 			}
 		}
 	}
-	if authority.gate.Name == "EnrollPoX4" {
+	if authority.gate.Name == api.GateEnrollPoX4 {
 		activation := int64(-1)
 		for _, epoch := range authority.genesis.Spec.Chain.Epochs {
 			if epoch.Name == "2.5" && epoch.StartHeight >= 0 && epoch.StartHeight < math.MaxInt64 {

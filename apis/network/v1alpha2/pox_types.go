@@ -10,7 +10,7 @@ type TransactionPostcondition struct {
 	TxID string `json:"txID"`
 	// Kind names the bounded operation whose exact public state was observed.
 	// +kubebuilder:validation:Enum=PoX4Enrollment;PoX4Extension;ContractDeployment;RegistryInitialization;ManagerDeployment;SignerRegistration;PoX5Enrollment;PoX5Extension
-	Kind string `json:"kind"`
+	Kind PostconditionKind `json:"kind"`
 	// StateDigest identifies the verified public state, excluding observation time.
 	// +kubebuilder:validation:Pattern=`^sha256:[0-9a-f]{64}$`
 	StateDigest string `json:"stateDigest"`

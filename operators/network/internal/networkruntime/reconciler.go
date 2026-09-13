@@ -44,7 +44,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, root *api.StacksNetwork) (re
 	}()
 	policy := foundation.ObservationPolicy()
 	root.Status.ObservationPolicy = &policy
-	failed := root.Status.Phase == "Failed" || meta.IsStatusConditionTrue(root.Status.Conditions, "Failed")
+	failed := root.Status.Phase == api.NetworkPhaseFailed || meta.IsStatusConditionTrue(root.Status.Conditions, "Failed")
 	if failed && !meta.IsStatusConditionTrue(root.Status.Conditions, "Failed") {
 		set(root, "Failed", metav1.ConditionTrue, "ExperimentFailed", "A terminal network failure is latched; stop or recreate the network")
 	}
@@ -68,7 +68,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, root *api.StacksNetwork) (re
 	}
 	failed = failed || meta.IsStatusConditionTrue(root.Status.Conditions, "Failed")
 	if root.DeletionTimestamp != nil {
-		root.Status.Phase = "Destroying"
+		root.Status.Phase = api.NetworkPhaseDestroying
 		set(root, "Running", metav1.ConditionFalse, "Deleting", "Network disposal is in progress")
 		set(root, "Operational", metav1.ConditionFalse, "Deleting", "Network disposal is in progress")
 		return ctrl.Result{RequeueAfter: time.Second}, nil
@@ -94,7 +94,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, root *api.StacksNetwork) (re
 		if r.actorKind(p.Spec.Kind) && (state == nil || !state.Terminated || state.ObservedGeneration != p.Generation) {
 			terminated = false
 		}
-		if p.Spec.Kind == "BitcoinNode" {
+		if p.Spec.Kind == api.ParticipantBitcoinNode {
 			control := p.Status.BitcoinControl
 			if control == nil || !control.Terminated || control.ObservedGeneration != p.Generation || control.NetworkGeneration != root.Generation {
 				terminated = false
@@ -107,12 +107,12 @@ func (r *Reconciler) Reconcile(ctx context.Context, root *api.StacksNetwork) (re
 			terminated = false
 		}
 	}
-	if root.Spec.Operation == "Stopped" {
-		root.Status.Phase = "Stopping"
+	if root.Spec.Operation == api.NetworkOperationStopped {
+		root.Status.Phase = api.NetworkPhaseStopping
 		if terminated {
-			root.Status.Phase = "Stopped"
+			root.Status.Phase = api.NetworkPhaseStopped
 		}
-		set(root, "Running", metav1.ConditionFalse, root.Status.Phase, "Terminal shutdown requires acknowledgement from each activated workload")
+		set(root, "Running", metav1.ConditionFalse, string(root.Status.Phase), "Terminal shutdown requires acknowledgement from each activated workload")
 		set(root, "Operational", metav1.ConditionFalse, "Stopped", "Terminal shutdown is requested")
 		if !terminated || workerPending {
 			return ctrl.Result{RequeueAfter: time.Second}, nil
@@ -120,7 +120,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, root *api.StacksNetwork) (re
 		return ctrl.Result{}, nil
 	}
 	if failed {
-		root.Status.Phase = "Failed"
+		root.Status.Phase = api.NetworkPhaseFailed
 		set(root, "Running", metav1.ConditionFalse, "ExperimentFailed", "A terminal network failure is latched")
 		set(root, "Operational", metav1.ConditionFalse, "ExperimentFailed", "A terminal network failure is latched")
 		return ctrl.Result{}, nil
@@ -132,8 +132,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, root *api.StacksNetwork) (re
 	projectKnownOperation(root)
 	set(root, "Operational", metav1.ConditionFalse, "Initializing", "Full protocol initialization has not completed")
 	if root.Status.GenesisRef == nil {
-		if root.Spec.Operation == "Paused" && meta.IsStatusConditionTrue(root.Status.Conditions, "Resolved") {
-			root.Status.Phase = "Uninitialized"
+		if root.Spec.Operation == api.NetworkOperationPaused && meta.IsStatusConditionTrue(root.Status.Conditions, "Resolved") {
+			root.Status.Phase = api.NetworkPhaseUninitialized
 		}
 		return ctrl.Result{}, nil
 	}
@@ -144,12 +144,12 @@ func (r *Reconciler) Reconcile(ctx context.Context, root *api.StacksNetwork) (re
 		set(root, "BitcoinPrepared", metav1.ConditionUnknown, "RecordsUnavailable", "Bitcoin execution records could not be validated")
 		return ctrl.Result{}, err
 	}
-	root.Status.Phase = "Initializing"
+	root.Status.Phase = api.NetworkPhaseInitializing
 	projectKnownOperation(root)
-	if root.Spec.Operation == "Paused" {
-		root.Status.Phase = "Uninitialized"
+	if root.Spec.Operation == api.NetworkOperationPaused {
+		root.Status.Phase = api.NetworkPhaseUninitialized
 		if activated {
-			root.Status.Phase = "Pausing"
+			root.Status.Phase = api.NetworkPhasePausing
 		}
 		set(root, "Running", metav1.ConditionFalse, "DesiredPause", "Network pause holds new managed activation and production")
 	}
@@ -185,13 +185,13 @@ func (r *Reconciler) Reconcile(ctx context.Context, root *api.StacksNetwork) (re
 		set(root, "Operational", metav1.ConditionFalse, "BootstrapFailed", "Frozen initialization requirements failed")
 		return ctrl.Result{}, nil
 	}
-	if root.Spec.Operation == "Paused" && activated {
+	if root.Spec.Operation == api.NetworkOperationPaused && activated {
 		acknowledged, err := r.bitcoinPaused(ctx, root)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
 		if acknowledged && workersPaused(root, participants.Items, time.Now()) {
-			root.Status.Phase = "Paused"
+			root.Status.Phase = api.NetworkPhasePaused
 		}
 	}
 
@@ -238,7 +238,7 @@ func (r *Reconciler) bitcoinPaused(ctx context.Context, root *api.StacksNetwork)
 			continue
 		}
 		ack := record.Status.Control
-		if record.Status.Armed != nil || ack == nil || ack.NetworkGeneration != root.Generation || ack.Operation != "Paused" || ack.ProcessNonce == "" || ack.ObservedAt.IsZero() || ack.ObservedAt.After(ack.HeartbeatAt.Time) || ack.HeartbeatAt.After(time.Now()) || time.Since(ack.HeartbeatAt.Time) > foundation.ObservationFreshness() {
+		if record.Status.Armed != nil || ack == nil || ack.NetworkGeneration != root.Generation || ack.Operation != bitcoin.ControlPaused || ack.ProcessNonce == "" || ack.ObservedAt.IsZero() || ack.ObservedAt.After(ack.HeartbeatAt.Time) || ack.HeartbeatAt.After(time.Now()) || time.Since(ack.HeartbeatAt.Time) > foundation.ObservationFreshness() {
 			return false, nil
 		}
 	}
@@ -248,7 +248,7 @@ func (r *Reconciler) bitcoinPaused(ctx context.Context, root *api.StacksNetwork)
 // cleanDrain recognizes terminal acknowledgement without treating abandoned uncertainty as quiescence.
 func cleanDrain(status bitcoin.BitcoinExecutionStatus) bool {
 	d := status.Drain
-	if status.Armed != nil || d == nil || d.ProcessNonce == "" || d.Outcome != "Drained" {
+	if status.Armed != nil || d == nil || d.ProcessNonce == "" || d.Outcome != bitcoin.DrainDrained {
 		return false
 	}
 	switch d.Reason {
@@ -262,7 +262,7 @@ func cleanDrain(status bitcoin.BitcoinExecutionStatus) bool {
 // actorKind distinguishes installed domains from admitted-but-unsupported participant kinds.
 func (r *Reconciler) actorKind(kind api.ParticipantKind) bool {
 	if len(r.ActorKinds) == 0 {
-		return kind == "BitcoinNode"
+		return kind == api.ParticipantBitcoinNode
 	}
 	for _, supported := range r.ActorKinds {
 		if supported == kind {
@@ -276,7 +276,7 @@ func (r *Reconciler) actorKind(kind api.ParticipantKind) bool {
 func projectPreparation(root *api.StacksNetwork, record *bitcoin.BitcoinInitialization) bool {
 	switch record.Status.Reason {
 	case "PrepareBitcoinObservationDeadline", "FrozenCeilingExceeded", "PreparedChainRegressed":
-		root.Status.Phase = "Failed"
+		root.Status.Phase = api.NetworkPhaseFailed
 		set(root, "Failed", metav1.ConditionTrue, record.Status.Reason, "Frozen Bitcoin preparation requirements cannot be satisfied; recreate the network")
 		set(root, "Running", metav1.ConditionFalse, record.Status.Reason, "Bitcoin initialization failed")
 		set(root, "Operational", metav1.ConditionFalse, record.Status.Reason, "Bitcoin initialization failed")
@@ -293,11 +293,11 @@ func projectPreparation(root *api.StacksNetwork, record *bitcoin.BitcoinInitiali
 
 // projectKnownOperation preserves historical initialization independently of current protocol reads.
 func projectKnownOperation(root *api.StacksNetwork) {
-	if root.DeletionTimestamp != nil || root.Spec.Operation != "Running" || meta.IsStatusConditionTrue(root.Status.Conditions, "Failed") {
+	if root.DeletionTimestamp != nil || root.Spec.Operation != api.NetworkOperationRunning || meta.IsStatusConditionTrue(root.Status.Conditions, "Failed") {
 		return
 	}
 	if meta.IsStatusConditionTrue(root.Status.Conditions, "Initialized") {
-		root.Status.Phase = "Running"
+		root.Status.Phase = api.NetworkPhaseRunning
 		set(root, "Running", metav1.ConditionTrue, "Running", "Initialization is complete and running operation is requested")
 	}
 }
@@ -308,13 +308,13 @@ func observationUnavailable(root *api.StacksNetwork, reason, message string) {
 	switch {
 	case root.DeletionTimestamp != nil:
 		reason, message = "Deleting", "Network disposal is in progress"
-		root.Status.Phase = "Destroying"
-	case root.Spec.Operation == "Stopped":
+		root.Status.Phase = api.NetworkPhaseDestroying
+	case root.Spec.Operation == api.NetworkOperationStopped:
 		reason, message = "Stopped", "Terminal shutdown is requested"
 	case meta.IsStatusConditionTrue(root.Status.Conditions, "Failed"):
 		reason, message = "ExperimentFailed", "A terminal network failure is latched"
-		root.Status.Phase = "Failed"
-	case root.Spec.Operation == "Paused":
+		root.Status.Phase = api.NetworkPhaseFailed
+	case root.Spec.Operation == api.NetworkOperationPaused:
 		reason, message = "DesiredPause", "Network pause holds managed production"
 	case !meta.IsStatusConditionTrue(root.Status.Conditions, "Initialized"):
 		reason, message = "Initializing", "Full protocol initialization has not completed"

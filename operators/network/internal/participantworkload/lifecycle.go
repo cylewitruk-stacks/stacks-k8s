@@ -73,7 +73,7 @@ func (r *Reconciler) reconcileStatefulSet(ctx context.Context, p *api.StacksNetw
 		}
 		var pvc corev1.PersistentVolumeClaim
 		if err := r.Reader.Get(ctx, client.ObjectKey{Namespace: p.Namespace, Name: "data-" + current.Name + "-0"}, &pvc); err == nil {
-			if pvc.Labels["network.stacks.org/participant-uid"] != string(p.UID) || pvc.Labels["network.stacks.org/network-uid"] != string(p.Spec.NetworkUID) {
+			if pvc.Labels[api.LabelParticipantUID] != string(p.UID) || pvc.Labels[api.LabelNetworkUID] != string(p.Spec.NetworkUID) {
 				return fmt.Errorf("PVC identity is foreign")
 			}
 			if owner := metav1.GetControllerOf(&pvc); owner != nil && owner.UID != current.UID {
@@ -114,7 +114,7 @@ func (r *Reconciler) actorPod(ctx context.Context, p *api.StacksNetworkParticipa
 		return nil, err
 	}
 	owner := metav1.GetControllerOf(&pod)
-	if owner == nil || owner.Kind != "StatefulSet" || owner.UID != workload.UID || pod.Labels["network.stacks.org/participant-uid"] != string(p.UID) || pod.Labels["network.stacks.org/network-uid"] != string(p.Spec.NetworkUID) {
+	if owner == nil || owner.Kind != "StatefulSet" || owner.UID != workload.UID || pod.Labels[api.LabelParticipantUID] != string(p.UID) || pod.Labels[api.LabelNetworkUID] != string(p.Spec.NetworkUID) {
 		return nil, fmt.Errorf("actor Pod identity is foreign")
 	}
 	return &pod, nil
@@ -148,7 +148,7 @@ func observePod(state *api.ParticipantRuntimeStatus, pod *corev1.Pod) {
 	state.PodRef = binding("Pod", pod)
 	state.PodIP = pod.Status.PodIP
 	state.ContainerID, state.ImageID = "", ""
-	name := actorContainer(api.ParticipantKind(pod.Labels["network.stacks.org/participant-kind"]))
+	name := actorContainer(api.ParticipantKind(pod.Labels[api.LabelParticipantKind]))
 	for _, container := range pod.Status.ContainerStatuses {
 		if container.Name == name {
 			state.ContainerID = container.ContainerID

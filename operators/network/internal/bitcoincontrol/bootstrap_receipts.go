@@ -16,11 +16,11 @@ func accountBootstrapReceipt(root *api.StacksNetwork, initial *bitcoin.BitcoinIn
 		return false
 	}
 	receipt := execution.Status.LastReceipt
-	if receipt == nil || receipt.Request.Method != "Generate" || receipt.Request.Action != nil || receipt.Request.Offer == nil || receipt.Request.Reservation != binding("BitcoinInitialization", initial) || receipt.Request.Target.Participant != initial.Spec.Target || !hashValid(receipt.BlockHash) {
+	if receipt == nil || receipt.Request.Method != bitcoin.RPCGenerate || receipt.Request.Action != nil || receipt.Request.Offer == nil || receipt.Request.Reservation != binding("BitcoinInitialization", initial) || receipt.Request.Target.Participant != initial.Spec.Target || !hashValid(receipt.BlockHash) {
 		return false
 	}
 	offer := receipt.Request.Offer
-	if offer.Mode != "" && offer.Mode != "Bootstrap" || offer.Initialization != binding("BitcoinInitialization", initial) || offer.Production.Kind != "StacksNetworkParticipant" || offer.Production.UID == "" || offer.Production.Name == "" || offer.Number <= initial.Status.LastAccountedOffer || offer.Number != execution.Status.CompletedOffer || offer.ExpectedHeight < 0 || offer.ExpectedHeight >= offer.Ceiling {
+	if offer.Mode != "" && offer.Mode != bitcoin.OfferBootstrap || offer.Initialization != binding("BitcoinInitialization", initial) || offer.Production.Kind != "StacksNetworkParticipant" || offer.Production.UID == "" || offer.Production.Name == "" || offer.Number <= initial.Status.LastAccountedOffer || offer.Number != execution.Status.CompletedOffer || offer.ExpectedHeight < 0 || offer.ExpectedHeight >= offer.Ceiling {
 		return false
 	}
 	known := offer.Wallet == initial.Spec.PayoutWallet.Wallet && offer.Address == initial.Spec.PayoutWallet.Address

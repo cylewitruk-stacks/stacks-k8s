@@ -65,12 +65,12 @@ func (c *candidate) wallet(ctx context.Context, r client.Reader, ref *common.Nam
 	c.dependencies = append(c.dependencies, binding("BitcoinWallet", &w, w.Status.Digest))
 	return nil
 }
-func (c *candidate) participant(all map[string]*candidate, ref *common.NameRef, kind string) error {
+func (c *candidate) participant(all map[string]*candidate, ref *common.NameRef, kind api.ParticipantKind) error {
 	if ref == nil {
 		return fmt.Errorf("required %s participant reference missing", kind)
 	}
 	other := all[ref.Name]
-	if other == nil || string(other.instance.Spec.Kind) != kind {
+	if other == nil || other.instance.Spec.Kind != kind {
 		return fmt.Errorf("participant %s must select an admitted %s", ref.Name, kind)
 	}
 	if unverified(other.configuration) && !unverified(c.configuration) {
@@ -95,7 +95,9 @@ func (c *candidate) validate(ctx context.Context, r client.Reader, all map[strin
 	var errs []error
 	account := func(ref *common.NameRef, sign bool) { errs = append(errs, c.account(ctx, r, ref, sign)) }
 	wallet := func(ref *common.NameRef) { errs = append(errs, c.wallet(ctx, r, ref)) }
-	participant := func(ref *common.NameRef, kind string) { errs = append(errs, c.participant(all, ref, kind)) }
+	participant := func(ref *common.NameRef, kind api.ParticipantKind) {
+		errs = append(errs, c.participant(all, ref, kind))
+	}
 	var fields *common.ActorFields
 	var peers *common.Peers
 	switch {
@@ -110,7 +112,7 @@ func (c *candidate) validate(ctx context.Context, r client.Reader, all map[strin
 		v := c.configuration.StacksNode
 		fields = &v.ActorFields
 		peers = v.Peers
-		participant(v.BitcoinNodeRef, "BitcoinNode")
+		participant(v.BitcoinNodeRef, api.ParticipantBitcoinNode)
 		account(v.IdentityAccountRef, true)
 		if v.Mining != nil && v.Mining.BitcoinWalletRef != nil {
 			wallet(v.Mining.BitcoinWalletRef)
@@ -121,12 +123,12 @@ func (c *candidate) validate(ctx context.Context, r client.Reader, all map[strin
 	case c.configuration.StacksSigner != nil:
 		v := c.configuration.StacksSigner
 		fields = &v.ActorFields
-		participant(v.NodeRef, "StacksNode")
+		participant(v.NodeRef, api.ParticipantStacksNode)
 		account(v.AccountRef, true)
 	case c.configuration.StacksStacker != nil:
 		v := c.configuration.StacksStacker
-		participant(v.SignerRef, "StacksSigner")
-		participant(v.TargetNodeRef, "StacksNode")
+		participant(v.SignerRef, api.ParticipantStacksSigner)
+		participant(v.TargetNodeRef, api.ParticipantStacksNode)
 		account(v.HolderAccountRef, true)
 		account(v.AdministratorAccountRef, true)
 		errs = append(errs, positive(v.AmountMicroSTX))
@@ -135,12 +137,12 @@ func (c *candidate) validate(ctx context.Context, r client.Reader, all map[strin
 		}
 	case c.configuration.StacksFaucet != nil:
 		v := c.configuration.StacksFaucet
-		participant(v.TargetNodeRef, "StacksNode")
+		participant(v.TargetNodeRef, api.ParticipantStacksNode)
 		account(v.AccountRef, true)
 		errs = append(errs, positive(v.MaxRequestMicroSTX))
 	case c.configuration.StacksTransactionProduction != nil:
 		v := c.configuration.StacksTransactionProduction
-		participant(v.TargetNodeRef, "StacksNode")
+		participant(v.TargetNodeRef, api.ParticipantStacksNode)
 		account(v.AccountRef, true)
 		errs = append(errs, positive(v.AmountMicroSTX), positive(v.FeeMicroSTX))
 		if v.Interval == nil {
@@ -158,7 +160,7 @@ func (c *candidate) validate(ctx context.Context, r client.Reader, all map[strin
 		}
 	case c.configuration.StacksContractSet != nil:
 		v := c.configuration.StacksContractSet
-		participant(v.TargetNodeRef, "StacksNode")
+		participant(v.TargetNodeRef, api.ParticipantStacksNode)
 		account(v.DeployerAccountRef, true)
 		if v.Initialization == nil {
 			errs = append(errs, fmt.Errorf("registry initialization missing"))
@@ -177,7 +179,7 @@ func (c *candidate) validate(ctx context.Context, r client.Reader, all map[strin
 		}
 		seen := map[string]bool{}
 		for _, target := range ptr.Deref(v.Targets, nil) {
-			participant(&target.NodeRef, "BitcoinNode")
+			participant(&target.NodeRef, api.ParticipantBitcoinNode)
 			if seen[target.NodeRef.Name] || target.Weight < 1 {
 				errs = append(errs, fmt.Errorf("invalid or duplicate production target"))
 			}
@@ -203,7 +205,7 @@ func (c *candidate) validate(ctx context.Context, r client.Reader, all map[strin
 		if v.Initialization == nil {
 			errs = append(errs, fmt.Errorf("Bitcoin initialization missing"))
 		} else {
-			participant(&v.Initialization.TargetNodeRef, "BitcoinNode")
+			participant(&v.Initialization.TargetNodeRef, api.ParticipantBitcoinNode)
 			for _, ref := range ptr.Deref(v.Initialization.MinerWalletRefs, nil) {
 				wallet(&ref)
 			}

@@ -59,10 +59,10 @@ func EnsureRecords(ctx context.Context, c client.Client, reader client.Reader, s
 	}
 	for i := range participants.Items {
 		p := &participants.Items[i]
-		if p.Spec.Kind != "BitcoinNode" || p.Spec.NetworkUID != root.UID || p.DeletionTimestamp != nil {
+		if p.Spec.Kind != api.ParticipantBitcoinNode || p.Spec.NetworkUID != root.UID || p.DeletionTimestamp != nil {
 			continue
 		}
-		name := naming.RuntimeName(string(root.UID), string(p.UID), "BitcoinNode", p.Spec.ParticipantName, "execution")
+		name := naming.RuntimeName(string(root.UID), string(p.UID), string(api.ParticipantBitcoinNode), p.Spec.ParticipantName, "execution")
 		if hasBinding(refs, name, "") {
 			continue
 		}
@@ -138,7 +138,7 @@ func EnsureRecords(ctx context.Context, c client.Client, reader client.Reader, s
 func freezeInitialization(ctx context.Context, reader client.Reader, root *api.StacksNetwork, genesis *api.StacksGenesis, participants []api.StacksNetworkParticipant) (bitcoin.BitcoinInitializationSpec, error) {
 	spec := bitcoin.BitcoinInitializationSpec{NetworkUID: root.UID, Genesis: binding("StacksGenesis", genesis)}
 	spec.Genesis.Fingerprint = foundation.Digest(genesis.Spec)
-	if len(genesis.Spec.Bootstrap.Gates) == 0 || genesis.Spec.Bootstrap.Gates[0].Name != "PrepareBitcoin" {
+	if len(genesis.Spec.Bootstrap.Gates) == 0 || genesis.Spec.Bootstrap.Gates[0].Name != api.GatePrepareBitcoin {
 		return spec, fmt.Errorf("first frozen Bitcoin gate unavailable")
 	}
 	byUID := map[types.UID]*api.StacksNetworkParticipant{}
@@ -155,7 +155,7 @@ func freezeInitialization(ctx context.Context, reader client.Reader, root *api.S
 		if p == nil || p.Name != req.Participant.Name {
 			return spec, fmt.Errorf("captured participant missing")
 		}
-		if p.Spec.Kind == "BitcoinNode" {
+		if p.Spec.Kind == api.ParticipantBitcoinNode {
 			spec.Nodes = append(spec.Nodes, req.Participant)
 		}
 		if req.BitcoinInitialization != nil {
@@ -170,7 +170,7 @@ func freezeInitialization(ctx context.Context, reader client.Reader, root *api.S
 	}
 	initial := production.BitcoinInitialization
 	target := byName[initial.TargetNodeRef.Name]
-	if target == nil || target.Spec.Kind != "BitcoinNode" {
+	if target == nil || target.Spec.Kind != api.ParticipantBitcoinNode {
 		return spec, fmt.Errorf("initialization target unavailable")
 	}
 	spec.Production = production.Participant
@@ -253,5 +253,5 @@ func hasBinding(refs []common.Binding, name string, uid types.UID) bool {
 
 // labels matches the public participant runtime identity contract.
 func labels(p *api.StacksNetworkParticipant, role string) map[string]string {
-	return map[string]string{"app.kubernetes.io/managed-by": "stacks-network-operator", "network.stacks.org/network": "network", "network.stacks.org/network-uid": string(p.Spec.NetworkUID), "network.stacks.org/participant": p.Spec.ParticipantName, "network.stacks.org/participant-uid": string(p.UID), "network.stacks.org/participant-kind": string(p.Spec.Kind), "network.stacks.org/role": role}
+	return map[string]string{api.LabelManagedBy: "stacks-network-operator", api.LabelNetwork: "network", api.LabelNetworkUID: string(p.Spec.NetworkUID), api.LabelParticipant: p.Spec.ParticipantName, api.LabelParticipantUID: string(p.UID), api.LabelParticipantKind: string(p.Spec.Kind), api.LabelRole: role}
 }

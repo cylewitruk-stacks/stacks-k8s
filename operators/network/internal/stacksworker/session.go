@@ -74,10 +74,10 @@ func ProjectSession(root *api.StacksNetwork, p *api.StacksNetworkParticipant, po
 		return SessionFact{Unknown: true, Reason: "WorkerObservationUnavailable"}
 	}
 	if id.Worker == nil {
-		if p.Status.Execution != nil && p.Status.Execution.Phase != "Inactive" {
+		if p.Status.Execution != nil && p.Status.Execution.Phase != api.WorkerPhaseInactive {
 			return SessionFact{Failed: true, Reason: "WorkerBindingLost"}
 		}
-		if stoppedReason(root, p, id) != "" || root.Spec.Operation != "Running" || failed(root) {
+		if stoppedReason(root, p, id) != "" || root.Spec.Operation != api.NetworkOperationRunning || failed(root) {
 			return SessionFact{Reason: "ActivationHeld"}
 		}
 		if p.Status.Runtime == nil || p.Status.Runtime.WorkerCandidate == nil {
@@ -115,15 +115,15 @@ func ProjectSession(root *api.StacksNetwork, p *api.StacksNetworkParticipant, po
 	if session.Disposal != nil {
 		if Terminated(pod) && !session.Disposal.Terminated {
 			session.Disposal.Terminated = true
-			return SessionFact{Changed: true, Failed: session.Disposal.Outcome == "Unsettled", Reason: "WorkerTerminationConfirmed"}
+			return SessionFact{Changed: true, Failed: session.Disposal.Outcome == api.WorkerDisposalUnsettled, Reason: "WorkerTerminationConfirmed"}
 		}
-		return SessionFact{Failed: session.Disposal.Outcome == "Unsettled", Unknown: !session.Disposal.Terminated, Reason: "WorkerDisposing"}
+		return SessionFact{Failed: session.Disposal.Outcome == api.WorkerDisposalUnsettled, Unknown: !session.Disposal.Terminated, Reason: "WorkerDisposing"}
 	}
 	if session.Shutdown == nil {
 		if pod.DeletionTimestamp != nil || terminal(pod) {
 			if reason := stoppedReason(root, p, id); reason != "" {
 				session.Shutdown = &api.WorkerShutdown{NetworkGeneration: root.Generation, Reason: reason, RequestedAt: metav1.NewTime(now)}
-				session.Disposal = &api.WorkerDisposal{Outcome: "Unsettled", ObservedAt: metav1.NewTime(now), Terminated: Terminated(pod)}
+				session.Disposal = &api.WorkerDisposal{Outcome: api.WorkerDisposalUnsettled, ObservedAt: metav1.NewTime(now), Terminated: Terminated(pod)}
 				return SessionFact{Changed: true, Failed: true, Unknown: !session.Disposal.Terminated, Reason: "PriorWorkerExitUnsettled"}
 			}
 			return SessionFact{Failed: true, Unknown: !Terminated(pod), Reason: "BoundWorkerExited"}
@@ -133,7 +133,7 @@ func ProjectSession(root *api.StacksNetwork, p *api.StacksNetworkParticipant, po
 			return SessionFact{Changed: true, Reason: "WorkerShutdownRequested"}
 		}
 	}
-	if execution := p.Status.Execution; session.Shutdown == nil && execution != nil && execution.PodUID == session.Pod.UID && execution.ProfileDigest == session.ProfileDigest && execution.Phase == "Failed" {
+	if execution := p.Status.Execution; session.Shutdown == nil && execution != nil && execution.PodUID == session.Pod.UID && execution.ProfileDigest == session.ProfileDigest && execution.Phase == api.WorkerPhaseFailed {
 		return SessionFact{Failed: true, Reason: "WorkerProtocolFailed"}
 	}
 	if session.Shutdown == nil {
@@ -142,16 +142,16 @@ func ProjectSession(root *api.StacksNetwork, p *api.StacksNetworkParticipant, po
 		}
 		return SessionFact{Reason: "WorkerBound"}
 	}
-	if execution := p.Status.Execution; execution != nil && execution.PodUID == session.Pod.UID && execution.ProcessNonce != "" && execution.ProfileDigest == session.ProfileDigest && execution.NetworkGeneration == session.Shutdown.NetworkGeneration && execution.Reason == session.Shutdown.Reason && (execution.Phase == "Settled" || execution.Phase == "Unsettled") {
-		outcome := execution.Phase
+	if execution := p.Status.Execution; execution != nil && execution.PodUID == session.Pod.UID && execution.ProcessNonce != "" && execution.ProfileDigest == session.ProfileDigest && execution.NetworkGeneration == session.Shutdown.NetworkGeneration && execution.Reason == string(session.Shutdown.Reason) && (execution.Phase == api.WorkerPhaseSettled || execution.Phase == api.WorkerPhaseUnsettled) {
+		outcome := api.WorkerDisposalOutcome(execution.Phase)
 		if execution.Pending > 0 {
-			outcome = "Unsettled"
+			outcome = api.WorkerDisposalUnsettled
 		}
 		session.Disposal = &api.WorkerDisposal{Outcome: outcome, ProcessNonce: execution.ProcessNonce, ObservedAt: execution.ObservedAt, Terminated: Terminated(pod)}
-		return SessionFact{Changed: true, Failed: outcome == "Unsettled", Reason: "WorkerDisposalAcknowledged"}
+		return SessionFact{Changed: true, Failed: outcome == api.WorkerDisposalUnsettled, Reason: "WorkerDisposalAcknowledged"}
 	}
 	if terminal(pod) || pod.DeletionTimestamp != nil || now.Sub(session.Shutdown.RequestedAt.Time) >= ShutdownBound {
-		session.Disposal = &api.WorkerDisposal{Outcome: "Unsettled", ObservedAt: metav1.NewTime(now), Terminated: Terminated(pod)}
+		session.Disposal = &api.WorkerDisposal{Outcome: api.WorkerDisposalUnsettled, ObservedAt: metav1.NewTime(now), Terminated: Terminated(pod)}
 		return SessionFact{Changed: true, Failed: true, Unknown: !session.Disposal.Terminated, Reason: "WorkerSettlementUnconfirmed"}
 	}
 	return SessionFact{Reason: "WorkerDraining"}
@@ -159,31 +159,31 @@ func ProjectSession(root *api.StacksNetwork, p *api.StacksNetworkParticipant, po
 
 // failed preserves the aggregate's durable experiment failure latch.
 func failed(root *api.StacksNetwork) bool {
-	return root.Status.Phase == "Failed" || meta.IsStatusConditionTrue(root.Status.Conditions, "Failed")
+	return root.Status.Phase == api.NetworkPhaseFailed || meta.IsStatusConditionTrue(root.Status.Conditions, "Failed")
 }
 
 // stoppedReason evaluates current desired controls independently of admitted policy.
-func stoppedReason(root *api.StacksNetwork, p *api.StacksNetworkParticipant, id *api.InstanceIdentity) string {
+func stoppedReason(root *api.StacksNetwork, p *api.StacksNetworkParticipant, id *api.InstanceIdentity) api.WorkerShutdownReason {
 	if root.DeletionTimestamp != nil {
-		return "NetworkDeleting"
+		return api.WorkerShutdownNetworkDeleting
 	}
-	if root.Spec.Operation == "Stopped" {
-		return "NetworkStopped"
+	if root.Spec.Operation == api.NetworkOperationStopped {
+		return api.WorkerShutdownNetworkStopped
 	}
 	if p.DeletionTimestamp != nil || id.Removing {
-		return "ParticipantRemoved"
+		return api.WorkerShutdownParticipantRemoved
 	}
 	for _, entry := range root.Spec.Participants {
 		if entry.Name == p.Spec.ParticipantName && entry.Kind == p.Spec.Kind {
 			return ""
 		}
 	}
-	return "ParticipantRemoved"
+	return api.WorkerShutdownParticipantRemoved
 }
 
 // paused includes root failure and current per-entry controls without adopting rejected policy.
 func paused(root *api.StacksNetwork, p *api.StacksNetworkParticipant) bool {
-	if root.Spec.Operation != "Running" || failed(root) {
+	if root.Spec.Operation != api.NetworkOperationRunning || failed(root) {
 		return true
 	}
 	for _, entry := range root.Spec.Participants {

@@ -14,7 +14,7 @@ import (
 // observeConfigurationReport corroborates public output identity without accessing private bytes.
 func observeConfigurationReport(ctx context.Context, reads *directRead, p *api.StacksNetworkParticipant) (types.UID, error) {
 	reports := &corev1.ConfigMapList{}
-	if err := reads.reader.List(ctx, reports, client.InNamespace(p.Namespace), client.MatchingLabels{"network.stacks.org/participant-uid": string(p.UID)}, client.Limit(1001)); err != nil {
+	if err := reads.reader.List(ctx, reports, client.InNamespace(p.Namespace), client.MatchingLabels{api.LabelParticipantUID: string(p.UID)}, client.Limit(1001)); err != nil {
 		return "", err
 	}
 	if reports.Continue != "" || len(reports.Items) > 1000 {

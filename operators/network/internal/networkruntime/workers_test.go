@@ -58,7 +58,7 @@ func TestRootProjectsShutdownBeforeDeletionAndRetainsMissingWorkerFailure(t *tes
 			if mode == "delete" {
 				expected = "NetworkDeleting"
 			}
-			if session.Shutdown == nil || session.Shutdown.Reason != expected || session.Disposal != nil {
+			if session.Shutdown == nil || string(session.Shutdown.Reason) != expected || session.Disposal != nil {
 				t.Fatalf("incorrect disposal ordering: %+v", session)
 			}
 			if root.Status.Phase == "Stopped" {

@@ -126,16 +126,16 @@ func run(ctx context.Context, mode, input, image, health string, leader bool, en
 			return err
 		}
 	}
-	actorKinds := []api.ParticipantKind{"BitcoinNode", "StacksNode", "StacksSigner"}
+	actorKinds := []api.ParticipantKind{api.ParticipantBitcoinNode, api.ParticipantStacksNode, api.ParticipantStacksSigner}
 	configuration := &participantworkload.Reconciler{Client: manager.GetClient(), Reader: manager.GetAPIReader(), ResolverImage: image}
 	projection := &networkruntime.Reconciler{Client: manager.GetClient(), Reader: manager.GetAPIReader(), Scheme: scheme, ActorKinds: actorKinds}
-	kinds := append(append([]api.ParticipantKind(nil), actorKinds...), "BitcoinBlockProduction", "StacksTransactionProduction", "StacksStacker", "StacksContractSet", "StacksFaucet")
+	kinds := append(append([]api.ParticipantKind(nil), actorKinds...), api.ParticipantBitcoinBlockProduction, api.ParticipantStacksTransactionProduction, api.ParticipantStacksStacker, api.ParticipantStacksContractSet, api.ParticipantStacksFaucet)
 	if err := foundation.Register(manager, image, foundation.RuntimeOptions{Configurations: configuration, Kinds: kinds, Runtime: projection}); err != nil {
 		return err
 	}
 	for _, kind := range actorKinds {
 		actor := &participantworkload.Reconciler{Client: manager.GetClient(), Reader: manager.GetAPIReader(), ResolverImage: image, Kind: kind}
-		if kind == "BitcoinNode" {
+		if kind == api.ParticipantBitcoinNode {
 			actor.BeforeStop = func(ctx context.Context, p *api.StacksNetworkParticipant) (bool, error) {
 				return bitcoincontrol.CheckDrained(ctx, manager.GetAPIReader(), p)
 			}
@@ -169,7 +169,7 @@ func run(ctx context.Context, mode, input, image, health string, leader bool, en
 		return err
 	}
 	profiles := stacksworker.Profiles{Client: manager.GetClient(), Reader: manager.GetAPIReader(), Image: image}
-	for _, kind := range []api.ParticipantKind{"StacksTransactionProduction", "StacksStacker", "StacksContractSet", "StacksFaucet"} {
+	for _, kind := range []api.ParticipantKind{api.ParticipantStacksTransactionProduction, api.ParticipantStacksStacker, api.ParticipantStacksContractSet, api.ParticipantStacksFaucet} {
 		worker := &stacksworker.Reconciler{Client: manager.GetClient(), Reader: manager.GetAPIReader(), Kind: kind, ResolveProfile: profiles.Resolve, ResolveReads: profiles.Reads}
 		if err := worker.SetupWithManager(manager); err != nil {
 			return err

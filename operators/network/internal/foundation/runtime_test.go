@@ -273,7 +273,7 @@ func TestFailedRootStillWithdrawsAndDeletesParticipants(t *testing.T) {
 	for _, phase := range []string{"Failed", "Stopped"} {
 		t.Run(phase, func(t *testing.T) {
 			root, c := runtimeFixture(t)
-			root.Status.Phase = phase
+			root.Status.Phase = api.NetworkPhase(phase)
 			root.Status.GenesisRef = &common.Binding{Name: "missing-genesis", UID: "genesis"}
 			root.Status.Identities = []api.InstanceIdentity{{Name: "removed", UID: "participant"}}
 			condition(&root.Status.Conditions, root.Generation, "Failed", metav1.ConditionTrue, "WorkerLost", "Worker lost")
@@ -295,7 +295,7 @@ func TestFailedRootStillWithdrawsAndDeletesParticipants(t *testing.T) {
 			if err := c.Client.Get(context.Background(), request.key, root); err != nil {
 				t.Fatal(err)
 			}
-			if !root.Status.Identities[0].Removing || !meta.IsStatusConditionTrue(root.Status.Conditions, "Failed") || root.Status.Phase != phase {
+			if !root.Status.Identities[0].Removing || !meta.IsStatusConditionTrue(root.Status.Conditions, "Failed") || string(root.Status.Phase) != phase {
 				t.Fatal("withdrawal erased failure latch/phase")
 			}
 			if _, err := r.reconcileRequest(context.Background(), request); err != nil {

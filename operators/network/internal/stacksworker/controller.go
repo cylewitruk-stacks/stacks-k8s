@@ -120,7 +120,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 				return finish(metav1.ConditionFalse, "BoundWorkerLost")
 			}
 			state.Terminated = true
-			if stoppedReason(&root, &p, id) == "ParticipantRemoved" || p.DeletionTimestamp != nil || root.DeletionTimestamp != nil {
+			if stoppedReason(&root, &p, id) == api.WorkerShutdownParticipantRemoved || p.DeletionTimestamp != nil || root.DeletionTimestamp != nil {
 				if err := r.releaseParticipant(ctx, &p); err != nil {
 					return ctrl.Result{}, err
 				}
@@ -181,12 +181,12 @@ func (r *Reconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 				return finish(metav1.ConditionUnknown, "WorkerSupportUnavailable")
 			}
 		}
-		if execution := p.Status.Execution; execution != nil && execution.PodUID == pod.UID && execution.ProfileDigest == session.ProfileDigest && execution.ProcessNonce != "" && (execution.Phase == "Active" || execution.Phase == "Paused") {
+		if execution := p.Status.Execution; execution != nil && execution.PodUID == pod.UID && execution.ProfileDigest == session.ProfileDigest && execution.ProcessNonce != "" && (execution.Phase == api.WorkerPhaseActive || execution.Phase == api.WorkerPhasePaused) {
 			return finish(metav1.ConditionTrue, "WorkerBound")
 		}
 		return finish(metav1.ConditionFalse, "WorkerInactive")
 	}
-	if p.Status.Execution != nil && p.Status.Execution.Phase != "Inactive" {
+	if p.Status.Execution != nil && p.Status.Execution.Phase != api.WorkerPhaseInactive {
 		return finish(metav1.ConditionFalse, "WorkerBindingLost")
 	}
 	if stoppedReason(&root, &p, id) != "" {
@@ -220,7 +220,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 		}
 		return finish(metav1.ConditionFalse, "InactiveCandidateDisposed")
 	}
-	if root.Spec.Operation != "Running" || failed(&root) || root.Status.GenesisRef == nil {
+	if root.Spec.Operation != api.NetworkOperationRunning || failed(&root) || root.Status.GenesisRef == nil {
 		return finish(metav1.ConditionFalse, "WorkerActivationHeld")
 	}
 	if err := foundation.ValidateParticipantAdmission(ctx, r.Reader, &root, &p); err != nil {
@@ -301,7 +301,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 // profileFromPod validates the retained immutable bootstrap manifest against mutable image fields.
 func profileFromPod(pod *corev1.Pod) (Profile, error) {
 	var profile Profile
-	raw := pod.Annotations["network.stacks.org/worker-profile-json"]
+	raw := pod.Annotations[profileJSONAnnotation]
 	if len(raw) > 48*1024 || json.Unmarshal([]byte(raw), &profile) != nil {
 		return profile, fmt.Errorf("worker profile missing")
 	}
@@ -316,7 +316,7 @@ func profileFromPod(pod *corev1.Pod) (Profile, error) {
 	if owner == nil {
 		return profile, fmt.Errorf("worker owner unavailable")
 	}
-	p := &api.StacksNetworkParticipant{ObjectMeta: metav1.ObjectMeta{Name: owner.Name, Namespace: pod.Namespace, UID: owner.UID}, Spec: api.StacksNetworkParticipantSpec{NetworkUID: types.UID(pod.Labels["network.stacks.org/network-uid"]), ParticipantName: pod.Labels["network.stacks.org/participant"], Kind: api.ParticipantKind(pod.Labels["network.stacks.org/participant-kind"])}}
+	p := &api.StacksNetworkParticipant{ObjectMeta: metav1.ObjectMeta{Name: owner.Name, Namespace: pod.Namespace, UID: owner.UID}, Spec: api.StacksNetworkParticipantSpec{NetworkUID: types.UID(pod.Labels[api.LabelNetworkUID]), ParticipantName: pod.Labels[api.LabelParticipant], Kind: api.ParticipantKind(pod.Labels[api.LabelParticipantKind])}}
 	wanted, err := Pod(p, profile)
 	if err != nil {
 		return profile, err
@@ -473,7 +473,7 @@ func (r *Reconciler) ensureSupport(ctx context.Context, p *api.StacksNetworkPart
 // extraCandidates removes only never-scheduled extras; every uncertain process is a conflict.
 func (r *Reconciler) extraCandidates(ctx context.Context, p *api.StacksNetworkParticipant) error {
 	var pods corev1.PodList
-	if err := r.Reader.List(ctx, &pods, client.InNamespace(p.Namespace), client.MatchingLabels{"network.stacks.org/participant-uid": string(p.UID), "network.stacks.org/workload": "stacks-worker"}, client.Limit(3)); err != nil {
+	if err := r.Reader.List(ctx, &pods, client.InNamespace(p.Namespace), client.MatchingLabels{api.LabelParticipantUID: string(p.UID), workloadLabel: "stacks-worker"}, client.Limit(3)); err != nil {
 		return err
 	}
 	if pods.Continue != "" || len(pods.Items) > 2 {

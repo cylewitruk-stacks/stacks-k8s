@@ -7,6 +7,7 @@ import (
 
 	action "github.com/cylewitruk-stacks/stacks-k8s/apis/network/actions/v1alpha2"
 	bitcoin "github.com/cylewitruk-stacks/stacks-k8s/apis/network/bitcoin/v1alpha2"
+	api "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha2"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/foundation"
 	"k8s.io/apimachinery/pkg/api/equality"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -21,7 +22,7 @@ func (w *Worker) authorizeMutation(ctx context.Context, record *bitcoin.BitcoinE
 	if state == nil || state.Request != *operation.Action || record.Status.Reservation == nil || *record.Status.Reservation != state.Request || state.CleanupUnsafe {
 		return admitted{}, fmt.Errorf("finite action reservation unavailable")
 	}
-	cleanup := operation.Method == "ReconsiderBlock"
+	cleanup := operation.Method == bitcoin.RPCReconsiderBlock
 	if !cleanup && (state.Generation != nil && !w.Input.ActionsEnabled || state.Reorganization != nil && !w.Input.ReorganizationEnabled) {
 		return admitted{}, fmt.Errorf("finite action kind disabled")
 	}
@@ -46,7 +47,7 @@ func (w *Worker) authorizeMutation(ctx context.Context, record *bitcoin.BitcoinE
 		}
 		return a, nil
 	}
-	if a.root.Spec.Operation == "Paused" || state.StopReason != "" || state.EffectUncertain || !w.Now().Before(state.ExpiresAt.Time) {
+	if a.root.Spec.Operation == api.NetworkOperationPaused || state.StopReason != "" || state.EffectUncertain || !w.Now().Before(state.ExpiresAt.Time) {
 		return admitted{}, fmt.Errorf("finite action stopped")
 	}
 	view, same, err := w.readAction(ctx, record)
@@ -56,14 +57,14 @@ func (w *Worker) authorizeMutation(ctx context.Context, record *bitcoin.BitcoinE
 	if !same || view.object.GetDeletionTimestamp() != nil || action.IsTerminalPhase(view.status.Phase) || !actionAdmissionAcknowledged(view, record) {
 		return admitted{}, fmt.Errorf("finite request admission unavailable")
 	}
-	if operation.Method == "InvalidateBlock" {
+	if operation.Method == bitcoin.RPCInvalidateBlock {
 		if state.Reorganization == nil || state.InvalidationAcknowledged || operation.BlockHash != state.InvalidatedHash {
 			return admitted{}, fmt.Errorf("invalidation already consumed")
 		}
 		if err := w.reorganizationPreflight(ctx, a, state, false); err != nil {
 			return admitted{}, err
 		}
-	} else if operation.Method == "Generate" {
+	} else if operation.Method == bitcoin.RPCGenerate {
 		count := int32(0)
 		address := ""
 		if state.Generation != nil {
@@ -94,7 +95,7 @@ func (w *Worker) authorizeMutation(ctx context.Context, record *bitcoin.BitcoinE
 	if err := w.actionCeiling(ctx, a, height); err != nil {
 		return admitted{}, err
 	}
-	if operation.Method == "Generate" {
+	if operation.Method == bitcoin.RPCGenerate {
 		if err := w.RPC.Check(ctx, a.target.Endpoint, operation.Address); err != nil {
 			return admitted{}, err
 		}
@@ -115,7 +116,7 @@ func accountActionReceipt(record *bitcoin.BitcoinExecution, receipt *bitcoin.Bit
 	}
 	state.LastCompletedAt = &metav1.Time{Time: completed.UTC()}
 	switch receipt.Request.Method {
-	case "Generate":
+	case bitcoin.RPCGenerate:
 		if !hashValid(receipt.BlockHash) {
 			return fmt.Errorf("finite generation receipt malformed")
 		}
@@ -141,9 +142,9 @@ func accountActionReceipt(record *bitcoin.BitcoinExecution, receipt *bitcoin.Bit
 			due = due.Truncate(time.Second).Add(time.Second)
 		}
 		state.NextDispatchAt = &metav1.Time{Time: due.UTC()}
-	case "InvalidateBlock":
+	case bitcoin.RPCInvalidateBlock:
 		state.InvalidationAcknowledged = true
-	case "ReconsiderBlock":
+	case bitcoin.RPCReconsiderBlock:
 		state.CleanupAcknowledged = true
 	default:
 		return fmt.Errorf("unsupported finite receipt")

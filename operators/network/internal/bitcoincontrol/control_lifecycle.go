@@ -93,7 +93,7 @@ func (r *WorkloadReconciler) ReconcileControlLifecycle(ctx context.Context, p *a
 		deployments[ref.UID] = ref
 	}
 	var list corev1.PodList
-	selector := client.MatchingLabels{"network.stacks.org/participant-uid": string(p.UID), "network.stacks.org/network-uid": string(root.UID), "network.stacks.org/worker-role": "bitcoin-control"}
+	selector := client.MatchingLabels{api.LabelParticipantUID: string(p.UID), api.LabelNetworkUID: string(root.UID), workerRoleLabel: "bitcoin-control"}
 	var replicas appsv1.ReplicaSetList
 	if err := r.Reader.List(ctx, &replicas, client.InNamespace(p.Namespace), selector, client.Limit(controlPodLimit+1)); err != nil {
 		return finish("TerminationUnknown", err)
@@ -261,7 +261,7 @@ func replicaQuiesced(replica *appsv1.ReplicaSet) bool {
 
 // controlDeploymentName selects the participant's deterministic control workload.
 func controlDeploymentName(p *api.StacksNetworkParticipant) string {
-	return naming.RuntimeName(string(p.Spec.NetworkUID), string(p.UID), "BitcoinNode", p.Spec.ParticipantName, "control")
+	return naming.RuntimeName(string(p.Spec.NetworkUID), string(p.UID), string(api.ParticipantBitcoinNode), p.Spec.ParticipantName, "control")
 }
 
 // controllerMatches checks the full supported workload-controller binding.
@@ -348,8 +348,8 @@ func (r *WorkloadReconciler) ControlLifecycleRequests(ctx context.Context, objec
 		current = parent
 	}
 	labels := object.GetLabels()
-	if labels["network.stacks.org/worker-role"] != "bitcoin-control" || labels["network.stacks.org/network-uid"] == "" || labels["network.stacks.org/participant"] == "" {
+	if labels[workerRoleLabel] != "bitcoin-control" || labels[api.LabelNetworkUID] == "" || labels[api.LabelParticipant] == "" {
 		return nil
 	}
-	return []ctrl.Request{{NamespacedName: client.ObjectKey{Namespace: object.GetNamespace(), Name: foundation.ParticipantName(labels["network.stacks.org/network-uid"], labels["network.stacks.org/participant"])}}}
+	return []ctrl.Request{{NamespacedName: client.ObjectKey{Namespace: object.GetNamespace(), Name: foundation.ParticipantName(labels[api.LabelNetworkUID], labels[api.LabelParticipant])}}}
 }

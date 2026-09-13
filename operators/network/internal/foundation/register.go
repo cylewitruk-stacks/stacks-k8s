@@ -38,7 +38,7 @@ func Register(manager ctrl.Manager, image string, options ...RuntimeOptions) err
 			return err
 		}
 	}
-	for _, kind := range []string{"BitcoinNode", "StacksNode", "StacksSigner", "StacksStacker", "StacksFaucet", "StacksContractSet", "StacksTransactionProduction", "BitcoinBlockProduction", "StacksEpochSchedule", "BitcoinBlockSchedule"} {
+	for _, kind := range []string{string(api.ParticipantBitcoinNode), string(api.ParticipantStacksNode), string(api.ParticipantStacksSigner), string(api.ParticipantStacksStacker), string(api.ParticipantStacksFaucet), string(api.ParticipantStacksContractSet), string(api.ParticipantStacksTransactionProduction), string(api.ParticipantBitcoinBlockProduction), "StacksEpochSchedule", "BitcoinBlockSchedule"} {
 		r := &DefinitionReconciler{Client: manager.GetClient(), Scheme: manager.GetScheme(), Kind: kind}
 		if err := r.SetupWithManager(manager); err != nil {
 			return err

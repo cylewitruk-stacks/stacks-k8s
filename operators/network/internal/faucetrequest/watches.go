@@ -54,7 +54,7 @@ func (r *Reconciler) SetupWithManager(manager ctrl.Manager) error {
 		}})).
 		Watches(&api.StacksNetworkParticipant{}, handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []ctrl.Request {
 			p := o.(*api.StacksNetworkParticipant)
-			if p.Spec.Kind != "StacksFaucet" {
+			if p.Spec.Kind != api.ParticipantStacksFaucet {
 				return nil
 			}
 			return r.requests(ctx, p.Namespace, faucetIndex, p.Spec.ParticipantName)
@@ -82,7 +82,7 @@ func (r *Reconciler) requests(ctx context.Context, namespace, index, value strin
 	}
 	out := []ctrl.Request{}
 	for _, item := range list.Items {
-		if item.Status.Phase == "Completed" || item.Status.Phase == "Rejected" || item.Status.Phase == "Expired" {
+		if item.Status.Phase == stacks.FaucetCompleted || item.Status.Phase == stacks.FaucetRejected || item.Status.Phase == stacks.FaucetExpired {
 			continue
 		}
 		out = append(out, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(&item)})
@@ -107,11 +107,11 @@ func (r *Reconciler) activeCount(ctx context.Context, namespace string, worker t
 		}
 		for _, item := range list.Items {
 			a := item.Status.Admission
-			if a != nil && a.Decision != "Pending" {
+			if a != nil && a.Decision != stacks.FaucetDecisionPending {
 				delete(unobserved, item.UID)
 				delete(r.uncertain, item.UID)
 			}
-			if a != nil && a.Decision == "Admitted" && a.Worker != nil && a.Worker.UID == worker && !(MatchingExecution(&item) && TerminalExecution(item.Status.Execution)) {
+			if a != nil && a.Decision == stacks.FaucetDecisionAdmitted && a.Worker != nil && a.Worker.UID == worker && !(MatchingExecution(&item) && TerminalExecution(item.Status.Execution)) {
 				count++
 			}
 			if count >= Capacity {

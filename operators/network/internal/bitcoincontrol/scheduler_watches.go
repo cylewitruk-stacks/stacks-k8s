@@ -42,7 +42,7 @@ func schedulerEvents() predicate.Predicate {
 			return !ok || !same(old.Status.Bitcoin, current.Status.Bitcoin) || !same(old.Status.Initialization, current.Status.Initialization) || failed(old) != failed(current)
 		case *api.StacksNetworkParticipant:
 			current, ok := b.(*api.StacksNetworkParticipant)
-			if ok && current.Spec.Kind != "BitcoinNode" && current.Spec.Kind != "BitcoinBlockProduction" {
+			if ok && current.Spec.Kind != api.ParticipantBitcoinNode && current.Spec.Kind != api.ParticipantBitcoinBlockProduction {
 				return false // Protocol gates are observed by the bounded continuation timer.
 			}
 			return !ok || !same(old.Status.Admission, current.Status.Admission) || !same(old.Status.Runtime, current.Status.Runtime) || !same(old.Status.BitcoinControl, current.Status.BitcoinControl) || !same(old.Status.Conditions, current.Status.Conditions)

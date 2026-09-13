@@ -37,7 +37,7 @@ func (s *Scheduler) reconcileBaseline(ctx context.Context, root *api.StacksNetwo
 	}
 	baseline := record.Status.Baseline
 	var production *api.StacksNetworkParticipant
-	report := func(phase, reason string) (ctrl.Result, error) {
+	report := func(phase bitcoin.InitializationPhase, reason string) (ctrl.Result, error) {
 		record.Status.Phase, record.Status.Reason = phase, reason
 		baseline.Scheduling.NextOpportunityAt = record.Status.NextOpportunityAt.DeepCopy()
 		baseline.Scheduling.Reason = reason
@@ -55,19 +55,19 @@ func (s *Scheduler) reconcileBaseline(ctx context.Context, root *api.StacksNetwo
 	}
 	// Accounting survives producer deletion and never touches frozen funding counters.
 	executions := s.accountBaselineReceipts(ctx, root, record)
-	if failed(root) || root.DeletionTimestamp != nil || root.Spec.Operation == "Stopped" {
+	if failed(root) || root.DeletionTimestamp != nil || root.Spec.Operation == api.NetworkOperationStopped {
 		s.withdrawBaseline(record)
 		baseline.Scheduling.EligibleTargets = 0
 		if failed(root) {
-			return report("Blocked", "NetworkFailed")
+			return report(bitcoin.InitializationBlocked, "NetworkFailed")
 		}
-		return report("Abandoned", "NetworkStopped")
+		return report(bitcoin.InitializationAbandoned, "NetworkStopped")
 	}
 	if err := baselineCompleted(ctx, s.Reader, root, record); err != nil {
 		s.withdrawBaseline(record)
 		baseline.Scheduling.EligibleTargets = 0
 		baseline.Scheduling.ObservedAt = ptr.To(metav1.NewTime(s.Now().UTC().Truncate(time.Second)))
-		return report("Blocked", "InitializationCompletionUnavailable")
+		return report(bitcoin.InitializationBlocked, "InitializationCompletionUnavailable")
 	}
 	var err error
 	production, err = s.currentProduction(ctx, root, record)
@@ -75,14 +75,14 @@ func (s *Scheduler) reconcileBaseline(ctx context.Context, root *api.StacksNetwo
 		s.withdrawBaseline(record)
 		baseline.Scheduling.EligibleTargets = 0
 		baseline.Scheduling.ObservedAt = ptr.To(metav1.NewTime(s.Now().UTC().Truncate(time.Second)))
-		return report("Blocked", "ProductionIdentityUnavailable")
+		return report(bitcoin.InitializationBlocked, "ProductionIdentityUnavailable")
 	}
 	inputs, err := baselineInputs(ctx, s.Reader, root, record, production)
 	if err != nil {
 		s.withdrawBaseline(record)
 		baseline.Scheduling.EligibleTargets = 0
 		baseline.Scheduling.ObservedAt = ptr.To(metav1.NewTime(s.Now().UTC().Truncate(time.Second)))
-		return report("Blocked", "BaselineInputsUnavailable")
+		return report(bitcoin.InitializationBlocked, "BaselineInputsUnavailable")
 	}
 	inputs.Override = record.Status.Override.DeepCopy()
 	inputs.Schedule = effectiveSchedule(record, inputs.Schedule)
@@ -97,7 +97,7 @@ func (s *Scheduler) reconcileBaseline(ctx context.Context, root *api.StacksNetwo
 		baseline.Stage = ""
 		current := binding("StacksNetworkParticipant", production)
 		record.Status.Production = &current
-		return report("Preparing", "BaselinePolicyAdopted")
+		return report(bitcoin.InitializationPreparing, "BaselinePolicyAdopted")
 	}
 	baseline.Scheduling.EligibleTargets = 0
 	for i := range inputs.Targets {
@@ -106,45 +106,45 @@ func (s *Scheduler) reconcileBaseline(ctx context.Context, root *api.StacksNetwo
 		}
 	}
 	baseline.Scheduling.ObservedAt = ptr.To(metav1.NewTime(s.Now().UTC().Truncate(time.Second)))
-	if root.Spec.Operation == "Paused" || production.Spec.Control != nil && ptr.Deref(production.Spec.Control.Paused, false) {
+	if root.Spec.Operation == api.NetworkOperationPaused || production.Spec.Control != nil && ptr.Deref(production.Spec.Control.Paused, false) {
 		s.withdrawBaseline(record)
-		return report("Paused", "DesiredPause")
+		return report(bitcoin.InitializationPaused, "DesiredPause")
 	}
 	now := s.Now()
 	if record.Status.NextOpportunityAt == nil {
 		interval, err := s.interval(inputs.Schedule)
 		if err != nil {
-			return report("Blocked", "CadenceUnavailable")
+			return report(bitcoin.InitializationBlocked, "CadenceUnavailable")
 		}
 		next := metav1.NewTime(now.Add(interval).UTC())
 		record.Status.NextOpportunityAt = &next
-		return report("Preparing", "BaselineCadenceArmed")
+		return report(bitcoin.InitializationPreparing, "BaselineCadenceArmed")
 	}
-	if baseline.Stage == "Selected" || baseline.Stage == "Offered" {
+	if baseline.Stage == bitcoin.BaselineSelected || baseline.Stage == bitcoin.BaselineOffered {
 		if !now.Before(record.Status.NextOpportunityAt.Time) {
 			baseline.Scheduling.Unassigned++
-			baseline.Stage = "Unassigned"
+			baseline.Stage = bitcoin.BaselineUnassigned
 			record.Status.Offer = nil
-			return report("Preparing", "OpportunityExpiredBeforeAssignment")
+			return report(bitcoin.InitializationPreparing, "OpportunityExpiredBeforeAssignment")
 		}
 		target, reason := s.baselineTarget(ctx, root, record, baseline.SelectedTarget, executions)
 		if reason != "" {
 			baseline.Scheduling.Skipped++
-			baseline.Stage = "Skipped"
+			baseline.Stage = bitcoin.BaselineSkipped
 			record.Status.Offer = nil
-			return report("Preparing", reason)
+			return report(bitcoin.InitializationPreparing, reason)
 		}
-		if baseline.Stage == "Selected" {
+		if baseline.Stage == bitcoin.BaselineSelected {
 			observation := target.Status.Observation
 			wallet := record.Spec.PayoutWallet
-			record.Status.Offer = &bitcoin.BitcoinBlockOffer{Override: overrideBinding(record), Mode: "Baseline", Target: baseline.SelectedTarget.DeepCopy(), Initialization: binding("BitcoinInitialization", record), Production: binding("StacksNetworkParticipant", production), PolicyDigest: inputs.PolicyDigest, Number: baseline.Sequence, Wallet: wallet.Wallet, Address: wallet.Address, ExpectedHeight: observation.Height, ExpectedTip: observation.Tip, Ceiling: math.MaxInt64, ExpiresAt: *record.Status.NextOpportunityAt}
-			baseline.Stage = "Offered"
-			result, err := report("Preparing", "BaselineOfferCommitted")
+			record.Status.Offer = &bitcoin.BitcoinBlockOffer{Override: overrideBinding(record), Mode: bitcoin.OfferBaseline, Target: baseline.SelectedTarget.DeepCopy(), Initialization: binding("BitcoinInitialization", record), Production: binding("StacksNetworkParticipant", production), PolicyDigest: inputs.PolicyDigest, Number: baseline.Sequence, Wallet: wallet.Wallet, Address: wallet.Address, ExpectedHeight: observation.Height, ExpectedTip: observation.Tip, Ceiling: math.MaxInt64, ExpiresAt: *record.Status.NextOpportunityAt}
+			baseline.Stage = bitcoin.BaselineOffered
+			result, err := report(bitcoin.InitializationPreparing, "BaselineOfferCommitted")
 			result.RequeueAfter = time.Millisecond
 			return result, err
 		}
 		if record.Status.Offer == nil || record.Status.Offer.Number != baseline.Sequence {
-			return report("Blocked", "CommittedOfferUnavailable")
+			return report(bitcoin.InitializationBlocked, "CommittedOfferUnavailable")
 		}
 		if !equality.Semantic.DeepEqual(target.Spec.Offer, record.Status.Offer) {
 			target.Spec.Offer = record.Status.Offer.DeepCopy()
@@ -152,32 +152,32 @@ func (s *Scheduler) reconcileBaseline(ctx context.Context, root *api.StacksNetwo
 				return ctrl.Result{}, err
 			}
 		}
-		baseline.Stage = "Assigned"
+		baseline.Stage = bitcoin.BaselineAssigned
 		baseline.Scheduling.Assigned++
-		return report("Preparing", "BaselineOfferAssigned")
+		return report(bitcoin.InitializationPreparing, "BaselineOfferAssigned")
 	}
 	if now.Before(record.Status.NextOpportunityAt.Time) {
-		return report("Preparing", "BaselineCadenceWaiting")
+		return report(bitcoin.InitializationPreparing, "BaselineCadenceWaiting")
 	}
 	if baseline.Sequence == math.MaxInt64 || baseline.Scheduling.Opportunities == math.MaxInt64 {
-		return report("Blocked", "OpportunityCounterExhausted")
+		return report(bitcoin.InitializationBlocked, "OpportunityCounterExhausted")
 	}
 	interval, err := s.interval(inputs.Schedule)
 	if err != nil {
-		return report("Blocked", "CadenceUnavailable")
+		return report(bitcoin.InitializationBlocked, "CadenceUnavailable")
 	}
 	target, err := s.selectBaselineTarget(inputs.Targets)
 	if err != nil {
-		return report("Blocked", "TargetSelectionUnavailable")
+		return report(bitcoin.InitializationBlocked, "TargetSelectionUnavailable")
 	}
 	baseline.Sequence++
 	baseline.Scheduling.Opportunities++
 	baseline.SelectedTarget = &target
-	baseline.Stage = "Selected"
+	baseline.Stage = bitcoin.BaselineSelected
 	next := metav1.NewTime(now.Add(interval).UTC())
 	record.Status.NextOpportunityAt = &next
 	record.Status.Offer = nil
-	result, err := report("Preparing", "BaselineTargetSelected")
+	result, err := report(bitcoin.InitializationPreparing, "BaselineTargetSelected")
 	result.RequeueAfter = time.Millisecond
 	return result, err
 }
@@ -185,9 +185,9 @@ func (s *Scheduler) reconcileBaseline(ctx context.Context, root *api.StacksNetwo
 // withdrawBaseline removes new-send authority without discarding previously armed RPC evidence.
 func (s *Scheduler) withdrawBaseline(record *bitcoin.BitcoinInitialization) {
 	baseline := record.Status.Baseline
-	if baseline.Stage == "Selected" || baseline.Stage == "Offered" {
+	if baseline.Stage == bitcoin.BaselineSelected || baseline.Stage == bitcoin.BaselineOffered {
 		baseline.Scheduling.Unassigned++
-		baseline.Stage = "Unassigned"
+		baseline.Stage = bitcoin.BaselineUnassigned
 	}
 	record.Status.NextOpportunityAt = nil
 	record.Status.Offer = nil
@@ -212,7 +212,7 @@ func (s *Scheduler) observeBaselineTarget(ctx context.Context, reader client.Rea
 		return nil, "SelectedTargetUnavailable"
 	}
 	var p api.StacksNetworkParticipant
-	if err := reader.Get(ctx, client.ObjectKey{Namespace: root.Namespace, Name: pin.Name}, &p); err != nil || p.UID != pin.UID || p.Spec.Kind != "BitcoinNode" || !participantCurrent(root, &p) || p.Spec.Control != nil && ptr.Deref(p.Spec.Control.Suspended, false) {
+	if err := reader.Get(ctx, client.ObjectKey{Namespace: root.Namespace, Name: pin.Name}, &p); err != nil || p.UID != pin.UID || p.Spec.Kind != api.ParticipantBitcoinNode || !participantCurrent(root, &p) || p.Spec.Control != nil && ptr.Deref(p.Spec.Control.Suspended, false) {
 		return nil, "SelectedTargetUnavailable"
 	}
 	if err := foundation.ValidateAdmissionEligibility(ctx, reader, &p); err != nil {
@@ -230,7 +230,7 @@ func (s *Scheduler) observeBaselineTarget(ctx context.Context, reader client.Rea
 	if ready == nil || ready.Status != metav1.ConditionTrue || ready.ObservedGeneration != p.Generation || rt == nil || rt.ObservedGeneration != p.Generation || rt.PolicyDigest != p.Status.Admission.PolicyDigest || rt.PodRef == nil || rt.ConfigRef == nil || rt.RPCSecretRef == nil || rt.ContainerID == "" || rt.Terminated {
 		return nil, "SelectedTargetNotReady"
 	}
-	if config := p.Status.Admission.Configuration.BitcoinNode; config == nil || config.Config != nil && ptr.Deref(config.Config.Compatibility, "Managed") == "Unverified" {
+	if config := p.Status.Admission.Configuration.BitcoinNode; config == nil || config.Config != nil && ptr.Deref(config.Config.Compatibility, common.CompatibilityManaged) == common.CompatibilityUnverified {
 		return nil, "SelectedTargetUnverified"
 	}
 	execution := executions[pin.UID]
@@ -275,16 +275,16 @@ func (s *Scheduler) accountBaselineReceipts(ctx context.Context, root *api.Stack
 			baseline.Sequence = max(baseline.Sequence, initial.Status.LastAccountedOffer)
 		}
 		executions[execution.Spec.Participant.UID] = &execution
-		if baseline.Stage == "Offered" && initial.Status.Offer != nil && initial.Status.Offer.Target != nil && *initial.Status.Offer.Target == execution.Spec.Participant && equality.Semantic.DeepEqual(execution.Spec.Offer, initial.Status.Offer) {
-			baseline.Stage = "Assigned"
+		if baseline.Stage == bitcoin.BaselineOffered && initial.Status.Offer != nil && initial.Status.Offer.Target != nil && *initial.Status.Offer.Target == execution.Spec.Participant && equality.Semantic.DeepEqual(execution.Spec.Offer, initial.Status.Offer) {
+			baseline.Stage = bitcoin.BaselineAssigned
 			baseline.Scheduling.Assigned++
 		}
 		receipt := execution.Status.LastReceipt
-		if receipt == nil || receipt.Request.Method != "Generate" || receipt.Request.Offer == nil {
+		if receipt == nil || receipt.Request.Method != bitcoin.RPCGenerate || receipt.Request.Offer == nil {
 			continue
 		}
 		offer := receipt.Request.Offer
-		if offer.Mode != "Baseline" || offer.Initialization != binding("BitcoinInitialization", initial) || offer.Target == nil || *offer.Target != execution.Spec.Participant || receipt.Request.Target.Participant != execution.Spec.Participant || offer.Number > baseline.Sequence || offer.Number != execution.Status.CompletedOffer || !hashValid(receipt.BlockHash) {
+		if offer.Mode != bitcoin.OfferBaseline || offer.Initialization != binding("BitcoinInitialization", initial) || offer.Target == nil || *offer.Target != execution.Spec.Participant || receipt.Request.Target.Participant != execution.Spec.Participant || offer.Number > baseline.Sequence || offer.Number != execution.Status.CompletedOffer || !hashValid(receipt.BlockHash) {
 			continue
 		}
 		index := -1
@@ -321,7 +321,7 @@ func (s *Scheduler) accountBaselineReceipts(ctx context.Context, root *api.Stack
 // generationAccounted preserves every receipt until its appropriate scheduler cursor advances.
 func generationAccounted(initial *bitcoin.BitcoinInitialization, execution *bitcoin.BitcoinExecution) bool {
 	receipt := execution.Status.LastReceipt
-	if receipt == nil || receipt.Request.Method != "Generate" {
+	if receipt == nil || receipt.Request.Method != bitcoin.RPCGenerate {
 		return true
 	}
 	if receipt.Request.Action != nil {
@@ -330,7 +330,7 @@ func generationAccounted(initial *bitcoin.BitcoinInitialization, execution *bitc
 	if receipt.Request.Offer == nil {
 		return false
 	}
-	if receipt.Request.Offer.Mode != "Baseline" {
+	if receipt.Request.Offer.Mode != bitcoin.OfferBaseline {
 		return initial.Status.LastAccountedOffer >= execution.Status.CompletedOffer
 	}
 	if initial.Status.Baseline != nil {
@@ -346,7 +346,7 @@ func generationAccounted(initial *bitcoin.BitcoinInitialization, execution *bitc
 // baselineOfferMatches checks retained selection identity and effective admitted target membership.
 func baselineOfferMatches(initial *bitcoin.BitcoinInitialization, offer *bitcoin.BitcoinBlockOffer, inputs bitcoin.BitcoinSchedulingStatus, participant *api.StacksNetworkParticipant) error {
 	baseline := initial.Status.Baseline
-	if baseline == nil || baseline.Scheduling.AdmissionDigest != inputs.AdmissionDigest || offer.Target == nil || offer.Target.UID != participant.UID || offer.Target.Name != participant.Name || baseline.SelectedTarget == nil || *baseline.SelectedTarget != *offer.Target || baseline.Sequence != offer.Number || baseline.Stage != "Offered" && baseline.Stage != "Assigned" || offer.Ceiling != math.MaxInt64 || offer.Wallet != initial.Spec.PayoutWallet.Wallet || offer.Address != initial.Spec.PayoutWallet.Address {
+	if baseline == nil || baseline.Scheduling.AdmissionDigest != inputs.AdmissionDigest || offer.Target == nil || offer.Target.UID != participant.UID || offer.Target.Name != participant.Name || baseline.SelectedTarget == nil || *baseline.SelectedTarget != *offer.Target || baseline.Sequence != offer.Number || baseline.Stage != bitcoin.BaselineOffered && baseline.Stage != bitcoin.BaselineAssigned || offer.Ceiling != math.MaxInt64 || offer.Wallet != initial.Spec.PayoutWallet.Wallet || offer.Address != initial.Spec.PayoutWallet.Address {
 		return fmt.Errorf("baseline opportunity authority differs")
 	}
 	for _, target := range inputs.Targets {

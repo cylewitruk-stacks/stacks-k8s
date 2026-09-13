@@ -30,7 +30,7 @@ type Reconciler struct {
 	// Concurrency bounds parallel reconciles across separate action objects.
 	Concurrency int
 	// Kind is BitcoinBlockGeneration or BitcoinReorganization.
-	Kind string
+	Kind action.Kind
 	// Now supplies lifecycle observation timestamps.
 	Now func() time.Time
 }
@@ -41,16 +41,16 @@ func (r *Reconciler) SetupWithManager(m ctrl.Manager) error {
 	if err != nil {
 		return err
 	}
-	return ctrl.NewControllerManagedBy(m).Named("action-foundation-" + r.Kind).For(object).WithOptions(controller.Options{MaxConcurrentReconciles: r.Concurrency}).Complete(r)
+	return ctrl.NewControllerManagedBy(m).Named("action-foundation-" + string(r.Kind)).For(object).WithOptions(controller.Options{MaxConcurrentReconciles: r.Concurrency}).Complete(r)
 }
 
 // object returns the fixed request kind and its common status subtree.
 func (r *Reconciler) object() (client.Object, *action.BitcoinBlockGenerationStatus, error) {
 	switch r.Kind {
-	case "BitcoinBlockGeneration":
+	case action.KindBitcoinBlockGeneration:
 		o := &action.BitcoinBlockGeneration{}
 		return o, &o.Status, nil
-	case "BitcoinReorganization":
+	case action.KindBitcoinReorganization:
 		o := &action.BitcoinReorganization{}
 		return o, &o.Status.BitcoinBlockGenerationStatus, nil
 	}
@@ -89,33 +89,33 @@ func (r *Reconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 		return ctrl.Result{}, rootErr
 	}
 	gone := apierrors.IsNotFound(rootErr) || root.UID != uid || root.DeletionTimestamp != nil
-	bound := record != nil && record.Status.Action != nil && record.Status.Action.Request.UID == object.GetUID() && record.Status.Action.Request.Kind == r.Kind && record.Status.Action.Request.Name == object.GetName()
+	bound := record != nil && record.Status.Action != nil && record.Status.Action.Request.UID == object.GetUID() && record.Status.Action.Request.Kind == string(r.Kind) && record.Status.Action.Request.Name == object.GetName()
 	if bound {
 		state := record.Status.Action
 		copyEvidence(object, status, record, state)
 		if gone {
-			finish(status, "Inconclusive", "EnvironmentDisposed", now)
+			finish(status, action.PhaseInconclusive, "EnvironmentDisposed", now)
 		} else {
 			project(status, state, record, now, object.GetDeletionTimestamp())
 		}
 	} else if !action.IsTerminalPhase(status.Phase) {
 		if status.AdmittedAt != nil {
-			finish(status, "Inconclusive", "ExecutionUnavailable", now)
+			finish(status, action.PhaseInconclusive, "ExecutionUnavailable", now)
 		} else if object.GetDeletionTimestamp() != nil || !now.Before(expiry) {
 			if available {
-				finish(status, "Failed", "NoDispatch", now)
+				finish(status, action.PhaseFailed, "NoDispatch", now)
 			} else {
-				finish(status, "Inconclusive", "AdmissionUnavailable", now)
+				finish(status, action.PhaseInconclusive, "AdmissionUnavailable", now)
 			}
 		} else {
-			status.Phase = "Pending"
+			status.Phase = action.PhasePending
 		}
 	}
 	condition(status, "Admitted", status.AdmittedAt != nil, "AdmissionObserved", now)
 	if !action.IsTerminalPhase(status.Phase) || meta.FindStatusCondition(status.Conditions, "Progressing") == nil {
-		condition(status, "Progressing", !action.IsTerminalPhase(status.Phase), status.Phase, now)
+		condition(status, "Progressing", !action.IsTerminalPhase(status.Phase), string(status.Phase), now)
 	}
-	condition(status, "EffectObserved", status.Phase == "Completed", "ReceiptEvidence", now)
+	condition(status, "EffectObserved", status.Phase == action.PhaseCompleted, "ReceiptEvidence", now)
 	clean := !bound && available
 	if bound {
 		s := record.Status.Action
@@ -124,14 +124,14 @@ func (r *Reconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 	condition(status, "CleanupComplete", clean, "CleanupEvidence", now)
 	if !equality.Semantic.DeepEqual(statusOf(before), statusOf(object)) {
 		object.SetManagedFields(nil)
-		object.GetObjectKind().SetGroupVersionKind(action.GroupVersion.WithKind(r.Kind))
+		object.GetObjectKind().SetGroupVersionKind(action.GroupVersion.WithKind(string(r.Kind)))
 		// A fresh minimal object preserves metadata preconditions without claiming fetched metadata.
 		payload, _, _ := r.object()
 		payload.SetName(object.GetName())
 		payload.SetNamespace(object.GetNamespace())
 		payload.SetUID(object.GetUID())
 		payload.SetResourceVersion(object.GetResourceVersion())
-		payload.GetObjectKind().SetGroupVersionKind(action.GroupVersion.WithKind(r.Kind))
+		payload.GetObjectKind().SetGroupVersionKind(action.GroupVersion.WithKind(string(r.Kind)))
 		switch p := payload.(type) {
 		case *action.BitcoinBlockGeneration:
 			p.Status = object.(*action.BitcoinBlockGeneration).Status
@@ -267,46 +267,46 @@ func project(status *action.BitcoinBlockGenerationStatus, s *bitcoin.BitcoinActi
 		return
 	}
 	if s.EffectUncertain || s.CleanupUnsafe {
-		finish(status, "Inconclusive", "EffectUncertain", now)
+		finish(status, action.PhaseInconclusive, action.ReasonEffectUncertain, now)
 		return
 	}
 	complete := s.Generation != nil && s.BlocksGenerated == s.Generation.Count || s.Reorganization != nil && s.FinalChain != nil && s.CleanupAcknowledged
 	if complete && record.Status.Armed == nil && s.StopReason == "" && (s.Reorganization != nil || s.LastCompletedAt != nil && !s.LastCompletedAt.After(s.ExpiresAt.Time) && (deleted == nil || !s.LastCompletedAt.After(deleted.Time))) {
-		finish(status, "Completed", "ReceiptsComplete", now)
+		finish(status, action.PhaseCompleted, "ReceiptsComplete", now)
 		return
 	}
 	if (!now.Before(s.ExpiresAt.Time) || deleted != nil) && record.Status.Armed != nil {
-		if s.Reorganization != nil && record.Status.Armed.Method == "ReconsiderBlock" && now.Before(s.ExpiresAt.Add(30*time.Second)) {
-			status.Phase = "Recovering"
+		if s.Reorganization != nil && record.Status.Armed.Method == bitcoin.RPCReconsiderBlock && now.Before(s.ExpiresAt.Add(30*time.Second)) {
+			status.Phase = action.PhaseRecovering
 			return
 		}
-		finish(status, "Inconclusive", "EffectUncertain", now)
+		finish(status, action.PhaseInconclusive, action.ReasonEffectUncertain, now)
 		return
 	}
 	if s.Reorganization != nil && s.InvalidationAcknowledged && !s.CleanupAcknowledged && !now.Before(s.ExpiresAt.Add(30*time.Second)) {
-		finish(status, "Inconclusive", "CleanupDeadlineExceeded", now)
+		finish(status, action.PhaseInconclusive, action.ReasonCleanupDeadlineExceeded, now)
 		return
 	}
 	if s.StopReason != "" && record.Status.Armed == nil {
 		if s.Reorganization != nil && s.InvalidationAcknowledged && !s.CleanupAcknowledged {
-			status.Phase = "Recovering"
+			status.Phase = action.PhaseRecovering
 			return
 		}
-		phase := "Failed"
-		if s.StopReason == "IdentityDiverged" && s.StartedAt != nil {
-			phase = "Inconclusive"
+		phase := action.PhaseFailed
+		if s.StopReason == action.ReasonIdentityDiverged && s.StartedAt != nil {
+			phase = action.PhaseInconclusive
 		}
 		finish(status, phase, s.StopReason, now)
 		return
 	}
-	status.Phase = "Admitted"
+	status.Phase = action.PhaseAdmitted
 	if s.StartedAt != nil {
-		status.Phase = "Active"
+		status.Phase = action.PhaseActive
 	}
 }
 
 // finish records the first terminal observation and its bounded reason.
-func finish(s *action.BitcoinBlockGenerationStatus, phase, reason string, now time.Time) {
+func finish(s *action.BitcoinBlockGenerationStatus, phase action.Phase, reason string, now time.Time) {
 	if action.IsTerminalPhase(s.Phase) {
 		return
 	}

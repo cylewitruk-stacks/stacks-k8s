@@ -30,7 +30,7 @@ func baselineCompleted(ctx context.Context, reader client.Reader, root *api.Stac
 		return fmt.Errorf("completed genesis identity differs")
 	}
 	gates := genesis.Spec.Bootstrap.Gates
-	if len(gates) == 0 || len(gates) != len(state.Gates) || int(state.GateIndex) != len(gates) || gates[0].Name != "PrepareBitcoin" || gates[0].BitcoinCeiling != initial.Spec.MinimumHeight || state.AuthorizedCeiling != gates[len(gates)-1].BitcoinCeiling {
+	if len(gates) == 0 || len(gates) != len(state.Gates) || int(state.GateIndex) != len(gates) || gates[0].Name != api.GatePrepareBitcoin || gates[0].BitcoinCeiling != initial.Spec.MinimumHeight || state.AuthorizedCeiling != gates[len(gates)-1].BitcoinCeiling {
 		return fmt.Errorf("completed gate inventory differs")
 	}
 	for i, gate := range gates {
@@ -49,7 +49,7 @@ func baselineInputs(ctx context.Context, reader client.Reader, root *api.StacksN
 // resolveBaselineInputs keeps scheduler credential metadata checks separate from public dispatch inputs.
 func resolveBaselineInputs(ctx context.Context, reader client.Reader, root *api.StacksNetwork, initial *bitcoin.BitcoinInitialization, p *api.StacksNetworkParticipant, publicOnly bool) (bitcoin.BitcoinSchedulingStatus, error) {
 	out := bitcoin.BitcoinSchedulingStatus{Initialization: binding("BitcoinInitialization", initial)}
-	if !participantCurrent(root, p) || p.Spec.Kind != "BitcoinBlockProduction" || p.Status.Admission.Configuration.BitcoinBlockProduction == nil {
+	if !participantCurrent(root, p) || p.Spec.Kind != api.ParticipantBitcoinBlockProduction || p.Status.Admission.Configuration.BitcoinBlockProduction == nil {
 		return out, fmt.Errorf("admitted production identity unavailable")
 	}
 	policy := p.Status.Admission.Configuration.BitcoinBlockProduction

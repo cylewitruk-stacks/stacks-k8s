@@ -160,12 +160,12 @@ func (w *Worker) Step(ctx context.Context) error {
 	if e != nil || !equality.Semantic.DeepEqual(a.target, current.target) {
 		return fmt.Errorf("actor identity changed during observation")
 	}
-	if operation != nil && operation.Method == "UnloadWallet" {
+	if operation != nil && operation.Method == bitcoin.RPCUnloadWallet {
 		record.Status.PendingWalletRemoval = operation.Wallet.DeepCopy()
 	}
 	if !equality.Semantic.DeepEqual(record.Status.Observation, observation) || !equality.Semantic.DeepEqual(previousRemoval, record.Status.PendingWalletRemoval) {
 		record.Status.Observation = observation
-		record.Status.Phase = "Idle"
+		record.Status.Phase = bitcoin.ExecutionIdle
 		if e = w.Client.Status().Update(ctx, record); e != nil {
 			return e
 		}
@@ -189,7 +189,7 @@ func (w *Worker) Step(ctx context.Context) error {
 		if e = w.RPC.Check(ctx, current.target.Endpoint, offer.Address); e != nil {
 			return e
 		}
-		operation = &bitcoin.BitcoinArmedRPC{Method: "Generate", Offer: offer.DeepCopy()}
+		operation = &bitcoin.BitcoinArmedRPC{Method: bitcoin.RPCGenerate, Offer: offer.DeepCopy()}
 	}
 	if operation == nil {
 		return nil
@@ -260,7 +260,7 @@ func (w *Worker) arm(ctx context.Context, record *bitcoin.BitcoinExecution, a ad
 		current.Status.Action.StartedAt = operation.ArmedAt.DeepCopy()
 	}
 	current.Status.Armed = &operation
-	current.Status.Phase = "Armed"
+	current.Status.Phase = bitcoin.ExecutionArmed
 	if e = w.Client.Status().Update(ctx, current); e != nil {
 		return e
 	} // Lost CAS acknowledgement remains blocked and unsent.
@@ -306,7 +306,7 @@ func (w *Worker) withdraw(ctx context.Context, armed *bitcoin.BitcoinExecution, 
 		current.Status.Action.StopReason = stopReason
 	}
 	current.Status.Armed = nil
-	current.Status.Phase = "Idle"
+	current.Status.Phase = bitcoin.ExecutionIdle
 	return w.Client.Status().Update(ctx, current)
 }
 
@@ -354,7 +354,7 @@ func (w *Worker) account(ctx context.Context, record *bitcoin.BitcoinExecution, 
 		return fmt.Errorf("receipt does not match outstanding authority")
 	}
 	current.Status.LastReceipt = receipt.DeepCopy()
-	if receipt.Request.Method == "UnloadWallet" {
+	if receipt.Request.Method == bitcoin.RPCUnloadWallet {
 		current.Status.PendingWalletRemoval = nil
 		if observation := current.Status.Observation; observation != nil {
 			retained := observation.Wallets[:0]
@@ -367,12 +367,12 @@ func (w *Worker) account(ctx context.Context, record *bitcoin.BitcoinExecution, 
 		}
 	}
 	current.Status.Armed = nil
-	current.Status.Phase = "Idle"
+	current.Status.Phase = bitcoin.ExecutionIdle
 	if receipt.Request.Action != nil {
 		if err := accountActionReceipt(current, receipt); err != nil {
 			return err
 		}
-	} else if receipt.Request.Method == "Generate" {
+	} else if receipt.Request.Method == bitcoin.RPCGenerate {
 		current.Status.BlocksGenerated++
 		current.Status.CompletedOffer = receipt.Request.Offer.Number
 	}

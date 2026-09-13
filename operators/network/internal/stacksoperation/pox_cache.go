@@ -88,7 +88,7 @@ func poxBlocked(reason string, pending int32) bool {
 		return false
 	}
 	switch reason {
-	case "Paused", "StateObserved", "Included", "Idle", "PoX4EnrollmentObserved", "PoX5EnrollmentObserved", "PoX4InclusionObservedAtTransition", "PoX5PostconditionObserved", "AwaitingMaintenanceWindow":
+	case reasonPaused, reasonStateObserved, reasonIncluded, reasonIdle, reasonPoX4EnrollmentObserved, reasonPoX5EnrollmentObserved, reasonPoX4InclusionObservedAtTransition, reasonPoX5PostconditionObserved, reasonAwaitingMaintenanceWindow:
 		return false
 	}
 	return true

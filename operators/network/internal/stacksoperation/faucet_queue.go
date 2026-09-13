@@ -37,7 +37,7 @@ func (r *FaucetRole) CollectionChanged(ref stacksworker.CollectionWatch, object 
 		return
 	}
 	a := request.Status.Admission
-	if a == nil || a.Decision != "Admitted" || a.Faucet == nil || a.Worker == nil || a.Faucet.UID != r.ParticipantUID || a.Worker.UID != r.PodUID {
+	if a == nil || a.Decision != stacks.FaucetDecisionAdmitted || a.Faucet == nil || a.Worker == nil || a.Faucet.UID != r.ParticipantUID || a.Worker.UID != r.PodUID {
 		return
 	}
 	r.mu.Lock()

@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"time"
 
+	api "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha2"
 	"github.com/cylewitruk-stacks/stacks-k8s/libs/stacks/clarity"
 	"github.com/cylewitruk-stacks/stacks-k8s/libs/stacks/rpc"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/foundation"
@@ -75,7 +76,7 @@ func (r PublicInputs) Contracts(ctx context.Context, s stacksworker.Snapshot) (C
 	if err != nil {
 		return in, err
 	}
-	genesis, err := r.inputGenesis(ctx, s, "StacksContractSet")
+	genesis, err := r.inputGenesis(ctx, s, api.ParticipantStacksContractSet)
 	if err != nil {
 		return in, err
 	}
@@ -91,7 +92,7 @@ func (r PublicInputs) Contracts(ctx context.Context, s stacksworker.Snapshot) (C
 	if captured == nil {
 		for i := range genesis.Spec.Bootstrap.Requirements {
 			required := &genesis.Spec.Bootstrap.Requirements[i]
-			if required.Kind != "StacksContractSet" {
+			if required.Kind != api.ParticipantStacksContractSet {
 				continue
 			}
 			if captured != nil {

@@ -31,7 +31,7 @@ func main() {
 	must(err)
 	m, err := options.New(configuration, scheme)
 	must(err)
-	for kind, enabled := range map[string]bool{"BitcoinBlockGeneration": options.GenerationEnabled, "BitcoinReorganization": options.ReorganizationEnabled} {
+	for kind, enabled := range map[actionv2.Kind]bool{actionv2.KindBitcoinBlockGeneration: options.GenerationEnabled, actionv2.KindBitcoinReorganization: options.ReorganizationEnabled} {
 		if enabled {
 			must((&foundation.Reconciler{Client: m.GetClient(), Reader: m.GetAPIReader(), Kind: kind, Concurrency: options.Concurrency}).SetupWithManager(m))
 		}

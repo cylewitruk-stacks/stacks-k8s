@@ -36,7 +36,7 @@ func publicReadScope(ctx context.Context, reader client.Reader, p *api.StacksNet
 			object = &bitcoin.BitcoinWallet{}
 		case "StacksAccount":
 			object = &stacks.StacksAccount{}
-		case "BitcoinNode", "BitcoinBlockProduction", "BitcoinBlockSchedule":
+		case string(api.ParticipantBitcoinNode), string(api.ParticipantBitcoinBlockProduction), "BitcoinBlockSchedule":
 			out = append(out, ref)
 			continue
 		default:
@@ -60,7 +60,7 @@ func publicReadScope(ctx context.Context, reader client.Reader, p *api.StacksNet
 					queue = append(queue, common.Binding{Kind: string(current.Spec.Kind), Name: source.Name, UID: source.UID})
 				}
 				for _, dep := range current.Status.Admission.Dependencies {
-					if current.Spec.Kind == "BitcoinBlockProduction" && dep.Kind != "BitcoinBlockSchedule" && dep != initial.Spec.PayoutWallet.Wallet {
+					if current.Spec.Kind == api.ParticipantBitcoinBlockProduction && dep.Kind != "BitcoinBlockSchedule" && dep != initial.Spec.PayoutWallet.Wallet {
 						continue
 					}
 					queue = append(queue, dep)

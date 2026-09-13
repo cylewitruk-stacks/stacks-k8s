@@ -83,7 +83,7 @@ func (r Profiles) signer(ctx context.Context, root *api.StacksNetwork, p *api.St
 			captured = true
 		}
 	}
-	if !captured || signer.Spec.NetworkUID != root.UID || signer.Spec.ParticipantName != name || signer.Spec.Kind != "StacksSigner" || signer.DeletionTimestamp != nil || !metav1.IsControlledBy(&signer, root) || signer.Status.Admission == nil || signer.Status.Admission.Configuration.StacksSigner == nil || signer.Status.Admission.Configuration.StacksSigner.AccountRef == nil {
+	if !captured || signer.Spec.NetworkUID != root.UID || signer.Spec.ParticipantName != name || signer.Spec.Kind != api.ParticipantStacksSigner || signer.DeletionTimestamp != nil || !metav1.IsControlledBy(&signer, root) || signer.Status.Admission == nil || signer.Status.Admission.Configuration.StacksSigner == nil || signer.Status.Admission.Configuration.StacksSigner.AccountRef == nil {
 		return nil, fmt.Errorf("consensus participant identity unavailable")
 	}
 	return &signer, nil
@@ -108,7 +108,7 @@ func (r Profiles) Resolve(ctx context.Context, root *api.StacksNetwork, p *api.S
 	}
 	policy := p.Status.Admission.Configuration
 	switch p.Spec.Kind {
-	case "StacksFaucet":
+	case api.ParticipantStacksFaucet:
 		if policy.StacksFaucet == nil {
 			return Profile{}, fmt.Errorf("faucet policy unavailable")
 		}
@@ -116,7 +116,7 @@ func (r Profiles) Resolve(ctx context.Context, root *api.StacksNetwork, p *api.S
 		if err := add(p, policy.StacksFaucet.AccountRef, "sender"); err != nil {
 			return Profile{}, err
 		}
-	case "StacksTransactionProduction":
+	case api.ParticipantStacksTransactionProduction:
 		if policy.StacksTransactionProduction == nil {
 			return Profile{}, fmt.Errorf("transaction policy unavailable")
 		}
@@ -124,7 +124,7 @@ func (r Profiles) Resolve(ctx context.Context, root *api.StacksNetwork, p *api.S
 		if err := add(p, policy.StacksTransactionProduction.AccountRef, "sender"); err != nil {
 			return Profile{}, err
 		}
-	case "StacksContractSet":
+	case api.ParticipantStacksContractSet:
 		if policy.StacksContractSet == nil {
 			return Profile{}, fmt.Errorf("contract policy unavailable")
 		}
@@ -132,7 +132,7 @@ func (r Profiles) Resolve(ctx context.Context, root *api.StacksNetwork, p *api.S
 		if err := add(p, policy.StacksContractSet.DeployerAccountRef, "deployer"); err != nil {
 			return Profile{}, err
 		}
-	case "StacksStacker":
+	case api.ParticipantStacksStacker:
 		stacker := policy.StacksStacker
 		if stacker == nil || stacker.SignerRef == nil {
 			return Profile{}, fmt.Errorf("stacker policy unavailable")

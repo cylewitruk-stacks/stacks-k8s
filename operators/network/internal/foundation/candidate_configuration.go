@@ -45,7 +45,7 @@ func customization(configuration api.Configuration) *common.Config {
 // unverified excludes intentionally divergent actors from managed prerequisites.
 func unverified(configuration api.Configuration) bool {
 	config := customization(configuration)
-	return config != nil && ptr.Deref(config.Compatibility, "Managed") == "Unverified"
+	return config != nil && ptr.Deref(config.Compatibility, common.CompatibilityManaged) == common.CompatibilityUnverified
 }
 
 // validateCustomization checks each actor's native public override paths.
@@ -53,7 +53,7 @@ func validateCustomization(kind api.ParticipantKind, config *common.Config) erro
 	if config == nil {
 		return nil
 	}
-	if kind == "BitcoinNode" {
+	if kind == api.ParticipantBitcoinNode {
 		return bitcoinconfig.ValidateCustomization(config)
 	}
 	return stacksconfig.ValidateCustomization(kind, config)

@@ -29,7 +29,7 @@ func (r *Reconciler) stacksStartAuthorized(ctx context.Context, root *api.Stacks
 		return fmt.Errorf("PrepareBitcoin has not completed for this frozen network identity")
 	}
 	// Consensus startup deliberately has no enrollment or PoX registration dependency.
-	if p.Spec.Kind == "StacksSigner" {
+	if p.Spec.Kind == api.ParticipantStacksSigner {
 		return nil
 	}
 	node := p.Status.Admission.Configuration.StacksNode
@@ -45,7 +45,7 @@ func (r *Reconciler) stacksStartAuthorized(ctx context.Context, root *api.Stacks
 		if !owned(&existing, p) || existing.DeletionTimestamp != nil {
 			return fmt.Errorf("miner workload identity unavailable")
 		}
-		if ptr.Deref(existing.Spec.Replicas, 0) > 0 && existing.Spec.Template.Annotations["network.stacks.org/mining-enabled"] == "true" {
+		if ptr.Deref(existing.Spec.Replicas, 0) > 0 && existing.Spec.Template.Annotations[miningEnabledAnnotation] == "true" {
 			return nil
 		}
 	} else if !apierrors.IsNotFound(err) {
@@ -55,7 +55,7 @@ func (r *Reconciler) stacksStartAuthorized(ctx context.Context, root *api.Stacks
 	if err != nil {
 		return err
 	}
-	btc, err := r.boundParticipant(ctx, root, p, node.BitcoinNodeRef, "BitcoinNode")
+	btc, err := r.boundParticipant(ctx, root, p, node.BitcoinNodeRef, api.ParticipantBitcoinNode)
 	if err != nil {
 		return err
 	}

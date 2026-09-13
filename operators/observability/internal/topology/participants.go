@@ -26,8 +26,8 @@ import (
 const (
 	// VersionV1Alpha2 selects generated participant runtime identities.
 	VersionV1Alpha2         = "v1alpha2"
-	policyAnnotation        = "network.stacks.org/policy-digest"
-	configurationAnnotation = "network.stacks.org/configuration-digest"
+	policyAnnotation        = api.AnnotationPolicyDigest
+	configurationAnnotation = api.AnnotationConfigurationDigest
 )
 
 // directRead records objects for a final consistency check; Secret reads are never used.
@@ -142,7 +142,7 @@ func (r Reader) observeParticipants(ctx context.Context, namespace, name, expect
 	actors := []observation.ObservedActorIdentity{}
 	seen := map[string]bool{}
 	for _, selected := range root.Spec.Participants {
-		if actorContainerV2(string(selected.Kind)) == "" {
+		if actorContainerV2(selected.Kind) == "" {
 			continue
 		}
 		if seen[selected.Name] {
@@ -252,13 +252,13 @@ func exactOwner(object metav1.Object, version, kind, name string, uid types.UID)
 }
 
 // actorContainerV2 maps the closed actor-kind union to its native container.
-func actorContainerV2(kind string) string {
+func actorContainerV2(kind api.ParticipantKind) string {
 	switch kind {
-	case "BitcoinNode":
+	case api.ParticipantBitcoinNode:
 		return "bitcoin"
-	case "StacksNode":
+	case api.ParticipantStacksNode:
 		return "stacks-node"
-	case "StacksSigner":
+	case api.ParticipantStacksSigner:
 		return "stacks-signer"
 	}
 	return ""
