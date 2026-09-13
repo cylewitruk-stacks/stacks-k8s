@@ -50,6 +50,70 @@ packet behavior or deterministic chain divergence.
 
 ## Qualification outcomes
 
+### Full-cohort lifecycle and image roll — 2026-09-13
+
+`m3-lifecycle-20260913a` passed one combined run on source
+`cc629ebe573492bc20ab859b0987e925fac05830`, using a freshly built
+`stacks-network-operator:m3-20260913`. The full30 fixture used the reference
+five-second cadence throughout. The harness additionally applied the existing
+fresh-storage and canonical-tip predicates to both newly added followers.
+
+| Check | Observed result |
+| --- | --- |
+| Empty-storage bootstrap | All six gates completed; `Initialized`, `Running` and `Operational` were true. Bitcoin execution records reported height 301; Stacks observers reported burn heights 300–301. |
+| Operator restart | Deployment rolled; actor and bound worker process identities were preserved. |
+| Fresh follower | New uncloned PVC/PV; native PoX-5 canonical agreement and further same-process advancement. |
+| Independent image roll | `iteration2-f9b022-probe` → `iteration2-4.0.1`; same participant/PVC/PV, different Pod and runtime image, Stacks height 129 → 137. |
+| Suspend/resume | Exact process termination acknowledged; new Pod resumed with the same participant, configuration and storage. |
+| Removal and replacement | First runtime deleted with its PVC retained; second participant used distinct new storage and passed canonical catch-up. Second runtime and its non-retained claim were deleted. |
+| Cohort isolation | Frozen genesis and unrelated actor/worker process identities remained unchanged during actor operations; subsequent native progress passed. |
+| Continuing maintenance | All six stackers extended native lock coverage from end-cycle-exclusive 21 to 25 without replacing their workers; subsequent progress passed. |
+| Faucet | Two included transfers and bounded no-resubmission observation after request deletion. |
+| Shared Bitcoin definitions | Two added actors reused a definition and wallet with distinct runtime/storage identities; removal retained the reusable inputs and baseline progress. |
+| Network pause/resume | Pause acknowledged with stable Bitcoin receipt counters; surviving workers resumed fresh protocol progress. |
+| Teardown | Normal Stop, root deletion, reusable-declaration identity checks and namespace deletion passed; no qualification PV remained. |
+
+The run took 2164 seconds and ended at **12:52:38 UTC** with exit 0. No runtime
+fix or administrative finalizer removal was needed. The shared three-node cluster
+remains running with the tested operator installed and no network fixtures.
+
+Root UID: `1b77793d-73f4-492e-9412-725c9473ea6e`; genesis UID:
+`988eb471-ed02-40ee-8977-2983f078c76a`. The local image artifacts were:
+
+| Artifact | Docker image ID |
+| --- | --- |
+| Network operator | `sha256:0358a531f9236a99764ae588f18dd61b54786a1b91c5a75f790ad55da0386af8` |
+| Baseline Stacks | `sha256:8f82a5eae354e3d6fc6a1a8da866f91c516ca2597e8e1c3310f46307765219b4` |
+| Alternate Stacks | `sha256:d70390356696a3bd2a90d79fec4386b5f20b419090edc2c6c4fe29595223a4af` |
+
+Both Stacks binaries report the revisions in the profile table with a trailing `+`;
+this qualification binds those local artifacts and does not assert pristine upstream
+builds. Runtime-reported image IDs are recorded separately from Docker image IDs.
+Their recorded correspondence uses the repository tags in the all-node inventory
+`/tmp/stacks-m3-images.json`, not equality between the two sets of digests.
+Only the added follower was rolled to the alternate revision; this is not a miner,
+consensus-signer, reverse-upgrade or arbitrary-version compatibility claim.
+The image-roll height comparison uses the initial join observation (129), not an
+immediate pre-roll sample. The new Pod reported height 137; this check does not
+measure advancement between two observations of that new process.
+
+Local evidence: `/tmp/stacks-m3-lifecycle-a/` contains stage snapshots and
+`events.jsonl`; `/tmp/stacks-m3-live-a.log` records the pass and exit marker;
+`/tmp/stacks-m3-images.json` records all-node image inventory. Build/load/install
+logs use `/tmp/stacks-m3-{build,load,install}.log`. Full `make verify` passed in
+`/tmp/stacks-m3-verify.log` before the result documentation was written. Final
+documentation checks are recorded in `/tmp/stacks-m3-docs-checks.log`: Markdown lint,
+relative file links and a separate check of the new section anchor. The repository
+link test checks file paths only, not fragments. These local files are not a
+published evidence archive.
+
+This single successful sequence does not diagnose earlier intermittent bootstrap
+or missing-anchor failures. It exercises early follower joins after initialization,
+not catch-up after reorganization/fault experiments, repeated-run reliability,
+slow enrollment at the 294 ceiling, or an additional Chaos/action qualification.
+
+### Earlier runs
+
 | Run | Automated results | Boundary |
 | --- | --- | --- |
 | `iteration2-full-20260911` | Full cohort initialization, six renewals, faucet, schedules and generation modes | Reorganization expired without sending; competing producer moved the captured tip. Cleanup then required explicit administrative disposal after node-level termination inspection. |

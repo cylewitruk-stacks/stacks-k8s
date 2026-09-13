@@ -98,16 +98,21 @@ func (h *harness) qualifyFreshFollower(
 	}
 	if err := h.event(
 		"fresh-follower-storage",
-		map[string]any{"claim": objectIdentity(&claim), "volume": objectIdentity(&volume), "dataSource": "none"},
+		map[string]any{
+			"participant": name,
+			"claim":       objectIdentity(&claim),
+			"volume":      objectIdentity(&volume),
+			"dataSource":  "none",
+		},
 	); err != nil {
 		return joined, err
 	}
-	if _, err := h.awaitProgress(ctx, "fresh-follower-network-progress", joined); err != nil {
+	if _, err := h.awaitProgress(ctx, name+"-network-progress", joined); err != nil {
 		return joined, err
 	}
 	return h.wait(
 		ctx,
-		"fresh-follower-canonical-progress",
+		name+"-canonical-progress",
 		h.config.progressTimeout,
 		true,
 		func(s snapshot) (bool, error) {

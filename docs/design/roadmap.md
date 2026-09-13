@@ -141,6 +141,11 @@ distinguishable; the aggregate compiles resources and never becomes an experimen
 
 ## M3: multi-actor topology and independent upgrades
 
+**Current qualification:** one [full-cohort lifecycle sequence](../network-operator/public-api-qualification.md#full-cohort-lifecycle-and-image-roll--2026-09-13)
+passed with two fresh-storage follower joins, an independent follower image roll,
+suspend/resume, removal, renewal and network teardown. Other actor-role upgrades,
+image pairs and late joins after fault/action sequences remain open; M3 is not complete.
+
 **Outcome:** reusable heterogeneous networks preserve identity and storage
 across supported changes.
 
