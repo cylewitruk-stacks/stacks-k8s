@@ -19,7 +19,7 @@ jobs:
     name: Go lint and formatting
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
           go-version-file: operators/network/go.mod
@@ -34,7 +34,7 @@ jobs:
     name: Chart policy and native admission
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
           go-version-file: tools/chart-policy/go.mod
@@ -47,7 +47,7 @@ jobs:
     name: Network operator
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
           go-version-file: operators/network/go.mod
@@ -65,7 +65,7 @@ jobs:
     name: Action operator
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
           go-version-file: operators/action/go.mod
@@ -80,7 +80,7 @@ jobs:
     name: Observability operator
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
           go-version-file: operators/observability/go.mod
@@ -94,7 +94,7 @@ jobs:
     name: Module integrity
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
           go-version-file: operators/network/go.mod
@@ -116,6 +116,6 @@ jobs:
     name: Container builds
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - run: make docker-check
       - run: make docker-build
