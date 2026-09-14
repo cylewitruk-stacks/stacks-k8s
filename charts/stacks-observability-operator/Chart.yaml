@@ -14,3 +14,9 @@ keywords:
   - operator
 annotations:
   artifacthub.io/license: MIT
+dependencies:
+  - name: greptimedb-standalone
+    alias: greptime
+    version: 0.4.14
+    repository: https://greptimeteam.github.io/helm-charts/
+    condition: greptime.enabled

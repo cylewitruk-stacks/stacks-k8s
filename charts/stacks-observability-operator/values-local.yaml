@@ -1,0 +1,12 @@
+# Local kind profile; create greptime-auth before installing.
+dashboard:
+  enabled: true
+greptime:
+  enabled: true
+  fullnameOverride: greptime
+  nodeSelector:
+    kubernetes.io/hostname: stacks-k8s-control-plane
+  tolerations:
+    - key: node-role.kubernetes.io/control-plane
+      operator: Exists
+      effect: NoSchedule

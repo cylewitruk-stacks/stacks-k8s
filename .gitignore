@@ -34,3 +34,6 @@ node_modules/
 
 # Local kind access credentials
 /tools/local-cluster/kubeconfig
+
+# Downloaded Helm dependencies; versions are committed in Chart.lock.
+/charts/stacks-observability-operator/charts/

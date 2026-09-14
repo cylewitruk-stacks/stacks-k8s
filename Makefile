@@ -36,6 +36,7 @@ module-policy-verify:
 	GOWORK=off $(GO) -C tools/module-policy run ./cmd/module-policy-check --module ../../libs/stacks --portable
 
 verify-chart-policy:
+	$(MAKE) -C charts/stacks-observability-operator dependencies
 	GOWORK=off $(GO) -C tools/chart-policy vet ./...
 	GOWORK=off $(GO) -C tools/chart-policy vet -tags=integration,live ./internal/integration
 	GOWORK=off $(GO) -C tools/chart-policy test ./...

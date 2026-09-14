@@ -1,0 +1,94 @@
+{{- if and .Values.dashboard.enabled (not .Values.greptime.enabled) }}
+{{- fail "dashboard.enabled requires greptime.enabled; expose an external backend through its own chart" }}
+{{- end }}
+{{- if .Values.greptime.enabled }}
+{{- if or (not .Values.greptime.auth.enabled) (empty .Values.greptime.auth.existingSecretName) }}
+{{- fail "bundled Greptime requires auth.enabled and an administrator-provisioned auth.existingSecretName" }}
+{{- end }}
+{{- if ne .Values.greptime.service.type "ClusterIP" }}
+{{- fail "greptime.service.type must be ClusterIP; use dashboard.enabled for HTTP-only host access" }}
+{{- end }}
+{{- $backend := index .Subcharts "greptime" }}
+{{- $name := include "greptimedb-standalone.fullname" $backend }}
+{{- if .Values.dashboard.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ printf "%s-dashboard" ($name | trunc 53 | trimSuffix "-") }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "stacks-observability-operator.labels" . | nindent 4 }}
+spec:
+  type: NodePort
+  externalTrafficPolicy: Cluster
+  ports:
+    - name: http
+      port: {{ .Values.greptime.httpServicePort }}
+      targetPort: http
+      nodePort: {{ .Values.dashboard.nodePort }}
+      protocol: TCP
+  selector:
+    {{- include "greptimedb-standalone.selectorLabels" $backend | nindent 4 }}
+---
+{{- end }}
+{{- if .Values.backendInitialization.enabled }}
+{{- $initName := printf "%s-backend-init" ((include "stacks-observability-operator.fullname" .) | trunc 49 | trimSuffix "-") }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $initName }}
+  namespace: {{ .Release.Namespace }}
+automountServiceAccountToken: false
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $initName }}
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 6
+  activeDeadlineSeconds: 180
+  ttlSecondsAfterFinished: 3600
+  template:
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ $initName }}
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: backend-init
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: [/backend-init]
+          args:
+            - {{ printf "--endpoint=http://%s.%s.svc:%v" $name .Release.Namespace .Values.greptime.httpServicePort | quote }}
+            - --auth-file=/auth/passwd
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests: {cpu: 10m, memory: 16Mi}
+            limits: {cpu: 100m, memory: 64Mi}
+          volumeMounts:
+            - name: auth
+              mountPath: /auth
+              readOnly: true
+      volumes:
+        - name: auth
+          secret:
+            secretName: {{ .Values.greptime.auth.existingSecretName | quote }}
+            defaultMode: 0444
+            items:
+              - key: {{ .Values.greptime.auth.fileName | quote }}
+                path: passwd
+{{- end }}
+{{- end }}

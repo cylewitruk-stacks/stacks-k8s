@@ -143,6 +143,12 @@ export KUBECONFIG="$PWD/tools/local-cluster/kubeconfig"
 kubectl --context kind-stacks-k8s get nodes
 ```
 
+The control-plane container also publishes `127.0.0.1:14000` to NodePort `30400`.
+The optional [observability installation](observability/README.md#installation)
+uses this mapping for Greptime's dashboard and HTTP API. Cluster creation reserves
+the host port but does not install Greptime. Changing mappings requires recreation;
+stopping/starting an existing cluster preserves them.
+
 ### Dashboard and resource metrics
 
 Creation installs checksum-verified upstream charts: **Headlamp 0.45.0** and

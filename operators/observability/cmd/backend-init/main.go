@@ -15,7 +15,7 @@ import (
 )
 
 func main() {
-	endpoint := flag.String("endpoint", "http://127.0.0.1:14000", "Forwarded Greptime HTTP base URL.")
+	endpoint := flag.String("endpoint", "http://127.0.0.1:14000", "Greptime HTTP base URL.")
 	authFile := flag.String("auth-file", "", "Protected passwd file used for the greptime-auth Secret.")
 	flag.Parse()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
