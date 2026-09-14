@@ -5,3 +5,7 @@ Create a one-shot identity observation:
 
 Inspect the result:
   kubectl --namespace {{ .Release.Namespace }} get networkobservations
+
+Continuous recording is opt-in via NetworkTelemetry in an enrolled namespace.
+Install the independent Greptime backend and scoped ingestion credential first.
+See docs/observability/README.md for enrollment, retention and query setup.

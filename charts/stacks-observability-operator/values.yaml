@@ -21,3 +21,8 @@ resources:
   limits:
     cpu: 250m
     memory: 128Mi
+
+# Explicit namespace enrollment; an empty list observes only the installation namespace.
+watchNamespaces: []
+collector:
+  image: otel/opentelemetry-collector-contrib:0.160.0

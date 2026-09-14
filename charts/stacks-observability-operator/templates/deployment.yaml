@@ -36,7 +36,10 @@ spec:
           image: {{ printf "%s:%s" .Values.image.repository .Values.image.tag | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           args:
-            - --watch-namespace={{ .Release.Namespace }}
+            - --watch-namespace={{ include "stacks-observability-operator.watchNamespaces" . }}
+            - --leader-election-namespace={{ .Release.Namespace }}
+            - --worker-image={{ printf "%s:%s" .Values.image.repository .Values.image.tag }}
+            - --collector-image={{ .Values.collector.image }}
             - --max-concurrent-reconciles={{ .Values.controller.maxConcurrentReconciles }}
             - --leader-elect={{ .Values.controller.leaderElection }}
             - --zap-log-level={{ .Values.controller.logLevel }}

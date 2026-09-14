@@ -22,205 +22,144 @@ future run.
 
 ## Current implementation
 
-`NetworkObservation` is an implemented one-shot identity snapshot. It verifies
-a `StacksNetwork` UID, generation, and inventory digest and reports admitted
-actors. It does not continuously retain history or collect protocol telemetry.
+`NetworkObservation` is a one-shot identity snapshot against the public participant
+API. `NetworkTelemetry` in `observation.stacks.org/v1alpha2` continuously records
+public Kubernetes facts, logs, native metrics and collection health in GreptimeDB.
+Neither grants mutation authority over observed networks or protocol actors.
 
-Retain it as a lightweight compatibility API until the continuous recording
-surface is proven. Do not overload it with session or export behavior.
+See the [continuous telemetry guide](../observability/README.md) for the served
+resource, installation, storage schema, source bounds and query examples. The
+[public API package](public-api/resources.md#optional-action-and-observation-resources)
+defines how these optional resources relate to network instances.
 
-## Proposed resources and services
+## Resources and services
 
-| Component | Form | Purpose |
+| Component | Form | Delivery |
 | --- | --- | --- |
-| `NetworkTelemetry` | CRD | Declare passive collection and bounded retention for one network. |
-| `EvidenceExport` | CRD | Request one bounded, immutable export from retained observations. |
-| Observation query API | Service | Efficiently query retained facts without putting data in CRDs. |
-| Journal/object store | External data plane | Store event streams, logs, snapshots, indexes, and exported bundles. |
-
-Working API group remains `observation.stacks.org/v1alpha1`. Names are open
-until API review. M0.7 owns the implementation contract; examples below are
-illustrative and not served schemas. V1 uses one existing durable backend,
-backend-native pagination, and a small query/export surface. Audit webhooks
-are optional advanced sources.
+| `NetworkObservation` | CRD | One-shot identity verification. |
+| `NetworkTelemetry` | CRD | Exact-UID continuous recording and bounded status. |
+| GreptimeDB | Independently installed backend | Retained logs, public object observations and native metrics; read-only HTTP SQL. |
+| OTel collectors | Telemetry-owned DaemonSet | Node-local file collection, scraping and persistent bounded export queues. |
+| Go recorder | Telemetry-owned Deployment | Allowlisted list/watch sources, redaction, explicit gaps and recorder/collector health. |
+| `EvidenceExport` and query Service | Future resources | Bounded export and a narrower agent query interface, if needed beyond backend-native SQL. |
 
 ## `NetworkTelemetry`
 
 ### Example
 
 ```yaml
-apiVersion: observation.stacks.org/v1alpha1
+apiVersion: observation.stacks.org/v1alpha2
 kind: NetworkTelemetry
 metadata:
-  name: mixed-network-telemetry
+  name: capture
+  namespace: my-experiment
 spec:
-  networkRef:
-    name: mixed-network
-    uid: 00000000-0000-0000-0000-000000000000
+  networkName: network
+  networkUID: 00000000-0000-0000-0000-000000000000
+  storageSecretRef: telemetry-storage
   retention:
-    rollingWindow: 6h
-    maximumBytes: 20Gi
+    window: 24h
   sources:
-    kubernetesAudit: true
-    kubernetesEvents: true
-    actionResources: true
+    objects: true
     logs: true
     metrics: true
-    protocolFacts:
-      bitcoinTips: true
-      stacksTips: true
-      signerParticipation: true
-  redactionProfileRef:
-    name: local-redaction-v1
-  sampling:
-    maximumRecordsPerSecond: 100
-    maximumRecordBytes: 65536
-  storageRef:
-    name: local-observation-store
 ```
-
-This example retains a six-hour window in the configured storage profile.
-Watch/event collection has at most `NoKnownGap` coverage without a stronger
-loss-detecting source. Sampling and source outages lower the evidence available.
 
 ### Spec and status
 
-Spec selects exactly one network name and UID, source classes, rolling time/byte limits,
-redaction profile, sampling limits, and an administrator-provisioned storage
-backend reference. It does not contain experiment steps, expected outcomes,
-capture triggers, or replay instructions.
+Network name/UID, backend Secret reference and log/object TTL are immutable. Sources
+are mutable and change future capture through a collector rollout. The initial
+profile supports log/object TTLs of 1, 6 or 24 hours; native metrics use shared tables
+with a fixed 24-hour backend retention. Per-network byte quotas are not served.
 
-Status contains observed generation, admitted network UID, current inventory
-identity, source health/watermarks, oldest/newest retained timestamps, retained
-byte estimate, gap summaries, storage health, and a canonical configuration
-digest covering admitted spec/profile identities, plus phase and conditions.
-It stores no event stream or log payload.
+The controller owns `status.admitted`, `tablePrefix` and conditions. The recorder
+owns only `status.recording`, including its Pod UID, admitted generation, heartbeat,
+latest backend acknowledgement and bounded source summaries. Both use minimal
+server-side apply payloads with fixed field managers. No data stream is kept in CRDs.
 
-Initial phases are `Pending`, `Recording`, `Degraded`, and `Stopped`.
-Conditions are `NetworkResolved`, `StorageReady`, `SourcesHealthy`,
-`RetentionEnforced`, and `Ready`, each carrying `observedGeneration`. Stable
-reason values distinguish absent APIs, identity replacement, source outage,
-storage pressure, redaction failure, and policy pruning.
+`NetworkResolved` binds initial admission. `WorkloadsReady` describes the recorder
+and collectors, independently of protocol health. Source reasons distinguish missing
+optional APIs, access denial, failed reads and interrupted watches. Freshness is
+explicit; old status is never evidence of current collection health.
 
 ### Reconciliation, ownership, and mutability
 
-The controller resolves the network and configures its own collectors. It
-watches topology/action/Chaos resources, consumes the configured audit and
-telemetry sources, and writes journal segments outside the Kubernetes API.
-It never patches observed resources.
+Install one observation operator with an administrator-selected namespace list.
+It creates recording-owned workloads and scoped Roles in enrolled namespaces only.
+It does not patch source Pods, StatefulSets, networks, participants or actions.
 
-For baseline production, record policy-generation changes, effective target
-selection/timing when captured, overrides, availability, acknowledged effects,
-and uncertainty. Transaction producers distinguish offered, accepted, rejected,
-and ambiguous submissions from independently observed inclusion. Revised
-bounded status fields remain open; status summaries are not a complete ledger.
-Bitcoin polling records observed tips and branches independently. Logs and
-random choices are retained only when their configured source is captured,
-with gaps represented honestly.
-
-Do not gate collection or interpret protocol health solely through aggregate
-`Ready`. Preserve the implemented snapshot contract while qualifying sources
-against independently current identity.
-
-Spec is mutable except for network name/UID. Source or retention changes
-affect future collection and may prune data according to the newly admitted
-policy; status records the policy transition. Network identity replacement
-stops collection and requires a new `NetworkTelemetry` object. Deletion stops
-collectors and applies the declared storage-retention policy; it never deletes
-the network.
-
-Network recreation under the same name never silently resumes collection.
-One controller owns status. Collector workers publish through an internal
-bounded channel and durable writer interface; they do not independently patch
-the CRD.
+The root must exist with the requested UID before initial admission. The recording
+has no network owner reference: root deletion does not delete retained data or stop
+recording surviving resources. Same-name root replacement is excluded by UID.
+Telemetry deletion removes collectors without deleting backend tables or promising
+queue drain. Namespace deletion removes recording workloads; the independent
+backend retains already acknowledged records until its retention policy applies.
 
 ### Safety, RBAC, and privacy
 
-- Read-only access to enrolled topology, action, Chaos Mesh, Pod, Event, and
-  approved ConfigMap/status resources.
-- Log/metric access is backend-scoped; no actor Secret reads. Bitcoin polling
-  uses a separately restricted observation credential profile under R3, with
-  server-side mutation refusal tested.
-- Audit ingestion uses an explicit cluster-admin integration and documents
-  whether the source can drop records.
-- Redact authorization headers, credentials, keys, and configured patterns
-  before durable storage; record that redaction occurred.
-- Backpressure drops only according to declared priority. Record a gap when
-  storage is available; if the gap itself cannot be persisted, downgrade
-  continuity after recovery. Never claim lossless gap capture during outage.
-- Resource limits and storage quotas prevent telemetry from exhausting the
-  observed namespace or control plane.
+Managers have workload/RBAC management only in explicitly enrolled namespaces and
+check ownership before every write. Recorder identities have allowlisted public
+resource reads and name-scoped telemetry status writes. Node collectors read Pod
+metadata only. No component reads actor Secrets; backend credentials are mounted by
+the kubelet from administrator-provisioned Secrets.
+
+Public-object projection removes annotations, configuration payloads, Pod environment
+and private field classes. A fixed text policy redacts recognized credential-bearing
+lines before export. Oversized object bodies retain metadata only. Native metrics
+and log text remain actor-reported values; collector-assigned identity is separate.
+This policy is not a universal secret detector. Additional redaction profiles require
+an explicit contract before arbitrary raw payloads become eligible for storage.
 
 ### Administrator-owned profiles
 
-`storageRef` names a chart-configured immutable storage profile, not an
-arbitrary Kubernetes object. A profile specifies backend type, endpoint,
-Secret name, allowed namespaces, encryption, retention capabilities, and a
-stable configuration digest. Helm emits resource-name-restricted Secret RBAC
-for configured profiles. Agents may read profile names but cannot create,
-change, or select credentials.
-
-Redaction profiles are likewise administrator-owned, versioned, and
-content-digested. Unknown media types or malformed payloads are retained only
-as metadata plus digest and marked `RedactionUnverified`; raw bytes are not
-durably written. A policy update affects future collection and records a
-transition—it never silently re-labels older data.
+The first backend is a pinned GreptimeDB standalone installation with its own PVC,
+resource/query limits and separate administration, ingestion and query credentials.
+`storageSecretRef` selects only its endpoint and write-only authorization header.
+Agents query through the read-only database identity. Existing databases must have
+compatible schemas/TTLs; ingestion hints do not update existing table options.
 
 ### Source coverage
 
-Each source reports one coverage class per interval:
+The first slice reports conservative capture boundaries, not a lossless journal.
+Each recorder start, watch reconnect and observed export failure can introduce a gap.
+Collector restarts/failure counters and missing node coverage provide additional
+source evidence. Heartbeats record recent activity, never a coverage classification. A source gap
+may have an unknown start and does not quantify missing records. Current-state
+re-lists cannot reconstruct intermediate writes. Absent optional APIs do not prevent
+independent configured sources from recording.
+
+The richer coverage vocabulary for future export is:
 
 | Class | Meaning |
 | --- | --- |
-| `ContinuouslyAccounted` | A loss-detecting sequence/spool proves every accepted source record is present. |
-| `NoKnownGap` | Collection was healthy, but the source cannot prove absence of silent loss. |
+| `ContinuouslyAccounted` | A loss-detecting source proves every accepted record is retained; not claimed by this slice. |
+| `NoKnownGap` | Collection was observed healthy without proof against silent loss. |
 | `Unverifiable` | Records exist but continuity cannot be evaluated. |
-| `Unavailable` | The source was configured but no trustworthy records were collected. |
-
-Kubernetes audit uses an explicit policy with `Request` or `RequestResponse`
-levels at appropriate stages for enrolled non-sensitive CRDs, metadata-only
-treatment for Secrets and other sensitive resources, a dedicated webhook
-identity, and a durable spooling receiver when `ContinuouslyAccounted` is
-claimed. A normal audit
-webhook without loss-detecting delivery can claim at most `NoKnownGap`.
-Watches never claim every intermediate update; their resource-version relist
-history is low-latency state evidence, not an audit log.
-
-Status carries bounded counts and the latest gap/coverage summary. Full gap
-intervals live in the journal. A topology mutation is called recorded only if
-an audit record exists; otherwise the observer reports the state transition it
-actually saw and its weaker coverage class.
+| `Unavailable` | A configured source has no trustworthy current observation. |
 
 ### Retention semantics
 
-The chosen backend enforces time and byte retention limits and exposes retained
-watermarks and known pruning intervals. V1 does not require a custom segment
-store or tombstone system. Report the backend's actual coverage; inability to
-identify every removed record must not become a completeness claim.
-
-Queries distinguish `Expired` (outside rolling window), `PolicyPruned`
-(removed by a changed/stricter policy), `CaptureGap` (never collected), and
-`Unavailable` (source/backend unavailable). None are converted to an empty
-successful result.
+Time-based retention is enforced by the backend; it is not an immediate erasure
+promise. The database PVC, collection queues, record sizes and workload limits are
+bounded separately. A full disk or prolonged outage can lose telemetry, but must not
+stop baseline network operation. Retained history outlives its source namespace.
 
 ### Tests and definition of done
 
-- Unit-test source normalization, redaction, retention, watermarks, and gap
-  formation.
-- Envtest topology/action lifecycle correlation and strict read-only RBAC.
-- Integration-test audit/webhook disconnect, Loki/Prometheus outage, storage
-  full, controller restart, and clock skew.
-- Live-test a rolling window through network rollout and native/custom action
-  creation/deletion.
-- Done when an operator can identify collection health and gaps from status,
-  and high-volume data never enters etcd.
+Verify exact-UID admission, non-adoption, independent deletion, status-writer
+coexistence, recorder RBAC, redaction and export failure handling. Qualify actual
+metric listeners and identity columns, native fault correlation, collector/backend
+restart, source gaps and queries after network deletion. Wider journal/export
+contracts below remain future work and do not describe complete source coverage.
 
 ## `EvidenceExport`
+
+This resource is a future contract; it is not served by the initial telemetry slice.
 
 ### Example
 
 ```yaml
-apiVersion: observation.stacks.org/v1alpha1
+apiVersion: observation.stacks.org/v1alpha2
 kind: EvidenceExport
 metadata:
   name: suspected-liveness-loss
@@ -336,6 +275,9 @@ record, not an executable replay description.
 
 ## Journal event model
 
+This expanded model is a future contract. The initial slice stores identity-tagged
+OTLP observations and explicit capture markers as documented in the operating guide.
+
 Use a versioned append-only envelope outside etcd:
 
 ```yaml
@@ -401,6 +343,9 @@ protocol truth or diagnose root cause.
 
 ## Query service
 
+The initial delivery uses read-only backend-native HTTP SQL. This dedicated service
+is deferred until investigation needs justify an additional API. MCP is low priority.
+
 Provide read-only HTTP GET endpoints over retained data. Initial operations:
 
 - list mutations/actions over a time range;
@@ -433,18 +378,13 @@ API-server proxy; the proxy serves bounded queries, manifests, and previews.
 
 ## Optional API discovery
 
-`network.stacks.org` is required for a configured `NetworkTelemetry`; absence
-keeps it `Pending`/`SourceUnavailable`. Action and Chaos Mesh APIs are optional.
-The operator uses discovery plus dynamic informers for optional groups rather
-than registering static controller-runtime watches that fail manager startup.
-It starts/stops informers on CRD appearance/disappearance, records source
-instance transitions and gaps, and periodically refreshes discovery with a
-bounded rate. Typed adapters decode supported versions at the journal boundary;
-unknown versions are metadata-only and `Unverifiable`.
-
-Unit tests cover absent-at-startup, later installation, CRD removal, discovery
-failure, informer relist, duplicate delivery, and version change. Removing
-Chaos Mesh or the action operator cannot stop topology observation.
+The served profile requires the network API for initial recording admission. Optional
+action/Chaos sources use namespace-scoped dynamic list/watch requests against the
+pinned GVR allowlist. Missing or forbidden APIs report `APINotInstalled` or
+`AccessDenied` and retry once per minute; other interruptions re-list after five
+seconds with a capture gap. Neither requires optional CRDs to start the manager.
+This is bounded polling of known APIs, not arbitrary version discovery. Supporting
+another API version requires a reviewed source and decoding change.
 
 ## Data-plane alternatives
 
@@ -456,14 +396,14 @@ Chaos Mesh or the action operator cannot stop topology observation.
 | Observer-driven capture triggers | Rejected; the agent decides when it needs an export. |
 | Observer replay/diagnosis API | Rejected; orchestration and reasoning belong to the agent. |
 
-## Open decisions
+## Deferred decisions
 
-1. Initial existing durable backend and its supported retention/query profile.
-2. Loki/Prometheus query integration versus OpenTelemetry-first collection.
-3. Whether the initial local profile can support loss-detecting audit spooling
-   or must honestly use `NoKnownGap`.
-4. Stable fact schema and direct-backend trust qualification for HTTP GET queries.
-5. Default rolling time/byte windows for local and managed clusters.
+- Loss-detecting audit ingestion and durable recorder spooling.
+- Evidence export manifests, narrower query authorization and direct-backend trust
+  beyond the disposable local profile.
+- Per-network byte quotas and managed-cluster retention profiles.
+- Additional protocol polling and tracing sources.
+- Greptime MCP integration, after backend-native agent queries prove insufficient.
 
 ## References
 

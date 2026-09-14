@@ -1,45 +1,88 @@
+{{- $root := . -}}
+{{- $namespaces := append (deepCopy .Values.watchNamespaces) .Release.Namespace | uniq -}}
+{{- range $namespace := $namespaces }}
+---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: {{ include "stacks-observability-operator.fullname" . }}
-  namespace: {{ .Release.Namespace }}
+  name: {{ include "stacks-observability-operator.fullname" $root }}
+  namespace: {{ $namespace }}
   labels:
-    {{- include "stacks-observability-operator.labels" . | nindent 4 }}
+    {{- include "stacks-observability-operator.labels" $root | nindent 4 }}
 rules:
+{{- if or (not $root.Values.watchNamespaces) (has $namespace $root.Values.watchNamespaces) }}
   - apiGroups: ["observation.stacks.org"]
-    resources: ["networkobservations"]
+    resources: ["networkobservations", "networktelemetries"]
     verbs: ["get", "list", "watch"]
   - apiGroups: ["observation.stacks.org"]
     resources: ["networkobservations/status"]
     verbs: ["get", "update", "patch"]
+  - apiGroups: ["observation.stacks.org"]
+    resources: ["networktelemetries/status"]
+    verbs: ["patch"]
   - apiGroups: ["network.stacks.org"]
     resources: ["stacksnetworks"]
     verbs: ["get", "list", "watch"]
   - apiGroups: ["network.stacks.org"]
-    resources: ["stacksnetworkparticipants"]
-    verbs: ["get", "list"]
+    resources: ["stacksnetworkparticipants", "stacksgeneses"]
+    verbs: ["get", "list", "watch"]
   - apiGroups: [""]
-    resources: ["pods", "services", "configmaps"]
-    verbs: ["get", "list"]
+    resources: ["pods", "services", "events"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["configmaps", "serviceaccounts"]
+    verbs: ["get", "list", "watch", "create", "patch", "update", "delete"]
   - apiGroups: ["apps"]
     resources: ["statefulsets"]
     verbs: ["get", "list"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "daemonsets"]
+    verbs: ["get", "list", "watch", "create", "patch", "update", "delete"]
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["roles", "rolebindings"]
+    verbs: ["get", "list", "watch", "create", "patch", "update", "delete"]
+  # These reads allow creating the scoped recorder Role without RBAC escalation.
+  - apiGroups: ["bitcoin.stacks.org"]
+    resources: ["bitcoinexecutions"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["actions.stacks.org"]
+    resources: ["bitcoinblockgenerations", "bitcoinreorganizations"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["chaos-mesh.org"]
+    resources: ["networkchaos"]
+    verbs: ["get", "list", "watch"]
+  # Required to set blockOwnerDeletion on recording-owned resources.
+  - apiGroups: ["observation.stacks.org"]
+    resources: ["networktelemetries/finalizers"]
+    verbs: ["update"]
+{{- else }}
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["list"]
+{{- end }}
+{{- if eq $namespace $root.Release.Namespace }}
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
   - apiGroups: ["coordination.k8s.io"]
     resources: ["leases"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+{{- end }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: {{ include "stacks-observability-operator.fullname" . }}
-  namespace: {{ .Release.Namespace }}
+  name: {{ include "stacks-observability-operator.fullname" $root }}
+  namespace: {{ $namespace }}
   labels:
-    {{- include "stacks-observability-operator.labels" . | nindent 4 }}
+    {{- include "stacks-observability-operator.labels" $root | nindent 4 }}
 subjects:
   - kind: ServiceAccount
-    name: {{ include "stacks-observability-operator.serviceAccountName" . }}
-    namespace: {{ .Release.Namespace }}
+    name: {{ include "stacks-observability-operator.serviceAccountName" $root }}
+    namespace: {{ $root.Release.Namespace }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: {{ include "stacks-observability-operator.fullname" . }}
+  name: {{ include "stacks-observability-operator.fullname" $root }}
+
+{{- end }}

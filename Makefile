@@ -131,6 +131,7 @@ vuln:
 	GOWORK=off $(GO) -C operators/action run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
 
 docker-check:
+	STACKS_TELEMETRY_COLLECTOR_VALIDATE=1 GOWORK=off $(GO) -C operators/observability test ./internal/telemetry -run TestPinnedCollectorValidation -count=1
 	docker build --check --file operators/network/Dockerfile .
 	docker build --check --file operators/observability/Dockerfile .
 	docker build --check --file operators/action/Dockerfile .

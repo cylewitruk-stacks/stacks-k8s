@@ -11,8 +11,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	observationv1alpha1 "github.com/cylewitruk-stacks/stacks-k8s/operators/observability/api/v1alpha1"
+	observationv1alpha2 "github.com/cylewitruk-stacks/stacks-k8s/operators/observability/api/v1alpha2"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/observability/internal/manager"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/observability/internal/observation"
+	"github.com/cylewitruk-stacks/stacks-k8s/operators/observability/internal/telemetry"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/observability/internal/topology"
 )
 
@@ -27,6 +29,7 @@ func main() {
 	scheme := runtime.NewScheme()
 	must(clientgoscheme.AddToScheme(scheme))
 	must(observationv1alpha1.AddToScheme(scheme))
+	must(observationv1alpha2.AddToScheme(scheme))
 	topology.AddNetworkTypes(scheme)
 	controllerManager, err := options.New(scheme)
 	must(err)
@@ -39,6 +42,10 @@ func main() {
 			options.Concurrency,
 		),
 	)
+	must((&telemetry.Reconciler{
+		Client: controllerManager.GetClient(), APIReader: controllerManager.GetAPIReader(),
+		WorkerImage: options.WorkerImage, CollectorImage: options.CollectorImage,
+	}).SetupWithManager(controllerManager, options.Concurrency))
 	must(controllerManager.Start(ctrl.SetupSignalHandler()))
 }
 

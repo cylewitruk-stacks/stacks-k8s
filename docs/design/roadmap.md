@@ -163,6 +163,13 @@ admission distinct from complete aggregate inventory and protocol progress.
 
 ## M4: passive journal and initial telemetry
 
+**Current delivery:** [continuous GreptimeDB telemetry](../observability/README.md)
+provides opt-in recording workloads, public Kubernetes facts, actor logs, native
+node/signer metrics, capture gaps and indexed HTTP SQL queries. Metrics listeners
+are enforced in generated and private rendered actor configurations. M4 remains
+open for broader lifecycle/coverage qualification and additional protocol sources;
+MCP is low priority.
+
 **Outcome:** retain a truthful recent record in an existing durable backend.
 
 - Implement the reviewed `NetworkTelemetry` surface, source metadata,
@@ -171,6 +178,13 @@ admission distinct from complete aggregate inventory and protocol progress.
 - Support optional-CRD discovery without startup dependency on action/Chaos APIs.
 - Prove Kubernetes and RPC observation authority cannot mutate the environment.
 - Keep audit webhooks optional; watches never promise every intermediate write.
+- Enable Prometheus exports on every actor profile whose binary supports them,
+  independently of collector installation. Verify any environment-variable override
+  against the pinned binary; otherwise set the listener through the structured TOML
+  renderer. Define enforcement for complete user-supplied configurations, expose
+  discoverable endpoints, and qualify real samples with network/participant/Pod
+  identity. Do not advertise unsupported native metrics. The
+  [continuous telemetry profile](../observability/README.md) informs this work.
 
 **Done:** rollout, baseline updates, and independently created resources remain
 correlated through restart/source outage, with bounded CRD status and explicit
@@ -261,6 +275,35 @@ Managed Kubernetes remains a required direction, with explicit CNI, storage,
 proxy, actor-image, and native-fault qualification before support claims.
 
 ## Deferred capabilities
+
+### Reusable chainstate snapshots
+
+**Optional future slice:** reduce repeated bootstrap and synchronization time by
+capturing a network's Bitcoin and Stacks chainstate for use by fresh networks.
+An illustrative `StacksChainstateSnapshot` resource would request bounded capture;
+a future `StacksNetwork` could select the resulting immutable artifact at creation.
+Names and schemas require design review. This is not required for M0–M8 completion.
+
+- Define coordinated quiescence and application-consistent capture. Cooperative
+  pause alone does not prove that actors stopped writing. Evaluate clean shutdown
+  and file export versus supported storage snapshots, including the effect on
+  the source network's ability to resume.
+- Record per-actor chain tips/branches, Bitcoin–Stacks correspondence, genesis,
+  epoch schedule, image/database-format compatibility and artifact checksums.
+  Include the necessary signer/protocol state; chain databases alone may not
+  constitute a usable checkpoint. Define account/key requirements separately
+  from public artifact metadata.
+- Retain artifacts independently of the source network. Restore into fresh
+  volumes and new network/participant identities; never copy live worker bindings
+  or blindly replay completed bootstrap transactions. Define worker nonce and
+  protocol initialization against restored state without relaxing the existing
+  worker-crash contract.
+- Keep capture/restore in an explicit mutating capability, separate from passive
+  observability. Qualify restoring one artifact into two independent networks,
+  continued production and late-node synchronization; reject incompatible inputs
+  before starting workloads. Reuse does not promise deterministic experiment results.
+
+### Other deferred work
 
 Autonomous node-local Bitcoin production, hard aggregate action accounting,
 advanced native faults, and unavailable instrumented-image hooks need separate

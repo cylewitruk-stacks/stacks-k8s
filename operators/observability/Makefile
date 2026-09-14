@@ -22,4 +22,4 @@ vet:
 	$(GO_ISOLATED) vet ./...
 
 verify: fmt generate vet test test-race
-	@git diff --exit-code -- api/v1alpha1/zz_generated.deepcopy.go $(CRD_DIR)/observation.stacks.org_*.yaml
+	@git diff --exit-code -- api/*/zz_generated.deepcopy.go $(CRD_DIR)/observation.stacks.org_*.yaml

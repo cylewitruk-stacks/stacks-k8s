@@ -30,10 +30,28 @@
       "required": ["create", "name"],
       "properties": {
         "create": {"type": "boolean"},
-        "name": {"type": "string", "maxLength": 253, "pattern": "^(?:|[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?)*)$"}
+        "name": {
+          "type": "string",
+          "maxLength": 253,
+          "pattern": "^(?:|[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?)*)$"
+        }
       }
     },
-    "resources": {"type": "object"}
+    "resources": {"type": "object"},
+    "collector": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["image"],
+      "properties": {
+        "image": {"type": "string", "minLength": 1}
+      }
+    },
+    "watchNamespaces": {
+      "type": "array",
+      "maxItems": 32,
+      "uniqueItems": true,
+      "items": {"type": "string", "maxLength": 63, "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"}
+    }
   },
-  "required": ["replicaCount", "image", "controller", "serviceAccount", "resources"]
+  "required": ["replicaCount", "image", "controller", "serviceAccount", "resources", "collector", "watchNamespaces"]
 }

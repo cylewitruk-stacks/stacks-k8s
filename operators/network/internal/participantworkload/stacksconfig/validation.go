@@ -136,6 +136,12 @@ func customOverrides(kind api.ParticipantKind, config *common.Config) (map[strin
 		protected = signerProtected
 	}
 	overrides := converted.(map[string]any)
+	// Metrics listeners are enforced in full custom files but cannot be overridden in generated configuration.
+	metricsPath := "node.prometheus_bind"
+	if kind == api.ParticipantStacksSigner {
+		metricsPath = "metrics_endpoint"
+	}
+	protected = append(append([]string(nil), protected...), metricsPath)
 	if err := rejectProtected(overrides, "", protected); err != nil {
 		return nil, err
 	}
@@ -195,7 +201,8 @@ func Apply(
 				}
 			}
 		}
-		return []byte(text), !unverified, nil
+		data, err := metricsDocument(kind, candidate)
+		return data, !unverified, err
 	}
 	if config.Overrides != nil {
 		overrides, err := customOverrides(kind, config)
@@ -204,7 +211,7 @@ func Apply(
 		}
 		merge(base, overrides)
 	}
-	data, err := toml.Marshal(base)
+	data, err := metricsDocument(kind, base)
 	if err != nil {
 		return nil, false, fmt.Errorf("unsupported TOML override value")
 	}
@@ -212,6 +219,25 @@ func Apply(
 		return nil, false, err
 	}
 	return data, config.Compatibility == nil || *config.Compatibility != common.CompatibilityUnverified, nil
+}
+
+// metricsDocument enforces discoverable listeners even for complete custom configurations.
+// It edits the private rendered copy, never the user-supplied Secret.
+func metricsDocument(kind api.ParticipantKind, value map[string]any) ([]byte, error) {
+	if kind == api.ParticipantStacksSigner {
+		value["metrics_endpoint"] = "0.0.0.0:31000"
+	} else {
+		node, ok := value["node"].(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("node configuration requires a node table")
+		}
+		node["prometheus_bind"] = "0.0.0.0:9153"
+	}
+	data, err := toml.Marshal(value)
+	if err != nil {
+		return nil, fmt.Errorf("render native metrics configuration")
+	}
+	return data, nil
 }
 
 // document validates bounded TOML without exposing source text through parser errors.

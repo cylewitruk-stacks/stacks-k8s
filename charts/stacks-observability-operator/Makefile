@@ -34,6 +34,7 @@ helm-verify:
 	@$(HELM) template verify . --namespace stacks-observation-system --set controller.leaderElection=false | grep -q 'type: Recreate'
 
 rbac-verify:
+	$(HELM) template verify . --namespace stacks-observation-system --set-json 'watchNamespaces=["lab-a","lab-b"]' | $(GO_ISOLATED) -C $(OPERATOR_DIR) run ./cmd/rbac-check
 	$(HELM) template verify . --namespace stacks-observation-system | $(GO_ISOLATED) -C $(OPERATOR_DIR) run ./cmd/rbac-check
 
 workload-verify:
