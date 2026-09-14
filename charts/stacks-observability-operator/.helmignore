@@ -1,4 +1,4 @@
 .DS_Store
 .git/
-*.tgz
 Makefile
+stacks-observability-operator-*.tgz

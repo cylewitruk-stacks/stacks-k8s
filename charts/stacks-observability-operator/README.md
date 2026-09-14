@@ -13,7 +13,8 @@ scoped recorder/collector workloads. The recorder status Role names its exact te
 resource. No ClusterRole or cluster-wide mutation permission is installed.
 
 Changing enrollment does not delete existing collectors. Remove `NetworkTelemetry`
-resources before unenrolling a namespace. The backend has an independent lifetime.
+resources before unenrolling a namespace. The backend is independent of recordings;
+a bundled backend shares this Helm release lifetime.
 Objects-only recordings create no node collectors. Log-enabled OTel collectors use
 host log mounts and UID-scoped node checkpoint directories;
 the node-local process runs as root to read container logs, drops all capabilities
@@ -21,6 +22,38 @@ and does not use privileged mode or host networking. Metrics-only collectors run
 non-root with an ephemeral queue volume and no host mounts. The one-shot
 `NetworkObservation` also reads Services and StatefulSets. An unenrolled installation
 namespace receives only readiness and leader-election permissions.
+
+## Optional backend and dashboard
+
+`greptime.enabled=false` installs only the operator at runtime. Enable the
+canonical `greptimedb-standalone` dependency with `greptime.enabled=true`; its version
+is locked in `Chart.lock`. Run `make dependencies` before rendering/installing from
+this directory. It runs Helm's standard repository and dependency commands with a
+temporary repository configuration and index cache, leaving personal repository
+settings untouched. Helm's content cache uses its normal location. Downloaded
+archives are ignored by Git.
+Helm requires the dependency even when the backend is disabled; preparing a source
+checkout can require network access. Packaged releases include the dependency.
+
+The bundled profile requires `greptime.auth.existingSecretName` (default
+`greptime-auth`) containing a `passwd` file with an `admin:readwrite` entry and scoped
+reader/ingestion entries. No passwords are generated or stored in Helm values.
+A bounded, tokenless post-install/post-upgrade Job initializes 24-hour retention
+using the same operator image. Set `backendInitialization.enabled=false` only when
+retention is administered separately.
+
+`dashboard.enabled=true` creates an HTTP-only NodePort Service; `dashboard.nodePort`
+defaults to 30400. Greptime's other protocol ports remain ClusterIP-only. The
+[local values](values-local.yaml) enable the backend and dashboard and place the
+backend on the kind control-plane node. With the repository's kind mapping, open
+`http://127.0.0.1:14000/dashboard/` without a port-forward. This port exposes the
+HTTP API as well as embedded Perses; backend query authentication still applies.
+
+The NodePort Service is removed when disabled. Helm cannot modify Docker's host-port
+mappings; existing clusters without the mapping require recreation. On other cluster
+providers, configure host/network access separately. Backend PVCs are retained on
+uninstall by default; destroying the kind cluster removes their data. Enabling this
+dependency does not adopt an already installed backend from another Helm release.
 
 ## One-shot identity observation
 

@@ -1,0 +1,6 @@
+dependencies:
+- name: greptimedb-standalone
+  repository: https://greptimeteam.github.io/helm-charts/
+  version: 0.4.14
+digest: sha256:b61bc892672e82de335eea7586de13d0b3ec7d32e1da4a2df893b3764a1bd072
+generated: "2026-09-14T09:26:10.899702+02:00"

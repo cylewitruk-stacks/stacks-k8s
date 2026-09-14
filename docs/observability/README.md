@@ -7,8 +7,13 @@ HTTP SQL; MCP integration is low priority. See the [qualified profile and limits
 
 ## Installation
 
-Use the existing kind cluster. Install the backend once, independently of network
-namespaces. Run repository commands from its root:
+Use `kind-stacks-k8s`, created with the repository's current configuration. It maps
+host `127.0.0.1:14000` to NodePort `30400` for optional dashboard access. Existing
+clusters without this mapping require recreation or a manually managed port-forward.
+The local profile installs the operator and Greptime in one Helm release; the default
+chart installs only the operator for use with an independently managed backend.
+
+Run repository commands from its root:
 
 ```bash
 export KUBECONFIG="$PWD/tools/local-cluster/kubeconfig"
@@ -16,9 +21,9 @@ kubectl config current-context # kind-stacks-k8s
 kubectl create namespace stacks-observation-system
 ```
 
-An administrator creates `greptime-auth` in that namespace, with a `passwd` key
-containing three separately generated credential lines. Keep the passwords outside
-Git and use a protected local file with `kubectl create secret --from-file`:
+Create `greptime-auth` in that namespace, with a `passwd` key containing three
+separately generated credential lines. Keep passwords outside Git and use a protected
+local file:
 
 ```text
 admin:readwrite=<admin-password>
@@ -29,48 +34,88 @@ reader:readonly=<query-password>
 ```bash
 kubectl create secret generic greptime-auth -n stacks-observation-system \
   --from-file=passwd=/path/to/private/passwd
-make -C deploy/telemetry install
 ```
 
-The helper verifies the upstream Helm archive checksum before installation.
-The [backend values](../../deploy/telemetry/greptime-values.yaml) pin GreptimeDB
-1.2.0, a 10 GiB PVC, a 2 GiB memory limit and bounded query concurrency/memory.
-This is a single-instance local profile, not a highly available storage service.
-The deployment requires the existing local cluster's storage provisioner.
-
-Before collecting, open a local backend tunnel in another terminal, then configure
-the database retention using the administrator credential file:
-
-```bash
-kubectl port-forward -n stacks-observation-system service/greptime 14000:4000
-```
-
-```bash
-GOWORK=off go -C operators/observability run ./cmd/backend-init \
-  --auth-file /path/to/private/passwd
-```
-
-This explicit administrator command sets the dedicated `public` database default TTL
-and any existing physical metric table to 24 hours. Metric ingestion does not apply
-per-request TTL hints. Log/object tables use each recording’s requested TTL.
-Do not run this command against a shared production database. Greptime documents
-[database/table TTL inheritance](https://docs.greptime.com/reference/sql/create/)
-separately from creation-only defaults.
-
-Build the observation image and install one operator for explicitly enrolled
-namespaces. Those namespaces must already exist. An empty `watchNamespaces` list
-observes only the installation namespace; adding entries does not install another
-operator per network. Use a new image tag for each build when upgrading.
+For an unpublished checkout, build and load the operator image before installation.
+Use a fresh tag when its source changes:
 
 ```bash
 docker build -f operators/observability/Dockerfile \
   -t stacks-observability-operator:local .
 kind load docker-image stacks-observability-operator:local --name stacks-k8s
+make -C deploy/telemetry install \
+  HELM_ARGS='--set image.repository=stacks-observability-operator --set image.tag=local'
+```
+
+The helper uses Helm to fetch the canonical dependency pinned in `Chart.lock`, with
+a temporary repository configuration and index cache. Personal repository settings
+are unaffected. Downloaded archives are ignored by Git.
+To install directly with Helm, first run
+`make -C charts/stacks-observability-operator dependencies`, then use
+[values-local.yaml](../../charts/stacks-observability-operator/values-local.yaml).
+The pinned backend is GreptimeDB 1.2.0 (upstream chart 0.4.14), with a 10 GiB PVC,
+2 GiB memory limit and bounded query concurrency/memory. It requires the local
+cluster's storage provisioner. This is a single-instance development backend.
+
+A bounded post-install/post-upgrade Job runs `/backend-init` from the operator image.
+It mounts the existing administrator credential and has no Kubernetes API token or
+RBAC permissions. It sets the dedicated `public` database and any existing physical
+metric table to 24-hour retention. Failed initialization fails the Helm operation;
+recordings should start only after it succeeds. This administrator operation is not
+part of the observation controller or its scoped recording workers.
+
+Open the [dashboard](http://127.0.0.1:14000/dashboard/) and select **Visualization**
+for the embedded Perses dashboard. In its connection settings, set Host to `http://127.0.0.1:14000`,
+Database to `public`, Username to `reader`, and Password to the reader credential,
+then select **Save and Test**. Retrieve only that password in your local terminal:
+
+```bash
+kubectl -n stacks-observation-system get secret greptime-auth \
+  -o jsonpath='{.data.passwd}' | base64 --decode | sed -n 's/^reader:readonly=//p'
+```
+
+A missing-authorization-header toast before login means a data query was sent
+without credentials; serving the UI does not bypass query authentication.
+The page and HTTP API share port 4000: this exposes the backend HTTP interface,
+not just static UI assets.
+No separate Perses deployment or background port-forward is required. See the
+[dashboard qualification](dashboard-qualification.md) for tested lifecycle behavior. Host exposure
+is loopback-only with our kind mapping; NodePort remains reachable on cluster nodes.
+
+Set `dashboard.enabled=false` to remove the NodePort Service while keeping the
+backend and its internal Service. Changing `dashboard.nodePort` also requires a
+matching kind host mapping. Changing an existing Docker mapping requires cluster
+recreation. The mapping survives `make cluster-stop` / `make cluster-start`.
+
+### Independently managed backend
+
+Omit the local values file and leave `greptime.enabled=false`. Install/configure the
+backend separately, then install this operator with your enrolled namespaces:
+
+```bash
+make -C charts/stacks-observability-operator dependencies
 helm upgrade --install telemetry charts/stacks-observability-operator \
   -n stacks-observation-system \
   --set image.repository=stacks-observability-operator --set image.tag=local \
   --set 'watchNamespaces[0]=my-experiment'
 ```
+
+Enrolled namespaces must exist. An empty `watchNamespaces` list observes only the
+installation namespace. Set the same option on the bundled installation to enroll
+experiment namespaces; this does not install another operator per network.
+`dashboard.enabled` is only supported for the bundled backend. Expose an external
+backend through its own installation. For a dedicated external backend, the explicit
+administrator initializer remains available:
+
+```bash
+GOWORK=off go -C operators/observability run ./cmd/backend-init \
+  --endpoint http://your-backend:4000 --auth-file /path/to/private/passwd
+```
+
+Do not run this against a shared production database. Metric ingestion does not set
+TTL from request hints; log/object tables use each recording's retention window.
+An existing independent backend is not automatically adopted when enabling the
+bundled dependency; keep it external or plan its storage migration explicitly.
 
 Enrollment grants namespace-scoped workload/RBAC management for recording resources;
 there is no cluster-wide mutation role. Controllers verify ownership before writes.
@@ -198,10 +243,7 @@ can also be legitimate repetition. Collector observation time changes on replay 
 deduplication key; raw log counts are not exact event counts. Log source timestamps and
 collector observation timestamps are separate and do not establish a global causal clock.
 
-```bash
-kubectl port-forward -n stacks-observation-system service/greptime 14000:4000
-```
-
+The local profile serves HTTP at `http://127.0.0.1:14000`; no tunnel is needed.
 Use the reader credential for `POST /v1/sql` with form field `sql`.
 [Investigation queries](queries.sql) demonstrate bounded identity/time filters,
 progress comparison, fault timelines and source gaps. Substitute the recorded table
@@ -213,12 +255,12 @@ distributed tracing and additional native protocol polling remain future work.
 ## Cleanup
 
 Stop and delete the experiment using the network lifecycle. Its namespace can then
-be removed; retained data remains in the independently installed database. Query or
+be removed; retained data remains in the backend database. Query or
 export selected records before their TTL expires. Deleting `NetworkTelemetry` removes
 its workloads without deleting backend tables and without guaranteeing queue drain.
 
 After collectors stop, remove only their UID-specific checkpoint directory on each
-node when no longer needed. For full backend removal:
+node when no longer needed. To uninstall the bundled operator/backend release:
 
 ```bash
 make -C deploy/telemetry uninstall
@@ -229,7 +271,7 @@ when its retained telemetry is no longer needed. Leave the shared kind cluster r
 
 ## Backend contract qualification
 
-With the backend tunnel open and the protected credential file available, run the
+With the backend HTTP endpoint reachable and the protected credential file available, run the
 opt-in ingestion/query test. It creates one TTL-limited test table and checks
 identical-timestamp retention plus redaction; it does not mutate a network.
 

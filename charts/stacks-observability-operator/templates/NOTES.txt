@@ -7,5 +7,21 @@ Inspect the result:
   kubectl --namespace {{ .Release.Namespace }} get networkobservations
 
 Continuous recording is opt-in via NetworkTelemetry in an enrolled namespace.
-Install the independent Greptime backend and scoped ingestion credential first.
+{{ if .Values.greptime.enabled }}
+The bundled Greptime backend is installed; use a scoped ingestion credential in each recording namespace.
+{{ if .Values.backendInitialization.enabled }}The backend initialization hook sets the dedicated public database retention to 24h.{{ end }}
+{{ if .Values.dashboard.enabled }}
+Greptime HTTP (API and dashboard) is exposed on NodePort {{ .Values.dashboard.nodePort }}.
+With the repository's kind mapping (NodePort 30400 -> loopback 14000), open:
+  http://127.0.0.1:14000/dashboard
+No port-forward is needed. Other clusters require their own host/network mapping.
+In the dashboard connection settings, use database public and username reader.
+Read its password locally from the existing {{ .Values.greptime.auth.existingSecretName }} Secret;
+do not use the ingestion credential for dashboard queries.
+{{ else }}
+The dashboard is available through the backend's internal HTTP Service at /dashboard.
+{{ end }}
+{{ else }}
+Configure an independently installed Greptime backend and scoped ingestion credential first.
+{{ end }}
 See docs/observability/README.md for enrollment, retention and query setup.
