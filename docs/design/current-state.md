@@ -47,12 +47,16 @@ The independently versioned `NetworkObservation` API remains `v1alpha1`.
 Its default network reader verifies `v1alpha2` participants, workload/process
 identity and public configuration reports. It never reads Secret values or
 controls the environment. Snapshot identity excludes unrelated protocol heartbeats.
-The explicitly selected old inventory reader remains available for external
-legacy installations; there is no fallback between network API versions.
+There is no legacy inventory fallback.
 
-Logs, metrics, tracing, durable journals, broader capture/export and richer
-correlation remain roadmap work. Native RPC and worker observations used for
-baseline convergence are not a general observability implementation.
+`NetworkTelemetry` (`observation.stacks.org/v1alpha2`) adds optional continuous
+GreptimeDB recording of public Kubernetes objects, actor logs, native metrics and
+capture gaps. Recording workloads are scoped to administrator-enrolled namespaces;
+they cannot mutate source networks or actors. Native Stacks node/signer metrics are
+enabled by the configuration renderer. See the [operating guide](../observability/README.md).
+Tracing, richer journal/export contracts and additional protocol polling remain
+roadmap work. Native observations used for baseline convergence remain distinct
+from this optional observability layer.
 
 ## Qualification and remaining scope
 

@@ -1,5 +1,9 @@
 # Observation operator development
 
+The operator also provisions continuous `NetworkTelemetry` recorders and OTel
+collectors in explicitly enrolled namespaces. [Operating guide](../../docs/observability/README.md).
+Recorder code is separate from the one-shot identity reader below.
+
 The one-shot reader uses `network.stacks.org/v1alpha2`: admitted generated participants,
 public resolver reports and uncached Service/StatefulSet/Pod reads establish the
 selected actor snapshot.

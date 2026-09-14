@@ -241,7 +241,8 @@ Generated `network.stacks.org/v1alpha2` resource, one per named network entry. I
 reusable definition and users do not apply it. The aggregate controller owns its spec,
 complete status.admission and resolution/policy projections. Domain controllers own
 configuration validation reports and workload/runtime facts; a scoped worker owns only
-its assigned execution status. The [status ownership contract](operations.md#admission-execution-status-and-faucet-dispatch)
+its assigned execution status. The [status ownership
+contract](operations.md#admission-execution-status-and-faucet-dispatch)
 also defines the temporary WorkloadReady fallback for unsupported kinds. A kind
 discriminator selects the same configuration branches as
 [composition](composition.md).
@@ -326,7 +327,8 @@ artifact UID/digest. It creates no workloads itself.
 
 Creation captures validated chain data, initial cohort and bootstrap requirements together.
 spec.bootstrap is immutable, excluded from genesisDigest and included in the artifact size
-limit. Gate evaluation uses these captured values; [bootstrap policy updates](lifecycle.md#bootstrap-policy-updates)
+limit. Gate evaluation uses these captured values; [bootstrap policy
+updates](lifecycle.md#bootstrap-policy-updates)
 cannot rewrite them. Maximum total serialized
 artifact size is 900 KiB; reject oversize before activation. There is one deterministic
 artifact name per network UID. A lost create acknowledgement is read back, not retried under a
@@ -406,7 +408,8 @@ spec:
 ```
 
 No mining role or cadence field. `peers` is either explicit `nodeRefs` or `discovery: Network`
-(default); discovery resolves startup seed identities/DNS from selected participants' allocated identities,
+(default); discovery resolves startup seed identities/DNS from selected participants' allocated
+identities,
 excluding self, without waiting for peer Pods. The rendered seed set is fixed for that actor
 configuration generation; ordinary joins/removals do not rewrite existing configs or roll
 peers. Seed resolution does not wait for peers' final runtime admission. An admitted
@@ -504,7 +507,8 @@ mature funding, with MiningReady False/WalletNotReady until available. This does
 genesis initialization. `peers` has the same explicit/discovery alternatives as Bitcoin peers,
 within the Stacks node kind. Nodes must start without waiting for peers to become Ready.
 
-Node controller manages participant-owned StatefulSet, RPC/P2P Services (20443/20444), config
+Node controller manages participant-owned StatefulSet, RPC/P2P Services (20443/20444 and metrics
+9153), config
 artifacts and PVCs. It renders the **same StacksGenesis** into every managed node config. A
 selected signer references this node; the controller derives signer event destinations from
 that relationship. At most one consensus signer attaches to a node in this profile; miners may
@@ -582,7 +586,8 @@ Node/key binding changes require a new participant; the declaration itself is re
 Account must be signing-capable; multiple signers may deliberately share its key. Account
 ownership is not transferred. Actor image/resources/storage/config escape hatch follow the
 node rules, with signer-specific protected fields. The signer controller manages a
-participant-owned StatefulSet, event Service on 30000, configuration Secret and optional PVC.
+participant-owned StatefulSet, event Service on 30000, metrics listener on 31000, configuration
+Secret and optional PVC.
 The node controller manages its event subscription and provisions a scoped Go resolver
 Job that mints the event token into an immutable Secret owned by the node participant.
 Only the relevant node and signer workloads mount it; the operator consumes public
@@ -618,7 +623,8 @@ spec:
 
 Ref changes require a new participant; amount, lockCycles (2–12), renewal threshold (1 to
 lockCycles−1) and entry control.paused are mutable, subject to
-[unfinished bootstrap gates](lifecycle.md#bootstrap-policy-updates). A changed amount is a next-enrollment
+[unfinished bootstrap gates](lifecycle.md#bootstrap-policy-updates). A changed amount is a
+next-enrollment
 intent, not an immediate unlock. This profile stops renewal of the old amount, reports
 AwaitingUnlockForAmountChange, and enrolls the latest amount after unlock. It does not issue
 stake-increase or indefinitely renew the obsolete amount. Examples separate holder,
@@ -947,13 +953,16 @@ These do not gate network startup. Examples are in [optional.yaml](examples/opti
   See [Chaos Mesh interaction](operations.md#chaos-mesh-interaction) for the required
   target and full selector contract. A retained fault cannot select actors from the
   next run. Worker/control paths remain excluded.
-- `NetworkTelemetry` in `observation.stacks.org/v1alpha2` has required immutable networkUID,
-  mutable `{retention: {window: 6h, maximumBytes: 1073741824}, sources: {...}}`, and
-  `storageSecretRef` naming an administrator-provided backend connection. Source
-  booleans select Kubernetes objects/events, logs, metrics and native protocol
-  polling. Controller owns its collectors/query Service; status reports network UID,
-  source freshness, gaps and backend health. No actor Secret access or writes.
-- `EvidenceExport` in the same group has immutable networkUID, telemetryRef and time window,
+- `NetworkTelemetry` in `observation.stacks.org/v1alpha2` selects an immutable same-namespace
+  `networkName`/`networkUID` and administrator-provided `storageSecretRef`. Its mutable
+  `sources` select public objects/events, logs and metrics. The controller owns scoped
+  collector workloads and admission/workload status; its Go recorder owns the disjoint
+  recording-status subtree through SSA. Status reports freshness, gaps and backend
+  acknowledgements, never bulk data. Initial log/object retention is an immutable 1h,
+  6h or 24h TTL; metrics use the backend's fixed 24h retention. Per-network byte quotas,
+  a query Service and additional native protocol polling are deferred. See the
+  [operating guide](../../observability/README.md). No actor Secret access or source mutations.
+- Future `EvidenceExport` in the same group has immutable networkUID, telemetryRef and time window,
   timeout (1m–1h), and destination prefix beneath the telemetry's configured store.
   Before work, it verifies telemetry.spec.networkUID equals its requested networkUID
   and persists the telemetry UID plus resolved immutable export inputs. It never

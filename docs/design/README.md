@@ -139,7 +139,8 @@ when permissions, dependencies, or failure domains materially differ.
 | `ApplicationClockOffset` | Conditional on a qualified native `TimeChaos` gap | [Protocol actions](protocol-actions.md) |
 | `ProtocolInputInjection` | Recommended after endpoint decision | [Protocol actions](protocol-actions.md) |
 | `ActorDiskPressure` | Conditional fallback | [Protocol actions](protocol-actions.md) |
-| `NetworkTelemetry`, `EvidenceExport` | Recommended; names open | [Observability](observability.md) |
+| `NetworkTelemetry` | Initial GreptimeDB/OTel profile implemented | [Observability](observability.md) |
+| `EvidenceExport` | Future contract | [Observability](observability.md) |
 | Native Chaos Mesh fault kinds | Upstream APIs; qualify directly | [Chaos Mesh](chaos-mesh.md) |
 | `SbtcSigner` | Open, not yet proposed | [Topology](topology.md) |
 
@@ -161,7 +162,7 @@ when permissions, dependencies, or failure domains materially differ.
 | Action deployment boundary | Recommended | One modular operator initially; revisit when privileges diverge. |
 | Custom-action API contract | Direction | `actions.stacks.org/v1alpha2`, immutable specs, exact network UID and logical participant references. |
 | Action correlation | Direction | `actions.stacks.org/correlation-id` is a search hint; object UID is authoritative. |
-| Observation API names | Open | `NetworkTelemetry` and `EvidenceExport` are working names. |
+| Observation API names | Partially implemented | `NetworkTelemetry` is served; `EvidenceExport` remains a future contract. |
 | Aggregate action admission | Open | Not claimed initially; preserve direct native CRDs and avoid side-effecting admission. |
 | Bitcoin mutation serialization | Reopened | Shared per-target exclusion is required; server-side quiescence and takeover semantics remain open. |
 | Bitcoin RPC credentials | Reopened | Separate observation/mutation authority with digest-verified rendering; concrete profiles and names remain open. |

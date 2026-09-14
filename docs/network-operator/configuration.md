@@ -38,3 +38,21 @@ Images and workload resource requests can be overridden per actor. Rollouts repl
 Pods while retaining the participant's identity and configured PVCs. Management
 workers have a stricter single-process contract; their bound placement cannot be
 silently repaired by creating a new worker. See [lifecycle](../design/public-api/lifecycle.md).
+
+## Native metrics
+
+The supported node/signer profiles always expose Prometheus listeners: Stacks nodes
+on `0.0.0.0:9153`, signers on `0.0.0.0:31000`, with named `metrics` container ports.
+The structured renderer enforces these settings in generated configuration and
+complete custom configurations in Managed and Unverified mode. Other supported
+configuration fields retain their usual precedence.
+
+Collection remains optional; see [continuous telemetry](../observability/README.md).
+A custom binary must implement the configured listener for scraping to succeed.
+Bitcoin Core has no native Prometheus endpoint in the supported profile.
+
+Generated-config overrides of `node.prometheus_bind` or `metrics_endpoint` are rejected
+with the protected path. Complete custom TOML is parsed and reserialized after metrics
+listener enforcement and supported placeholder substitution: comments, ordering and
+formatting are not retained. Other configuration values retain their TOML meaning;
+the source Secret itself remains byte-for-byte unchanged.

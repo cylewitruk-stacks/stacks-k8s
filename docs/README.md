@@ -15,6 +15,7 @@
 
 ## Experiments and observation
 
+- [Continuous GreptimeDB/OTel telemetry](observability/README.md)
 - [Bounded action operator](../charts/stacks-action-operator/README.md)
 - [Native Chaos Mesh profile](chaos/operations.md)
 - [Read-only observability operator](../charts/stacks-observability-operator/README.md)

@@ -60,16 +60,15 @@ metadata:
 spec:
   retention:
     window: 6h
-    maximumBytes: 1073741824
   sources:
-    kubernetes: true
+    objects: true
     logs: true
     metrics: true
-    protocol: true
-  storageSecretRef:
-    name: observation-store
+  networkName: network
+  storageSecretRef: observation-store
   networkUID: "${NETWORK_UID}"
 ---
+# Future API sketch: EvidenceExport is not served by the current chart.
 apiVersion: observation.stacks.org/v1alpha2
 kind: EvidenceExport
 metadata:

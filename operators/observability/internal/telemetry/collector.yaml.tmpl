@@ -1,0 +1,161 @@
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+  file_storage:
+    directory: /var/lib/otelcol
+receivers:
+{{if .Sources.Logs}}
+  file_log:
+    include: ['/var/log/pods/{{.Namespace}}_*/*/*.log']
+    include_file_path: true
+    start_at: beginning
+    storage: file_storage
+    retry_on_failure:
+      enabled: true
+    operators:
+      - id: container-parser
+        type: container
+        max_log_size: 65536
+{{end}}
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: telemetry-collector
+          scrape_interval: 10s
+          static_configs:
+            - targets: ['127.0.0.1:8888']
+          relabel_configs:
+            - target_label: source
+              replacement: '{{.CollectorSource}}'
+            - target_label: network_uid
+              replacement: '{{.NetworkUID}}'
+            - target_label: telemetry_uid
+              replacement: '{{.TelemetryUID}}'
+            - target_label: collector_pod_uid
+              replacement: '${env:POD_UID}'
+{{if .Sources.Metrics}}
+        - job_name: stacks-native
+          scrape_interval: 10s
+          scrape_timeout: 3s
+          sample_limit: 20000
+          body_size_limit: 8MB
+          honor_labels: false
+          honor_timestamps: false
+          metric_relabel_configs:
+            - action: labeldrop
+              regex: '{{.SensitiveNames}}'
+          kubernetes_sd_configs:
+            - role: pod
+              namespaces:
+                names: ['{{.Namespace}}']
+          relabel_configs:
+            - target_label: source
+              replacement: '{{.ActorSource}}'
+            - source_labels: [__meta_kubernetes_pod_node_name]
+              action: keep
+              regex: '${env:NODE_NAME}'
+            - source_labels: [__meta_kubernetes_pod_label_network_stacks_org_network_uid]
+              action: keep
+              regex: '{{.NetworkUID}}'
+            - source_labels: [__meta_kubernetes_pod_container_port_name]
+              action: keep
+              regex: metrics
+            - source_labels: [__meta_kubernetes_pod_uid]
+              target_label: pod_uid
+            - source_labels: [__meta_kubernetes_pod_label_network_stacks_org_participant_uid]
+              target_label: participant_uid
+            - target_label: network_uid
+              replacement: '{{.NetworkUID}}'
+            - target_label: telemetry_uid
+              replacement: '{{.TelemetryUID}}'
+{{end}}
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 280
+    spike_limit_mib: 64
+  k8s_attributes:
+    auth_type: serviceAccount
+    filter:
+      namespace: '{{.Namespace}}'
+      node_from_env_var: NODE_NAME
+    extract:
+      metadata: [k8s.namespace.name, k8s.pod.name, k8s.pod.uid, k8s.node.name, k8s.container.name]
+      labels:
+        - from: pod
+          key: network.stacks.org/network-uid
+          tag_name: network_uid
+        - from: pod
+          key: network.stacks.org/participant-uid
+          tag_name: participant_uid
+    pod_association:
+      - sources:
+          - from: resource_attribute
+            name: k8s.pod.uid
+  filter/network:
+    error_mode: propagate
+    logs:
+      log_record:
+        - 'resource.attributes["network_uid"] != "{{.NetworkUID}}"'
+  transform/redaction:
+    error_mode: propagate
+    log_statements:
+      - context: log
+        statements:
+          - 'set(attributes["network_uid"], resource.attributes["network_uid"])'
+          - 'set(attributes["participant_uid"], resource.attributes["participant_uid"])'
+          - 'set(attributes["pod_uid"], resource.attributes["k8s.pod.uid"])'
+          - 'set(attributes["source"], "container-log")'
+          - 'set(attributes["event_type"], "Log")'
+          - 'set(attributes["collector_observed_time_unix_nano"], observed_time_unix_nano)'
+          - 'replace_pattern(body, {{quote .SensitiveAssignments}}, "[REDACTED]")'
+  batch:
+    timeout: 2s
+    send_batch_size: 256
+    send_batch_max_size: 512
+exporters:
+  otlp_http/logs:
+    endpoint: '${env:GREPTIME_ENDPOINT}/v1/otlp'
+    headers:
+      Authorization: '${env:GREPTIME_AUTH}'
+      X-Greptime-DB-Name: public
+      X-Greptime-Log-Table-Name: '{{.TablePrefix}}_logs'
+      X-Greptime-Log-Extract-Keys: '{{.ExtractKeys}}'
+      X-Greptime-Hints: 'ttl={{.Retention}},append_mode=true'
+    retry_on_failure:
+      max_elapsed_time: 120s
+    sending_queue:
+      storage: file_storage
+      queue_size: 2000
+  otlp_http/metrics:
+    endpoint: '${env:GREPTIME_ENDPOINT}/v1/otlp'
+    headers:
+      Authorization: '${env:GREPTIME_AUTH}'
+      X-Greptime-DB-Name: public
+      X-Greptime-Hints: 'ttl=24h'
+    retry_on_failure:
+      max_elapsed_time: 120s
+    sending_queue:
+      storage: file_storage
+      queue_size: 2000
+service:
+  extensions: [health_check, file_storage]
+  telemetry:
+    metrics:
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: 0.0.0.0
+                port: 8888
+  pipelines:
+{{if .Sources.Logs}}
+    logs:
+      receivers: [file_log]
+      processors: [memory_limiter, k8s_attributes, filter/network, transform/redaction, batch]
+      exporters: [otlp_http/logs]
+{{end}}
+    metrics:
+      receivers: [prometheus]
+      processors: [memory_limiter, batch]
+      exporters: [otlp_http/metrics]

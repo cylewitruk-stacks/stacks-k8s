@@ -67,6 +67,8 @@ type nodeDocument struct {
 
 // nodeSection maps protected identity and shared genesis fields to Core TOML.
 type nodeSection struct {
+	// PrometheusBind exposes native metrics independently of collector installation.
+	PrometheusBind string `toml:"prometheus_bind"`
 	// Name identifies the actor.
 	Name string `toml:"name"`
 	// RPCBind is the fixed native RPC listener.
@@ -232,6 +234,7 @@ func Node(p NodeParameters, secrets NodeSecrets) ([]byte, error) {
 	}
 	d := nodeDocument{
 		Node: nodeSection{
+			PrometheusBind:   "0.0.0.0:9153",
 			Name:             p.Name,
 			RPCBind:          "0.0.0.0:20443",
 			P2PBind:          "0.0.0.0:20444",

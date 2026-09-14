@@ -10,6 +10,8 @@ const (
 )
 
 const (
+	// EndpointMetrics names the supported native Prometheus container listener.
+	EndpointMetrics = "metrics"
 	// EndpointRPC selects an actor's native RPC service and named port.
 	EndpointRPC = "rpc"
 	// EndpointP2P selects an actor's peer protocol service and named port.

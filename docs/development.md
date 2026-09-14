@@ -237,7 +237,10 @@ executes negative renders for unsafe replica settings and malformed image-pull
 secret or service-account names. The shared structural validator lives under
 `tools/chart-policy` and is not part of any operator binary.
 
-`make docker-check` validates the operator and worker Dockerfiles, while `make docker-build`
+`make docker-check` validates the operator and worker Dockerfiles and all supported
+collector source configurations against the pinned OTel binary. Run it after changing
+collector templates or configuration rendering, as well as dependency/container changes.
+`make docker-build`
 compiles all three operator images from the repository's default-deny root build
 context. CI runs both so sibling-module changes cannot silently break image
 builds.

@@ -1,13 +1,26 @@
 # Stacks observability operator
 
-This independent chart begins the trusted-observation layer for topologies
-managed by the network operator. New installations select the `v1alpha2`
-foundation API. The initial API verifies the admitted
-Kubernetes identity of every actor through uncached API-server reads.
+This independently installed operator supports one-shot identity observations and
+continuous `NetworkTelemetry` recording. See the [telemetry guide](../../docs/observability/README.md)
+for the GreptimeDB backend, collection policy, queries and cleanup.
 
-The identity reader does not collect protocol values, logs, metrics,
-or evidence bundles. It writes no topology or workload resource and has no
-Secret access.
+`watchNamespaces` explicitly enrolls namespaces for one operator installation; empty
+selects the installation namespace. Roles are namespaced. The manager can manage
+recording Deployments, DaemonSets, ConfigMaps, ServiceAccounts and Roles only there;
+ownership checks prevent adoption. Source Pods and protocol resources
+are read-only. No Secret API access is granted. Backend credentials are mounted into
+scoped recorder/collector workloads. The recorder status Role names its exact telemetry
+resource. No ClusterRole or cluster-wide mutation permission is installed.
+
+Changing enrollment does not delete existing collectors. Remove `NetworkTelemetry`
+resources before unenrolling a namespace. The backend has an independent lifetime.
+Objects-only recordings create no node collectors. Log-enabled OTel collectors use
+host log mounts and UID-scoped node checkpoint directories;
+the node-local process runs as root to read container logs, drops all capabilities
+and does not use privileged mode or host networking. Metrics-only collectors run
+non-root with an ephemeral queue volume and no host mounts. The one-shot
+`NetworkObservation` also reads Services and StatefulSets. An unenrolled installation
+namespace receives only readiness and leader-election permissions.
 
 ## One-shot identity observation
 
@@ -32,8 +45,8 @@ helm upgrade --install stacks-observability-operator \
   --set image.pullPolicy=Never
 ```
 
-Install this chart in the namespace of the network to observe, then create
-a `NetworkObservation`:
+Install this chart in the network namespace, or enroll it through `watchNamespaces`,
+then create a `NetworkObservation`:
 
 ```bash
 helm upgrade --install stacks-observability-operator \

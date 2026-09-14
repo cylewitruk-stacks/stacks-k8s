@@ -21,3 +21,7 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- define "stacks-observability-operator.serviceAccountName" -}}
 {{- default (include "stacks-observability-operator.fullname" .) .Values.serviceAccount.name -}}
 {{- end }}
+
+{{- define "stacks-observability-operator.watchNamespaces" -}}
+{{- if .Values.watchNamespaces -}}{{ join "," .Values.watchNamespaces }}{{- else -}}{{ .Release.Namespace }}{{- end -}}
+{{- end -}}

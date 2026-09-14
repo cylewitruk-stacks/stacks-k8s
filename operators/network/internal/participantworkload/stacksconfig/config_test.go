@@ -204,7 +204,9 @@ func TestCustomConfigurationAgreementAndUnverified(t *testing.T) {
 	}
 	custom := bytes.ReplaceAll(generated, []byte(p.BitcoinHost), []byte("${SERVICE:bitcoin}"))
 	data, verified, err := Apply("StacksNode", generated, custom, config, map[string]string{"bitcoin": p.BitcoinHost})
-	if err != nil || !verified || !bytes.Equal(data, generated) {
+	rendered, renderErr := document(data)
+	expected, expectedErr := document(generated)
+	if err != nil || renderErr != nil || expectedErr != nil || !verified || !reflect.DeepEqual(rendered, expected) {
 		t.Fatalf("valid complete custom config: %v", err)
 	}
 	custom = bytes.ReplaceAll(generated, []byte("nakamoto-neon"), []byte("divergent"))
@@ -246,5 +248,74 @@ func TestCustomConfigurationAgreementAndUnverified(t *testing.T) {
 		map[string]string{"bitcoin": p.BitcoinHost},
 	); err == nil {
 		t.Fatal("accepted unsupported timestamp scalar")
+	}
+}
+
+func TestMetricsEnforcedInGeneratedOverridesAndPrivateCopies(t *testing.T) {
+	p, s := nodeFixture()
+	node, err := Node(p, s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signer, err := Signer("node", s.PrivateKey, s.EventToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		kind         api.ParticipantKind
+		data         []byte
+		path, wanted string
+	}{
+		{api.ParticipantStacksNode, node, "node.prometheus_bind", "0.0.0.0:9153"},
+		{api.ParticipantStacksSigner, signer, "metrics_endpoint", "0.0.0.0:31000"},
+	} {
+		t.Run(string(tc.kind), func(t *testing.T) {
+			native, err := document(tc.data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			actual, _ := at(native, tc.path)
+			if actual != tc.wanted {
+				t.Fatalf("listener = %v", actual)
+			}
+			custom := bytes.ReplaceAll(tc.data, []byte(tc.wanted), []byte("127.0.0.1:9999"))
+			original := append([]byte(nil), custom...)
+			for _, compatibility := range []string{common.CompatibilityManaged, common.CompatibilityUnverified} {
+				config := &common.Config{
+					SecretRef:     &common.SecretKeyRef{Name: "custom", Key: "config.toml"},
+					Compatibility: &compatibility,
+				}
+				output, _, err := Apply(tc.kind, tc.data, custom, config, nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+				rendered, err := document(output)
+				if err != nil {
+					t.Fatal(err)
+				}
+				actual, _ := at(rendered, tc.path)
+				if actual != tc.wanted {
+					t.Fatalf("custom listener = %v", actual)
+				}
+				if !bytes.Equal(custom, original) {
+					t.Fatal("input bytes mutated")
+				}
+			}
+		})
+	}
+}
+
+func TestMetricsOverridesRejectExactManagedPath(t *testing.T) {
+	for _, tc := range []struct {
+		kind      api.ParticipantKind
+		raw, path string
+	}{
+		{api.ParticipantStacksNode, `{"node":{"prometheus_bind":"127.0.0.1:9999"}}`, "node.prometheus_bind"},
+		{api.ParticipantStacksSigner, `{"metrics_endpoint":"127.0.0.1:9999"}`, "metrics_endpoint"},
+	} {
+		err := ValidateCustomization(tc.kind, &common.Config{Overrides: &runtime.RawExtension{Raw: []byte(tc.raw)}})
+		if err == nil || !strings.Contains(err.Error(), tc.path) {
+			t.Fatalf("missing protected path %s: %v", tc.path, err)
+		}
 	}
 }

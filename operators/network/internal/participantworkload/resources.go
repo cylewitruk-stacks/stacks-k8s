@@ -256,6 +256,7 @@ func StatefulSet(
 		container.Args = []string{"start", "--config", "/config/config.toml"}
 		container.Env = nil
 		container.Ports = []corev1.ContainerPort{
+			{Name: common.EndpointMetrics, ContainerPort: 9153},
 			{Name: common.EndpointRPC, ContainerPort: 20443},
 			{Name: common.EndpointP2P, ContainerPort: 20444},
 		}
@@ -269,7 +270,10 @@ func StatefulSet(
 		if p.Spec.Kind == api.ParticipantStacksSigner {
 			workload.Spec.ServiceName = Name(p, common.EndpointEvents)
 			container.Args = []string{"run", "--config", "/config/config.toml"}
-			container.Ports = []corev1.ContainerPort{{Name: common.EndpointEvents, ContainerPort: 30000}}
+			container.Ports = []corev1.ContainerPort{
+				{Name: common.EndpointEvents, ContainerPort: 30000},
+				{Name: common.EndpointMetrics, ContainerPort: 31000},
+			}
 			container.ReadinessProbe = &corev1.Probe{
 				ProbeHandler:   corev1.ProbeHandler{TCPSocket: &corev1.TCPSocketAction{Port: intstr.FromInt32(30000)}},
 				PeriodSeconds:  5,

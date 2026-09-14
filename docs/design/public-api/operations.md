@@ -166,8 +166,8 @@ replace root-owned session identity or authorize worker crash recovery.
 | StacksNode P2P 20444 | Stacks peers. |
 | StacksNode RPC 20443 | Consensus signer and assigned Stacks workers; native state, contract, transaction and submission APIs. |
 | StacksSigner events 30000 | Its configured Stacks node's required native event observer for consensus input. |
+| StacksNode metrics 9153 / StacksSigner metrics 31000 | Optional external Prometheus scraping; listeners are enforced on the private rendered configuration. |
 | Kubernetes API | Scoped Go workers watch admitted CRs/root lifecycle and apply only their assigned execution fields through the status subresource. No worker status Service or application command endpoint. Standard local process probes are not a control protocol. |
-| Optional telemetry query 8080 | User/agent via port-forward; `/healthz`, `/v1/sources`, `/v1/events?from=...&to=...&cursor=...`. Read-only paginated facts/gaps, maximum 1000 entries per page. |
 
 Status publishes actual endpoints and workload refs; clients must not invent DNS or
 follow a stable definition-name alias into a replacement network. Names are UID-derived,
