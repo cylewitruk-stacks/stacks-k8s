@@ -81,6 +81,8 @@ cluster in namespace `slice1b-20260915`, network UID
 still bound throughput. A separately selected five-second schedule then completed
 all protocol gates, including PoX-5, by 07:26:55 UTC. This does not qualify all
 protocol initialization at one-second cadence or alter the 60-second product default.
+The run did not wait for the separate post-waterfall progress requirement:
+`Initialized` remained false when production was paused for diagnostic checks.
 
 With production cooperatively paused, both height-296 diagnostic samples retained
 identical identities and `firstObservedAt=07:30:36Z` across a 20-second observation
@@ -102,5 +104,7 @@ precede the observations above. Unit/race and API-server offer-publication/accou
 tests cover the timing fix; `make verify` passed without generated drift.
 
 Public working evidence is under `/tmp/stacks-slice1/`; temporary scripts and files
-are not a durable release artifact. The namespace is retained only until this goal's
-evidence export completes, then removed in the documented teardown order.
+are not a durable release artifact. The network was stopped and deleted, followed
+by its recording and namespace.
+The [portable export](../observability/evidence-export-qualification.md) remained
+verifiable after teardown; the shared cluster remains running.

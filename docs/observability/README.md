@@ -286,7 +286,11 @@ distributed tracing and additional native protocol polling remain future work.
 
 Stop and delete the experiment using the network lifecycle. Its namespace can then
 be removed; retained data remains in the backend database. Query or
-export selected records before their TTL expires. Deleting `NetworkTelemetry` removes
+export selected records before their TTL expires. The standalone
+[`stacks-evidence` tool](../../tools/stacks-evidence/README.md#portable-evidence-bundles)
+exports bounded object/log/metric pages with identity context, explicit gaps and
+checksums for offline inspection. Successful export does not establish complete capture.
+Deleting `NetworkTelemetry` removes
 its workloads without deleting backend tables and without guaranteeing queue drain.
 
 After collectors stop, remove only their UID-specific checkpoint directory on each
