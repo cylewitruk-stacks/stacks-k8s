@@ -54,6 +54,7 @@ const (
 	reasonQueryUnavailable          exportReason = "QueryUnavailable"
 	reasonResponseByteLimit         exportReason = "ResponseByteLimit"
 	reasonInvalidRecords            exportReason = "InvalidRecords"
+	reasonBackendRejected           exportReason = "BackendRejected"
 	reasonIdentitySchemaUnavailable exportReason = "IdentitySchemaUnavailable"
 	reasonSchemaOrLimitChanged      exportReason = "SchemaOrLimitChanged"
 	reasonRecordIdentityMismatch    exportReason = "RecordIdentityMismatch"
@@ -121,6 +122,9 @@ type queryRecords struct {
 	Rows [][]json.RawMessage `json:"rows"`
 }
 
+// errBackendRejected identifies a decoded backend rejection without retaining its message.
+var errBackendRejected = errors.New("backend rejected query")
+
 // parseRecords rejects HTTP-success SQL errors, malformed schemas and truncated row shapes.
 func parseRecords(data []byte) (*queryRecords, error) {
 	var envelope struct {
@@ -129,7 +133,13 @@ func parseRecords(data []byte) (*queryRecords, error) {
 			Records *queryRecords `json:"records"`
 		} `json:"output"`
 	}
-	if json.Unmarshal(data, &envelope) != nil || envelope.Code != 0 || len(envelope.Output) != 1 ||
+	if json.Unmarshal(data, &envelope) != nil {
+		return nil, errors.New("backend response malformed")
+	}
+	if envelope.Code != 0 {
+		return nil, errBackendRejected
+	}
+	if len(envelope.Output) != 1 ||
 		envelope.Output[0].Records == nil {
 		return nil, errors.New("backend did not return records")
 	}
@@ -227,16 +237,17 @@ func bundle(ctx context.Context, r bundleRequest, c *http.Client, out io.Writer)
 		context: map[string]json.RawMessage{},
 		kinds:   map[string]bool{},
 		manifest: evidenceManifest{
-			Format:       "stacks-evidence/v1",
-			NetworkUID:   r.NetworkUID,
-			TelemetryUID: r.TelemetryUID,
-			From:         r.From,
-			To:           r.To,
-			StartedAt:    time.Now().UTC(),
-			Consistency:  "LiveReadNoSnapshot",
-			Coverage:     "Unknown",
-			State:        stateExported,
-			CaptureGaps:  map[string]int{},
+			Format:         "stacks-evidence/v1",
+			NetworkUID:     r.NetworkUID,
+			TelemetryUID:   r.TelemetryUID,
+			From:           r.From,
+			To:             r.To,
+			StartedAt:      time.Now().UTC(),
+			Consistency:    "LiveReadNoSnapshot",
+			Coverage:       "Unknown",
+			State:          stateExported,
+			CaptureGaps:    map[string]int{},
+			ContextMissing: []string{},
 			Limits: bundleLimits{
 				r.PageSize,
 				r.WindowSeconds,
@@ -378,6 +389,9 @@ func (b *bundleExporter) exportTable(ctx context.Context, index int, table strin
 			if err != nil {
 				state.State = stateUnavailable
 				state.Reason = reasonInvalidRecords
+				if errors.Is(err, errBackendRejected) {
+					state.Reason = reasonBackendRejected
+				}
 				return state
 			}
 			currentSchema, _ := json.Marshal(records.Schema)

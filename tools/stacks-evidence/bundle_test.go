@@ -126,8 +126,28 @@ func TestBundlePaginationContextAndIntegrity(t *testing.T) {
 		len(manifest.Tables[0].Files) != 3 {
 		t.Fatalf("manifest differs: %s", output.String())
 	}
+	var encoded map[string]json.RawMessage
+	if err := json.Unmarshal(output.Bytes(), &encoded); err != nil {
+		t.Fatal(err)
+	}
+	if string(encoded["contextMissing"]) != "[]" {
+		t.Fatal("empty contextMissing must encode as an array")
+	}
 	if !strings.Contains(strings.Join(*queries, "\n"), "OFFSET 4") {
 		t.Fatal("pagination did not reach equal-timestamp tail")
+	}
+	for _, table := range manifest.Tables {
+		if !table.Through.Equal(request.To) {
+			t.Fatal("completed window not reflected in through")
+		}
+	}
+	// Additional experimenter-owned files are outside the manifest's integrity contract.
+	if err := os.WriteFile(
+		filepath.Join(request.OutputDir, "receipts.jsonl"),
+		[]byte("external receipt\n"),
+		0o600,
+	); err != nil {
+		t.Fatal(err)
 	}
 	if err := verifyBundle(request.OutputDir); err != nil {
 		t.Fatal(err)
@@ -156,7 +176,7 @@ func TestBundlePaginationContextAndIntegrity(t *testing.T) {
 }
 
 func TestBundleBudgetsAndUnavailableSourcesAreExplicit(t *testing.T) {
-	for _, mode := range []string{"rows", "bytes", "queries", "backend", "schema", "foreign"} {
+	for _, mode := range []string{"rows", "bytes", "queries", "backend", "malformed", "schema", "foreign"} {
 		t.Run(mode, func(t *testing.T) {
 			request, c, _ := bundleFixture(t)
 			switch mode {
@@ -178,6 +198,8 @@ func TestBundleBudgetsAndUnavailableSourcesAreExplicit(t *testing.T) {
 					switch mode {
 					case "backend":
 						data = []byte(`{"code":1000,"error":"PRIVATE"}`)
+					case "malformed":
+						data = []byte(`{"code":1000,"error":"PRIVATE",`)
 					case "schema":
 						data = bytes.ReplaceAll(data, []byte(`"network_uid"`), []byte(`"foreign"`))
 					case "foreign":
@@ -196,6 +218,21 @@ func TestBundleBudgetsAndUnavailableSourcesAreExplicit(t *testing.T) {
 			if manifest.State == "Exported" || len(manifest.Tables) != 3 || len(manifest.ContextMissing) == 0 ||
 				bytes.Contains(output.Bytes(), []byte("PRIVATE")) {
 				t.Fatalf("partial evidence hidden: %s", output.String())
+			}
+			if mode == "rows" &&
+				(!manifest.Tables[0].Through.Equal(request.From) || len(manifest.Tables[0].Files) != 1) {
+				t.Fatal("partial window advanced through or lost saved page")
+			}
+			if mode == "backend" || mode == "malformed" {
+				expected := "BackendRejected"
+				if mode == "malformed" {
+					expected = "InvalidRecords"
+				}
+				for _, table := range manifest.Tables {
+					if table.State != "Unavailable" || string(table.Reason) != expected {
+						t.Fatalf("backend failure misclassified: %+v", table)
+					}
+				}
 			}
 			if err := verifyBundle(request.OutputDir); err != nil {
 				t.Fatal("partial retained files unverifiable", err)

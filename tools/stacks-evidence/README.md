@@ -89,6 +89,15 @@ the query-page byte budget. Backend queries retain the server's own memory limit
 smaller query windows may be needed for dense logs. Rows sharing a timestamp are
 paged using a total ordering over returned columns; offsets reset per window.
 Schema changes, unsupported ordering and unavailable tables produce partial exports.
+`BackendRejected` means the backend returned a decoded nonzero SQL error code;
+`InvalidRecords` means its response could not be parsed as valid records. Raw backend
+error messages are not included in the manifest.
+
+Budgets are independent: the 24-hour maximum is not a promise that default budgets
+cover that window. Five tables at 45-second windows need at least 9,605 queries
+(including schema reads), exceeding the default 4,000 even without pagination.
+Select a shorter range, fewer tables or larger windows, or explicitly raise the
+query allowance within its maximum. Dense tables also consume row/byte budgets.
 
 Exit zero and table state `Exported` mean the requested traversal finished within
 its budgets. They **do not mean complete evidence**: queries are independent live
@@ -96,7 +105,10 @@ reads, without a database snapshot. Late ingestion, concurrent changes, retentio
 and historical capture gaps can cause missing or repeated rows during pagination.
 Use a settled historical window and export before TTL expiry. `coverage` remains
 `Unknown`; explicit `CaptureGap` counts, absent context and partial-source reasons
-remain in the manifest. No detected gap is not proof of uninterrupted capture.
+remain in the manifest. An empty `contextMissing` is `[]`. No detected gap is not
+proof of uninterrupted capture. Each table's `through` is the exclusive end of its
+last fully traversed window, initially `from`; saved pages from a later partial
+window may also be present. It is a traversal checkpoint, not a capture watermark.
 
 Cancellation, row/byte/query limits and query failures return nonzero while retaining
 successful pages and a manifest when the filesystem remains writable. Unattempted
@@ -106,7 +118,9 @@ new export rather than resuming offsets against a changing database.
 
 `verify` streams checksums for all files listed in the manifest, with paths confined
 to the selected directory. It checks byte integrity, not authenticity, coverage or
-whether a partial export was sufficient. The manifest is unsigned; changing both
+whether a partial export was sufficient. Additional files in the directory are
+allowed and ignored by `verify`; only manifest-listed files are checked.
+The manifest is unsigned; changing both
 files and their manifest cannot be detected. The export retains the recorder's
 redaction boundary and does not guarantee arbitrary actor text contains no secrets.
 Keep workload JSONL receipts alongside the bundle; their association with a network
