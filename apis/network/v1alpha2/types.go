@@ -61,6 +61,8 @@ type InstanceIdentity struct {
 
 // StacksNetworkStatus is written only by the aggregate controller.
 type StacksNetworkStatus struct {
+	// BurnchainObservations contains independent height samples, never a health gate.
+	BurnchainObservations *BurnchainObservations `json:"burnchainObservations,omitempty"`
 	// ObservationPolicy identifies release freshness and progress parameters.
 	ObservationPolicy *ObservationPolicy `json:"observationPolicy,omitempty"`
 	// Phase reports the observed lifecycle, not protocol health.

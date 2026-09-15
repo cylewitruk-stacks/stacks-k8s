@@ -92,3 +92,13 @@ func TestBitcoinMountedPublicInput(t *testing.T) {
 		t.Fatal("mounted Bitcoin resolver request changed its exact public bindings")
 	}
 }
+
+// TestControllerRequiresExplicitImages fails before reading cluster configuration.
+func TestControllerRequiresExplicitImages(t *testing.T) {
+	for _, images := range [][2]string{{"resolver:test", ""}, {"", "observer:test"}} {
+		err := run(t.Context(), "controller", "", images[0], images[1], ":0", false, actionOptions{})
+		if err == nil || err.Error() != "controller requires --resolver-image and --bitcoin-observer-image" {
+			t.Fatalf("missing explicit image accepted: %v", err)
+		}
+	}
+}

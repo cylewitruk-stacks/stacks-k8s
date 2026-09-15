@@ -1,0 +1,17 @@
+(define-map rows2 uint (tuple (f0 (buff 4096)) (f1 (buff 4096))))
+(define-public (write2 (key uint) (payload (buff 4096)))
+ (begin (map-set rows2 key (tuple (f0 payload) (f1 payload))) (ok (len payload))))
+(define-read-only (read2 (key uint))
+ (ok (match (map-get? rows2 key) row (+ (len (get f0 row)) (len (get f1 row))) u0)))
+
+(define-map rows8 uint (tuple (f0 (buff 4096)) (f1 (buff 4096)) (f2 (buff 4096)) (f3 (buff 4096)) (f4 (buff 4096)) (f5 (buff 4096)) (f6 (buff 4096)) (f7 (buff 4096))))
+(define-public (write8 (key uint) (payload (buff 4096)))
+ (begin (map-set rows8 key (tuple (f0 payload) (f1 payload) (f2 payload) (f3 payload) (f4 payload) (f5 payload) (f6 payload) (f7 payload))) (ok (len payload))))
+(define-read-only (read8 (key uint))
+ (ok (match (map-get? rows8 key) row (+ (len (get f0 row)) (len (get f1 row)) (len (get f2 row)) (len (get f3 row)) (len (get f4 row)) (len (get f5 row)) (len (get f6 row)) (len (get f7 row))) u0)))
+
+(define-map rows16 uint (tuple (f0 (buff 4096)) (f1 (buff 4096)) (f2 (buff 4096)) (f3 (buff 4096)) (f4 (buff 4096)) (f5 (buff 4096)) (f6 (buff 4096)) (f7 (buff 4096)) (f8 (buff 4096)) (f9 (buff 4096)) (f10 (buff 4096)) (f11 (buff 4096)) (f12 (buff 4096)) (f13 (buff 4096)) (f14 (buff 4096)) (f15 (buff 4096))))
+(define-public (write16 (key uint) (payload (buff 4096)))
+ (begin (map-set rows16 key (tuple (f0 payload) (f1 payload) (f2 payload) (f3 payload) (f4 payload) (f5 payload) (f6 payload) (f7 payload) (f8 payload) (f9 payload) (f10 payload) (f11 payload) (f12 payload) (f13 payload) (f14 payload) (f15 payload))) (ok (len payload))))
+(define-read-only (read16 (key uint))
+ (ok (match (map-get? rows16 key) row (+ (len (get f0 row)) (len (get f1 row)) (len (get f2 row)) (len (get f3 row)) (len (get f4 row)) (len (get f5 row)) (len (get f6 row)) (len (get f7 row)) (len (get f8 row)) (len (get f9 row)) (len (get f10 row)) (len (get f11 row)) (len (get f12 row)) (len (get f13 row)) (len (get f14 row)) (len (get f15 row))) u0)))

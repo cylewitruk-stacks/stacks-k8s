@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	bitcoin "github.com/cylewitruk-stacks/stacks-k8s/apis/network/bitcoin/v1alpha2"
 	common "github.com/cylewitruk-stacks/stacks-k8s/apis/network/common/v1alpha2"
 	api "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha2"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/participantstatus"
@@ -52,6 +53,9 @@ func TestActorAPILifecycleAndStatusIsolation(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := api.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	if err := bitcoin.AddToScheme(scheme); err != nil {
 		t.Fatal(err)
 	}
 	c, err := client.New(config, client.Options{Scheme: scheme})

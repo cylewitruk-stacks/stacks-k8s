@@ -30,7 +30,9 @@ than modifying generated Pods, configurations or admitted status directly.
 
 `WorkloadReady` describes Kubernetes workloads. `Initialized` records completion
 of frozen protocol gates. `Operational` requires fresh native chain/transaction
-progress and required signer participation. A Ready Pod is not proof of consensus
+progress and required contract postconditions. Independent attributed Bitcoin/miner
+height samples in `status.burnchainObservations` aid diagnosis without gating Operational.
+A Ready Pod is not proof of consensus
 progress. Examine root conditions, participant admission/workload/execution,
 Bitcoin records and worker logs when initialization stops advancing.
 

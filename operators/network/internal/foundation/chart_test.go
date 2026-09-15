@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
@@ -175,5 +176,51 @@ func TestKeyJobRulesAreNameScoped(t *testing.T) {
 	want[0].Verbs = append(want[0].Verbs, "patch")
 	if !reflect.DeepEqual(KeyJobRules(in), want) {
 		t.Fatal("generation grants excess authority")
+	}
+}
+
+// TestObserverImageDoesNotFollowControllerImage proves independent default and explicit pins.
+func TestObserverImageDoesNotFollowControllerImage(t *testing.T) {
+	for _, observer := range []string{"", "observer:custom"} {
+		t.Run(observer, func(t *testing.T) {
+			chart := filepath.Join("..", "..", "..", "..", "charts", "stacks-network-operator")
+			args := []string{
+				"template",
+				"network",
+				chart,
+				"--kube-version",
+				"1.37.0",
+				"--set",
+				"image.tag=controller-new",
+			}
+			// #nosec G304 -- Test-owned repository chart path, without external input.
+			data, err := os.ReadFile(filepath.Join(chart, "values.yaml"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var values struct {
+				Observer string `json:"bitcoinObserverImage"`
+			}
+			if err := yaml.NewYAMLOrJSONDecoder(bytes.NewReader(data), 4096).Decode(&values); err != nil {
+				t.Fatal(err)
+			}
+			if values.Observer == "" {
+				t.Fatal("chart must pin observer image")
+			}
+			want := values.Observer
+			if observer != "" {
+				args = append(args, "--set", "bitcoinObserverImage="+observer)
+				want = observer
+			}
+			// #nosec G204 -- Fixed local chart and test-owned flags.
+			out, err := exec.CommandContext(t.Context(), "helm", args...).CombinedOutput()
+			if err != nil {
+				t.Fatalf("render: %v %s", err, out)
+			}
+			if !strings.Contains(string(out), "--resolver-image=stacks-network-operator:controller-new") ||
+				!strings.Contains(string(out), "--bitcoin-observer-image="+want) {
+				t.Fatalf("independent image pin lost: %s", out)
+			}
+		})
 	}
 }

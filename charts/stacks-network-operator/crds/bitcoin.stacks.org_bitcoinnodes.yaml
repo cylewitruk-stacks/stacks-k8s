@@ -125,6 +125,22 @@ spec:
                 - IfNotPresent
                 - Never
                 type: string
+              observer:
+                description: Observer enables the optional network-owned read-only
+                  RPC exporter; omission disables it.
+                properties:
+                  enabled:
+                    description: Enabled starts the metrics and structured-log sidecar;
+                      omission is false.
+                    type: boolean
+                  intervalSeconds:
+                    description: IntervalSeconds separates completed polls; omission
+                      uses 10 seconds.
+                    format: int32
+                    maximum: 300
+                    minimum: 5
+                    type: integer
+                type: object
               peers:
                 description: Peers supplies startup seed hints.
                 properties:

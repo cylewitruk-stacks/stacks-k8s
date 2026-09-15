@@ -11,6 +11,7 @@ MODULE_DIRS := \
 	operators/observability \
 	operators/observability/tools \
 	tools/chart-policy \
+	tools/stacks-experiment \
 	tools/module-policy \
 	tools/local-cluster
 
@@ -130,6 +131,7 @@ vuln:
 	GOWORK=off $(GO) -C operators/network run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
 	GOWORK=off $(GO) -C operators/observability run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
 	GOWORK=off $(GO) -C operators/action run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
+	GOWORK=off $(GO) -C tools/stacks-experiment run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
 
 docker-check:
 	STACKS_TELEMETRY_COLLECTOR_VALIDATE=1 GOWORK=off $(GO) -C operators/observability test ./internal/telemetry -run TestPinnedCollectorValidation -count=1

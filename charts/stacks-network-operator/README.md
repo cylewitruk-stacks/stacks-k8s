@@ -24,7 +24,8 @@ export KUBECONFIG="$PWD/tools/local-cluster/kubeconfig"
 docker build -f operators/network/Dockerfile -t stacks-network-operator:dev .
 kind load docker-image stacks-network-operator:dev --name "$STACKS_KIND_CLUSTER"
 helm upgrade --install network charts/stacks-network-operator \
-  --kube-context "$STACKS_CONTEXT" --namespace stacks-network-system --create-namespace
+  --kube-context "$STACKS_CONTEXT" --namespace stacks-network-system --create-namespace \
+  --set bitcoinObserverImage=stacks-network-operator:dev
 kubectl --context "$STACKS_CONTEXT" apply -f docs/design/public-api/examples/30-actors.yaml
 kubectl --context "$STACKS_CONTEXT" -n lab-30 get stacksnetwork network -o yaml
 ```
@@ -72,6 +73,7 @@ reusable-definition deletion on behalf of a network.
 
 | Value | Default | Meaning |
 | --- | --- | --- |
+| `bitcoinObserverImage` | See [values.yaml](values.yaml) | Independent observer artifact pin; load it into kind before use |
 | `image.repository` | `stacks-network-operator` | Controller and resolver image |
 | `image.tag` | `dev` | Explicit locally built revision |
 | `image.pullPolicy` | `IfNotPresent` | Controller image pull policy |
@@ -96,3 +98,12 @@ Finite action lifecycle controllers install separately through
 [stacks-action-operator](../stacks-action-operator/README.md). The matching network
 option grants only public action reads to each existing Bitcoin control worker;
 requests share its retained execution reservation with baseline generation.
+
+## Optional Bitcoin observation
+
+Set `BitcoinNode.spec.observer.enabled: true` to provision the network-owned Go RPC
+exporter alongside Core. `bitcoinObserverImage` independently pins its image
+(default in [values.yaml](values.yaml)). Enabling it or changing that pin rolls the
+actor Pod; changing only `image` leaves the sidecar image unchanged.
+No observability installation is required.
+See [configuration, permissions and collection semantics](../../docs/network-operator/bitcoin-observer.md).

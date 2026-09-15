@@ -475,6 +475,12 @@ unknown options, numeric values or option interactions; semantic compatibility i
 checked by Core startup and actor readiness. No help-command or separate Core
 startup probe is used as a configuration validator.
 
+The optional `observer` settings enable a network-owned read-only RPC sidecar.
+`enabled` defaults to false; `intervalSeconds` defaults to 10 (bounds 5–300).
+The participant runtime pins its dedicated `observerRPCSecretRef`; it is never
+shared with protocol clients or mutation workers. See the
+[Bitcoin observer contract](../../network-operator/bitcoin-observer.md).
+
 ## StacksNode
 
 ```yaml
@@ -823,7 +829,7 @@ metadata:
 spec:
   cadence:
     mode: Fixed
-    interval: 5s
+    interval: 60s
 ---
 apiVersion: bitcoin.stacks.org/v1alpha2
 kind: BitcoinBlockProduction
@@ -850,7 +856,7 @@ spec:
 Schedule is a reusable immutable value, not a worker or network owner. Cadence is Fixed with
 positive interval or Uniform with positive `minimumInterval` and `maximumInterval >=
 minimumInterval`; bounds 1s–1h. Production accepts exactly one scheduleRef or inline
-`schedule` with the same shape; omitting both uses Fixed/5s. Changing a ref switches to
+`schedule` with the same shape; omitting both uses Fixed/60s. Changing a ref switches to
 another immutable schedule. The controller snapshots its value/generation into status;
 a rejected candidate retains the last complete admission while its exact captured schedule
 and payout identities remain available. Missing, replaced or deleting admitted inputs close

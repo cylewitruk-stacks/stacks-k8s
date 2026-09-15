@@ -51,14 +51,14 @@ type Retention struct {
 	Window string `json:"window"`
 }
 
-// Sources selects independent recording sources. Recorder health is always recorded.
-// Node collectors and their health metrics exist only when logs or metrics are enabled.
+// Sources selects independent recording sources. Recorder health and actor container CPU/memory are always recorded.
+// Node collectors and their health metrics exist only when logs or native metrics are enabled.
 type Sources struct {
 	// Objects captures allowlisted public Kubernetes observations.
 	Objects bool `json:"objects"`
 	// Logs captures redacted workload stdout/stderr.
 	Logs bool `json:"logs"`
-	// Metrics scrapes named native metrics ports.
+	// Metrics scrapes named native metrics ports; actor container CPU/memory does not depend on this field.
 	Metrics bool `json:"metrics"`
 }
 
@@ -86,6 +86,7 @@ type NetworkTelemetrySpec struct {
 }
 
 // SourceReason is a bounded source-health diagnostic.
+// WatchInterrupted remains accepted for persisted status compatibility; current recorders do not emit it.
 // +kubebuilder:validation:Enum=Available;Unavailable;APINotInstalled;AccessDenied;ReadUnavailable;WatchInterrupted
 type SourceReason string
 
@@ -100,8 +101,6 @@ const (
 	SourceAccessDenied SourceReason = "AccessDenied"
 	// SourceReadUnavailable identifies a failed source request without exposing its raw response.
 	SourceReadUnavailable SourceReason = "ReadUnavailable"
-	// SourceWatchInterrupted identifies a closed subscription requiring a re-list.
-	SourceWatchInterrupted SourceReason = "WatchInterrupted"
 )
 
 // SourceStatus reports bounded point-in-time source health; records live in the backend.

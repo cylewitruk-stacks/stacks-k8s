@@ -12,3 +12,6 @@ resources:
 bitcoinActions:
   generationEnabled: false
   reorganizationEnabled: false
+
+# Independent pin: controller/resolver image changes must not implicitly roll Bitcoin actors.
+bitcoinObserverImage: stacks-network-operator:0.2.0

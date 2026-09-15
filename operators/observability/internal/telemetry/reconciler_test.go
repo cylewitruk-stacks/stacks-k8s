@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -54,7 +55,15 @@ func TestCollectorConfigurationAndScopedRoles(t *testing.T) {
 			t.Fatalf("missing collector boundary %q", required)
 		}
 	}
+	chaosFound := false
 	for _, rule := range RecorderRules("capture") {
+		if len(rule.APIGroups) == 1 && rule.APIGroups[0] == ChaosAPIGroup {
+			chaosFound = true
+			if !slices.Equal(rule.Resources, ChaosResources()) ||
+				!slices.Equal(rule.Verbs, []string{"get", "list", "watch"}) {
+				t.Fatalf("native fault rule differs: %+v", rule)
+			}
+		}
 		for _, resource := range rule.Resources {
 			if resource == "secrets" {
 				t.Fatal("recorder can read Secrets")
@@ -71,6 +80,9 @@ func TestCollectorConfigurationAndScopedRoles(t *testing.T) {
 				}
 			}
 		}
+	}
+	if !chaosFound {
+		t.Fatal("native fault rule omitted")
 	}
 }
 

@@ -50,10 +50,13 @@ controls the environment. Snapshot identity excludes unrelated protocol heartbea
 There is no legacy inventory fallback.
 
 `NetworkTelemetry` (`observation.stacks.org/v1alpha2`) adds optional continuous
-GreptimeDB recording of public Kubernetes objects, actor logs, native metrics and
-capture gaps. Recording workloads are scoped to administrator-enrolled namespaces;
+GreptimeDB recording of public Kubernetes objects, actor logs, native metrics,
+actor-container CPU/memory and capture gaps. Recording workloads are scoped to
+administrator-enrolled namespaces;
 they cannot mutate source networks or actors. Native Stacks node/signer metrics are
 enabled by the configuration renderer. See the [operating guide](../observability/README.md).
+Optional [Bitcoin RPC observers](../network-operator/bitcoin-observer.md) export numerical
+metrics and structured tip/hash/chainwork records through the same collectors.
 Tracing, richer journal/export contracts and additional protocol polling remain
 roadmap work. Native observations used for baseline convergence remain distinct
 from this optional observability layer.

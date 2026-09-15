@@ -169,6 +169,7 @@ spec:
             - --bitcoin-reorganization-enabled=true
             {{- end }}
             - {{ printf "--resolver-image=%s:%s" .Values.image.repository .Values.image.tag | quote }}
+            - {{ printf "--bitcoin-observer-image=%s" (required "bitcoinObserverImage must be set" .Values.bitcoinObserverImage) | quote }}
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

@@ -87,7 +87,8 @@ spec:
                     description: Logs captures redacted workload stdout/stderr.
                     type: boolean
                   metrics:
-                    description: Metrics scrapes named native metrics ports.
+                    description: Metrics scrapes named native metrics ports; actor
+                      container CPU/memory does not depend on this field.
                     type: boolean
                   objects:
                     description: Objects captures allowlisted public Kubernetes observations.

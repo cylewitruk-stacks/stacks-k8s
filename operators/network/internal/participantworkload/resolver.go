@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/bitcoinobserver"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/participantworkload/bitcoinconfig"
 
 	common "github.com/cylewitruk-stacks/stacks-k8s/apis/network/common/v1alpha2"
@@ -39,6 +40,8 @@ type BitcoinConfigInput struct {
 	ControlCredentials common.Binding `json:"controlCredentials"`
 	// ActorCredentials identifies restricted protocol-client credentials.
 	ActorCredentials common.Binding `json:"actorCredentials"`
+	// ObserverCredentials optionally pins the read-only observer principal.
+	ObserverCredentials *common.Binding `json:"observerCredentials,omitempty"`
 	// Report identifies the exact public result ConfigMap.
 	Report common.Binding `json:"report"`
 	// Seeds freezes startup peer DNS addresses without waiting for live peers.
@@ -95,7 +98,17 @@ func RunBitcoinConfigResolver(ctx context.Context, c client.Client, in BitcoinCo
 	if err != nil {
 		return err
 	}
-	server, err := renderConfig(in.Seeds, actor, control)
+	var observer *corev1.Secret
+	if in.ObserverCredentials != nil {
+		observer, err = resolverSecret(ctx, c, in, *in.ObserverCredentials)
+		if err != nil {
+			return err
+		}
+		if err := generateCredential(ctx, c, observer, bitcoinobserver.Username); err != nil {
+			return err
+		}
+	}
+	server, err := renderConfig(in.Seeds, actor, control, observer)
 	if err != nil {
 		return err
 	}
@@ -220,18 +233,29 @@ func generateCredential(ctx context.Context, c client.Client, secret *corev1.Sec
 }
 
 // renderConfig renders authenticated Core configuration with disjoint RPC method sets.
-func renderConfig(seeds []string, actor, control *corev1.Secret) (string, error) {
+func renderConfig(seeds []string, actor, control, observer *corev1.Secret) (string, error) {
 	var out strings.Builder
 	out.WriteString(
 		"regtest=1\nserver=1\nlisten=1\ntxindex=1\nprinttoconsole=1\nfallbackfee=0.0002\nrpcwhitelistdefault=1\n",
 	)
-	for _, credentials := range []*corev1.Secret{actor, control} {
+	for _, credentials := range []*corev1.Secret{actor, control, observer} {
+		if credentials == nil {
+			continue
+		}
 		// Secret UIDs provide a unique salt while keeping rendering deterministic.
 		saltBytes := sha256.Sum256([]byte(credentials.UID))
 		salt := hex.EncodeToString(saltBytes[:16])
 		mac := hmac.New(sha256.New, []byte(salt))
 		mac.Write(credentials.Data["password"])
 		fmt.Fprintf(&out, "rpcauth=%s:%s$%x\n", credentials.Data["username"], salt, mac.Sum(nil))
+	}
+	if observer != nil {
+		fmt.Fprintf(
+			&out,
+			"rpcwhitelist=%s:%s\n",
+			bitcoinobserver.Username,
+			strings.Join(bitcoinobserver.Methods(), ","),
+		)
 	}
 	fmt.Fprintf(
 		&out,
@@ -264,6 +288,9 @@ func BitcoinConfigRules(in BitcoinConfigInput) []rbacv1.PolicyRule {
 			ResourceNames: []string{in.Report.Name},
 			Verbs:         []string{"get", "patch"},
 		},
+	}
+	if in.ObserverCredentials != nil {
+		rules[0].ResourceNames = append(rules[0].ResourceNames, in.ObserverCredentials.Name)
 	}
 	if in.Custom != nil {
 		rules = append(

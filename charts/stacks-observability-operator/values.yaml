@@ -39,10 +39,10 @@ greptime:
   resources:
     requests:
       cpu: 250m
-      memory: 512Mi
+      memory: 1Gi
     limits:
       cpu: '2'
-      memory: 2Gi
+      memory: 3Gi
   logging:
     onlyLogToStdout: true
   auth:
@@ -55,7 +55,7 @@ greptime:
     max_concurrent_queries = 4
     [query]
     parallelism = 2
-    memory_pool_size = '128MB'
+    memory_pool_size = '1GB'
     [[region_engine]]
     [region_engine.mito]
     num_workers = 2
@@ -68,7 +68,7 @@ greptime:
     range_result_cache_size = '16MB'
     prefilter_result_cache_size = '16MB'
     manifest_cache_size = '32MB'
-    scan_memory_limit = '128MB'
+    scan_memory_limit = '1GB'
   persistentVolumeClaimRetentionPolicy:
     whenDeleted: Retain
     whenScaled: Retain

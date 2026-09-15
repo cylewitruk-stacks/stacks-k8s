@@ -892,7 +892,7 @@ metadata:
 spec:
   cadence:
     mode: Fixed
-    interval: 5s
+    interval: 60s
 ---
 apiVersion: bitcoin.stacks.org/v1alpha2
 kind: BitcoinBlockProduction
@@ -1249,8 +1249,8 @@ spec:
         effect: NoSchedule
     images:
       bitcoin: bitcoin/bitcoin:31.1
-      stacksNode: stacks-core:4.0.1-pox5
-      stacksSigner: stacks-core:4.0.1-pox5
+      stacksNode: ghcr.io/stacks-network/stacks-core:4.0.3
+      stacksSigner: ghcr.io/stacks-network/stacks-signer:4.0.3
     storage:
       size: 2Gi
       retainOnDelete: false

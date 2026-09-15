@@ -13,6 +13,7 @@ import (
 	observation "github.com/cylewitruk-stacks/stacks-k8s/operators/observability/api/v1alpha2"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/observability/internal/telemetry"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -20,6 +21,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/metadata"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -27,6 +29,8 @@ import (
 type Recorder struct {
 	// Dynamic supplies namespace-scoped allowlisted list/watch access.
 	Dynamic dynamic.Interface
+	// Metadata lists actor identity without reading Pod specifications.
+	Metadata metadata.Interface
 	// Client gets the exact telemetry object and patches only its execution status.
 	Client client.Client
 	// Telemetry is the immutable process admission snapshot.
@@ -44,17 +48,19 @@ type Recorder struct {
 	backendReady      bool
 	attributionFull   bool
 	collectorSessions map[string]float64
+	resourceSamples   map[string]string
 }
 
 // Run resumes observation after failure with explicit discontinuity; it never resumes a mutation.
 func (r *Recorder) Run(ctx context.Context) error {
-	if r.Telemetry == nil || !r.Telemetry.Status.Admitted || r.PodUID == "" || r.Sink == nil {
+	if r.Telemetry == nil || !r.Telemetry.Status.Admitted || r.PodUID == "" || r.Sink == nil || r.Metadata == nil {
 		return fmt.Errorf("recorder requires admitted identity and backend")
 	}
 	r.states = map[string]observation.SourceStatus{}
 	r.collectorSessions = map[string]float64{}
 	r.pendingGaps = map[string]bool{}
 	r.known = map[types.UID]bool{r.Telemetry.Spec.NetworkUID: true}
+	r.resourceSamples = map[string]string{}
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	var workers sync.WaitGroup
@@ -63,6 +69,7 @@ func (r *Recorder) Run(ctx context.Context) error {
 			workers.Go(func() { r.observe(ctx, source) })
 		}
 	}
+	workers.Go(func() { r.observeContainerResources(ctx) })
 	defer workers.Wait()
 	// A process start is always a coverage boundary, including a graceful rollout.
 	r.gap(ctx, SourceRecorder, "Recorder started; continuity before this process is unverified")
@@ -100,36 +107,58 @@ func (r *Recorder) Run(ctx context.Context) error {
 	}
 }
 
-// observe re-lists after interruption and marks every unaccounted boundary before exporting new snapshots.
+// observe resumes ordinary watch interruptions from the last delivered resourceVersion.
 func (r *Recorder) observe(ctx context.Context, source schema.GroupVersionResource) {
 	name := sourceID(source)
 	resource := r.Dynamic.Resource(source).Namespace(r.Telemetry.Namespace)
+	rv := ""
+	relist := true
+	var retry sourceRetry
 	for ctx.Err() == nil {
-		r.gap(ctx, name, "Source subscription starts or reconnects; intermediate writes may be absent")
-		rv, err := r.snapshot(ctx, resource, name)
-		if err == nil {
-			timeout := int64(120)
-			stream, watchErr := resource.Watch(ctx, metav1.ListOptions{
-				ResourceVersion: rv, TimeoutSeconds: &timeout,
-				AllowWatchBookmarks: true,
-			})
-			err = watchErr
-			if watchErr == nil {
-				r.consume(ctx, stream, name)
-				stream.Stop()
+		if relist {
+			r.gap(
+				ctx,
+				name,
+				"Source subscription starts or resource history is unavailable; intermediate writes may be absent",
+			)
+			var err error
+			rv, err = r.snapshot(ctx, resource, name)
+			if err != nil {
+				r.sourceError(name, err)
+				waitSourceRetry(ctx, retry.next(err, false))
+				continue
 			}
+			retry.reset()
+			relist = false
 		}
-		r.sourceError(name, err)
-		delay := 5 * time.Second
-		if apierrors.IsNotFound(err) || apierrors.IsForbidden(err) {
-			delay = time.Minute
+		timeout := int64(120)
+		cursor := rv
+		stream, err := resource.Watch(ctx, metav1.ListOptions{
+			ResourceVersion: rv, TimeoutSeconds: &timeout,
+			AllowWatchBookmarks: true,
+		})
+		opened, started := err == nil, time.Now()
+		if opened {
+			rv, err = r.consume(ctx, stream, name, rv)
+			stream.Stop()
 		}
-		select {
-		case <-ctx.Done():
+		if ctx.Err() != nil {
 			return
-		case <-time.After(delay):
 		}
+		if resourceHistoryUnavailable(err) {
+			relist = true
+			waitSourceRetry(ctx, retry.next(err, false))
+			continue
+		}
+		if err != nil {
+			r.sourceError(name, err)
+		}
+		waitSourceRetry(ctx, retry.next(err, opened && (rv != cursor || time.Since(started) >= healthyWatchDuration)))
 	}
+}
+
+func resourceHistoryUnavailable(err error) bool {
+	return apierrors.IsResourceExpired(err) || apierrors.IsGone(err)
 }
 
 // snapshot paginates current state without claiming the list contains intermediate transitions.
@@ -154,25 +183,34 @@ func (r *Recorder) snapshot(ctx context.Context, resource dynamic.ResourceInterf
 	}
 }
 
-// consume accepts only typed public objects; watch errors force a marked re-list.
-func (r *Recorder) consume(ctx context.Context, stream watch.Interface, source string) {
+// consume returns the last observed resourceVersion so reconnects do not discard available history.
+func (r *Recorder) consume(ctx context.Context, stream watch.Interface, source, rv string) (string, error) {
 	for {
 		select {
 		case <-ctx.Done():
-			return
+			return rv, nil
 		case event, ok := <-stream.ResultChan():
-			if !ok || event.Type == watch.Error {
-				return
+			if !ok {
+				return rv, nil
+			}
+			if event.Type == watch.Error {
+				return rv, apierrors.FromObject(event.Object)
 			}
 			if event.Type == watch.Bookmark {
+				if accessor, err := meta.Accessor(event.Object); err == nil && accessor.GetResourceVersion() != "" {
+					rv = accessor.GetResourceVersion()
+				}
 				r.available(source, true)
 				continue
 			}
 			object, ok := event.Object.(*unstructured.Unstructured)
 			if !ok {
-				return
+				return rv, fmt.Errorf("source %s returned an unexpected watch object", source)
 			}
 			r.object(ctx, object, source, string(event.Type))
+			if object.GetResourceVersion() != "" {
+				rv = object.GetResourceVersion()
+			}
 			r.available(source, true)
 		}
 	}
@@ -259,8 +297,8 @@ func (r *Recorder) gap(ctx context.Context, source, message string) {
 	})
 }
 
-// emit reports uncertainty on export failure and writes a gap before the next ordinary record.
-func (r *Recorder) emit(ctx context.Context, record Record) {
+// emit reports uncertainty on export failure and returns whether this record was acknowledged.
+func (r *Recorder) emit(ctx context.Context, record Record) bool {
 	r.mu.Lock()
 	pending := r.pendingGaps[record.Source]
 	r.mu.Unlock()
@@ -270,11 +308,12 @@ func (r *Recorder) emit(ctx context.Context, record Record) {
 		gap.Body = "Prior export or source interval is unaccounted; duplicates and loss are possible"
 		if err := r.Sink.Write(ctx, gap); err != nil {
 			r.exportResult(record.Source, false)
-			return
+			return false
 		}
 	}
 	err := r.Sink.Write(ctx, record)
 	r.exportResult(record.Source, err == nil)
+	return err == nil
 }
 
 // exportResult keeps source-specific outage state separate from the most recent backend acknowledgement.
@@ -369,8 +408,6 @@ func (r *Recorder) sourceError(source string, err error) {
 	state.ObservedAt = metav1.Now()
 	state.Reason = observation.SourceReadUnavailable
 	switch {
-	case err == nil:
-		state.Reason = observation.SourceWatchInterrupted
 	case apierrors.IsNotFound(err):
 		state.Reason = observation.SourceAPINotInstalled
 	case apierrors.IsForbidden(err), apierrors.IsUnauthorized(err):

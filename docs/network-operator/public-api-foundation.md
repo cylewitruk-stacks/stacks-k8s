@@ -128,10 +128,13 @@ not a process-identity fence.
 
 `Resolved`, `Initialized`, `Running` and `Operational` answer different questions.
 Initialization is historical and never cleared by a temporary read failure or later fault.
-Operational requires fresh, correctly identified protocol observations and recent Bitcoin
-and Stacks progress. A required paused baseline makes it False; unavailable evidence makes
-it Unknown unless another known requirement is already false. Optional faucets, extra
-actors and telemetry do not automatically gate global health.
+Operational requires fresh, correctly identified protocol observations, recent Bitcoin
+and Stacks progress. Independent height samples in `status.burnchainObservations`
+preserve exact runtime identities and a stable `firstObservedAt` for unchanged facts.
+Current source timestamps determine freshness; stale samples are withdrawn. The diagnostic
+does not gate health or establish chain agreement. A required paused baseline makes Operational False;
+unavailable evidence makes it Unknown unless another known requirement is already false.
+Optional faucets, extra actors and telemetry do not automatically gate global health.
 
 The release observation policy uses 2 s polls, a 10 s RPC bound, 5 s heartbeats and 16 s
 freshness. Progress windows are `max(120 s, 3 × cadence) + 10 s`, using the upper cadence

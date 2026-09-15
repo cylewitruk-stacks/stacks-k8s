@@ -114,21 +114,21 @@ func (r *Client) Call(ctx context.Context, endpoint, id, method string, params [
 	}
 	body, err := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": id, "method": method, "params": params})
 	if err != nil {
-		return err
+		return &CallError{Kind: FailureRequest, message: "encode RPC request"}
 	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, io.NopCloser(bytes.NewReader(body)))
 	if err != nil {
-		return fmt.Errorf("create RPC request")
+		return &CallError{Kind: FailureRequest, message: "create RPC request"}
 	}
 	request.Header.Set("Content-Type", "application/json")
 	request.SetBasicAuth(r.credentials.Username, r.credentials.Password)
 	response, err := r.client.Do(request)
 	if err != nil {
-		return fmt.Errorf("RPC transport did not yield a receipt")
+		return &CallError{Kind: FailureTransport, message: "RPC transport did not yield a receipt"}
 	}
 	defer func() { _ = response.Body.Close() }() // Read/cleanup completion cannot change the operation's result.
 	if response.StatusCode != http.StatusOK {
-		return fmt.Errorf("RPC HTTP status %d", response.StatusCode)
+		return &CallError{Kind: FailureResponse, message: fmt.Sprintf("RPC HTTP status %d", response.StatusCode)}
 	}
 	var envelope struct {
 		ID     string          `json:"id"`
@@ -136,18 +136,21 @@ func (r *Client) Call(ctx context.Context, endpoint, id, method string, params [
 		Error  json.RawMessage `json:"error"`
 	}
 	data, err := io.ReadAll(io.LimitReader(response.Body, 65537))
-	if err != nil || len(data) > 65536 {
-		return fmt.Errorf("RPC receipt unreadable or oversized")
+	if err != nil {
+		return &CallError{Kind: FailureTransport, message: "RPC receipt unreadable or oversized"}
+	}
+	if len(data) > 65536 {
+		return &CallError{Kind: FailureBound, message: "RPC receipt unreadable or oversized"}
 	}
 	if err := json.Unmarshal(
 		data,
 		&envelope,
 	); err != nil || envelope.ID != id ||
 		(len(envelope.Error) != 0 && string(envelope.Error) != "null") {
-		return fmt.Errorf("RPC did not return a matching success receipt")
+		return &CallError{Kind: FailureResponse, message: "RPC did not return a matching success receipt"}
 	}
 	if err := json.Unmarshal(envelope.Result, result); err != nil {
-		return fmt.Errorf("RPC result could not be decoded")
+		return &CallError{Kind: FailureResponse, message: "RPC result could not be decoded"}
 	}
 	return nil
 }

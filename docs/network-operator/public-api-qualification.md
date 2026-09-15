@@ -347,6 +347,29 @@ identity mismatch fails the stage. Successful samples and receipt advancement ac
 the hold window do not claim uninterrupted RPC availability. Native fault cleanup
 must still be followed by newly observed canonical progress.
 
+## Official 4.0.3 image qualification — 2026-09-15
+
+The `minimal14` public lifecycle ran in `followup-final-20260915` with the
+official `ghcr.io/stacks-network/stacks-core:4.0.3` and
+`ghcr.io/stacks-network/stacks-signer:4.0.3` images. The three node Pods reported
+image digest `sha256:9c45dbf25dbe6a2b5051657f914b98abccfbec1a9f84d1df45233d627446227d`;
+the two signer Pods reported
+`sha256:6cb6f31a6fdaf6e002816ec75691d7d44b654046fc433b253591f239742e1d58`.
+All five became ready without restarts.
+
+The run used an explicit five-second qualification cadence, not the product's
+60-second default. Network UID `3aeea8a6-4adf-4454-84fa-65f76aa1a854` reached
+`Initialized=True` and `Operational=True`, then produced fresh native progress.
+Pause held, resume produced new progress, stop completed, reusable declarations
+survived root deletion and the namespace was removed. The lifecycle passed in
+1,724 seconds. Evidence is under `/tmp/stacks-followup-qualified-20260915/`.
+
+An attempted one-second acceleration did not generate blocks: initialization
+offers were replaced before the target control loop admitted them. That failed
+setup is recorded as W8 in the
+[experiment findings ledger](../experiments/findings-20260914.md); this record
+does not claim one-second cadence support.
+
 ## Limitations
 
 This is a local profile qualification, not a compatibility matrix for arbitrary

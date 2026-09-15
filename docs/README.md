@@ -7,7 +7,7 @@
 - [API reference](network-operator/api.md) and [architecture](network-operator/architecture.md)
 - [Configuration and genesis](network-operator/configuration.md)
 - [Operations and cleanup](network-operator/operations.md)
-- [Bitcoin production](network-operator/bitcoin-production.md)
+- [Bitcoin production](network-operator/bitcoin-production.md) and [RPC observation](network-operator/bitcoin-observer.md)
 - [Stacks production and initialization](network-operator/stacks-production.md)
 - [PoX-4/PoX-5](network-operator/pox5.md)
 - [Custom actor images](network-operator/actor-images.md)
@@ -18,6 +18,9 @@
 - [Continuous GreptimeDB/OTel telemetry](observability/README.md)
 - [Bounded action operator](../charts/stacks-action-operator/README.md)
 - [Native Chaos Mesh profile](chaos/operations.md)
+- [Contract load and signer-fault experiment](experiments/contract-load-and-faults.md)
+- [Bitcoin split-view and persistent Stacks burnchain stall](experiments/bitcoin-split-anchor-stall.md)
+- [External experiment tools](../tools/stacks-experiment/README.md)
 - [Read-only observability operator](../charts/stacks-observability-operator/README.md)
 
 ## Design and development

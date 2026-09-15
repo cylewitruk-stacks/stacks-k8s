@@ -109,6 +109,22 @@ func bitcoinOperational(root *api.StacksNetwork, participants []api.StacksNetwor
 	if s.EligibleTargets == 0 {
 		return predicate{metav1.ConditionFalse, reasonBitcoinTargetsUnavailable}
 	}
+	_, window, valid := bitcoinTiming(s)
+	if !valid {
+		return predicate{metav1.ConditionUnknown, reasonBitcoinTimingUnavailable}
+	}
+	if s.LastAcknowledgedAt == nil || s.LastAcknowledgedAt.After(now) ||
+		now.Sub(s.LastAcknowledgedAt.Time) > window {
+		return predicate{metav1.ConditionFalse, reasonBitcoinProgressOverdue}
+	}
+	return predicate{metav1.ConditionTrue, reasonBitcoinProgressObserved}
+}
+
+// bitcoinTiming validates the current scheduler's claimed cadence and progress window.
+func bitcoinTiming(s *vocabulary.BitcoinSchedulingStatus) (time.Duration, time.Duration, bool) {
+	if s == nil || s.Schedule == nil {
+		return 0, 0, false
+	}
 	var bound time.Duration
 	var err error
 	switch s.Schedule.Cadence.Mode {
@@ -121,23 +137,16 @@ func bitcoinOperational(root *api.StacksNetwork, participants []api.StacksNetwor
 			bound, err = time.ParseDuration(string(*s.Schedule.Cadence.MaximumInterval))
 		}
 	}
-	if err != nil || bound < time.Second || bound > time.Hour ||
-		s.ProgressWindowSeconds != int64(foundation.ProgressWindow(bound)/time.Second) {
-		return predicate{metav1.ConditionUnknown, reasonBitcoinTimingUnavailable}
-	}
-	if s.LastAcknowledgedAt == nil || s.LastAcknowledgedAt.After(now) ||
-		now.Sub(s.LastAcknowledgedAt.Time) > foundation.ProgressWindow(bound) {
-		return predicate{metav1.ConditionFalse, reasonBitcoinProgressOverdue}
-	}
-	return predicate{metav1.ConditionTrue, reasonBitcoinProgressObserved}
+	window := foundation.ProgressWindow(bound)
+	return bound, window, err == nil && bound >= time.Second && bound <= time.Hour &&
+		s.ProgressWindowSeconds == int64(window/time.Second)
 }
 
 // minerOperational excludes intentionally unverified and suspended peers from the required miner set.
 func minerOperational(root *api.StacksNetwork, participants []api.StacksNetworkParticipant) predicate {
 	waiting := false
 	for _, entry := range root.Spec.Participants {
-		if entry.Kind != api.ParticipantStacksNode ||
-			entry.Control != nil && ptr.Deref(entry.Control.Suspended, false) {
+		if entry.Kind != api.ParticipantStacksNode {
 			continue
 		}
 		for i := range participants {
@@ -147,7 +156,7 @@ func minerOperational(root *api.StacksNetwork, participants []api.StacksNetworkP
 				p.Status.Admission == nil ||
 				p.DeletionTimestamp != nil ||
 				!metav1.IsControlledBy(p, root) ||
-				p.Spec.Control != nil && ptr.Deref(p.Spec.Control.Suspended, false) {
+				actorSuspended(root, p) {
 				continue
 			}
 			policy := p.Status.Admission.Configuration.StacksNode
@@ -289,12 +298,15 @@ func (r *Reconciler) projectOperation(
 ) error {
 	state := root.Status.Initialization
 	if state == nil || !state.Completed {
+		root.Status.BurnchainObservations = nil
 		return nil
 	}
 	g, err := r.frozenGenesis(ctx, root)
 	if err != nil {
+		root.Status.BurnchainObservations = nil
 		return err
 	}
+	root.Status.BurnchainObservations = r.burnchainObservations(ctx, root, g, participants, now)
 	traffic := trafficOperational(root, g, participants, now)
 	if !meta.IsStatusConditionTrue(root.Status.Conditions, api.ConditionInitialized) {
 		if traffic.status != metav1.ConditionTrue || !postWaterfallObserved(root, g, participants, now) {
@@ -333,9 +345,10 @@ func (r *Reconciler) projectOperation(
 			bitcoin = predicate{metav1.ConditionUnknown, reasonBitcoinTimingUnavailable}
 		}
 	}
+	miner := minerOperational(root, participants)
 	result := combinePredicates(
 		bitcoin,
-		minerOperational(root, participants),
+		miner,
 		traffic,
 		contractsOperational(root, g, participants, now),
 	)

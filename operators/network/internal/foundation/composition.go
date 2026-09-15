@@ -213,9 +213,13 @@ func Compose(root *api.StacksNetwork, entry api.Participant, source any) (api.Co
 	}
 	switch entry.Kind {
 	case api.ParticipantBitcoinNode, api.ParticipantStacksNode, api.ParticipantStacksSigner:
-		image := "stacks-core:4.0.1-pox5"
-		if entry.Kind == api.ParticipantBitcoinNode {
+		image := "ghcr.io/stacks-network/stacks-core:4.0.3"
+		//nolint:exhaustive // The outer switch restricts this branch to actor kinds.
+		switch entry.Kind {
+		case api.ParticipantBitcoinNode:
 			image = "bitcoin/bitcoin:31.1"
+		case api.ParticipantStacksSigner:
+			image = "ghcr.io/stacks-network/stacks-signer:4.0.3"
 		}
 		fill(out, map[string]any{"image": image, "imagePullPolicy": string(corev1.PullIfNotPresent)})
 		storage, _ := out["storage"].(map[string]any)
@@ -240,7 +244,7 @@ func Compose(root *api.StacksNetwork, entry api.Participant, source any) (api.Co
 	case api.ParticipantBitcoinBlockProduction:
 		if out["schedule"] == nil && out["scheduleRef"] == nil {
 			out["schedule"] = map[string]any{
-				"cadence": map[string]any{"mode": string(bitcoin.CadenceFixed), "interval": "5s"},
+				"cadence": map[string]any{"mode": string(bitcoin.CadenceFixed), "interval": "60s"},
 			}
 		}
 	}

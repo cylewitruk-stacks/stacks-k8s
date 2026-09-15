@@ -23,7 +23,7 @@ import (
 func operationalFixture(
 	t *testing.T,
 	now time.Time,
-) (*api.StacksNetwork, *api.StacksGenesis, []api.StacksNetworkParticipant) {
+) (*api.StacksNetwork, *api.StacksGenesis, []api.StacksNetworkParticipant, *bitcoin.BitcoinExecution) {
 	t.Helper()
 	root, g := gateFixture()
 	root.Spec.Operation = "Running"
@@ -189,7 +189,65 @@ func operationalFixture(
 	root.Status.GenesisRef.Fingerprint = foundation.Digest(g.Spec)
 	root.Status.GenesisDigest = foundation.Digest(g.Spec.Chain)
 	root.Status.Initialization = &api.InitializationStatus{Completed: true}
-	return root, g, participants
+	btc := participantFixture(root)
+	btc.Name = "btc"
+	btc.UID = "btc"
+	btc.Spec.ParticipantName = "btc"
+	btc.Spec.Kind = api.ParticipantBitcoinNode
+	btc.Status.Admission = &api.Admission{PolicyDigest: "policy-btc"}
+	btc.Status.Conditions = []metav1.Condition{
+		{Type: api.ConditionWorkloadReady, Status: metav1.ConditionTrue, ObservedGeneration: btc.Generation},
+		{Type: api.ConditionConfigVerified, Status: metav1.ConditionTrue, ObservedGeneration: btc.Generation},
+	}
+	btc.Status.Runtime = &api.ParticipantRuntimeStatus{
+		ObservedGeneration: btc.Generation,
+		PolicyDigest:       btc.Status.Admission.PolicyDigest,
+		PodRef:             &common.Binding{Kind: common.KindPod, Name: "pod-btc", UID: "pod-btc"},
+		ContainerID:        "container-btc",
+		ConfigRef:          &common.Binding{Kind: common.KindSecret, Name: "config-btc", UID: "config-btc"},
+		RPCSecretRef:       &common.Binding{Kind: common.KindSecret, Name: "rpc-btc", UID: "rpc-btc"},
+		PodIP:              "10.0.0.10",
+		Endpoints:          []api.RuntimeEndpoint{{Name: common.EndpointRPC, Port: 18443}},
+	}
+	root.Spec.Participants = append(root.Spec.Participants, api.Participant{Name: btc.Name, Kind: btc.Spec.Kind})
+	root.Status.Identities = append(root.Status.Identities, api.InstanceIdentity{Name: btc.Name, UID: btc.UID})
+	participants = append(participants, *btc)
+	record := &bitcoin.BitcoinExecution{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "execution-btc",
+			Namespace: root.Namespace,
+			UID:       "execution-btc",
+			OwnerReferences: []metav1.OwnerReference{{
+				APIVersion: api.GroupVersion.String(),
+				Kind:       api.KindStacksNetwork,
+				Name:       root.Name,
+				UID:        root.UID,
+				Controller: ptr.To(true),
+			}},
+		},
+		Spec: bitcoin.BitcoinExecutionSpec{
+			NetworkUID:  root.UID,
+			Participant: common.Binding{Kind: api.KindStacksNetworkParticipant, Name: btc.Name, UID: btc.UID},
+		},
+		Status: bitcoin.BitcoinExecutionStatus{Observation: &bitcoin.BitcoinObservation{
+			Height:     301,
+			Tip:        strings.Repeat("c", 64),
+			ObservedAt: metav1.NewTime(now),
+			Target: bitcoin.BitcoinTargetIdentity{
+				Participant:   common.Binding{Kind: api.KindStacksNetworkParticipant, Name: btc.Name, UID: btc.UID},
+				Pod:           *btc.Status.Runtime.PodRef,
+				ContainerID:   btc.Status.Runtime.ContainerID,
+				Endpoint:      "http://10.0.0.10:18443",
+				Configuration: *btc.Status.Runtime.ConfigRef,
+				Credentials:   *btc.Status.Runtime.RPCSecretRef,
+				PolicyDigest:  btc.Status.Admission.PolicyDigest,
+			},
+		}},
+	}
+	root.Status.Bitcoin = &api.BitcoinRuntimeStatus{
+		ExecutionRefs: []common.Binding{{Kind: bitcoin.KindBitcoinExecution, Name: record.Name, UID: record.UID}},
+	}
+	return root, g, participants, record
 }
 
 func TestOperationalSeparatesKnownFailuresFreshnessAndOriginalProgress(t *testing.T) {
@@ -207,10 +265,14 @@ func TestOperationalSeparatesKnownFailuresFreshnessAndOriginalProgress(t *testin
 		"failed-extra",
 		"slow-cadence",
 		"unbound-miner",
+		"burnchain-lag",
+		"burnchain-boundary",
+		"burnchain-stale",
+		"burnchain-identity",
 	} {
 		t.Run(mode, func(t *testing.T) {
 			now := time.Now()
-			root, g, ps := operationalFixture(t, now)
+			root, g, ps, record := operationalFixture(t, now)
 			want := metav1.ConditionTrue
 			switch mode {
 			case "traffic-paused":
@@ -254,6 +316,14 @@ func TestOperationalSeparatesKnownFailuresFreshnessAndOriginalProgress(t *testin
 			case "unbound-miner":
 				root.Status.Identities[0].UID = "replacement"
 				want = metav1.ConditionFalse
+			case "burnchain-lag":
+				record.Status.Observation.Height = 328
+			case "burnchain-boundary":
+				record.Status.Observation.Height = 327
+			case "burnchain-stale":
+				record.Status.Observation.ObservedAt = metav1.NewTime(now.Add(-17 * time.Second))
+			case "burnchain-identity":
+				record.Status.Observation.Target.ContainerID = "replacement"
 			}
 			got := combinePredicates(
 				bitcoinOperational(root, ps, now),
@@ -270,7 +340,7 @@ func TestOperationalSeparatesKnownFailuresFreshnessAndOriginalProgress(t *testin
 
 func TestInitializationNeedsNewPostWaterfallTransferAndDoesNotRewind(t *testing.T) {
 	now := time.Now()
-	root, g, ps := operationalFixture(t, now)
+	root, g, ps, execution := operationalFixture(t, now)
 	record := &bitcoin.BitcoinInitialization{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            "initialization",
@@ -281,9 +351,12 @@ func TestInitializationNeedsNewPostWaterfallTransferAndDoesNotRewind(t *testing.
 		Spec: bitcoin.BitcoinInitializationSpec{NetworkUID: root.UID},
 	}
 	root.Status.Bitcoin = &api.BitcoinRuntimeStatus{
+		ExecutionRefs: []common.Binding{{
+			Kind: bitcoin.KindBitcoinExecution, Name: execution.Name, UID: execution.UID,
+		}},
 		InitializationRef: &common.Binding{Kind: "BitcoinInitialization", Name: record.Name, UID: record.UID},
 	}
-	r := fixtureReconciler(t, g, record)
+	r := fixtureReconciler(t, g, record, execution)
 	ps[2].Status.Execution.Traffic.SubmittedBurnHeight = 299
 	if err := r.projectOperation(context.Background(), root, ps, now); err != nil {
 		t.Fatal(err)
@@ -316,7 +389,7 @@ func TestTrafficIntervalOverflowCannotLookOperational(t *testing.T) {
 	for _, seconds := range []uint64{0, 3601, 1<<55 + 10, ^uint64(0)} {
 		t.Run(fmt.Sprint(seconds), func(t *testing.T) {
 			now := time.Now()
-			root, genesis, participants := operationalFixture(t, now)
+			root, genesis, participants, _ := operationalFixture(t, now)
 			participants[2].Status.Execution.Traffic.EffectiveIntervalSeconds = seconds
 			// Adding 2^55 seconds wraps to the fixture's valid 10-second duration after multiplication.
 			got := trafficOperational(root, genesis, participants, now)

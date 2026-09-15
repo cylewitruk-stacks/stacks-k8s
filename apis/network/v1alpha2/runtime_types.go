@@ -35,6 +35,8 @@ type ParticipantRuntimeStatus struct {
 	EventAuthSecretRef *common.Binding `json:"eventAuthSecretRef,omitempty"`
 	// RPCSecretRef identifies this node's mutation-worker credentials.
 	RPCSecretRef *common.Binding `json:"rpcSecretRef,omitempty"`
+	// ObserverRPCSecretRef pins the read-only Bitcoin observer credential.
+	ObserverRPCSecretRef *common.Binding `json:"observerRPCSecretRef,omitempty"`
 	// ActorRPCSecretRef identifies restricted protocol-client credentials.
 	ActorRPCSecretRef *common.Binding `json:"actorRPCSecretRef,omitempty"`
 	// Endpoints contains actual Service addresses.

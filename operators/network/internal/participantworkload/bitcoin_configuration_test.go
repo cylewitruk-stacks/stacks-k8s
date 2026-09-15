@@ -34,7 +34,7 @@ func bitcoinCustomFixture(t *testing.T) (client.Client, BitcoinConfigInput, *cor
 	actor.UID = "actor-uid"
 	report := &corev1.ConfigMap{ObjectMeta: objectMeta(p, "report", "support")}
 	report.UID = "report-uid"
-	rendered, err := renderConfig(nil, actor, control)
+	rendered, err := renderConfig(nil, actor, control, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

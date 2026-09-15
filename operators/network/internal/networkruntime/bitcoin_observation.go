@@ -37,16 +37,7 @@ func (r *Reconciler) currentBitcoinObservation(
 	}
 	state := p.Status.Runtime
 	target := o.Target
-	if state.ConfigRef == nil || state.RPCSecretRef == nil || target.Participant.UID != p.UID ||
-		target.Participant.Name != p.Name ||
-		target.Pod.UID != state.PodRef.UID ||
-		target.Pod.Name != state.PodRef.Name ||
-		target.ContainerID != state.ContainerID ||
-		target.Configuration.UID != state.ConfigRef.UID ||
-		target.Configuration.Name != state.ConfigRef.Name ||
-		target.Credentials.UID != state.RPCSecretRef.UID ||
-		target.Credentials.Name != state.RPCSecretRef.Name ||
-		target.PolicyDigest != p.Status.Admission.PolicyDigest {
+	if !bitcoinTargetMatchesRuntime(&p, o) {
 		return false, nil
 	}
 	for _, binding := range []struct {
@@ -109,13 +100,38 @@ func (r *Reconciler) currentBitcoinObservation(
 	if !process {
 		return false, nil
 	}
+	return bitcoinEndpointMatches(state, &target, pod.Status.PodIP), nil
+}
+
+// bitcoinTargetMatchesRuntime binds an observation to the participant's published process identity.
+func bitcoinTargetMatchesRuntime(p *api.StacksNetworkParticipant, o *bitcoin.BitcoinObservation) bool {
+	state := p.Status.Runtime
+	if state == nil || state.PodRef == nil || state.ConfigRef == nil || state.RPCSecretRef == nil ||
+		p.Status.Admission == nil {
+		return false
+	}
+	target := o.Target
+	return target.Participant.UID == p.UID && target.Participant.Name == p.Name &&
+		target.Pod.UID == state.PodRef.UID && target.Pod.Name == state.PodRef.Name &&
+		target.ContainerID == state.ContainerID &&
+		target.Configuration.UID == state.ConfigRef.UID && target.Configuration.Name == state.ConfigRef.Name &&
+		target.Credentials.UID == state.RPCSecretRef.UID && target.Credentials.Name == state.RPCSecretRef.Name &&
+		target.PolicyDigest == p.Status.Admission.PolicyDigest
+}
+
+// bitcoinEndpointMatches verifies the RPC address against one published actor address.
+func bitcoinEndpointMatches(
+	state *api.ParticipantRuntimeStatus,
+	target *bitcoin.BitcoinTargetIdentity,
+	podIP string,
+) bool {
 	for _, endpoint := range state.Endpoints {
 		if endpoint.Name == common.EndpointRPC && endpoint.Port > 0 && endpoint.Port <= 65535 {
 			return target.Endpoint == "http://"+net.JoinHostPort(
-				pod.Status.PodIP,
+				podIP,
 				strconv.Itoa(int(endpoint.Port)),
-			), nil
+			)
 		}
 	}
-	return false, nil
+	return false
 }

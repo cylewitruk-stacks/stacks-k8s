@@ -323,6 +323,26 @@ True. A missing required singleton is False, while an unavailable membership rea
 Unknown. A fresh report showing progress overdue is False; stale reporting alone
 does not prove a stall. Reasons identify the unmet or unavailable predicate.
 
+`status.burnchainObservations` exposes independent Bitcoin and miner height samples
+after `status.initialization.completed` and a valid frozen-genesis read. This can precede
+`Initialized=True`, which also requires post-waterfall canonical progress. Each sample
+pins participant and Pod bindings, container ID and configuration digest. Selection takes
+the greatest fresh available height in each group; ties use participant UID. The miner
+group excludes suspended and Unverified miners. If neither sample is available, the
+whole diagnostic is omitted.
+
+`firstObservedAt` is the first source timestamp in the currently retained sequence of
+equal height and identity. Timestamp-only source updates do not rewrite root status.
+Freshness is always checked against current source observations, not this retained time.
+Missing/stale/mismatched samples are withdrawn; recovery or a height/identity change
+starts a new sequence. An execution-record read failure withdraws the Bitcoin sample
+without blocking other health reporting. Per-participant observations retain current
+source timestamps for investigation.
+
+Samples may describe different forks or unconnected peers. Equal observed heights do
+not prove continuous observation or absence of intervening chain changes. Their difference
+is not elapsed lag, canonical-chain agreement or a stall verdict, and never gates Operational.
+
 The release [observation policy](operations.md#observation-policy) defines freshness
 and cadence-aware progress windows. Late additions/removals re-evaluate the current
 predicate without rewinding Initialized. Operational is a bounded recent-progress

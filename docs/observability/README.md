@@ -54,7 +54,9 @@ To install directly with Helm, first run
 `make -C charts/stacks-observability-operator dependencies`, then use
 [values-local.yaml](../../charts/stacks-observability-operator/values-local.yaml).
 The pinned backend is GreptimeDB 1.2.0 (upstream chart 0.4.14), with a 10 GiB PVC,
-2 GiB memory limit and bounded query concurrency/memory. It requires the local
+3 GiB memory limit, four-query concurrency, a 1 GiB shared query-execution pool and
+a separate 1 GiB shared table-scan pool.
+It requires the local
 cluster's storage provisioner. This is a single-instance development backend.
 
 A bounded post-install/post-upgrade Job runs `/backend-init` from the operator image.
@@ -169,8 +171,8 @@ It continues recording after root deletion; a same-name replacement never inheri
 Independent recordings have separate log/object tables; native metric series include recording
 identity to distinguish overlapping subscriptions. Metric `source` separates `actor-native` from
 `collector-internal`; target relabeling preserves identity on synthetic `up` samples as well as
-native values. The Prometheus receiver maps `job` into resource metadata; queries use the
-explicit source tag.
+native values and Bitcoin observer metrics. The Prometheus receiver maps `job` into
+resource metadata; queries use the explicit source tag.
 
 Sources are mutable; changing them rolls recording workloads and creates a capture
 boundary. Disabling both logs and metrics removes the node collectors and their identities.
@@ -185,8 +187,15 @@ stops controller reconciliation; delete its telemetry resources before unenrolli
 | --- | --- | --- |
 | Kubernetes list/watch | Root, participant, genesis, Bitcoin execution, action and native fault objects; Pods and attributable Events | Snapshots are current state, not missed transitions. Missing optional APIs produce unavailable coverage. Events are attributed only after their object UID is known. |
 | Container logs | Bounded stdout/stderr with Kubernetes-derived network, participant and Pod identity | Missing Pod metadata is filtered rather than guessed. Actor text remains an actor claim. |
-| Native metrics | Named `metrics` ports on selected Pods, scraped once per node every 10 seconds | Scrape labels and scrape time come from the collector; metric values are actor reports. Unsupported images and unreachable endpoints do not produce native samples. |
+| Native metrics | Named `metrics` ports on selected Pods, scraped once per node every 3 seconds | Scrape labels and scrape time come from the collector; metric values are actor reports. Unsupported images and unreachable endpoints do not produce native samples. |
+| Container resources | Actor-container CPU and memory from the namespace-scoped Metrics API | Samples retain Pod and participant UID. Metrics Server is required for this mandatory source. The recorder polls every 15 seconds; Metrics Server controls source resolution, and repeated samples are deduplicated. CPU throttling is not exposed by this source. |
 | Collection health | Recorder heartbeats, watch/export gaps, collector session changes and failure counters | A gap indicates possible loss or duplicates, not an exact missing-record count. |
+
+Bitcoin nodes can opt into the network-owned [RPC observer](../network-operator/bitcoin-observer.md).
+It supplies numerical metrics and structured branch/hash observations through the
+existing metrics and log sources. Enable both sources to retain both forms;
+`bitcoin_observer_success` distinguishes RPC collection from HTTP scrape availability.
+Use the [Bitcoin-specific queries](bitcoin-observer-queries.sql) for this optional source.
 
 `WorkloadsReady=True` describes Kubernetes workload readiness only.
 `status.recording.heartbeatAt` must be recent before trusting its source summaries;
@@ -198,7 +207,9 @@ is the latest source health observation, not a complete-history watermark. A qui
 have an older timestamp until a bookmark or reconnect. Collector metrics provide queue/failure
 detail.
 
-The recorder re-lists after watch interruptions and records a conservative gap.
+The recorder resumes ordinary watch interruptions from the latest object or bookmark
+resourceVersion. It re-lists and records a conservative gap when Kubernetes reports
+that retained history has expired or when no prior cursor exists.
 Recorder restart begins a new session with an explicit coverage boundary. Kubernetes
 watches never guarantee every intermediate write, and Events for unknown UIDs can
 be absent. Event attribution tracks at most 4,096 source UIDs per recorder process.
@@ -231,7 +242,8 @@ metric tables are shared and use the backend profile's fixed 24-hour retention.
 Use a dedicated backend initialized with this profile; verify table TTLs before
 reusing an existing database. TTL is neither a per-network byte quota nor immediate
 physical reclamation. The PVC and resource limits bound the installation; monitor
-storage pressure. Per-network byte quotas are not exposed in this slice.
+storage pressure. The 1 GiB execution and scan pools support post-experiment analysis but do
+not make unbounded scans safe. Per-network byte quotas are not exposed in this slice.
 
 Logs and object records promote `network_uid`, `participant_uid`, `pod_uid`, `object_uid`,
 `event_type` and `source` into tags. Resource source IDs use `resource.group/version`, with
@@ -249,6 +261,24 @@ Use the reader credential for `POST /v1/sql` with form field `sql`.
 progress comparison, fault timelines and source gaps. Substitute the recorded table
 prefix, UID and absolute experiment window. Start with a one-minute log window
 and a participant filter; widen in bounded steps. `LIMIT` alone does not bound scan cost.
+Container resource samples use source `container-resource` and event type
+`ContainerResource`; query their numeric JSON fields with the exact Pod or participant UID.
+Pod inventory uses metadata-only reads filtered by network UID and actor role. A malformed
+PodMetrics entry marks the source unavailable while other valid actor samples are retained.
+Native Prometheus scraping remains every 3 seconds; the Metrics API polling interval is
+separate and assumes the local Metrics Server's 15-second resolution. Faster source
+configurations may produce samples between polls that this recorder does not retain.
+Failed source subscriptions use independent exponential backoff with jitter (up to 30s;
+missing APIs or denied access retry after 30–60s). Healthy watch closures reconnect after
+250ms. Opening a stream that immediately fails does not reset backoff. A successful list,
+delivered cursor progress or a subscription lasting at least 30s resets it.
+Native `NetworkChaos`, `PodChaos` and `StressChaos` resources are recorded through
+independent optional watches. Their source IDs are respectively `networkchaos`, `podchaos`
+and `stresschaos` under `chaos-mesh.org/v1alpha1`; an absent CRD is reported per source.
+Native last-block cost gauges are point-in-time ratios of configured block limits. They
+may be overwritten between scrapes and must not be summed as per-block accounting.
+Use exact transaction observations for short inclusion-latency investigations; histogram
+buckets may be too coarse for regtest timing.
 The first slice uses backend-native SQL; custom query services, `EvidenceExport`,
 distributed tracing and additional native protocol polling remain future work.
 

@@ -5,6 +5,10 @@ Its reusable definition references a `BitcoinBlockSchedule`, selected Bitcoin-no
 participants and a payout wallet. The [example](../design/public-api/examples/30-actors.yaml)
 shows the complete wiring and initial miner-wallet funding requirements.
 
+Omitting both `schedule` and `scheduleRef` uses a fixed 60-second Bitcoin cadence.
+Explicit schedules take precedence; use a shorter interval when faster network
+bootstrap is desired.
+
 Timing and target selection are separate. Fixed or uniform cadence creates one
 opportunity at a time; weighted targets determine where it is offered. Capacity,
 reservations, expiration and unavailable targets may skip opportunities. There is

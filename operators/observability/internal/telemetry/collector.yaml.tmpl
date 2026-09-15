@@ -35,7 +35,7 @@ receivers:
               replacement: '${env:POD_UID}'
 {{if .Sources.Metrics}}
         - job_name: stacks-native
-          scrape_interval: 10s
+          scrape_interval: 3s
           scrape_timeout: 3s
           sample_limit: 20000
           body_size_limit: 8MB

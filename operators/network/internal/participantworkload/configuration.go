@@ -46,6 +46,13 @@ func (r *Reconciler) configuration(
 		}
 		*item.destination = ref
 	}
+	if observerEnabled(p) {
+		ref, err := r.emptySecret(ctx, p, "rpc-observer", state.ObserverRPCSecretRef)
+		if err != nil {
+			return false, err
+		}
+		state.ObserverRPCSecretRef = ref
+	}
 	state.PolicyDigest = policy
 	report := &corev1.ConfigMap{
 		ObjectMeta: objectMeta(p, "report-"+strings.TrimPrefix(policy, "sha256:"), api.RoleSupport),
@@ -64,6 +71,9 @@ func (r *Reconciler) configuration(
 		ControlCredentials: *state.RPCSecretRef,
 		ActorCredentials:   *state.ActorRPCSecretRef,
 		Report:             objectref.ConfigMap(report),
+	}
+	if observerEnabled(p) {
+		in.ObserverCredentials = state.ObserverRPCSecretRef
 	}
 	in.Customization = p.Status.Admission.Configuration.BitcoinNode.Config
 	if in.Customization != nil {

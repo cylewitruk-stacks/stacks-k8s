@@ -8,7 +8,8 @@ for the GreptimeDB backend, collection policy, queries and cleanup.
 selects the installation namespace. Roles are namespaced. The manager can manage
 recording Deployments, DaemonSets, ConfigMaps, ServiceAccounts and Roles only there;
 ownership checks prevent adoption. Source Pods and protocol resources
-are read-only. No Secret API access is granted. Backend credentials are mounted into
+are read-only. Native fault observation covers `NetworkChaos`, `PodChaos` and
+`StressChaos`. No Secret API access is granted. Backend credentials are mounted into
 scoped recorder/collector workloads. The recorder status Role names its exact telemetry
 resource. No ClusterRole or cluster-wide mutation permission is installed.
 
@@ -22,6 +23,9 @@ and does not use privileged mode or host networking. Metrics-only collectors run
 non-root with an ephemeral queue volume and no host mounts. The one-shot
 `NetworkObservation` also reads Services and StatefulSets. An unenrolled installation
 namespace receives only readiness and leader-election permissions.
+Every admitted `NetworkTelemetry` recorder reads namespace-scoped PodMetrics and
+retains CPU/memory samples for exact actor Pod and participant UIDs. This remains
+enabled when logs or native metrics are disabled and requires Metrics Server.
 
 ## Optional backend and dashboard
 

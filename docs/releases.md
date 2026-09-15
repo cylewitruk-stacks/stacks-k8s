@@ -62,3 +62,18 @@ images. Publish `libs/stacks` before consumers that require its module version.
 Unpublished incompatible chart/schema changes require fresh test installations.
 See [installation compatibility](network-operator/migration.md) for explicit CRD
 handling; Helm does not perform API conversion or schema upgrades automatically.
+
+## Prepared 0.2.0 changes
+
+Network and observability charts/appVersions are prepared as 0.2.0; the action operator
+version is unchanged. Development controller image tags remain `dev` until publication.
+The observer pin is declared once in the network chart
+[values.yaml](../charts/stacks-network-operator/values.yaml). Local builds must load that
+image or explicitly override `bitcoinObserverImage`, independently of the controller tag.
+
+Network changes include optional read-only Bitcoin observer sidecars, independent image
+selection and attributed burnchain diagnostic status. Observability changes include
+mandatory actor resource samples, native fault sources, resilient watch reconnection and
+the larger local query profile. Apply generated CRD schema updates explicitly before
+upgrading; Helm does not upgrade bundled CRDs. These are prepared versions, not a claim
+that images or charts have been published.

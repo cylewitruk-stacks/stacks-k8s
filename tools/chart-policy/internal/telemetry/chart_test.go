@@ -12,11 +12,13 @@ import (
 	"path/filepath"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/util/yaml"
 )
@@ -92,6 +94,7 @@ func TestBackendAndDashboardComposition(t *testing.T) {
 			var backend *appsv1.StatefulSet
 			var dashboard *corev1.Service
 			var initializer *batchv1.Job
+			var backendConfig *corev1.ConfigMap
 			for _, object := range objects(t, data) {
 				switch object.GetKind() {
 				case "StatefulSet":
@@ -102,6 +105,12 @@ func TestBackendAndDashboardComposition(t *testing.T) {
 					decode(t, object, initializer)
 				case "Secret":
 					t.Fatal("chart must use an existing credential, not render passwords")
+				case "ConfigMap":
+					config := &corev1.ConfigMap{}
+					decode(t, object, config)
+					if strings.Contains(config.Data["config.toml"], "max_concurrent_queries") {
+						backendConfig = config
+					}
 				case "Service":
 					service := &corev1.Service{}
 					decode(t, object, service)
@@ -116,6 +125,14 @@ func TestBackendAndDashboardComposition(t *testing.T) {
 			}
 			if !mode.enabled {
 				return
+			}
+			backendResources := backend.Spec.Template.Spec.Containers[0].Resources
+			if backendConfig == nil ||
+				!strings.Contains(backendConfig.Data["config.toml"], "memory_pool_size = '1GB'") ||
+				!strings.Contains(backendConfig.Data["config.toml"], "scan_memory_limit = '1GB'") ||
+				backendResources.Requests.Memory().Cmp(resource.MustParse("1Gi")) != 0 ||
+				backendResources.Limits.Memory().Cmp(resource.MustParse("3Gi")) != 0 {
+				t.Fatal("backend query budget and memory envelope differ")
 			}
 			retention := backend.Spec.PersistentVolumeClaimRetentionPolicy
 			if retention.WhenDeleted != appsv1.RetainPersistentVolumeClaimRetentionPolicyType {
@@ -259,5 +276,48 @@ func TestBackendOverrides(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("dashboard service absent")
+	}
+}
+
+// TestBackendBudgetsRemainConfigurable exercises the public values instead of enforcing one envelope.
+func TestBackendBudgetsRemainConfigurable(t *testing.T) {
+	out, err := render(
+		t,
+		"--set",
+		"greptime.enabled=true,greptime.auth.existingSecretName=greptime-auth,"+
+			"greptime.resources.requests.memory=2Gi,greptime.resources.limits.memory=4Gi",
+		"--set-string",
+		"greptime.configToml=[query]\nmemory_pool_size = '2GB'\n[region_engine.mito]\nscan_memory_limit = '2GB'\n",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoder := yaml.NewYAMLOrJSONDecoder(bytes.NewReader(out), 4096)
+	var foundConfig, foundWorkload bool
+	for {
+		var object unstructured.Unstructured
+		if err := decoder.Decode(&object); errors.Is(err, io.EOF) {
+			break
+		} else if err != nil {
+			t.Fatal(err)
+		}
+		switch object.GetKind() {
+		case "ConfigMap":
+			config := &corev1.ConfigMap{}
+			decode(t, &object, config)
+			if strings.Contains(config.Data["config.toml"], "memory_pool_size = '2GB'") &&
+				strings.Contains(config.Data["config.toml"], "scan_memory_limit = '2GB'") {
+				foundConfig = true
+			}
+		case "StatefulSet":
+			backend := &appsv1.StatefulSet{}
+			decode(t, &object, backend)
+			resources := backend.Spec.Template.Spec.Containers[0].Resources
+			foundWorkload = resources.Requests.Memory().Cmp(resource.MustParse("2Gi")) == 0 &&
+				resources.Limits.Memory().Cmp(resource.MustParse("4Gi")) == 0
+		}
+	}
+	if !foundConfig || !foundWorkload {
+		t.Fatal("backend budget overrides ignored")
 	}
 }

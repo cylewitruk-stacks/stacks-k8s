@@ -6,8 +6,11 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
+
+	common "github.com/cylewitruk-stacks/stacks-k8s/apis/network/common/v1alpha2"
 
 	api "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha2"
 	corev1 "k8s.io/api/core/v1"
@@ -155,5 +158,36 @@ func TestCachedInventoryContinuationDoesNotBlockBootstrap(t *testing.T) {
 		current.Message != completed.Message ||
 		!current.LastTransitionTime.Equal(&completed.LastTransitionTime) {
 		t.Fatalf("operation edit lost or made bootstrap completion stale: %+v", current)
+	}
+	// Prove generated status schema preserves independently attributed samples and removes them.
+	sample := &api.BurnHeightSample{
+		Participant:         common.Binding{Kind: "StacksNetworkParticipant", Name: "btc", UID: "participant"},
+		Pod:                 common.Binding{Kind: "Pod", Name: "btc-0", UID: "pod"},
+		ContainerID:         "containerd://process",
+		ConfigurationDigest: "config",
+		Height:              1000,
+		FirstObservedAt:     metav1.NewTime(time.Now().Truncate(time.Second)),
+	}
+	root.Status.BurnchainObservations = &api.BurnchainObservations{Bitcoin: sample}
+	if err := direct.Status().Update(ctx, root); err != nil {
+		t.Fatal(err)
+	}
+	if err := direct.Get(ctx, client.ObjectKeyFromObject(root), root); err != nil {
+		t.Fatal(err)
+	}
+	if root.Status.BurnchainObservations == nil ||
+		!reflect.DeepEqual(root.Status.BurnchainObservations.Bitcoin, sample) ||
+		root.Status.BurnchainObservations.Miner != nil {
+		t.Fatal("diagnostic identity or source time pruned")
+	}
+	root.Status.BurnchainObservations = nil
+	if err := direct.Status().Update(ctx, root); err != nil {
+		t.Fatal(err)
+	}
+	if err := direct.Get(ctx, client.ObjectKeyFromObject(root), root); err != nil {
+		t.Fatal(err)
+	}
+	if root.Status.BurnchainObservations != nil {
+		t.Fatal("unavailable diagnostic retained")
 	}
 }

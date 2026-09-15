@@ -258,10 +258,11 @@ func RecorderRules(name string) []rbacv1.PolicyRule {
 			Verbs:     []string{"get", "list", "watch"},
 		},
 		{
-			APIGroups: []string{"chaos-mesh.org"},
-			Resources: []string{"networkchaos"},
+			APIGroups: []string{ChaosAPIGroup},
+			Resources: ChaosResources(),
 			Verbs:     []string{"get", "list", "watch"},
 		},
+		{APIGroups: []string{MetricsAPIGroup}, Resources: []string{"pods"}, Verbs: []string{"list"}},
 		{APIGroups: []string{""}, Resources: []string{"pods", "events"}, Verbs: []string{"get", "list", "watch"}},
 	}
 }

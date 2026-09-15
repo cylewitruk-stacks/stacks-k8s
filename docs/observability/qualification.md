@@ -114,6 +114,44 @@ under race detection verify both directions preserve unrelated Pod fields and de
 The deployed image and live results above predate this narrowing; no additional
 live rollout or protocol qualification was performed for it.
 
+## Actor-resource and scrape qualification — 2026-09-15
+
+The shared three-node cluster ran
+`stacks-observability-operator:followup-final-20260915` for network UID
+`3aeea8a6-4adf-4454-84fa-65f76aa1a854` and telemetry UID
+`f2d502b9-424c-4382-a2e4-9a4e6f9d1662`. The recorder's PodMetrics Role contained
+only namespace-scoped `list`; the backend requested 1 GiB, was limited to 3 GiB
+and rendered separate 1 GB shared query-execution and scan pools.
+
+The first 10,000 retained object rows contained 371 `ContainerResource` records
+after namespace deletion. Each record carried exact participant and Pod UIDs plus
+container CPU, memory, Metrics Server timestamp and window. This bounded result
+proves collection, not total sample cardinality.
+
+The shared `up` table contained 25–32 current-recording samples for each of three
+Stacks nodes and two signers. Their mean timestamp spacing was exactly three
+seconds. Every actor reached `up=1`; one signer node retained its startup `0→1`
+transition. Native scrape availability remains separate from protocol progress.
+
+An earlier 138-second live probe crossed the API server's normal watch timeout
+without increasing the Event source's initial gap count. The final lifecycle later
+recorded a second Event gap when the requested resource history was unavailable,
+then continued from a fresh snapshot. Unit tests distinguish normal closure from
+expired history. Evidence is under `/tmp/stacks-followup-20260915/` and
+`/tmp/stacks-followup-qualified-20260915/`.
+
+## Native fault-source follow-up — 2026-09-15
+
+The adversarial recording for network UID
+`fe2e4cc2-5597-4f22-883e-8f672f7845e1` used a recorder image with the shared
+NetworkChaos, PodChaos and StressChaos source allowlist. Its namespace Role contained
+only those three Chaos Mesh resources. No-target probes with PodChaos UID
+`d48ab3ea-3402-4af7-92eb-0548476c2d40` and StressChaos UID
+`9ff0acd7-f4c6-47e9-8173-ed6f4214b316` produced exact `ADDED` and `MODIFIED` rows in
+Greptime without selecting an actor. This proves source/RBAC/ingestion coverage, not
+fault injection or protocol recovery. The related real fault experiment is documented
+in [the experiment report](../experiments/bitcoin-split-anchor-stall.md).
+
 ## Initial delivery cleanup
 
 All qualification namespaces, native admission objects and twelve UID-specific

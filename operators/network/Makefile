@@ -29,7 +29,7 @@ test-sdk:
 
 .PHONY: test-cli
 test-cli:
-	@set -eu; for command in foundation stacks-worker; do \
+	@set -eu; for command in foundation stacks-worker bitcoin-observer; do \
 		$(GO_ISOLATED) run ./cmd/$$command --help >/dev/null 2>&1; \
 	done
 

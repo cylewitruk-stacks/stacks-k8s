@@ -1,6 +1,12 @@
 package bitcoinrpc
 
 const (
+	// MethodGetNetworkInfo identifies the getnetworkinfo RPC method.
+	MethodGetNetworkInfo = "getnetworkinfo"
+	// MethodGetMempoolInfo identifies the getmempoolinfo RPC method.
+	MethodGetMempoolInfo = "getmempoolinfo"
+	// MethodGetNetTotals identifies the getnettotals RPC method.
+	MethodGetNetTotals = "getnettotals"
 	// MethodGetBlockchainInfo identifies the getblockchaininfo RPC method.
 	MethodGetBlockchainInfo = "getblockchaininfo"
 	// MethodGetBlockHash identifies the getblockhash RPC method.
@@ -48,4 +54,16 @@ const (
 	ChainTipActive = "active"
 	// ChainTipInvalid identifies a tip excluded by Core validation or invalidation.
 	ChainTipInvalid = "invalid"
+)
+
+// Native branch classifications returned by getchaintips.
+const (
+	// ChainTipValidFork identifies the valid-fork native branch state.
+	ChainTipValidFork = "valid-fork"
+	// ChainTipValidHeaders identifies the valid-headers native branch state.
+	ChainTipValidHeaders = "valid-headers"
+	// ChainTipHeadersOnly identifies the headers-only native branch state.
+	ChainTipHeadersOnly = "headers-only"
+	// ChainTipUnknown identifies the unknown native branch state.
+	ChainTipUnknown = "unknown"
 )

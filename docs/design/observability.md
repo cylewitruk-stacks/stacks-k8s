@@ -24,7 +24,8 @@ future run.
 
 `NetworkObservation` is a one-shot identity snapshot against the public participant
 API. `NetworkTelemetry` in `observation.stacks.org/v1alpha2` continuously records
-public Kubernetes facts, logs, native metrics and collection health in GreptimeDB.
+public Kubernetes facts, logs, native metrics, actor-container CPU/memory and
+collection health in GreptimeDB.
 Neither grants mutation authority over observed networks or protocol actors.
 
 See the [continuous telemetry guide](../observability/README.md) for the served
@@ -38,9 +39,9 @@ defines how these optional resources relate to network instances.
 | --- | --- | --- |
 | `NetworkObservation` | CRD | One-shot identity verification. |
 | `NetworkTelemetry` | CRD | Exact-UID continuous recording and bounded status. |
-| GreptimeDB | Independently installed backend | Retained logs, public object observations and native metrics; read-only HTTP SQL. |
+| GreptimeDB | Optional bundled or independently installed backend | Retained logs, public object observations, native metrics and container-resource samples; read-only HTTP SQL. |
 | OTel collectors | Telemetry-owned DaemonSet | Node-local file collection, scraping and persistent bounded export queues. |
-| Go recorder | Telemetry-owned Deployment | Allowlisted list/watch sources, redaction, explicit gaps and recorder/collector health. |
+| Go recorder | Telemetry-owned Deployment | Allowlisted list/watch and Metrics API reads, redaction, explicit gaps and recorder/collector health. |
 | `EvidenceExport` and query Service | Future resources | Bounded export and a narrower agent query interface, if needed beyond backend-native SQL. |
 
 ## `NetworkTelemetry`
@@ -79,7 +80,7 @@ server-side apply payloads with fixed field managers. No data stream is kept in 
 
 `NetworkResolved` binds initial admission. `WorkloadsReady` describes the recorder
 and collectors, independently of protocol health. Source reasons distinguish missing
-optional APIs, access denial, failed reads and interrupted watches. Freshness is
+optional APIs, access denial, failed reads and unavailable watch history. Freshness is
 explicit; old status is never evidence of current collection health.
 
 ### Reconciliation, ownership, and mutability
@@ -99,9 +100,12 @@ backend retains already acknowledged records until its retention policy applies.
 
 Managers have workload/RBAC management only in explicitly enrolled namespaces and
 check ownership before every write. Recorder identities have allowlisted public
-resource reads and name-scoped telemetry status writes. Node collectors read Pod
+resource and namespace-scoped PodMetrics reads plus name-scoped telemetry status
+writes. Node collectors read Pod
 metadata only. No component reads actor Secrets; backend credentials are mounted by
 the kubelet from administrator-provisioned Secrets.
+The optional Chaos Mesh object allowlist covers `NetworkChaos`, `PodChaos` and
+`StressChaos`; each remains an independently reported source.
 
 Public-object projection removes annotations, configuration payloads, Pod environment
 and private field classes. A fixed text policy redacts recognized credential-bearing
@@ -121,7 +125,8 @@ compatible schemas/TTLs; ingestion hints do not update existing table options.
 ### Source coverage
 
 The first slice reports conservative capture boundaries, not a lossless journal.
-Each recorder start, watch reconnect and observed export failure can introduce a gap.
+Each recorder start, expired watch history and observed export failure can introduce
+a gap. Ordinary watch closure resumes from the last object or bookmark resource version.
 Collector restarts/failure counters and missing node coverage provide additional
 source evidence. Heartbeats record recent activity, never a coverage classification. A source gap
 may have an unknown start and does not quantify missing records. Current-state
@@ -381,8 +386,9 @@ API-server proxy; the proxy serves bounded queries, manifests, and previews.
 The served profile requires the network API for initial recording admission. Optional
 action/Chaos sources use namespace-scoped dynamic list/watch requests against the
 pinned GVR allowlist. Missing or forbidden APIs report `APINotInstalled` or
-`AccessDenied` and retry once per minute; other interruptions re-list after five
-seconds with a capture gap. Neither requires optional CRDs to start the manager.
+`AccessDenied` and retry once per minute. Ordinary interruptions reconnect from the
+last observed resource version; expired history causes a marked re-list. Neither
+requires optional CRDs to start the manager.
 This is bounded polling of known APIs, not arbitrary version discovery. Supporting
 another API version requires a reviewed source and decoding change.
 

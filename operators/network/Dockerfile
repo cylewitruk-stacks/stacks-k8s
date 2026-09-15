@@ -34,8 +34,12 @@ RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -trimpath -ldflags='-s -w' -o /stacks-worker ./cmd/stacks-worker
 
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -trimpath -ldflags='-s -w' -o /bitcoin-observer ./cmd/bitcoin-observer
+
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=builder /foundation /foundation
+COPY --from=builder /bitcoin-observer /bitcoin-observer
 COPY --from=builder /stacks-worker /stacks-worker
 COPY --from=builder /protocol /protocol
 COPY --from=builder /licenses /licenses

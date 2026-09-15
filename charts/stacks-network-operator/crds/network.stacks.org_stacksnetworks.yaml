@@ -773,6 +773,22 @@ spec:
                                   - IfNotPresent
                                   - Never
                                   type: string
+                                observer:
+                                  description: Observer enables the optional network-owned
+                                    read-only RPC exporter; omission disables it.
+                                  properties:
+                                    enabled:
+                                      description: Enabled starts the metrics and
+                                        structured-log sidecar; omission is false.
+                                      type: boolean
+                                    intervalSeconds:
+                                      description: IntervalSeconds separates completed
+                                        polls; omission uses 10 seconds.
+                                      format: int32
+                                      maximum: 300
+                                      minimum: 5
+                                      type: integer
+                                  type: object
                                 peers:
                                   description: Peers supplies startup seed hints.
                                   properties:
@@ -2484,6 +2500,22 @@ spec:
                               - IfNotPresent
                               - Never
                               type: string
+                            observer:
+                              description: Observer enables the optional network-owned
+                                read-only RPC exporter; omission disables it.
+                              properties:
+                                enabled:
+                                  description: Enabled starts the metrics and structured-log
+                                    sidecar; omission is false.
+                                  type: boolean
+                                intervalSeconds:
+                                  description: IntervalSeconds separates completed
+                                    polls; omission uses 10 seconds.
+                                  format: int32
+                                  maximum: 300
+                                  minimum: 5
+                                  type: integer
+                              type: object
                             peers:
                               description: Peers supplies startup seed hints.
                               properties:
@@ -4031,6 +4063,167 @@ spec:
                     - kind
                     - name
                     - uid
+                    type: object
+                type: object
+              burnchainObservations:
+                description: BurnchainObservations contains independent height samples,
+                  never a health gate.
+                properties:
+                  bitcoin:
+                    description: Bitcoin is the greatest fresh height among selected
+                      ready Bitcoin actors.
+                    properties:
+                      configurationDigest:
+                        description: ConfigurationDigest identifies the public runtime
+                          configuration.
+                        maxLength: 71
+                        type: string
+                      containerID:
+                        description: ContainerID identifies the exact actor process.
+                        maxLength: 256
+                        type: string
+                      firstObservedAt:
+                        description: |-
+                          FirstObservedAt is the first source observation in the currently retained sequence
+                          of equal height and identity. It is not a freshness timestamp or proof of continuous observation.
+                        format: date-time
+                        type: string
+                      height:
+                        description: Height is the observed Bitcoin or processed burn
+                          height.
+                        format: int64
+                        type: integer
+                      participant:
+                        description: Participant identifies the admitted instance.
+                        properties:
+                          fingerprint:
+                            description: Fingerprint identifies public content when
+                              relevant.
+                            type: string
+                          kind:
+                            description: Kind identifies the API kind or participant
+                              kind.
+                            type: string
+                          name:
+                            description: Name is the public resource name.
+                            type: string
+                          uid:
+                            description: UID prevents same-name replacement from inheriting
+                              authority.
+                            type: string
+                        required:
+                        - kind
+                        - name
+                        - uid
+                        type: object
+                      pod:
+                        description: Pod identifies the observed workload.
+                        properties:
+                          fingerprint:
+                            description: Fingerprint identifies public content when
+                              relevant.
+                            type: string
+                          kind:
+                            description: Kind identifies the API kind or participant
+                              kind.
+                            type: string
+                          name:
+                            description: Name is the public resource name.
+                            type: string
+                          uid:
+                            description: UID prevents same-name replacement from inheriting
+                              authority.
+                            type: string
+                        required:
+                        - kind
+                        - name
+                        - uid
+                        type: object
+                    required:
+                    - configurationDigest
+                    - containerID
+                    - firstObservedAt
+                    - height
+                    - participant
+                    - pod
+                    type: object
+                  miner:
+                    description: Miner is the greatest fresh processed burn height
+                      among selected verified unsuspended miners.
+                    properties:
+                      configurationDigest:
+                        description: ConfigurationDigest identifies the public runtime
+                          configuration.
+                        maxLength: 71
+                        type: string
+                      containerID:
+                        description: ContainerID identifies the exact actor process.
+                        maxLength: 256
+                        type: string
+                      firstObservedAt:
+                        description: |-
+                          FirstObservedAt is the first source observation in the currently retained sequence
+                          of equal height and identity. It is not a freshness timestamp or proof of continuous observation.
+                        format: date-time
+                        type: string
+                      height:
+                        description: Height is the observed Bitcoin or processed burn
+                          height.
+                        format: int64
+                        type: integer
+                      participant:
+                        description: Participant identifies the admitted instance.
+                        properties:
+                          fingerprint:
+                            description: Fingerprint identifies public content when
+                              relevant.
+                            type: string
+                          kind:
+                            description: Kind identifies the API kind or participant
+                              kind.
+                            type: string
+                          name:
+                            description: Name is the public resource name.
+                            type: string
+                          uid:
+                            description: UID prevents same-name replacement from inheriting
+                              authority.
+                            type: string
+                        required:
+                        - kind
+                        - name
+                        - uid
+                        type: object
+                      pod:
+                        description: Pod identifies the observed workload.
+                        properties:
+                          fingerprint:
+                            description: Fingerprint identifies public content when
+                              relevant.
+                            type: string
+                          kind:
+                            description: Kind identifies the API kind or participant
+                              kind.
+                            type: string
+                          name:
+                            description: Name is the public resource name.
+                            type: string
+                          uid:
+                            description: UID prevents same-name replacement from inheriting
+                              authority.
+                            type: string
+                        required:
+                        - kind
+                        - name
+                        - uid
+                        type: object
+                    required:
+                    - configurationDigest
+                    - containerID
+                    - firstObservedAt
+                    - height
+                    - participant
+                    - pod
                     type: object
                 type: object
               conditions:

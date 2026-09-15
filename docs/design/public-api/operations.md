@@ -105,7 +105,7 @@ resolved imageIDs belong in status/evidence. The following artifacts are require
 | Stacks protocol worker OCI image | One Pod per stacker, faucet, transaction producer or contract set; one Go binary with explicit role entrypoints. Watches admitted CR state, queries/signs/submits through libs/stacks, and owns in-memory nonce/protocol state. Pinned real sBTC/direct-manager sources included. No topology or workload management. |
 | Bitcoin control worker OCI image | One Deployment per BitcoinNode. Go wallet/RPC execution, scoped Kubernetes execution records and retained Bitcoin uncertainty semantics. May share a release/build with the network image but remains an explicit runtime entrypoint. |
 | Bitcoin Core | `bitcoin/bitcoin:31.1`, qualified platform digest in release profile. Ten Core Pods in the example. |
-| Stacks node and consensus signer | Independently selectable OCI images exposing `stacks-node start --config` and `stacks-signer run --config`. Example uses the locally built `stacks-core:4.0.1-pox5`; this tag is not a public registry promise. |
+| Stacks node and consensus signer | Independently selectable OCI images exposing `stacks-node start --config` and `stacks-signer run --config`. Defaults use the official `ghcr.io/stacks-network/stacks-core:4.0.3` and `ghcr.io/stacks-network/stacks-signer:4.0.3` images. |
 | Action operator OCI image | Independently versioned Go lifecycle controller Deployment, optional. |
 | Observability controller/collector OCI images | Independently versioned Go controller and collector/query/export entrypoints, optional. No signing material. |
 | Chaos Mesh/Headlamp/Metrics Server | Existing independently pinned upstream installation artifacts; not built into the network image. |
@@ -423,3 +423,9 @@ resolution; [Job retry semantics](https://kubernetes.io/docs/concepts/workloads/
 are deliberately not used as transaction-recovery semantics. Non-restarting owned
 management Pods are the explicit consequence of this test profile's crash contract,
 not a general recommendation for resilient production services.
+
+### Burnchain diagnostic samples
+
+The aggregate projects independent height observations into
+`status.burnchainObservations`; it does not infer a stall from their difference.
+See the [selection, freshness and health boundary](lifecycle.md#operational-condition).

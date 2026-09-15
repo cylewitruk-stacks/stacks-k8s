@@ -56,14 +56,23 @@ func main() {
 	)
 	input := flag.String("input", "", "public resolver binding JSON")
 	inputFile := flag.String("input-file", "", "bounded public configuration resolver request file")
-	image := flag.String("resolver-image", "", "image used for scoped identity resolver Jobs")
+	image := flag.String(
+		"resolver-image",
+		"",
+		"image for scoped resolver Jobs and capability workers",
+	)
+	observerImage := flag.String(
+		"bitcoin-observer-image",
+		"",
+		"required in controller mode: independently pinned Bitcoin observer sidecar image",
+	)
 	health := flag.String("health-probe-bind-address", ":8081", "health/readiness listen address")
 	leader := flag.Bool("leader-elect", true, "use leader election for controller replicas")
 	flag.Parse()
 	ctrl.SetLogger(zap.New())
 	request, err := publicInput(*mode, *input, *inputFile)
 	if err == nil {
-		err = run(ctrl.SetupSignalHandler(), *mode, request, *image, *health, *leader, actions)
+		err = run(ctrl.SetupSignalHandler(), *mode, request, *image, *observerImage, *health, *leader, actions)
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -71,7 +80,15 @@ func main() {
 	}
 }
 
-func run(ctx context.Context, mode, input, image, health string, leader bool, enabled actionOptions) error {
+func run(
+	ctx context.Context,
+	mode, input, image, observerImage, health string,
+	leader bool,
+	enabled actionOptions,
+) error {
+	if mode == foundation.ModeController && (image == "" || observerImage == "") {
+		return fmt.Errorf("controller requires --resolver-image and --bitcoin-observer-image")
+	}
 	scheme := runtime.NewScheme()
 	for _, add := range []func(*runtime.Scheme) error{
 		clientgoscheme.AddToScheme,
@@ -135,8 +152,8 @@ func run(ctx context.Context, mode, input, image, health string, leader bool, en
 		}
 		return bitcoincontrol.RunWorker(ctx, c, c, binding)
 	}
-	if mode != foundation.ModeController || image == "" {
-		return fmt.Errorf("controller requires --resolver-image")
+	if mode != foundation.ModeController {
+		return fmt.Errorf("unsupported controller mode")
 	}
 	manager, err := ctrl.NewManager(
 		config,
@@ -214,6 +231,7 @@ func run(ctx context.Context, mode, input, image, health string, leader bool, en
 			Client:        manager.GetClient(),
 			Reader:        manager.GetAPIReader(),
 			ResolverImage: image,
+			ObserverImage: observerImage,
 			Kind:          kind,
 		}
 		if kind == api.ParticipantBitcoinNode {

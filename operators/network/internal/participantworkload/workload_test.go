@@ -218,7 +218,7 @@ func TestResolverRetriesKeepExactCredentialsAndPublicReport(t *testing.T) {
 					t.Fatal("private RPC credential escaped into public/server material")
 				}
 			}
-			rendered, err := renderConfig(input.Seeds, actor, control)
+			rendered, err := renderConfig(input.Seeds, actor, control, nil)
 			if err != nil || rendered != string(config.Data["bitcoin.conf"]) {
 				t.Fatalf("configuration rendering is not deterministic: %v", err)
 			}

@@ -33,6 +33,12 @@ type Reconciler struct {
 
 // Reconcile advances runtime allocation independently of unrelated composition errors.
 func (r *Reconciler) Reconcile(ctx context.Context, root *api.StacksNetwork) (result ctrl.Result, reconcileErr error) {
+	operationProjected := false
+	defer func() {
+		if !operationProjected {
+			root.Status.BurnchainObservations = nil
+		}
+	}()
 	// Completion describes immutable bootstrap history and remains valid when
 	// mutable membership or operation changes; it does not re-run the gates.
 	if initialized := meta.FindStatusCondition(
@@ -309,6 +315,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, root *api.StacksNetwork) (re
 		}
 	}
 
+	operationProjected = true
 	if err := r.projectOperation(ctx, root, participants.Items, time.Now()); err != nil {
 		set(
 			root,

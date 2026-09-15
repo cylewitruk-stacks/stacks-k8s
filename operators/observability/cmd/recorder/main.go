@@ -14,6 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/metadata"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -59,12 +60,23 @@ func run(ctx context.Context, namespace, name, uid string, generation int64) err
 	if err != nil {
 		return err
 	}
+	m, err := metadata.NewForConfig(config)
+	if err != nil {
+		return err
+	}
 	exporter, err := recorder.NewExporter(os.Getenv("GREPTIME_ENDPOINT"), os.Getenv("GREPTIME_AUTH"),
 		telemetry.TablePrefix(t)+"_objects", t.Spec.Retention.Window)
 	if err != nil {
 		return err
 	}
-	r := recorder.Recorder{Dynamic: d, Client: c, Telemetry: t, PodUID: types.UID(os.Getenv("POD_UID")), Sink: exporter}
+	r := recorder.Recorder{
+		Metadata:  m,
+		Dynamic:   d,
+		Client:    c,
+		Telemetry: t,
+		PodUID:    types.UID(os.Getenv("POD_UID")),
+		Sink:      exporter,
+	}
 	return r.Run(ctx)
 }
 

@@ -114,14 +114,14 @@ func TestDocumentedQueries(t *testing.T) {
 		if len(rows) == 0 {
 			t.Fatalf("query %d did not answer a populated fixture", i+1)
 		}
-		if i == 7 {
+		if strings.Contains(query, "WITH versions AS") {
 			for _, row := range rows {
 				if version, ok := row[2].(string); !ok || version == "" {
 					t.Fatal("dedup query omitted resourceVersion")
 				}
 			}
 		}
-		if i == 4 {
+		if strings.Contains(query, "FROM up") {
 			found := false
 			for _, row := range rows {
 				if row[0] == values["participant-uid"] && row[2] == float64(0) && row[3] == float64(1) {

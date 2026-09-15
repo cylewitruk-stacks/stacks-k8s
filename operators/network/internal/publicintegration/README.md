@@ -63,7 +63,7 @@ operator selects its fixed worker image; this test does not change that profile.
 | `STACKS_PUBLIC_FRESH_JOIN` | Disabled | Set `1` for a new-storage follower joining after PoX-5 initialization, matching the cohort's canonical tip and advancing in the same process. Exclusive with the actor lifecycle/upgrade options. |
 | `STACKS_PUBLIC_VARIANT` | `minimal14` | Select `minimal14` or `full30`. |
 | `STACKS_PUBLIC_FIXTURE` | Documented YAML | Optional YAML or Kubernetes JSON `List`; `/tmp/stacks-iteration2-first-fixture.json` is supported when present. |
-| `STACKS_PUBLIC_CADENCE` | `5s` | Explicit fixed Bitcoin cadence; no automatic acceleration. |
+| `STACKS_PUBLIC_CADENCE` | `5s` | Explicit qualification cadence, overriding the product's 60s default; no automatic acceleration. |
 | `STACKS_PUBLIC_TIMEOUT` | `45m` | Total normal lifecycle observation budget. |
 | `STACKS_PUBLIC_PROGRESS_TIMEOUT` | `5m` | Progress, pause acknowledgement and operator rollout bound. |
 | `STACKS_PUBLIC_PAUSE_WINDOW` | `20s` | Observation after cooperative pause acknowledgement. |

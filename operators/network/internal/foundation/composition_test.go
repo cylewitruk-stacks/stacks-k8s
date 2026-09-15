@@ -1,14 +1,84 @@
 package foundation
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
+	bitcoin "github.com/cylewitruk-stacks/stacks-k8s/apis/network/bitcoin/v1alpha2"
 	common "github.com/cylewitruk-stacks/stacks-k8s/apis/network/common/v1alpha2"
 	stacks "github.com/cylewitruk-stacks/stacks-k8s/apis/network/stacks/v1alpha2"
 	api "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha2"
 	"k8s.io/utils/ptr"
 )
+
+func TestBitcoinProductionScheduleDefaultAndExplicitSources(t *testing.T) {
+	fixed := func(interval common.Duration) *bitcoin.BitcoinBlockScheduleSpec {
+		return &bitcoin.BitcoinBlockScheduleSpec{
+			Cadence: bitcoin.Cadence{Mode: bitcoin.CadenceFixed, Interval: &interval},
+		}
+	}
+	for _, tc := range []struct {
+		name  string
+		input bitcoin.BitcoinBlockProductionSpec
+		want  bitcoin.BitcoinBlockProductionSpec
+	}{
+		{name: "omitted", want: bitcoin.BitcoinBlockProductionSpec{Schedule: fixed("60s")}},
+		{
+			name:  "inline",
+			input: bitcoin.BitcoinBlockProductionSpec{Schedule: fixed("5s")},
+			want:  bitcoin.BitcoinBlockProductionSpec{Schedule: fixed("5s")},
+		},
+		{
+			name:  "reference",
+			input: bitcoin.BitcoinBlockProductionSpec{ScheduleRef: &common.NameRef{Name: "custom"}},
+			want:  bitcoin.BitcoinBlockProductionSpec{ScheduleRef: &common.NameRef{Name: "custom"}},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := Compose(
+				&api.StacksNetwork{},
+				api.Participant{Kind: api.ParticipantBitcoinBlockProduction},
+				tc.input,
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(got.BitcoinBlockProduction, &tc.want) {
+				t.Fatalf("production schedule: got %+v, want %+v", got.BitcoinBlockProduction, tc.want)
+			}
+		})
+	}
+}
+
+func TestActorImageDefaultsUseCurrentOfficialReleases(t *testing.T) {
+	for _, tc := range []struct {
+		kind api.ParticipantKind
+		want string
+	}{
+		{api.ParticipantBitcoinNode, "bitcoin/bitcoin:31.1"},
+		{api.ParticipantStacksNode, "ghcr.io/stacks-network/stacks-core:4.0.3"},
+		{api.ParticipantStacksSigner, "ghcr.io/stacks-network/stacks-signer:4.0.3"},
+	} {
+		got, err := Compose(&api.StacksNetwork{}, api.Participant{Kind: tc.kind}, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var image *string
+		//nolint:exhaustive // The table deliberately contains only actor kinds with image defaults.
+		switch tc.kind {
+		case api.ParticipantBitcoinNode:
+			image = got.BitcoinNode.Image
+		case api.ParticipantStacksNode:
+			image = got.StacksNode.Image
+		case api.ParticipantStacksSigner:
+			image = got.StacksSigner.Image
+		}
+		if image == nil || *image != tc.want {
+			t.Fatalf("%s default image: got %v, want %s", tc.kind, image, tc.want)
+		}
+	}
+}
 
 func TestCompositionPrecedenceAndAlternatives(t *testing.T) {
 	root := &api.StacksNetwork{

@@ -40,6 +40,8 @@ type Reconciler struct {
 	Reader client.Reader
 	// ResolverImage provides the scoped configuration entrypoint.
 	ResolverImage string
+	// ObserverImage pins the Bitcoin sidecar independently of resolver/operator rollouts.
+	ObserverImage string
 	// ProtocolClient optionally supplies the bounded native read-only observer.
 	ProtocolClient func(string) (StacksProtocolRPC, error)
 	// BeforeStop drains the node's control executor before terminal shutdown or disposal.
@@ -337,6 +339,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.
 	}
 	workload, err := actorWorkload(&p, &state)
 	if err != nil {
+		return finish(metav1.ConditionFalse, api.ReasonInvalidConfiguration, err.Error())
+	}
+	if err := attachObserver(&p, &state, workload, r.ObserverImage); err != nil {
 		return finish(metav1.ConditionFalse, api.ReasonInvalidConfiguration, err.Error())
 	}
 	if err := r.reconcileStatefulSet(ctx, &p, workload); err != nil {

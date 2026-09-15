@@ -9,12 +9,14 @@ WHERE network_uid = '<network-uid>'
   AND source = 'stacksnetworkparticipants.network.stacks.org/v1alpha2'
 ORDER BY timestamp LIMIT 200;
 
--- Native fault lifecycle and selected actor UIDs; inspect the redacted spec/status.
+-- Qualified native fault lifecycles and selected actor UIDs; inspect the redacted spec/status.
 SELECT timestamp, event_type, object_uid, body
 FROM <prefix>_objects
 WHERE network_uid = '<network-uid>'
   AND timestamp >= '<from>' AND timestamp < '<to>'
-  AND source = 'networkchaos.chaos-mesh.org/v1alpha1'
+  AND source IN ('networkchaos.chaos-mesh.org/v1alpha1',
+                 'podchaos.chaos-mesh.org/v1alpha1',
+                 'stresschaos.chaos-mesh.org/v1alpha1')
 ORDER BY timestamp LIMIT 200;
 
 -- Coverage failures are evidence, not assertions that the actor failed.
@@ -49,6 +51,19 @@ FROM <prefix>_logs
 WHERE network_uid = '<network-uid>'
   AND timestamp >= '<from>' AND timestamp < '<to>'
 ORDER BY timestamp LIMIT 200;
+
+-- Actor container CPU/memory samples. Metrics Server controls the source interval;
+-- repeated source timestamps are deduplicated before export.
+SELECT timestamp, participant_uid, pod_uid,
+       json_get_float(parse_json(body), '$.cpuCores') AS cpu_cores,
+       json_get_int(parse_json(body), '$.memoryBytes') AS memory_bytes,
+       json_get_string(parse_json(body), '$.container') AS container
+FROM <prefix>_objects
+WHERE network_uid = '<network-uid>'
+  AND participant_uid = '<participant-uid>'
+  AND timestamp >= '<from>' AND timestamp < '<to>'
+  AND source = 'container-resource' AND event_type = 'ContainerResource'
+ORDER BY timestamp LIMIT 500;
 
 -- Preserve observation order when investigating a stall or height reversal.
 SELECT greptime_timestamp, pod_uid, greptime_value AS reported_height

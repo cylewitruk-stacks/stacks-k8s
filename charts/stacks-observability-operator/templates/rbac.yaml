@@ -49,8 +49,11 @@ rules:
     resources: ["bitcoinblockgenerations", "bitcoinreorganizations"]
     verbs: ["get", "list", "watch"]
   - apiGroups: ["chaos-mesh.org"]
-    resources: ["networkchaos"]
+    resources: ["networkchaos", "podchaos", "stresschaos"]
     verbs: ["get", "list", "watch"]
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["pods"]
+    verbs: ["list"]
   # Required to set blockOwnerDeletion on recording-owned resources.
   - apiGroups: ["observation.stacks.org"]
     resources: ["networktelemetries/finalizers"]

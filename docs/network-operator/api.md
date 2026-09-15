@@ -23,3 +23,7 @@ Use the [resource reference](../design/public-api/resources.md),
 [Generated CRDs](../../charts/stacks-network-operator/crds/) define served schema
 validation. [Runtime status](public-api-foundation.md#network-status) distinguishes
 resolution, initialization, running operation and protocol health.
+
+`BitcoinNode.spec.observer` optionally enables a network-owned read-only RPC exporter.
+The participant's `status.runtime.observerRPCSecretRef` pins its scoped credential.
+See [Bitcoin observation](bitcoin-observer.md) for settings, lifecycle and metric/log contracts.

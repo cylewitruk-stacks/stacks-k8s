@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cylewitruk-stacks/stacks-k8s/operators/observability/internal/telemetry"
 	appsv1 "k8s.io/api/apps/v1"
 
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -157,7 +158,12 @@ func expectedRules() []rbacv1.PolicyRule {
 			Resources: []string{"bitcoinblockgenerations", "bitcoinreorganizations"},
 			Verbs:     read,
 		},
-		{APIGroups: []string{"chaos-mesh.org"}, Resources: []string{"networkchaos"}, Verbs: read},
+		{
+			APIGroups: []string{telemetry.ChaosAPIGroup},
+			Resources: telemetry.ChaosResources(),
+			Verbs:     read,
+		},
+		{APIGroups: []string{telemetry.MetricsAPIGroup}, Resources: []string{"pods"}, Verbs: []string{"list"}},
 		{
 			APIGroups: []string{"observation.stacks.org"},
 			Resources: []string{"networktelemetries/finalizers"},

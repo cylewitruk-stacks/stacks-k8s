@@ -204,6 +204,7 @@ func (r *Reconciler) publishCandidateBindings(
 	}{
 		{&state.RPCSecretRef, prepared.RPCSecretRef},
 		{&state.ActorRPCSecretRef, prepared.ActorRPCSecretRef},
+		{&state.ObserverRPCSecretRef, prepared.ObserverRPCSecretRef},
 		{&state.EventAuthSecretRef, prepared.EventAuthSecretRef},
 	} {
 		if pair.source == nil {

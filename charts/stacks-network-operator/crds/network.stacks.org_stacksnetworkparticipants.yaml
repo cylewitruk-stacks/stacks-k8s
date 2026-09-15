@@ -308,6 +308,22 @@ spec:
                         - IfNotPresent
                         - Never
                         type: string
+                      observer:
+                        description: Observer enables the optional network-owned read-only
+                          RPC exporter; omission disables it.
+                        properties:
+                          enabled:
+                            description: Enabled starts the metrics and structured-log
+                              sidecar; omission is false.
+                            type: boolean
+                          intervalSeconds:
+                            description: IntervalSeconds separates completed polls;
+                              omission uses 10 seconds.
+                            format: int32
+                            maximum: 300
+                            minimum: 5
+                            type: integer
+                        type: object
                       peers:
                         description: Peers supplies startup seed hints.
                         properties:
@@ -1990,6 +2006,22 @@ spec:
                             - IfNotPresent
                             - Never
                             type: string
+                          observer:
+                            description: Observer enables the optional network-owned
+                              read-only RPC exporter; omission disables it.
+                            properties:
+                              enabled:
+                                description: Enabled starts the metrics and structured-log
+                                  sidecar; omission is false.
+                                type: boolean
+                              intervalSeconds:
+                                description: IntervalSeconds separates completed polls;
+                                  omission uses 10 seconds.
+                                format: int32
+                                maximum: 300
+                                minimum: 5
+                                type: integer
+                            type: object
                           peers:
                             description: Peers supplies startup seed hints.
                             properties:
@@ -4569,6 +4601,28 @@ spec:
                       evaluated.
                     format: int64
                     type: integer
+                  observerRPCSecretRef:
+                    description: ObserverRPCSecretRef pins the read-only Bitcoin observer
+                      credential.
+                    properties:
+                      fingerprint:
+                        description: Fingerprint identifies public content when relevant.
+                        type: string
+                      kind:
+                        description: Kind identifies the API kind or participant kind.
+                        type: string
+                      name:
+                        description: Name is the public resource name.
+                        type: string
+                      uid:
+                        description: UID prevents same-name replacement from inheriting
+                          authority.
+                        type: string
+                    required:
+                    - kind
+                    - name
+                    - uid
+                    type: object
                   podIP:
                     description: PodIP is the native address observed with PodRef
                       and ContainerID.

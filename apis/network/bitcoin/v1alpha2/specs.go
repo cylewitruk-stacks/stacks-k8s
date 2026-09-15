@@ -9,6 +9,8 @@ import common "github.com/cylewitruk-stacks/stacks-k8s/apis/network/common/v1alp
 type BitcoinNodeSpec struct {
 	common.ActorFields  `json:",inline"`
 	common.WorkerFields `json:",inline"`
+	// Observer enables the optional network-owned read-only RPC exporter; omission disables it.
+	Observer *BitcoinObserverSpec `json:"observer,omitempty"`
 	// Peers supplies startup seed hints.
 	Peers *common.Peers `json:"peers,omitempty"`
 	// WalletRefs selects reusable wallet identities loaded by this node.
@@ -16,6 +18,16 @@ type BitcoinNodeSpec struct {
 	// +listType=map
 	// +listMapKey=name
 	WalletRefs *[]common.NameRef `json:"walletRefs,omitempty"`
+}
+
+// BitcoinObserverSpec configures local RPC observation independently of production.
+type BitcoinObserverSpec struct {
+	// Enabled starts the metrics and structured-log sidecar; omission is false.
+	Enabled *bool `json:"enabled,omitempty"`
+	// IntervalSeconds separates completed polls; omission uses 10 seconds.
+	// +kubebuilder:validation:Minimum=5
+	// +kubebuilder:validation:Maximum=300
+	IntervalSeconds *int32 `json:"intervalSeconds,omitempty"`
 }
 
 // WalletKeySource selects one reusable wallet identity.
