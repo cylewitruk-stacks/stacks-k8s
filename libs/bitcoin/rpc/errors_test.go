@@ -1,4 +1,4 @@
-package bitcoinrpc
+package rpc
 
 import (
 	"context"

@@ -20,7 +20,8 @@
 - [Native Chaos Mesh profile](chaos/operations.md)
 - [Contract load and signer-fault experiment](experiments/contract-load-and-faults.md)
 - [Bitcoin split-view and persistent Stacks burnchain stall](experiments/bitcoin-split-anchor-stall.md)
-- [External experiment tools](../tools/stacks-experiment/README.md)
+- [Transaction workloads](../tools/stacks-workload/README.md)
+- [Evidence queries and export](../tools/stacks-evidence/README.md)
 - [Read-only observability operator](../charts/stacks-observability-operator/README.md)
 
 ## Design and development

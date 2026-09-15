@@ -9,7 +9,7 @@ import (
 	action "github.com/cylewitruk-stacks/stacks-k8s/apis/network/actions/v1alpha2"
 	bitcoin "github.com/cylewitruk-stacks/stacks-k8s/apis/network/bitcoin/v1alpha2"
 	api "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha2"
-	bitcoinrpc "github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/bitcoinrpc"
+	bitcoinrpc "github.com/cylewitruk-stacks/stacks-k8s/libs/bitcoin/rpc"
 	"k8s.io/apimachinery/pkg/api/equality"
 )
 

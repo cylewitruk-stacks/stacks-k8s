@@ -1,4 +1,4 @@
-package bitcoinrpc
+package rpc
 
 const (
 	// MethodGetNetworkInfo identifies the getnetworkinfo RPC method.

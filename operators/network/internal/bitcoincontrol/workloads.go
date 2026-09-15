@@ -14,7 +14,7 @@ import (
 	common "github.com/cylewitruk-stacks/stacks-k8s/apis/network/common/v1alpha2"
 	stacks "github.com/cylewitruk-stacks/stacks-k8s/apis/network/stacks/v1alpha2"
 	api "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha2"
-	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/bitcoinrpc"
+	bitcoinrpc "github.com/cylewitruk-stacks/stacks-k8s/libs/bitcoin/rpc"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/foundation"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/naming"
 	appsv1 "k8s.io/api/apps/v1"

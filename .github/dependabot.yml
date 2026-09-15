@@ -64,3 +64,8 @@ updates:
     directory: /libs/stacks
     schedule:
       interval: weekly
+
+  - package-ecosystem: gomod
+    directory: /libs/bitcoin
+    schedule:
+      interval: weekly

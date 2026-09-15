@@ -1,4 +1,4 @@
-module github.com/cylewitruk-stacks/stacks-k8s/tools/stacks-experiment
+module github.com/cylewitruk-stacks/stacks-k8s/tools/stacks-workload
 
 go 1.27.0
 

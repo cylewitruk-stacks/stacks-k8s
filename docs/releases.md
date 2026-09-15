@@ -57,7 +57,7 @@ contracts; do not infer a safe management-worker restart from an operator rollou
 
 `operators/network/transactions` is an offline SDK oracle only. Include its pinned
 test dependencies in repository auditing, but do not package Node.js in runtime
-images. Publish `libs/stacks` before consumers that require its module version.
+images. Publish `libs/stacks` and `libs/bitcoin` before consumers that require their module versions.
 
 Unpublished incompatible chart/schema changes require fresh test installations.
 See [installation compatibility](network-operator/migration.md) for explicit CRD

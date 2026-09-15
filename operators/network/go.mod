@@ -10,6 +10,7 @@ replace github.com/cylewitruk-stacks/stacks-k8s/operators/action => ../action
 // Keep controller-runtime v0.25 aligned with Kubernetes v0.37.
 require (
 	github.com/cylewitruk-stacks/stacks-k8s/apis/network v0.1.0
+	github.com/cylewitruk-stacks/stacks-k8s/libs/bitcoin v0.1.0
 	github.com/cylewitruk-stacks/stacks-k8s/libs/stacks v0.1.0
 	github.com/pelletier/go-toml/v2 v2.4.3
 	github.com/prometheus/client_golang v1.24.1
@@ -83,3 +84,5 @@ require (
 )
 
 replace github.com/cylewitruk-stacks/stacks-k8s/libs/stacks => ../../libs/stacks
+
+replace github.com/cylewitruk-stacks/stacks-k8s/libs/bitcoin => ../../libs/bitcoin

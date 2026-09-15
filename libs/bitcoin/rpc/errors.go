@@ -1,4 +1,4 @@
-package bitcoinrpc
+package rpc
 
 // FailureKind classifies Call failures without exposing transport or server-controlled details.
 type FailureKind string

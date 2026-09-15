@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/bitcoinrpc"
+	bitcoinrpc "github.com/cylewitruk-stacks/stacks-k8s/libs/bitcoin/rpc"
 )
 
 const (

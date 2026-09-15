@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/bitcoinrpc"
+	bitcoinrpc "github.com/cylewitruk-stacks/stacks-k8s/libs/bitcoin/rpc"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )

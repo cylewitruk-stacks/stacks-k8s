@@ -2,7 +2,7 @@
 
 Each operator is independently deployable and versioned, with its own Go module,
 image and chart. Shared Kubernetes types live in `apis/network`; portable protocol
-code lives in `libs/stacks`. Neither contains controller implementations.
+code lives in `libs/stacks` and `libs/bitcoin`. Neither contains controller implementations.
 
 | Component | Responsibility |
 | --- | --- |

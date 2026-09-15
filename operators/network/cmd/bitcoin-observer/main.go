@@ -13,8 +13,8 @@ import (
 	"syscall"
 	"time"
 
+	bitcoinrpc "github.com/cylewitruk-stacks/stacks-k8s/libs/bitcoin/rpc"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/bitcoinobserver"
-	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/bitcoinrpc"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )

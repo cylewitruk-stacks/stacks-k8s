@@ -3,6 +3,7 @@ GOVULNCHECK_VERSION ?= v1.7.0
 GOLANGCI_LINT ?= golangci-lint
 
 MODULE_DIRS := \
+	libs/bitcoin \
 	libs/stacks \
 	apis/network \
 	apis/network/tools \
@@ -11,7 +12,8 @@ MODULE_DIRS := \
 	operators/observability \
 	operators/observability/tools \
 	tools/chart-policy \
-	tools/stacks-experiment \
+	tools/stacks-workload \
+	tools/stacks-evidence \
 	tools/module-policy \
 	tools/local-cluster
 
@@ -35,6 +37,7 @@ module-policy-verify:
 	GOWORK=off $(GO) -C tools/module-policy test ./...
 	GOWORK=off $(GO) -C tools/module-policy run ./cmd/module-policy-check --module ../../apis/network
 	GOWORK=off $(GO) -C tools/module-policy run ./cmd/module-policy-check --module ../../libs/stacks --portable
+	GOWORK=off $(GO) -C tools/module-policy run ./cmd/module-policy-check --module ../../libs/bitcoin --portable
 
 verify-chart-policy:
 	$(MAKE) -C charts/stacks-observability-operator dependencies
@@ -124,6 +127,8 @@ modules-verify:
 	done
 
 vuln:
+	GOWORK=off $(GO) -C libs/bitcoin run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
+	GOWORK=off $(GO) -C tools/stacks-evidence run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
 	GOWORK=off $(GO) -C libs/stacks run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
 	GOWORK=off $(GO) -C tools/chart-policy run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
 	npm --prefix operators/network/transactions audit --omit=dev
@@ -131,7 +136,7 @@ vuln:
 	GOWORK=off $(GO) -C operators/network run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
 	GOWORK=off $(GO) -C operators/observability run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
 	GOWORK=off $(GO) -C operators/action run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
-	GOWORK=off $(GO) -C tools/stacks-experiment run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
+	GOWORK=off $(GO) -C tools/stacks-workload run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
 
 docker-check:
 	STACKS_TELEMETRY_COLLECTOR_VALIDATE=1 GOWORK=off $(GO) -C operators/observability test ./internal/telemetry -run TestPinnedCollectorValidation -count=1
@@ -156,5 +161,9 @@ verify-local-cluster:
 
 .PHONY: verify-library
 verify-library:
+	GOWORK=off $(GO) -C libs/bitcoin vet ./...
+	GOWORK=off $(GO) -C libs/bitcoin test -race ./...
+	GOWORK=off $(GO) -C tools/stacks-workload test -race ./...
+	GOWORK=off $(GO) -C tools/stacks-evidence test -race ./...
 	GOWORK=off $(GO) -C libs/stacks vet ./...
 	GOWORK=off $(GO) -C libs/stacks test -race ./...

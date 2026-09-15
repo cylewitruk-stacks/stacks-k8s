@@ -7,7 +7,7 @@ They are external experiment inputs, not an operator workload or scenario contro
 Deploy `load-store`, `load-relay`, then `load-driver` under one funded testnet principal
 using Clarity 4. The relative contract references require these names and deployment order.
 Use unused funded accounts to submit `load-driver.run2`, `run8` or `run16`.
-The repository [experiment tool](../../../tools/stacks-experiment/README.md) constructs,
+The repository [workload tool](../../../tools/stacks-workload/README.md) constructs,
 submits once and observes this two-list call shape without owning scenario sequencing.
 
 - `load-store`: maps with 2, 8 or 16 buffer fields; writes repeat the supplied buffer

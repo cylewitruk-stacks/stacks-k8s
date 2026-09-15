@@ -3,6 +3,8 @@
 **
 !.dockerignore
 !libs/
+!libs/bitcoin/
+!libs/bitcoin/**
 !libs/stacks/
 !libs/stacks/**
 !apis/

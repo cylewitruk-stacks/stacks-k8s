@@ -1,18 +1,14 @@
-// Command stacks-experiment provides bounded external-agent experiment primitives.
+// Command stacks-workload submits bounded transaction workloads.
 package main
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
-	"net/http"
-	"net/url"
 	"os"
-	"regexp"
 	"strings"
 	"time"
 
@@ -22,52 +18,24 @@ import (
 	"github.com/cylewitruk-stacks/stacks-k8s/libs/stacks/transaction"
 )
 
-const (
-	commandSubmit = "submit"
-	commandEvent  = "event"
-	commandExport = "export"
-)
-
-var defaultExportHTTPClient = &http.Client{
-	Timeout:       60 * time.Second,
-	CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
-}
-
 func main() {
 	flag.Parse()
 	if err := run(context.Background(), flag.Args(), os.Stdin, os.Stdout); err != nil {
-		fmt.Fprintln(os.Stderr, "stacks-experiment:", err)
+		fmt.Fprintln(os.Stderr, "stacks-workload:", err)
 		os.Exit(1)
 	}
 }
 
-// run dispatches one strict JSON request to a bounded experiment primitive.
+// run accepts exactly one bounded submitRequest document.
 func run(ctx context.Context, args []string, input io.Reader, output io.Writer) error {
-	if len(args) != 1 {
-		return errors.New("usage: stacks-experiment <submit|event|export> < request.json")
+	if len(args) != 1 || args[0] != "submit" {
+		return errors.New("usage: stacks-workload submit < request.json")
 	}
-	switch args[0] {
-	case commandSubmit:
-		var request submitRequest
-		if err := decode(input, &request); err != nil {
-			return err
-		}
-		return submit(ctx, request, json.NewEncoder(output))
-	case commandEvent:
-		var request eventRequest
-		if err := decode(input, &request); err != nil {
-			return err
-		}
-		return writeEvent(request, json.NewEncoder(output))
-	case commandExport:
-		var request exportRequest
-		if err := decode(input, &request); err != nil {
-			return err
-		}
-		return export(ctx, request, output)
-	default:
-		return errors.New("unknown command")
+	var request submitRequest
+	if err := decode(input, &request); err != nil {
+		return err
 	}
+	return submit(ctx, request, json.NewEncoder(output))
 }
 
 // decode accepts one bounded JSON document and rejects unknown fields.
@@ -290,108 +258,3 @@ func observeTransactions(
 	}
 	return nil
 }
-
-// eventRequest describes one exact-network experiment phase marker.
-type eventRequest struct {
-	Namespace   string         `json:"namespace"`
-	NetworkName string         `json:"networkName"`
-	NetworkUID  string         `json:"networkUID"`
-	Phase       string         `json:"phase"`
-	Values      map[string]any `json:"values,omitempty"`
-}
-
-// writeEvent renders one core Kubernetes Event for explicit submission by the caller.
-func writeEvent(request eventRequest, output *json.Encoder) error {
-	if !dnsName.MatchString(request.Namespace) || !dnsName.MatchString(request.NetworkName) ||
-		!uid.MatchString(request.NetworkUID) || request.Phase == "" || len(request.Phase) > 128 {
-		return errors.New("event identity is invalid")
-	}
-	message, err := json.Marshal(map[string]any{"phase": request.Phase, "values": request.Values})
-	if err != nil || len(message) > 2048 {
-		return errors.New("event payload is invalid")
-	}
-	now := time.Now().UTC().Format(time.RFC3339Nano)
-	return output.Encode(map[string]any{
-		"apiVersion": "v1", "kind": "Event",
-		"metadata": map[string]any{
-			"generateName": "stacks-experiment-", "namespace": request.Namespace,
-			"labels": map[string]string{"network.stacks.org/network-uid": request.NetworkUID},
-		},
-		"involvedObject": map[string]any{
-			"apiVersion": "network.stacks.org/v1alpha2", "kind": "StacksNetwork",
-			"namespace": request.Namespace, "name": request.NetworkName, "uid": request.NetworkUID,
-		},
-		"reason": "ExperimentPhase", "message": string(message), "type": "Normal",
-		"firstTimestamp": now, "lastTimestamp": now, "count": 1,
-		"source": map[string]string{"component": "stacks-experiment"},
-	})
-}
-
-// exportRequest describes one bounded read-only Greptime query.
-type exportRequest struct {
-	Endpoint       string    `json:"endpoint"`
-	Authorization  string    `json:"authorization"`
-	Table          string    `json:"table"`
-	TimeColumn     string    `json:"timeColumn"`
-	NetworkUID     string    `json:"networkUID"`
-	ParticipantUID string    `json:"participantUID,omitempty"`
-	From           time.Time `json:"from"`
-	To             time.Time `json:"to"`
-	Limit          int       `json:"limit"`
-}
-
-// export validates a bounded query and executes it with the default transport.
-func export(ctx context.Context, request exportRequest, output io.Writer) error {
-	return exportWithClient(ctx, defaultExportHTTPClient, request, output)
-}
-
-// exportWithClient executes a validated bounded query through the supplied transport.
-func exportWithClient(ctx context.Context, httpClient *http.Client, request exportRequest, output io.Writer) error {
-	parsed, err := url.Parse(request.Endpoint)
-	validEndpoint := err == nil && parsed.Host != "" && (parsed.Scheme == "http" || parsed.Scheme == "https") &&
-		parsed.User == nil && parsed.RawQuery == "" && parsed.Fragment == "" && (parsed.Path == "" || parsed.Path == "/")
-	validIdentity := uid.MatchString(request.NetworkUID) &&
-		(request.ParticipantUID == "" || uid.MatchString(request.ParticipantUID))
-	if !validEndpoint || !validIdentity || !sqlIdentifier.MatchString(request.Table) ||
-		(request.TimeColumn != "timestamp" && request.TimeColumn != "greptime_timestamp") ||
-		request.Limit < 1 || request.Limit > 10000 || !request.To.After(request.From) ||
-		request.To.Sub(request.From) > 24*time.Hour || !strings.HasPrefix(request.Authorization, "Basic ") ||
-		strings.ContainsAny(request.Authorization, "\r\n") {
-		return errors.New("export bounds are invalid")
-	}
-	query := fmt.Sprintf(
-		"SELECT * FROM %s WHERE network_uid = '%s' AND %s >= '%s' AND %s < '%s'",
-		request.Table, request.NetworkUID, request.TimeColumn, request.From.UTC().Format(time.RFC3339Nano),
-		request.TimeColumn, request.To.UTC().Format(time.RFC3339Nano),
-	)
-	if request.ParticipantUID != "" {
-		query += " AND participant_uid = '" + request.ParticipantUID + "'"
-	}
-	query += fmt.Sprintf(" ORDER BY %s LIMIT %d", request.TimeColumn, request.Limit)
-	body := url.Values{"sql": {query}}.Encode()
-	req, err := http.NewRequestWithContext(
-		ctx, http.MethodPost, strings.TrimSuffix(request.Endpoint, "/")+"/v1/sql", bytes.NewBufferString(body),
-	)
-	if err != nil {
-		return errors.New("construct export request")
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Authorization", request.Authorization)
-	response, err := httpClient.Do(req) // #nosec G704 -- Endpoint is explicitly validated administrator input.
-	if err != nil {
-		return errors.New("export transport unavailable")
-	}
-	defer func() { _ = response.Body.Close() }()
-	data, err := io.ReadAll(io.LimitReader(response.Body, (64<<20)+1))
-	if err != nil || len(data) > 64<<20 || response.StatusCode != http.StatusOK {
-		return fmt.Errorf("export response unavailable (HTTP %d)", response.StatusCode)
-	}
-	_, err = output.Write(data)
-	return err
-}
-
-var (
-	dnsName       = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`)
-	uid           = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
-	sqlIdentifier = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]{0,127}$`)
-)

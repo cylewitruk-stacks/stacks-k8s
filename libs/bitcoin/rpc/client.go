@@ -1,5 +1,5 @@
-// Package bitcoinrpc implements non-retrying native Bitcoin Core RPC transport.
-package bitcoinrpc
+// Package rpc implements non-retrying native Bitcoin Core RPC transport.
+package rpc
 
 import (
 	"bytes"
@@ -13,20 +13,12 @@ import (
 	"time"
 )
 
-// Credentials contains the static producer principal and administrator-approved server configuration digest.
+// Credentials supplies HTTP Basic authentication to a Bitcoin Core endpoint.
 type Credentials struct {
-	// Username identifies the method-restricted producer principal.
+	// Username identifies the configured RPC principal.
 	Username string `json:"username"`
-	// Password authenticates only the producer; it must never be logged.
+	// Password authenticates the principal; it must never be logged.
 	Password string `json:"password"`
-	// ConfigDigest identifies the exact approved Bitcoin configuration bytes.
-	ConfigDigest string `json:"configDigest"`
-}
-
-// RPC exposes only the preflight and single-block operations used by this controller.
-type RPC interface {
-	Check(context.Context, string, string) error
-	Generate(context.Context, string, string, string) (string, error)
 }
 
 // Client is a non-retrying, non-redirecting typed Bitcoin Core client.

@@ -1,0 +1,22 @@
+# Replace namespace, network UID and timestamps, then use kubectl create -f.
+apiVersion: v1
+kind: Event
+metadata:
+  generateName: experiment-phase-
+  namespace: experiment
+  labels:
+    network.stacks.org/network-uid: "00000000-0000-0000-0000-000000000000"
+involvedObject:
+  apiVersion: network.stacks.org/v1alpha2
+  kind: StacksNetwork
+  name: network
+  namespace: experiment
+  uid: "00000000-0000-0000-0000-000000000000"
+reason: ExperimentPhase
+type: Normal
+message: '{"phase":"load-start","batch":10}'
+firstTimestamp: "2026-09-15T00:00:00Z"
+lastTimestamp: "2026-09-15T00:00:00Z"
+count: 1
+source:
+  component: external-experimenter
