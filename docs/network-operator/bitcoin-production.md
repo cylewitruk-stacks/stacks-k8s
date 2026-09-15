@@ -35,3 +35,13 @@ Use participant/root cooperative controls to pause new production. Receipt
 collection and native observations continue. Follow [network cleanup](operations.md#removal-and-cleanup)
 before deleting a namespace; genesis and execution records stay protected until
 participant consumers finish disposal.
+
+## Bootstrap admission timing
+
+Before initialization completes, an unconsumed generation offer remains valid for
+the greater of the sampled cadence interval and 30 seconds. Cadence controls when
+a new offer may be selected; it is not the bootstrap worker admission deadline.
+A missed tick does not replace an unexpired offer or accumulate catch-up work.
+Workers still check current policy, pause, exact target and chain identity, and
+the frozen gate ceiling before sending. Expiry does not cancel an Armed RPC.
+Completed-initialization baseline opportunities retain their next-tick expiry.

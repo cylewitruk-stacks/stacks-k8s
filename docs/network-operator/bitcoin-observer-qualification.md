@@ -70,3 +70,37 @@ re-addition with stable workload and credential identity; actual Pod rolls are l
 The network, recording and namespace were removed in order; recorded observations remained
 queryable. The shared cluster stays running with the corrected image installed and the
 observability release's original namespace scope restored.
+
+## Fast bootstrap and stable diagnostics — 2026-09-15
+
+Image `stacks-network-operator:slice1b-20260915` ran on the shared three-node kind
+cluster in namespace `slice1b-20260915`, network UID
+`9ae6e338-0809-4bb0-a77b-145cc07e60d2`, using Bitcoin 31.1 and Stacks node/signer
+4.0.3. All three Bitcoin nodes reached height 203; `PrepareBitcoin` completed at
+07:18:25 UTC using a one-second schedule. Native control polling and peer convergence
+still bound throughput. A separately selected five-second schedule then completed
+all protocol gates, including PoX-5, by 07:26:55 UTC. This does not qualify all
+protocol initialization at one-second cadence or alter the 60-second product default.
+
+With production cooperatively paused, both height-296 diagnostic samples retained
+identical identities and `firstObservedAt=07:30:36Z` across a 20-second observation
+while native source timestamps advanced. Greptime returned 785 observer-success rows
+for recording UID `f8d33fe2-87f0-4f39-a513-e105f80d5785` at 07:31:11 UTC.
+Suspending the exact Core processes on all three hosts withdrew the Bitcoin sample
+at 07:31:30; resuming those processes restored a new sequence at 07:31:31.
+Replacing the selected Bitcoin Pod changed its UID from
+`d5511ad5-30bc-4269-a596-4b2e123dd1bd` to
+`4486014c-0ad2-4897-bdba-70f917e9fdca` with a new container and sequence timestamp.
+Brief production resumption advanced height 296 to 297 with a new timestamp at
+07:33:23; production was paused again for evidence export.
+
+The qualification applied generated CRDs explicitly: Helm upgrading the Deployment
+alone left the prior schema installed and pruned the diagnostic field. An initial
+scheduler iteration also exposed a stale preflight offer delay; the final scheduler
+replaces unsent offers after fresh, converged height/tip changes. Both corrections
+precede the observations above. Unit/race and API-server offer-publication/accounting
+tests cover the timing fix; `make verify` passed without generated drift.
+
+Public working evidence is under `/tmp/stacks-slice1/`; temporary scripts and files
+are not a durable release artifact. The namespace is retained only until this goal's
+evidence export completes, then removed in the documented teardown order.

@@ -21,6 +21,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 )
 
+// bootstrapAdmissionWindow gives control workers time to admit a bootstrap offer
+// independently of the next cadence tick; current authority is still checked before send.
+const bootstrapAdmissionWindow = 30 * time.Second
+
 // Scheduler owns bootstrap advancement and baseline cadence without RPC credentials.
 type Scheduler struct {
 	// Client writes initialization status and per-node desired block offers.
@@ -315,7 +319,7 @@ func (s *Scheduler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.R
 		return report(bitcoin.InitializationWaiting, reasonAwaitingEnrollmentDemand)
 	}
 	if offer := record.Status.Offer; offer != nil && offer.Number > record.Status.LastAccountedOffer &&
-		s.Now().Before(offer.ExpiresAt.Time) {
+		s.Now().Before(offer.ExpiresAt.Time) && offer.ExpectedHeight == height && offer.ExpectedTip == tip {
 		if !equality.Semantic.DeepEqual(target.Spec.Offer, offer) {
 			target.Spec.Offer = offer.DeepCopy()
 			if e := s.Client.Update(ctx, target); e != nil {
@@ -381,7 +385,7 @@ func (s *Scheduler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.R
 		ExpectedHeight: height,
 		ExpectedTip:    tip,
 		Ceiling:        authority.gate.BitcoinCeiling,
-		ExpiresAt:      next,
+		ExpiresAt:      metav1.NewTime(s.Now().Add(max(interval, bootstrapAdmissionWindow)).UTC()),
 	}
 	result, e := report(bitcoin.InitializationPreparing, reasonOpportunitySelected)
 	result.RequeueAfter = time.Millisecond

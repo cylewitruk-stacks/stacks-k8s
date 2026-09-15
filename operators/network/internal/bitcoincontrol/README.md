@@ -48,3 +48,7 @@ cleanup conflicts, production replacement, and workload drift. Integration tests
 exercise API status ownership and process-evidence retention. Native Core and
 Kubernetes deployment qualification are separate gates; these tests do not
 qualify legacy-runtime safety claims for the replacement.
+
+Bootstrap offers expire after `max(sampled cadence, 30s)`, independently of the
+next cadence tick. Fresh converged height/tip changes replace unsent stale offers;
+Armed requests remain excluded. Baseline offers retain next-tick expiry.
