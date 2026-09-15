@@ -1,8 +1,15 @@
 package bitcoincontrol
 
 import (
+	"fmt"
 	"testing"
 	"time"
+
+	bitcoin "github.com/cylewitruk-stacks/stacks-k8s/apis/network/bitcoin/v1alpha2"
+	common "github.com/cylewitruk-stacks/stacks-k8s/apis/network/common/v1alpha2"
+	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/foundation"
+	"k8s.io/utils/ptr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"k8s.io/apimachinery/pkg/api/equality"
 )
@@ -77,34 +84,135 @@ func TestBootstrapExpiredOfferCannotSend(t *testing.T) {
 
 // A newer converged chain invalidates an unsent offer rather than waiting its full window.
 func TestBootstrapReplacesUnsentOfferOnChangedChain(t *testing.T) {
-	f := newFixture(t)
+	for _, sameHeight := range []bool{false, true} {
+		t.Run(fmt.Sprint("same-height=", sameHeight), func(t *testing.T) {
+			f := newFixture(t)
+			f.worker.Now = func() time.Time { return f.now }
+			if err := f.worker.Step(t.Context()); err != nil {
+				t.Fatal(err)
+			}
+			s := f.schedulerFor()
+			f.reconcile(t, s)
+			f.now = f.now.Add(time.Second)
+			f.reconcile(t, s)
+			f.reconcile(t, s)
+			old := f.readInitial(t).Status.Offer.DeepCopy()
+			f.now = f.now.Add(2 * time.Second)
+			if sameHeight {
+				f.rpc.tip = fmt.Sprintf("%064x", 999)
+			} else {
+				f.rpc.height = 1
+			}
+			expectedTip := fmt.Sprintf("%064x", f.rpc.height)
+			if sameHeight {
+				expectedTip = f.rpc.tip
+			}
+			// Native preflight observes the changed chain and refuses the stale offer.
+			if err := f.worker.Step(t.Context()); err == nil {
+				t.Fatal("stale chain authorized")
+			}
+			f.reconcile(t, s)
+			f.reconcile(t, s)
+			next := f.readInitial(t).Status.Offer
+			if next.Number != old.Number+1 || next.ExpectedHeight != f.rpc.height || next.ExpectedTip != expectedTip ||
+				f.rpc.count() != 0 {
+				t.Fatal("stale offer retained or sent", next)
+			}
+			if err := f.worker.Step(t.Context()); err != nil {
+				t.Fatal(err)
+			}
+			f.worker.workers.Wait()
+			if f.rpc.count() != 1 {
+				t.Fatal("replacement did not send once")
+			}
+		})
+	}
+}
+
+// exerciseBootstrapAuthorityChange keeps unsent work live while preserving unknown Armed work.
+func exerciseBootstrapAuthorityChange(t *testing.T, f *testFixture, mode string, armed bool) {
+	t.Helper()
 	f.worker.Now = func() time.Time { return f.now }
 	if err := f.worker.Step(t.Context()); err != nil {
 		t.Fatal(err)
 	}
-	s := f.schedulerFor()
-	f.reconcile(t, s)
+	scheduler := f.schedulerFor()
+	f.reconcile(t, scheduler)
 	f.now = f.now.Add(time.Second)
-	f.reconcile(t, s)
-	f.reconcile(t, s)
+	f.reconcile(t, scheduler)
+	f.reconcile(t, scheduler)
 	old := f.readInitial(t).Status.Offer.DeepCopy()
 	f.now = f.now.Add(2 * time.Second)
-	f.rpc.height = 1
-	// Native preflight observes the changed chain and refuses the stale offer.
-	if err := f.worker.Step(t.Context()); err == nil {
-		t.Fatal("stale chain authorized")
+	if mode == "policy" {
+		production := f.production.DeepCopy()
+		if err := f.c.Get(t.Context(), client.ObjectKeyFromObject(production), production); err != nil {
+			t.Fatal(err)
+		}
+		production.Status.Admission.Configuration.BitcoinBlockProduction.Schedule.Cadence.Interval = ptr.To(
+			common.Duration("2s"),
+		)
+		production.Status.Admission.PolicyDigest = foundation.Digest(production.Status.Admission.Configuration)
+		if err := f.c.Status().Update(t.Context(), production); err != nil {
+			t.Fatal(err)
+		}
+	} else {
+		replaceBootstrapProducer(t, f, "replacement")
 	}
-	f.reconcile(t, s)
-	f.reconcile(t, s)
+	if armed {
+		record := f.readRecord(t)
+		record.Status.Armed = &bitcoin.BitcoinArmedRPC{ID: "unknown", ProcessNonce: "prior", Offer: old}
+		if err := f.c.Status().Update(t.Context(), record); err != nil {
+			t.Fatal(err)
+		}
+		f.reconcile(t, scheduler)
+		if !equality.Semantic.DeepEqual(f.readInitial(t).Status.Offer, old) ||
+			!equality.Semantic.DeepEqual(f.readRecord(t).Spec.Offer, old) ||
+			f.rpc.count() != 0 {
+			t.Fatal("authority change replaced Armed work")
+		}
+		return
+	}
+	if err := f.worker.Step(t.Context()); err == nil {
+		t.Fatal("old authority accepted")
+	}
+	if f.rpc.count() != 0 || f.readRecord(t).Status.Armed != nil {
+		t.Fatal("old authority sent or armed")
+	}
+	// Rebinding arms a fresh cadence; either case must progress well before old expiry.
+	for range 4 {
+		f.reconcile(t, scheduler)
+		f.now = f.now.Add(time.Second)
+	}
+	f.reconcile(t, scheduler)
 	next := f.readInitial(t).Status.Offer
-	if next.Number != old.Number+1 || next.ExpectedHeight != 1 || f.rpc.count() != 0 {
-		t.Fatal("stale offer retained or sent", next)
+	if !f.now.Before(old.ExpiresAt.Time) || next.Number != old.Number+1 ||
+		next.PolicyDigest == old.PolicyDigest && next.Production == old.Production ||
+		f.rpc.count() != 0 {
+		t.Fatal("stale authority retained", next)
+	}
+	if mode == "policy" && next.Production != old.Production {
+		t.Fatal("policy change rebound producer")
+	}
+	if mode == "production" && next.Production.UID != "replacement" {
+		t.Fatal("replacement identity missing")
 	}
 	if err := f.worker.Step(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	f.worker.workers.Wait()
-	if f.rpc.count() != 1 {
-		t.Fatal("replacement did not send once")
+	f.reconcile(t, scheduler)
+	if f.rpc.count() != 1 || f.readInitial(t).Status.LastAccountedOffer != next.Number {
+		t.Fatal("replacement did not send and account exactly once")
+	}
+}
+
+func TestBootstrapAuthorityChange(t *testing.T) {
+	for _, mode := range []string{"policy", "production"} {
+		for _, armed := range []bool{false, true} {
+			t.Run(
+				fmt.Sprintf("%s/armed=%v", mode, armed),
+				func(t *testing.T) { exerciseBootstrapAuthorityChange(t, newFixture(t), mode, armed) },
+			)
+		}
 	}
 }

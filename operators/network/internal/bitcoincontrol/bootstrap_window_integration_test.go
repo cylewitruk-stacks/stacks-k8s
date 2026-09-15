@@ -16,6 +16,12 @@ import (
 // TestBootstrapWindowAPI persists both sides of offer publication and accounting in
 // a real API server. Actor identity and RPC are fixtures, not live workload evidence.
 func TestBootstrapWindowAPI(t *testing.T) {
+	exerciseDelayedBootstrap(t, bootstrapAPIFixture(t))
+}
+
+// bootstrapAPIFixture persists execution records in envtest with fixture actor identity and RPC.
+func bootstrapAPIFixture(t *testing.T) *testFixture {
+	t.Helper()
 	apiClient := controlIntegrationClient(t)
 	f := newFixture(t)
 	must := func(err error) {
@@ -72,5 +78,14 @@ func TestBootstrapWindowAPI(t *testing.T) {
 		},
 	})
 	f.worker.Client, f.worker.Reader = f.c, f.c
-	exerciseDelayedBootstrap(t, f)
+	return f
+}
+
+// TestBootstrapAuthorityAPI verifies fresh offers and receipt accounting across authority changes.
+func TestBootstrapAuthorityAPI(t *testing.T) {
+	for _, mode := range []string{"policy", "production"} {
+		t.Run(mode, func(t *testing.T) {
+			exerciseBootstrapAuthorityChange(t, bootstrapAPIFixture(t), mode, false)
+		})
+	}
 }

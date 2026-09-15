@@ -319,7 +319,8 @@ func (s *Scheduler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.R
 		return report(bitcoin.InitializationWaiting, reasonAwaitingEnrollmentDemand)
 	}
 	if offer := record.Status.Offer; offer != nil && offer.Number > record.Status.LastAccountedOffer &&
-		s.Now().Before(offer.ExpiresAt.Time) && offer.ExpectedHeight == height && offer.ExpectedTip == tip {
+		s.Now().Before(offer.ExpiresAt.Time) && offer.ExpectedHeight == height && offer.ExpectedTip == tip &&
+		offer.PolicyDigest == production.Status.Admission.PolicyDigest && offer.Production == currentBinding {
 		if !equality.Semantic.DeepEqual(target.Spec.Offer, offer) {
 			target.Spec.Offer = offer.DeepCopy()
 			if e := s.Client.Update(ctx, target); e != nil {

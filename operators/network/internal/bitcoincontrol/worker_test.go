@@ -31,8 +31,10 @@ import (
 
 // fakeRPC models named wallet state and records every attempted mutation.
 type fakeRPC struct {
-	mu                       sync.Mutex
-	height                   int64
+	mu     sync.Mutex
+	height int64
+	// tip overrides the height-derived hash to model a same-height branch change.
+	tip                      string
 	exists, loaded, imported bool
 	calls                    []string
 	extraLoaded              []string
@@ -59,6 +61,7 @@ func (f *fakeRPC) Generate(ctx context.Context, _, _, _ string) (string, error) 
 	}
 	f.mu.Lock()
 	f.height++
+	f.tip = ""
 	height := f.height
 	f.mu.Unlock()
 	if after != nil {
@@ -73,10 +76,14 @@ func (f *fakeRPC) Call(_ context.Context, _, _, method string, args []any, out a
 	var value any
 	switch method {
 	case "getblockchaininfo":
+		tip := f.tip
+		if tip == "" {
+			tip = fmt.Sprintf("%064x", f.height)
+		}
 		value = map[string]any{
 			"chain":         "regtest",
 			"blocks":        f.height,
-			"bestblockhash": fmt.Sprintf("%064x", f.height),
+			"bestblockhash": tip,
 		}
 	case "listwallets":
 		loaded := append([]string{}, f.extraLoaded...)
