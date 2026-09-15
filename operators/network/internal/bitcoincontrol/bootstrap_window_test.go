@@ -216,3 +216,69 @@ func TestBootstrapAuthorityChange(t *testing.T) {
 		}
 	}
 }
+
+// TestBootstrapWaitsForPostReceiptObservation avoids a throwaway selection after accounting.
+func TestBootstrapWaitsForPostReceiptObservation(t *testing.T) {
+	for _, branch := range []string{"advance", "same-height-new-tip", "rollback"} {
+		t.Run(branch, func(t *testing.T) {
+			f := newFixture(t)
+			f.worker.Now = func() time.Time { return f.now }
+			scheduler := f.schedulerFor()
+			if err := f.worker.Step(t.Context()); err != nil {
+				t.Fatal(err)
+			}
+			f.reconcile(t, scheduler)
+			f.now = f.now.Add(time.Second)
+			f.reconcile(t, scheduler)
+			f.reconcile(t, scheduler)
+			first := f.readInitial(t).Status.Offer.DeepCopy()
+			if err := f.worker.Step(t.Context()); err != nil {
+				t.Fatal(err)
+			}
+			f.worker.workers.Wait()
+			receipt := f.readRecord(t).Status.LastReceipt.DeepCopy()
+			// The scheduler observes the receipt before the worker refreshes chain state.
+			for range 3 {
+				f.now = f.now.Add(time.Second)
+				f.reconcile(t, scheduler)
+			}
+			initial := f.readInitial(t)
+			if initial.Status.Reason != "AwaitingPostReceiptObservation" ||
+				initial.Status.LastAccountedOffer != first.Number ||
+				!equality.Semantic.DeepEqual(initial.Status.Offer, first) ||
+				f.rpc.count() != 1 ||
+				!equality.Semantic.DeepEqual(f.readRecord(t).Status.LastReceipt, receipt) {
+				t.Fatal("pre-receipt sample consumed an opportunity or delayed accounting")
+			}
+			if branch != "advance" {
+				f.rpc.mu.Lock()
+				f.rpc.height = first.ExpectedHeight
+				if branch == "same-height-new-tip" {
+					f.rpc.tip = fmt.Sprintf("%064x", 999)
+				} else {
+					f.rpc.tip = first.ExpectedTip
+				}
+				f.rpc.mu.Unlock()
+			}
+			if err := f.worker.Step(t.Context()); err != nil {
+				t.Fatal(err)
+			}
+			f.reconcile(t, scheduler)
+			f.reconcile(t, scheduler)
+			next := f.readInitial(t).Status.Offer
+			observation := f.readRecord(t).Status.Observation
+			if next.Number != first.Number+1 || next.ExpectedHeight != observation.Height ||
+				next.ExpectedTip != observation.Tip {
+				t.Fatal("fresh native sample did not select the next offer", next)
+			}
+			if err := f.worker.Step(t.Context()); err != nil {
+				t.Fatal(err)
+			}
+			f.worker.workers.Wait()
+			f.reconcile(t, scheduler)
+			if f.rpc.count() != 2 || f.readInitial(t).Status.LastAccountedOffer != next.Number {
+				t.Fatal("two blocks were not sent and accounted exactly once")
+			}
+		})
+	}
+}

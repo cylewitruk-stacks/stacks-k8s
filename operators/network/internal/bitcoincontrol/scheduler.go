@@ -318,6 +318,14 @@ func (s *Scheduler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.R
 	if !ready {
 		return report(bitcoin.InitializationWaiting, reasonAwaitingEnrollmentDemand)
 	}
+	// Accounting does not refresh native chain facts. Avoid selecting against the
+	// same pre-generation sample while allowing later observations of a reorg.
+	if receipt := target.Status.LastReceipt; receipt != nil && receipt.Request.Offer != nil &&
+		receipt.Request.Offer.Number == record.Status.LastAccountedOffer &&
+		height == receipt.Request.Offer.ExpectedHeight && tip == receipt.Request.Offer.ExpectedTip &&
+		!target.Status.Observation.ObservedAt.After(receipt.ReceivedAt.Time) {
+		return report(bitcoin.InitializationWaiting, reasonAwaitingPostReceiptObservation)
+	}
 	if offer := record.Status.Offer; offer != nil && offer.Number > record.Status.LastAccountedOffer &&
 		s.Now().Before(offer.ExpiresAt.Time) && offer.ExpectedHeight == height && offer.ExpectedTip == tip &&
 		offer.PolicyDigest == production.Status.Admission.PolicyDigest && offer.Production == currentBinding {
