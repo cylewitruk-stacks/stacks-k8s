@@ -62,6 +62,10 @@ integrity. See the
   without claiming causal minimality or identical execution. Deterministic
   compilation and content digests remain required where they define API or
   evidence identity; they do not promise deterministic runtime behavior.
+- Document the scope, prerequisites, dependencies and limits of any component or
+  experiment-control repeatability claim. Distinguish reproducible inputs (such
+  as seeded workload plans) from best-effort dispatch timing and uncontrolled
+  distributed outcomes; state explicitly when repeatability cannot be guaranteed.
 - Keep controllers small and resource-focused. Compose behavior through
   Kubernetes APIs and explicit interfaces rather than monolithic reconcilers.
 - Put shared, versioned Kubernetes API types in `apis/`; never put controller

@@ -63,6 +63,10 @@ must distinguish implemented behavior from proposed or unavailable features.
   reduces failures, diagnoses root cause, or creates regression cases.
 - The observability operator is passive toward the observed environment.
 - Distributed execution is not deterministic and is not claimed reproducible.
+- Component and experiment-control repeatability claims must name their scope,
+  prerequisites, dependencies and limits. Seeded inputs do not guarantee dispatch
+  timing or network outcomes; document best-effort behavior and absent guarantees
+  explicitly. The user or agent coordinates reproduction attempts.
 - New public APIs say Bitcoin rather than burnchain, except when quoting an
   existing Stacks configuration or protocol field.
 - Source checkout and image construction happen outside Kubernetes operators.
