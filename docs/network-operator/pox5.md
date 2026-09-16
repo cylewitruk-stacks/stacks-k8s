@@ -6,6 +6,11 @@ and registry initialization, then deploys direct PoX-5 managers and enrolls/rene
 those same declared holders. Native inclusion, source and contract-state checks
 control each release gate.
 
+The combined stacker renews PoX-4 only while its current canonical lock does not
+already cover the frozen PoX-5 activation height. This avoids unnecessary legacy
+extensions near the transition; it does not guarantee inclusion before activation.
+Previously submitted operations are still observed without replay.
+
 The consensus signer, stacker administration and sBTC initialization are separate
 roles. A `stacks-signer` Pod signs consensus messages; it does not administrate its
 holder's stacking transactions. Current sBTC initialization supplies explicit test

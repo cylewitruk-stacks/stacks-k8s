@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"math/big"
 	"strings"
 	"testing"
@@ -432,5 +433,62 @@ func TestPoX5ObservationPreservesFullWidthStake(t *testing.T) {
 		got.PoX5.DelegatedAmountMicroSTX != amount.String() ||
 		len(n.sent) != 0 {
 		t.Fatalf("full-width native stake truncated: %+v", got)
+	}
+}
+
+// Locks covering the frozen transition must not emit a legacy renewal at the boundary.
+func TestPoX4RenewalOnlyWhenLockCannotCoverPoX5(t *testing.T) {
+	for _, activation := range []uint64{282, 340, 341} {
+		t.Run(fmt.Sprint(activation), func(t *testing.T) {
+			r, n, s := newPoX5Fixture(t, false)
+			n.legacy = true
+			n.present = true
+			n.burn = 281
+			n.cycle = 14
+			n.first = 11
+			n.period = 6
+			r.legacy.initialDone = true
+			legacyResolve := r.ResolvePoX4
+			r.ResolvePoX4 = func(ctx context.Context, snapshot stacksworker.Snapshot) (PoX4Inputs, error) {
+				in, err := legacyResolve(ctx, snapshot)
+				in.LockCycles = 6
+				in.RenewWhenRemainingCycles = 3
+				return in, err
+			}
+			resolve := r.ResolvePoX5
+			r.ResolvePoX5 = func(ctx context.Context, snapshot stacksworker.Snapshot) (PoX5Inputs, error) {
+				in, err := resolve(ctx, snapshot)
+				in.Epoch4Height = activation
+				return in, err
+			}
+			result, err := r.Step(t.Context(), s)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if activation <= 340 {
+				if len(n.sent) != 0 || result.Pending != 0 || result.PoX4 == nil {
+					t.Fatalf("unnecessary legacy renewal: %+v", result)
+				}
+				// Repeated polls preserve observation and cannot create a new nonce reservation.
+				_, _ = r.Step(t.Context(), s)
+				if len(n.sent) != 0 {
+					t.Fatal("poll emitted legacy renewal")
+				}
+			} else if len(n.sent) != 1 || result.Pending != 1 || !bytes.Contains(n.sent[0].Bytes, []byte("stack-extend")) {
+				t.Fatalf("required pre-transition renewal withheld: %+v", result)
+			}
+			if activation > 340 {
+				// Once sent, coverage or pause cannot erase an exact execution failure.
+				r.legacy.transitionHeight = 282
+				s.Paused = true
+				n.legacy = false
+				n.included, n.executionSuccess = true, false
+				rejected, err := r.Step(t.Context(), s)
+				if err != nil || !rejected.Failed || len(n.sent) != 1 ||
+					rejected.Transactions.LastInclusion == nil || rejected.Transactions.LastInclusion.Success {
+					t.Fatalf("pending extension rejection bypassed: %+v, %v", rejected, err)
+				}
+			}
+		})
 	}
 }

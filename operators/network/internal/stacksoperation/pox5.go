@@ -131,6 +131,7 @@ func (r *StackerRole) Step(ctx context.Context, snapshot stacksworker.Snapshot) 
 		return r.result(reasonPoXObservationUnavailable), nil
 	}
 	if pox.Contract == PoX4Contract && !r.transitioned {
+		r.legacy.transitionHeight = input.Epoch4Height
 		return r.legacyStep(ctx, snapshot)
 	}
 	if pox.Contract != PoX5Contract {

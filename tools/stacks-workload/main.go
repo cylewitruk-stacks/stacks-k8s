@@ -9,7 +9,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/cylewitruk-stacks/stacks-k8s/libs/stacks/clarity"
@@ -18,9 +20,15 @@ import (
 	"github.com/cylewitruk-stacks/stacks-k8s/libs/stacks/transaction"
 )
 
+// defaultClarityVersion applies when a deployment omits clarityVersion.
+const defaultClarityVersion byte = 4
+
 func main() {
 	flag.Parse()
-	if err := run(context.Background(), flag.Args(), os.Stdin, os.Stdout); err != nil {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	err := run(ctx, flag.Args(), os.Stdin, os.Stdout)
+	stop()
+	if err != nil {
 		fmt.Fprintln(os.Stderr, "stacks-workload:", err)
 		os.Exit(1)
 	}
@@ -67,17 +75,16 @@ type submitRequest struct {
 	PayloadBytes   int    `json:"payloadBytes,omitempty"`
 	KeyBase        uint64 `json:"keyBase,omitempty"`
 	TimeoutSeconds int    `json:"timeoutSeconds"`
-}
-
-// experimentEvent records one transaction authorization or observation boundary.
-type experimentEvent struct {
-	Type       string    `json:"type"`
-	ObservedAt time.Time `json:"observedAt"`
-	TxID       string    `json:"txid"`
-	Nonce      uint64    `json:"nonce"`
-	Bytes      int       `json:"bytes,omitempty"`
-	BlockID    string    `json:"blockID,omitempty"`
-	Success    *bool     `json:"success,omitempty"`
+	// IntervalMilliseconds is the minimum spacing between submission starts; zero is unpaced.
+	IntervalMilliseconds int `json:"intervalMilliseconds,omitempty"`
+	// MaxOutstanding caps submissions not yet observed canonically included; zero defaults to 100.
+	MaxOutstanding int `json:"maxOutstanding,omitempty"`
+	// ObservationConcurrency bounds simultaneous read-only inclusion requests; zero defaults to one.
+	ObservationConcurrency int `json:"observationConcurrency,omitempty"`
+	// DurationSeconds bounds the submission phase after nonce discovery; observation uses the total timeout.
+	DurationSeconds int `json:"durationSeconds,omitempty"`
+	// Variation selects reproducible call shapes, independently of runtime scheduling.
+	Variation *variation `json:"variation,omitempty"`
 }
 
 // submit authorizes, sends once and observes exact transaction identities.
@@ -101,38 +108,23 @@ func submit(ctx context.Context, request submitRequest, output *json.Encoder) er
 	if err != nil {
 		return err
 	}
-	transactions, err := buildTransactions(request, account.Nonce)
-	if err != nil {
-		return err
-	}
-	for index, tx := range transactions {
-		event := experimentEvent{
-			Type: "Authorized", ObservedAt: time.Now().UTC(), TxID: tx.TxID,
-			Nonce: account.Nonce + uint64(index), Bytes: len(tx.Bytes),
-		}
-		if err := output.Encode(event); err != nil {
-			return errors.New("write authorization evidence")
-		}
-		if err := client.Submit(ctx, tx); err != nil {
-			return fmt.Errorf("transaction %s submission outcome: %w", tx.TxID, err)
-		}
-		event.Type = "Submitted"
-		event.ObservedAt = time.Now().UTC()
-		if err := output.Encode(event); err != nil {
-			return errors.New("write submission evidence")
-		}
-	}
-	return observeTransactions(ctx, client, account.Nonce, transactions, output)
+	return execute(ctx, client, request, account.Nonce, output)
 }
 
 // validateSubmitRequest requires one unambiguous bounded transaction mode.
 func validateSubmitRequest(request submitRequest) error {
 	if request.FeeMicroSTX == 0 || request.TimeoutSeconds < 1 || request.TimeoutSeconds > 3600 ||
-		request.Count < 0 || request.Count > 100 || request.Writes < 0 || request.Writes > 64 ||
+		request.Count < 0 || request.Count > 10000 || request.Writes < 0 || request.Writes > 64 ||
 		request.Reads < 0 || request.Reads > 1024 || request.PayloadBytes < 0 || request.PayloadBytes > 4096 {
 		return errors.New("submission bounds are invalid")
 	}
+	if err := validateControls(request); err != nil {
+		return err
+	}
 	if request.ContractSource != "" {
+		if request.Variation != nil {
+			return errors.New("variation is only supported for calls")
+		}
 		if request.Function != "" || request.Count != 0 || request.Writes != 0 || request.Reads != 0 ||
 			request.PayloadBytes != 0 || request.KeyBase != 0 {
 			return errors.New("contract deployment and load-call fields are mutually exclusive")
@@ -142,42 +134,23 @@ func validateSubmitRequest(request submitRequest) error {
 	if request.Function == "" || request.Count == 0 || request.ClarityVersion != 0 {
 		return errors.New("contract call fields are incomplete")
 	}
-	return nil
+	return validateVariation(request)
 }
 
-// buildTransactions signs the finite request against one freshly read nonce sequence.
-func buildTransactions(request submitRequest, nonce uint64) ([]transaction.Transaction, error) {
-	count := request.Count
-	if request.ContractSource != "" {
-		count = 1
-		if request.ClarityVersion == 0 {
-			request.ClarityVersion = 4
-		}
-	} else if count == 0 {
-		return nil, errors.New("contract call count is required")
-	}
+// buildTransaction signs one ordinal lazily, keeping memory independent of total count.
+func buildTransaction(request submitRequest, nonce uint64, ordinal int) (transaction.Transaction, error) {
 	key, err := identity.CompressedPrivateKey(request.PrivateKey)
 	if err != nil {
-		return nil, err
+		return transaction.Transaction{}, err
 	}
-	result := make([]transaction.Transaction, 0, count)
-	for index := 0; index < count; index++ {
-		options := transaction.Options{
-			Version: transaction.Testnet, ChainID: 0x80000000, Nonce: nonce + uint64(index),
-			Fee: request.FeeMicroSTX, PostConditionMode: transaction.Allow, PrivateKey: key,
-		}
-		var tx transaction.Transaction
-		if request.ContractSource != "" {
-			tx, err = transaction.Deploy(options, request.Contract, request.ContractSource, request.ClarityVersion)
-		} else {
-			tx, err = loadCall(options, request, index)
-		}
-		if err != nil {
-			return nil, err
-		}
-		result = append(result, tx)
+	options := transaction.Options{
+		Version: transaction.Testnet, ChainID: 0x80000000, Nonce: nonce,
+		Fee: request.FeeMicroSTX, PostConditionMode: transaction.Allow, PrivateKey: key,
 	}
-	return result, nil
+	if request.ContractSource != "" {
+		return transaction.Deploy(options, request.Contract, request.ContractSource, request.deploymentVersion())
+	}
+	return loadCall(options, request, ordinal)
 }
 
 // loadCall builds one deterministic two-list load-driver invocation.
@@ -213,48 +186,10 @@ func loadCall(options transaction.Options, request submitRequest, ordinal int) (
 	return transaction.Call(options, parts[0], parts[1], request.Function, []clarity.Value{writes, reads})
 }
 
-// observeTransactions waits for exact canonical transaction inclusion without resubmitting.
-func observeTransactions(
-	ctx context.Context,
-	client *rpc.Client,
-	nonce uint64,
-	transactions []transaction.Transaction,
-	output *json.Encoder,
-) error {
-	pending := make(map[int]bool, len(transactions))
-	for index := range transactions {
-		pending[index] = true
+// deploymentVersion resolves the supported default for deployment construction and evidence.
+func (r submitRequest) deploymentVersion() byte {
+	if r.ClarityVersion == 0 {
+		return defaultClarityVersion
 	}
-	ticker := time.NewTicker(3 * time.Second)
-	defer ticker.Stop()
-	for len(pending) > 0 {
-		for index := range pending {
-			included, err := client.Inclusion(ctx, transactions[index].TxID)
-			if err != nil {
-				return err
-			}
-			if !included.Found {
-				continue
-			}
-			// #nosec G115 -- index is bounded by the validated transaction count.
-			includedNonce := nonce + uint64(index)
-			event := experimentEvent{
-				Type: "Included", ObservedAt: time.Now().UTC(), TxID: transactions[index].TxID,
-				Nonce: includedNonce, BlockID: included.BlockID, Success: &included.Success,
-			}
-			if err := output.Encode(event); err != nil {
-				return errors.New("write inclusion evidence")
-			}
-			delete(pending, index)
-		}
-		if len(pending) == 0 {
-			return nil
-		}
-		select {
-		case <-ctx.Done():
-			return fmt.Errorf("%d transactions remain unobserved: %w", len(pending), ctx.Err())
-		case <-ticker.C:
-		}
-	}
-	return nil
+	return r.ClarityVersion
 }

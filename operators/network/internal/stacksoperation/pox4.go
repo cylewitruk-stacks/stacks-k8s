@@ -29,6 +29,9 @@ type pox4Goal struct {
 
 // PoX4Role maintains direct PoX-4 stake in one surviving worker process.
 type PoX4Role struct {
+	// transitionHeight is the immutable PoX-5 activation height, set by the combined stacker role.
+	transitionHeight uint64
+
 	// Resolve reads current complete public policy and frozen bootstrap requirements.
 	Resolve func(context.Context, stacksworker.Snapshot) (PoX4Inputs, error)
 	// Now injects observation time for deterministic tests.
@@ -190,6 +193,11 @@ func (r *PoX4Role) Step(ctx context.Context, snapshot stacksworker.Snapshot) (st
 	if state.pox.RewardCycle >= state.end {
 		r.failed = true
 		return r.result(reasonPoX4LockExpired), nil
+	}
+	// A lock already covering PoX-5 needs no legacy extension. Sending one near
+	// activation may execute after the legacy contract has been disabled.
+	if r.transitionHeight != 0 && state.account.UnlockHeight >= r.transitionHeight {
+		return r.result(reasonPoX4EnrollmentObserved), nil
 	}
 	remaining := state.end - state.pox.RewardCycle
 	if remaining > input.RenewWhenRemainingCycles || state.pox.BlocksUntilPrepare <= 0 {
