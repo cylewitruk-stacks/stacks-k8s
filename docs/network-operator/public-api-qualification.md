@@ -366,9 +366,9 @@ survived root deletion and the namespace was removed. The lifecycle passed in
 
 An attempted one-second acceleration did not generate blocks: initialization
 offers were replaced before the target control loop admitted them. That failed
-setup is recorded as W8 in the
-[experiment findings ledger](../experiments/findings-20260914.md); this record
-does not claim one-second cadence support.
+setup does not qualify one-second cadence support. The later
+[fast-bootstrap qualification](bitcoin-observer-qualification.md#fast-bootstrap-and-stable-diagnostics--2026-09-15)
+records the correction and its validation.
 
 ## Limitations
 

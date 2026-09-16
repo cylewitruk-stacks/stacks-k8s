@@ -149,8 +149,7 @@ only those three Chaos Mesh resources. No-target probes with PodChaos UID
 `d48ab3ea-3402-4af7-92eb-0548476c2d40` and StressChaos UID
 `9ff0acd7-f4c6-47e9-8173-ed6f4214b316` produced exact `ADDED` and `MODIFIED` rows in
 Greptime without selecting an actor. This proves source/RBAC/ingestion coverage, not
-fault injection or protocol recovery. The related real fault experiment is documented
-in [the experiment report](../experiments/bitcoin-split-anchor-stall.md).
+fault injection or protocol recovery.
 
 ## Initial delivery cleanup
 
