@@ -1,0 +1,24 @@
+{
+  "telemetryResource": {"group": "observation.stacks.org", "version": "v1alpha2", "resource": "networktelemetries"},
+  "telemetry": {
+    "apiVersion": "observation.stacks.org/v1alpha2",
+    "kind": "NetworkTelemetry",
+    "metadata": {"name": "capture", "namespace": "contract-lab", "generation": 2},
+    "spec": {"networkName": "network", "networkUID": "12345678-1234-1234-1234-123456789abc"},
+    "status": {
+      "admitted": true,
+      "conditions": [{"type": "WorkloadsReady", "status": "True", "observedGeneration": 2, "reason": "Available", "message": "Current workloads", "lastTransitionTime": "2026-01-01T00:00:00Z"}],
+      "recording": {
+        "observedGeneration": 2,
+        "backendReady": true,
+        "heartbeatAt": "2026-01-01T00:00:00Z",
+        "sources": [{"name": "container-resource", "available": true, "observedAt": "2026-01-01T00:00:00Z"}]
+      }
+    }
+  },
+  "observer": {"containerName": "manager", "scopeFlag": "watch-namespace", "namespace": "contract-lab"},
+  "chaosEnrollment": {
+    "labels": {"network.stacks.org/chaos-profile": "network-faults-v1"},
+    "annotations": {"chaos-mesh.org/inject": "enabled"}
+  }
+}

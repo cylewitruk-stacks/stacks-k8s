@@ -4,11 +4,14 @@ import (
 	"context"
 	"crypto/sha512"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cylewitruk-stacks/stacks-k8s/libs/stacks/clarity"
 )
@@ -145,6 +148,36 @@ func TestPreparedSetDistinguishesWaitingFromMalformedOrFailedReads(t *testing.T)
 			set, err := c.StackerSet(context.Background(), 12, strings.Repeat("1", 64))
 			if (err != nil) != test.wantErr || set.Available {
 				t.Fatalf("availability fabricated: %+v %v", set, err)
+			}
+		})
+	}
+}
+
+// Native unavailability text is classified only against the pinned full message.
+func TestStackerSetUnavailableReasonIsAllowlisted(t *testing.T) {
+	for _, test := range []struct {
+		message string
+		reason  PreparedSetReason
+	}{
+		{"Could not read reward set. Prepare phase may not have started for this cycle yet. " +
+			"Err = PoXAnchorBlockRequired", PreparedSetAnchorRequired},
+		{"PRIVATE PoXAnchorBlockRequired", PreparedSetUnavailable},
+		{"", PreparedSetUnavailable},
+	} {
+		t.Run(string(test.reason)+test.message, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusBadRequest)
+				_ = json.NewEncoder(w).
+					Encode(map[string]string{"err_type": "not_available_try_again", "err_msg": test.message})
+			}))
+			defer server.Close()
+			client, err := New(Config{Endpoint: server.URL, Timeout: time.Second, MaxResponseBytes: 4096})
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := client.StackerSet(context.Background(), 19, strings.Repeat("a", 64))
+			if err != nil || got.Available || got.UnavailableReason != test.reason {
+				t.Fatalf("%+v %v", got, err)
 			}
 		})
 	}

@@ -229,6 +229,10 @@ A resource's successful mechanism does not assert a protocol outcome.
 
 **Outcome:** clients inspect and preserve bounded retained facts.
 
+Available tools include [portable telemetry export](../../tools/stacks-evidence/README.md)
+and [bounded native protocol snapshots](../../tools/stacks-inspect/README.md).
+Their coverage and identity limits are explicit; they do not classify causes.
+
 - Implement read-only HTTP GET queries through the API-server Service proxy.
 - Qualify direct backend reachability and actor trust, or require a reviewed
   authenticated backend path (R7).
@@ -244,6 +248,11 @@ capture gaps, and source absence without a replay or diagnosis endpoint.
 
 **Outcome:** supported capabilities are usable for ordinary testing and
 authorized investigation with clear limits.
+
+[Read-only preflight](../../tools/stacks-preflight/README.md) checks selected
+network, recording, operator-scope, namespace-enrollment and backend prerequisites.
+It does not authorize a fault or establish protocol health; the external experimenter
+still chooses interventions and verifies their outcomes.
 
 Enable each instrumented action only after its bounded mechanism, image
 capability, expiry, credentials, and cleanup are reviewed. Clock/storage

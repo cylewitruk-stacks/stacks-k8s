@@ -9,6 +9,8 @@ const (
 	MethodGetNetTotals = "getnettotals"
 	// MethodGetBlockchainInfo identifies the getblockchaininfo RPC method.
 	MethodGetBlockchainInfo = "getblockchaininfo"
+	// MethodGetBlock identifies the getblock RPC method.
+	MethodGetBlock = "getblock"
 	// MethodGetBlockHash identifies the getblockhash RPC method.
 	MethodGetBlockHash = "getblockhash"
 	// MethodGetBlockHeader identifies the getblockheader RPC method.

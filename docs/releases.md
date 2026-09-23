@@ -77,3 +77,10 @@ mandatory actor resource samples, native fault sources, resilient watch reconnec
 the larger local query profile. Apply generated CRD schema updates explicitly before
 upgrading; Helm does not upgrade bundled CRDs. These are prepared versions, not a claim
 that images or charts have been published.
+
+The observability module uses gRPC 1.83.1 to address
+[GO-2026-6348](https://pkg.go.dev/vuln/GO-2026-6348). Existing installations need a
+rebuilt image and rollout to receive the fix. Repository tools include independent
+[protocol inspection](../tools/stacks-inspect/README.md) and
+[experiment preflight](../tools/stacks-preflight/README.md) commands; neither is an
+operator runtime dependency.

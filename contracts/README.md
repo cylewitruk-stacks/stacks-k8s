@@ -41,3 +41,10 @@ and generated `bitcoin.stacks.org/v1alpha1` schema define baseline execution.
 [Finite generation](../docs/network-operator/bitcoin-generation.md) and
 [local reorganization](../docs/network-operator/bitcoin-reorganization.md) define
 bounded actions sharing that executor. Broader production policies remain design work.
+
+[`investigation-preflight-v1.json`](investigation-preflight-v1.json) pins the
+implemented telemetry fields, observer scope flag/container and Chaos namespace
+enrollment consumed by `stacks-preflight`. It is a partial read-contract vector,
+not a complete admissible `NetworkTelemetry` manifest. The tool and telemetry API
+decode the same bytes through their own production types; chart tests independently
+verify the served resource, emitted arguments and enrollment predicate.

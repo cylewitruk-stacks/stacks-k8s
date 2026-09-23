@@ -20,6 +20,9 @@
 - [Native Chaos Mesh profile](chaos/operations.md)
 - [Contract-load examples](../examples/experiments/contract-load/README.md)
 - [Transaction workloads](../tools/stacks-workload/README.md)
+- [Protocol snapshots](../tools/stacks-inspect/README.md)
+- [Experiment preflight checks](../tools/stacks-preflight/README.md)
+- [Investigation tools qualification](observability/investigation-tools-qualification.md)
 - [Evidence queries and export](../tools/stacks-evidence/README.md)
 - [Read-only observability operator](../charts/stacks-observability-operator/README.md)
 

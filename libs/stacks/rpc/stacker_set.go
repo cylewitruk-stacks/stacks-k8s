@@ -76,10 +76,22 @@ type PreparedSigner struct {
 	StackedAmount clarity.Value
 }
 
+// PreparedSetReason identifies a sanitized native unavailability diagnostic.
+type PreparedSetReason string
+
+const (
+	// PreparedSetAnchorRequired reports the pinned native missing-anchor diagnostic.
+	PreparedSetAnchorRequired PreparedSetReason = "PoXAnchorBlockRequired"
+	// PreparedSetUnavailable preserves explicit unavailability without interpreting other native text.
+	PreparedSetUnavailable PreparedSetReason = "Unavailable"
+)
+
 // StackerSet contains a native prepared reward set for one explicitly requested cycle and tip.
 type StackerSet struct {
 	// Available is false only for Core's explicit not_available_try_again response.
 	Available bool
+	// UnavailableReason preserves only allowlisted diagnostics, never arbitrary response text.
+	UnavailableReason PreparedSetReason
 	// Version identifies the native classic or waterfall encoding.
 	Version uint32
 	// Signers preserves the native signer order and weights.
@@ -105,10 +117,17 @@ func (c *Client) StackerSet(ctx context.Context, cycle uint64, indexBlockID stri
 	}
 	if code == http.StatusBadRequest {
 		var unavailable struct {
-			Type string `json:"err_type"`
+			Type    string `json:"err_type"`
+			Message string `json:"err_msg"`
 		}
 		if json.Unmarshal(data, &unavailable) == nil && unavailable.Type == "not_available_try_again" {
-			return StackerSet{}, nil
+			reason := PreparedSetUnavailable
+			const anchorMessage = "Could not read reward set. Prepare phase may not have started for this cycle yet. " +
+				"Err = PoXAnchorBlockRequired"
+			if unavailable.Message == anchorMessage {
+				reason = PreparedSetAnchorRequired
+			}
+			return StackerSet{UnavailableReason: reason}, nil
 		}
 	}
 	var wire struct {
