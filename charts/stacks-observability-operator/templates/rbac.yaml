@@ -49,7 +49,28 @@ rules:
     resources: ["bitcoinblockgenerations", "bitcoinreorganizations"]
     verbs: ["get", "list", "watch"]
   - apiGroups: ["chaos-mesh.org"]
-    resources: ["networkchaos", "podchaos", "stresschaos"]
+    resources:
+      - awschaos
+      - azurechaos
+      - blockchaos
+      - dnschaos
+      - gcpchaos
+      - httpchaos
+      - iochaos
+      - jvmchaos
+      - kernelchaos
+      - networkchaos
+      - physicalmachinechaos
+      - podchaos
+      - podhttpchaos
+      - podiochaos
+      - podnetworkchaos
+      - schedules
+      - statuschecks
+      - stresschaos
+      - timechaos
+      - workflownodes
+      - workflows
     verbs: ["get", "list", "watch"]
   - apiGroups: ["metrics.k8s.io"]
     resources: ["pods"]

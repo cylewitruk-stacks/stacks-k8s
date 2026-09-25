@@ -51,7 +51,7 @@ func TestPreflightWireContract(t *testing.T) {
 		) {
 		t.Fatal("observer scope drift")
 	}
-	if contract.ChaosEnrollment.Labels[chaosProfileLabel] != chaosProfileValue ||
+	if len(contract.ChaosEnrollment.Labels) != 0 ||
 		contract.ChaosEnrollment.Annotations[chaosInjectAnnotation] != chaosInjectValue {
 		t.Fatal("namespace enrollment drift")
 	}

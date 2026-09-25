@@ -51,6 +51,9 @@ func publicBody(object *unstructured.Unstructured) string {
 		value["spec"] = spec
 	}
 	scrub(value)
+	if object.GroupVersionKind().Group == telemetry.ChaosAPIGroup {
+		scrubOpaqueChaos(value)
+	}
 	data, err := json.Marshal(value)
 	if err != nil || len(data) > MaximumRecordBytes {
 		data, _ = json.Marshal(map[string]any{
@@ -64,6 +67,31 @@ func publicBody(object *unstructured.Unstructured) string {
 		})
 	}
 	return string(data)
+}
+
+// scrubOpaqueChaos omits arbitrary fault payloads that cannot be made safe by credential-key matching.
+func scrubOpaqueChaos(value any) {
+	switch v := value.(type) {
+	case map[string]any:
+		for key, item := range v {
+			lower := strings.ToLower(key)
+			compact := strings.ReplaceAll(strings.ReplaceAll(lower, "_", ""), "-", "")
+			if strings.HasSuffix(compact, "headers") || strings.HasSuffix(compact, "queries") {
+				delete(v, key)
+				continue
+			}
+			switch compact {
+			case "body", "requestbody", "responsebody", "payload", "script", "ruledata":
+				delete(v, key)
+			default:
+				scrubOpaqueChaos(item)
+			}
+		}
+	case []any:
+		for _, item := range v {
+			scrubOpaqueChaos(item)
+		}
+	}
 }
 
 // scrub removes configured structured key classes and applies the same bounded text policy recursively.

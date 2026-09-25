@@ -37,9 +37,11 @@ receipt-relative delay. Reorganization cleanup removes its invalidity marker;
 it does not restore the previous best chain.
 
 Temporary schedule overrides resume the latest baseline on expiry/cancellation.
-The native Chaos Mesh profile requires exact network/participant identities and
-actor role on both ends of supported faults. Protocol faults and RPC control loss
-are qualified separately; fault cleanup does not prove protocol recovery.
+Agents use native Chaos Mesh faults with their granted Kubernetes authority.
+For actor-only targeting, prefer exact network/participant identities and the
+actor role; fault metadata carries network UID for journal attribution. Protocol
+faults and RPC control loss are qualified separately; fault cleanup does not
+prove protocol recovery.
 
 ## Observation
 

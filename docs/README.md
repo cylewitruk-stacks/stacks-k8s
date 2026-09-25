@@ -17,7 +17,7 @@
 
 - [Continuous GreptimeDB/OTel telemetry](observability/README.md)
 - [Bounded action operator](../charts/stacks-action-operator/README.md)
-- [Native Chaos Mesh profile](chaos/operations.md)
+- [Native Chaos Mesh faults](chaos/operations.md)
 - [Contract-load examples](../examples/experiments/contract-load/README.md)
 - [Transaction workloads](../tools/stacks-workload/README.md)
 - [Protocol snapshots](../tools/stacks-inspect/README.md)

@@ -24,7 +24,7 @@ managed mutations on its target indefinitely. Other valid targets may continue
 under the declared selection policy, without redistributing the blocked
 target's weight. Automatic recovery after ambiguity is not a v1 promise.
 Evaluate this cost against node-local IO/stress faults, Bitcoin restarts, and
-producer-controller restarts during vertical-slice use. The qualified protocol-fault profile preserves
+producer-controller restarts during vertical-slice use. The qualified delay/partition fixtures preserve
 the management path; that does not prevent these other causes of response loss.
 
 The initial profile trusts test-Pod services and excludes compromise of their

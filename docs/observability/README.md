@@ -191,6 +191,11 @@ stops controller reconciliation; delete its telemetry resources before unenrolli
 | Container resources | Actor-container CPU and memory from the namespace-scoped Metrics API | Samples retain Pod and participant UID. Metrics Server is required for this mandatory source. The recorder polls every 15 seconds; Metrics Server controls source resolution, and repeated samples are deduplicated. CPU throttling is not exposed by this source. |
 | Collection health | Recorder heartbeats, watch/export gaps, collector session changes and failure counters | A gap indicates possible loss or duplicates, not an exact missing-record count. |
 
+Native fault objects enter a network-scoped journal only when their own metadata
+has `network.stacks.org/network-uid` matching that network. Actor selectors alone
+do not establish journal membership; an unlabeled fault may affect Pods without
+appearing in that network's rows.
+
 Bitcoin nodes can opt into the network-owned [RPC observer](../network-operator/bitcoin-observer.md).
 It supplies numerical metrics and structured branch/hash observations through the
 existing metrics and log sources. Enable both sources to retain both forms;
@@ -272,9 +277,27 @@ Failed source subscriptions use independent exponential backoff with jitter (up 
 missing APIs or denied access retry after 30–60s). Healthy watch closures reconnect after
 250ms. Opening a stream that immediately fails does not reset backoff. A successful list,
 delivered cursor progress or a subscription lasting at least 30s resets it.
-Native `NetworkChaos`, `PodChaos` and `StressChaos` resources are recorded through
-independent optional watches. Their source IDs are respectively `networkchaos`, `podchaos`
-and `stresschaos` under `chaos-mesh.org/v1alpha1`; an absent CRD is reported per source.
+The recorder independently watches the namespaced Chaos Mesh 2.8.4 resources:
+`AWSChaos`, `AzureChaos`, `BlockChaos`, `DNSChaos`, `GCPChaos`, `HTTPChaos`,
+`IOChaos`, `JVMChaos`, `KernelChaos`, `NetworkChaos`, `PhysicalMachineChaos`,
+`PodChaos`, `PodHttpChaos`, `PodIOChaos`, `PodNetworkChaos`, `Schedule`,
+`StatusCheck`, `StressChaos`, `TimeChaos`, `WorkflowNode` and `Workflow`.
+Their source IDs use the lowercase resource plural under `chaos-mesh.org/v1alpha1`;
+an absent CRD or denied watch is reported per source. Repeated retries of the
+same absent API do not add new capture gaps. Cluster-scoped
+`RemoteCluster` and the namespaced `PhysicalMachine` definition are outside the
+recorder scope. Fault objects in the enrolled network namespace need a matching
+`network.stacks.org/network-uid` metadata label, a direct network owner, or a
+verifiable same-namespace Chaos Mesh owner chain for attribution. Generated
+`PodHttpChaos`, `PodIOChaos` and `PodNetworkChaos` instead use an exact Pod owner
+UID whose Pod carries the network label. Missing or replaced owners may leave
+children unrecorded; selector labels alone never establish attribution. Opaque
+fault bodies, headers, queries, scripts and JVM rule data are omitted from
+recorded object rows. This bounded redaction policy does not guarantee that
+arbitrary custom fields are credential-free; retain the original manifest
+separately when its inputs matter.
+For an existing observability installation, apply the updated chart CRD before
+rolling the recorder; Helm does not upgrade files under `crds/`.
 Native last-block cost gauges are point-in-time ratios of configured block limits. They
 may be overwritten between scrapes and must not be summed as per-block accounting.
 Use exact transaction observations for short inclusion-latency investigations; histogram

@@ -55,10 +55,11 @@ container environment, Secret bodies or raw server errors appear in the report.
   current observed generation, and all desired replicas updated, ready and
   available with no extra or unavailable replicas. This is the Deployment
   controller's report, not independent per-Pod image identity verification.
-- With `chaos=true`, both the namespace's `network-faults-v1` profile label and
-  `chaos-mesh.org/inject=enabled` annotation must exist. This does not verify Chaos
-  daemon health or accept an arbitrary fault. Independently server-side dry-run
-  the exact manifest, then observe native injection and cleanup conditions.
+- With `chaos=true`, the namespace must have
+  `chaos-mesh.org/inject=enabled`. This checks the namespace's opt-in to the
+  pinned Chaos Mesh installation, not daemon health, permissions, injection or
+  fault effect. Check the chosen native resource and observe its actual effects
+  and recovery separately.
 - Every requested backend table has at least one row for the network UID in the
   last `maxAgeSeconds` (15–600). Select one to eight tables with `timestamp` or
   `greptime_timestamp`. Sparse event tables can legitimately have no recent rows;

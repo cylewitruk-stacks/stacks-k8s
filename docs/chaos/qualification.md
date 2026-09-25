@@ -1,9 +1,8 @@
 # Native delay qualification
 
-These are historical legacy-runtime results. The current profile additionally
-requires exact network and participant UIDs and `role=actor` on both selectors.
-The legacy fixture is incompatible with that profile and does not qualify the
-replacement runtime. See the [current selector checks](../../charts/stacks-chaos-profile/README.md#replacement-actor-identities).
+The 2026-09-07 results below are historical legacy-runtime evidence obtained with the now-retired
+stacks-k8s fault profile. The legacy fixture does not qualify the replacement
+runtime. Current experiments use [native Chaos Mesh](operations.md) directly.
 
 Requalified 2026-09-07 in the task-owned `kind-stacks-chaos-20260906` cluster,
 namespace `chaos-live`, network `chaos`. Existing demo clusters were untouched.
@@ -99,4 +98,22 @@ to false before repeating the live suite. Its task-local log is
 `/tmp/stacks-chaos-followup-live.log`; API admission, full verification, dependency and
 container logs use the `/tmp/stacks-chaos-` prefix. These temporary files are
 review aids, not a shipped evidence-retention service. Reproduce using the
-[explicit opt-in guide](operations.md#repeat-qualification).
+[legacy live-suite guide](operations.md#opt-in-live-checks).
+
+## Direct native PodChaos smoke — 2026-09-24
+
+On the shared three-node kind/Kubernetes 1.37.0 cluster with Chaos Mesh 2.8.4,
+a disposable namespace was annotated `chaos-mesh.org/inject=enabled`. A single
+synthetically labeled `pause:3.10` Pod was selected by actor-role and network-UID
+labels. A 20-second
+native `PodChaos` `pod-failure` with the same fault-object network UID and a
+correlation ID passed server dry-run and creation without any stacks-k8s profile
+release, admission policy or agent Role. Chaos Mesh reported `AllInjected=True`;
+its Events recorded successful apply and recovery, and finalized deletion
+completed. The Pod retained UID `dad79eee-e259-4ba0-8aa3-f1c3e3321b79` and was
+Running after recovery. Fault UID was
+`47463c99-b705-4284-b031-6ef995830dbd`. The namespace was deleted afterward.
+
+This checks direct native admission and cleanup on that cluster. It does not
+qualify protocol impact, agent RBAC, or the expanded observability recorder
+binary, which was not rolled out for this smoke test.

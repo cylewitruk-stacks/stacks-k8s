@@ -31,9 +31,15 @@ const (
 	ExtractKeys = "network_uid,participant_uid,pod_uid,object_uid,event_type,source"
 )
 
-// ChaosResources returns the bounded native-fault resource allowlist observed by recorders.
+// ChaosResources lists the namespaced Chaos Mesh 2.8.4 fault and orchestration resources observed by recorders.
 func ChaosResources() []string {
-	return []string{"networkchaos", "podchaos", "stresschaos"}
+	return []string{
+		"awschaos", "azurechaos", "blockchaos", "dnschaos", "gcpchaos",
+		"httpchaos", "iochaos", "jvmchaos", "kernelchaos", "networkchaos",
+		"physicalmachinechaos", "podchaos", "podhttpchaos", "podiochaos",
+		"podnetworkchaos", "schedules", "statuschecks", "stresschaos",
+		"timechaos", "workflownodes", "workflows",
+	}
 }
 
 // Name binds generated workload names to the telemetry incarnation.

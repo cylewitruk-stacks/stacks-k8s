@@ -149,10 +149,21 @@ source kind/UID enter provenance labels. Verify metadata generation with legal s
 names longer than 63 characters. Do not truncate a source name into an ambiguous label
 or impose the participant-name limit on reusable definitions.
 
-## Chaos profile validation
+## Native Chaos Mesh selection
 
-The [profile template](../../../charts/stacks-chaos-profile/templates/profile.yaml)
-requires exact network/participant UIDs and actor-role selectors on both endpoints.
-Creation rules preserve legacy fault status/finalizer/deletion operations.
-[Qualification records](../../network-operator/public-api-qualification.md) scope the
-measured endpoint and control-path behavior; selector validation alone is not live evidence.
+Agents create native Chaos Mesh faults with their granted Kubernetes authority.
+stacks-k8s supplies no admission profile or fault quota. For actor-specific faults,
+prefer selectors with exact network and participant UIDs and `role=actor` on each
+intended endpoint. This convention avoids unrelated workloads but does not prevent
+an agent from intentionally targeting workers, collectors or nodes. Put the
+network UID and correlation ID on the fault object's metadata labels for journal
+attribution. Names are display hints. Observe selected Pod UIDs: a label selector
+may also match a replacement Pod, and an empty selection proves no effect. See
+[upstream selector semantics](https://chaos-mesh.org/docs/define-chaos-experiment-scope/)
+and [operations](../../chaos/operations.md).
+
+StatefulSet process replacement remains part of actor behavior. Removing a
+participant withdraws its workload; a fault does not retain membership or
+recreate the actor. [Qualification records](../../network-operator/public-api-qualification.md)
+scope measured endpoint and control-path behavior; native status alone is not
+live effect evidence.

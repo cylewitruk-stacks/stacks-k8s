@@ -18,7 +18,6 @@
   },
   "observer": {"containerName": "manager", "scopeFlag": "watch-namespace", "namespace": "contract-lab"},
   "chaosEnrollment": {
-    "labels": {"network.stacks.org/chaos-profile": "network-faults-v1"},
     "annotations": {"chaos-mesh.org/inject": "enabled"}
   }
 }

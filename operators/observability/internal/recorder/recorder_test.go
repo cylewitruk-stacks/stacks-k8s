@@ -93,7 +93,7 @@ func TestRedactionAndExactNetworkSelection(t *testing.T) {
 		}}},
 		"status": map[string]any{"message": "password=PRIVATE", "imageID": "sha256:public"},
 	}}
-	if !r.belongs(obj) {
+	if !r.belongs(t.Context(), obj) {
 		t.Fatal("matching Pod rejected")
 	}
 	body := publicBody(obj)
@@ -102,17 +102,73 @@ func TestRedactionAndExactNetworkSelection(t *testing.T) {
 		t.Fatalf("unsafe or incomplete public projection: %s", body)
 	}
 	obj.SetLabels(map[string]string{"network.stacks.org/network-uid": "network-b"})
-	if r.belongs(obj) {
+	if r.belongs(t.Context(), obj) {
 		t.Fatal("same-namespace foreign network accepted")
 	}
 	obj.SetKind("Event")
 	obj.Object["involvedObject"] = map[string]any{"uid": "network-a"}
-	if !r.belongs(obj) {
+	if !r.belongs(t.Context(), obj) {
 		t.Fatal("bound Event rejected")
 	}
 	obj.Object["involvedObject"] = map[string]any{"uid": "network-b"}
-	if r.belongs(obj) {
+	if r.belongs(t.Context(), obj) {
 		t.Fatal("unbound Event accepted")
+	}
+}
+
+func TestAdditionalChaosKindUsesExactIdentityAndRedactedBody(t *testing.T) {
+	r := &Recorder{Telemetry: &observation.NetworkTelemetry{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "lab"},
+		Spec:       observation.NetworkTelemetrySpec{NetworkUID: "network-a"},
+	}}
+	object := &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "chaos-mesh.org/v1alpha1", "kind": "HTTPChaos",
+		"metadata": map[string]any{
+			"name": "fault", "namespace": "lab", "uid": "fault-uid",
+			"labels": map[string]any{
+				"network.stacks.org/network-uid":    "network-a",
+				"actions.stacks.org/correlation-id": "probe-1",
+			},
+		},
+		"spec": map[string]any{
+			"mode": "one", "selector": map[string]any{"labelSelectors": map[string]any{
+				"network.stacks.org/role": "actor",
+			}},
+			"request_headers": map[string]any{
+				"Authorization": "PRIVATE", "X-Experiment": "visible", "X-API-Key": "PRIVATE-KEY",
+			},
+			"response_headers": map[string]any{"Set-Cookie": "PRIVATE-COOKIE"},
+			"replace": map[string]any{
+				"queries": map[string]any{"token": "PRIVATE-QUERY"},
+				"headers": map[string]any{"Set-Cookie": "PRIVATE-COOKIE"},
+				"body":    "PRIVATE-BODY",
+			},
+		},
+	}}
+	if !r.belongs(t.Context(), object) {
+		t.Fatal("matching HTTPChaos omitted")
+	}
+	body := publicBody(object)
+	if strings.Contains(body, "PRIVATE") || strings.Contains(body, "Authorization") ||
+		strings.Contains(body, "X-Experiment") || !strings.Contains(body, "probe-1") ||
+		!strings.Contains(body, "\"mode\":\"one\"") {
+		t.Fatalf("unsafe or incomplete Chaos projection: %s", body)
+	}
+	object.SetLabels(map[string]string{"network.stacks.org/network-uid": "network-b"})
+	if r.belongs(t.Context(), object) {
+		t.Fatal("foreign fault attributed to recording")
+	}
+}
+
+func TestJVMChaosOpaqueRuleDataIsNotExported(t *testing.T) {
+	object := &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "chaos-mesh.org/v1alpha1", "kind": "JVMChaos",
+		"metadata": map[string]any{"name": "fault", "namespace": "lab"},
+		"spec":     map[string]any{"action": "ruleData", "ruleData": "PRIVATE-RULE"},
+	}}
+	if body := publicBody(object); strings.Contains(body, "PRIVATE-RULE") ||
+		!strings.Contains(body, `"action":"ruleData"`) {
+		t.Fatalf("JVMChaos projection retained opaque rule data: %s", body)
 	}
 }
 

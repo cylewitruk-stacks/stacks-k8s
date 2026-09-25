@@ -38,8 +38,8 @@ behavior.
 1. OpenAPI and CEL enforce static type, enum, branch, numeric, and immutability
    invariants.
 2. Kubernetes RBAC limits principals to intended resources and subresources.
-3. ValidatingAdmissionPolicy enforces namespace and selector profiles where
-   expressible.
+3. Administrator-installed ValidatingAdmissionPolicy may constrain native
+   resources where expressible; stacks-k8s does not install a Chaos fault policy.
 4. A small fail-closed webhook is justified only for live cross-object or
    aggregate constraints that cannot be expressed statically.
 5. Controllers re-evaluate identity, policy, and dynamic preconditions before
@@ -52,7 +52,8 @@ observation record subsequent facts.
 
 The proposed namespace `ActionSafetyPolicy` in [Atomic action contract](actions.md)
 provides administrator-owned per-resource limits for custom actions. Native
-Chaos Mesh resources receive equivalent RBAC/admission caps.
+Chaos Mesh resources retain upstream admission and the permissions of the
+agent's Kubernetes identity; stacks-k8s does not cap them.
 
 The initial release deliberately makes no atomic aggregate-impact claim across
 independent custom and upstream resources. The external agent owns concurrency
@@ -181,7 +182,7 @@ ClusterIP alone is not an authentication boundary.
 | --- | --- | --- |
 | Network viewer | Read aggregate/leaves/status | Writes, Secrets |
 | Network editor | Edit `StacksNetwork`; read leaves | Leaf/workload/status writes |
-| Action user | Create/read/delete approved action kinds; read policy | Action update/patch, policy, status, workload, arbitrary Chaos kinds |
+| Action user | Create/read/delete approved custom action kinds; read policy | Action update/patch, policy, status, workload, native Chaos kinds unless separately granted |
 | Standalone baseline editor | Edit separately authorized unowned production resources | Aggregate-owned child specs, status, credentials, arbitrary RPC |
 | Observer viewer | Read telemetry/export status and query data | Source or export writes |
 | Evidence export requester | Create/read/watch/delete `EvidenceExport` | Telemetry configuration, destination/profile, status, or storage writes |
@@ -203,8 +204,8 @@ reconciliation alone is not authorization.
 
 - Cached-versus-live identity replacement and stale status.
 - Same-name foreign object, owner UID replacement, and selector confusion.
-- Agent attempts to edit compiled leaves, policy, status, Secrets, and
-  unqualified Chaos kinds.
+- Agent attempts to edit compiled leaves, policy, status and Secrets beyond
+  its granted identity.
 - Controller restart before/after every irreversible call and cleanup step.
 - Forged actor telemetry and observer replacement.
 - Audit/log/metric outage, storage full, redaction failure, oversized payload,
@@ -217,7 +218,7 @@ reconciliation alone is not authorization.
 
 | Alternative | Disposition |
 | --- | --- |
-| Trust the external agent with cluster-admin | Rejected as the supported model. |
+| Grant the external agent cluster-admin by default | Rejected as a product grant; a disposable local cluster may use administrator-provided authority. |
 | Rely on controller validation without RBAC/admission | Rejected; requests should fail before unsafe mutation where possible. |
 | One privileged action operator for every mechanism | Avoid; split ServiceAccounts/deployments when permissions differ materially. |
 | Treat missing telemetry as healthy | Rejected; detector health and gaps are explicit. |
@@ -228,9 +229,9 @@ reconciliation alone is not authorization.
 - Supported Roles deny direct compiled-workload mutation; topology authors'
   delegated workload authority is explicitly constrained or trusted.
 - Observer credentials cannot mutate workloads or protocol state.
-- Every custom action is exact-identity-pinned; native Chaos actions pin their
-  immutable request and logical targets and explicitly record Pod divergence.
-  Every custom action is independently bounded and safe under retry. It is
+- Every custom action is exact-identity-pinned. Native Chaos Mesh faults use
+  upstream schemas; agents record selected Pod identities and check effects
+  independently. Every custom action is independently bounded and safe under retry. It is
   policy-bound only when that kind implements administrator elevation;
   otherwise its schema bounds are absolute.
 - Irreversible ambiguity cannot become automatic success or blind repetition.

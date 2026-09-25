@@ -29,7 +29,6 @@ LINT_CONFIG := $(CURDIR)/.golangci.yml
 	verify-observability verify-action vuln
 
 verify: lint fmt-check api-verify verify-library verify-local-cluster modules-verify module-policy-verify verify-chart-policy verify-network verify-observability verify-action
-	$(MAKE) -C charts/stacks-chaos-profile verify
 
 api-verify:
 	$(MAKE) -C apis/network verify
@@ -111,7 +110,6 @@ test-integration:
 	$(MAKE) -C operators/action test-integration
 
 helm-verify:
-	$(MAKE) -C charts/stacks-chaos-profile helm-verify
 	$(MAKE) -C charts/stacks-network-operator helm-verify workload-verify
 	$(MAKE) -C charts/stacks-observability-operator helm-verify workload-verify
 	$(MAKE) -C charts/stacks-action-operator helm-verify workload-verify

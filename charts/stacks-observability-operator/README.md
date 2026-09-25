@@ -8,14 +8,20 @@ for the GreptimeDB backend, collection policy, queries and cleanup.
 selects the installation namespace. Roles are namespaced. The manager can manage
 recording Deployments, DaemonSets, ConfigMaps, ServiceAccounts and Roles only there;
 ownership checks prevent adoption. Source Pods and protocol resources
-are read-only. Native fault observation covers `NetworkChaos`, `PodChaos` and
-`StressChaos`. No Secret API access is granted. Backend credentials are mounted into
-scoped recorder/collector workloads. The recorder status Role names its exact telemetry
+are read-only. Native fault observation covers the namespaced Chaos Mesh 2.8.4
+fault and orchestration resources listed in the
+[telemetry guide](../../docs/observability/README.md). No Secret API access is granted.
+Backend credentials are mounted into scoped recorder/collector workloads.
+The recorder status Role names its exact telemetry
 resource. No ClusterRole or cluster-wide mutation permission is installed.
 
 Changing enrollment does not delete existing collectors. Remove `NetworkTelemetry`
 resources before unenrolling a namespace. The backend is independent of recordings;
 a bundled backend shares this Helm release lifetime.
+Helm installs files in `crds/` only on first installation. Before upgrading an
+existing release to the expanded Chaos Mesh watch inventory, apply the generated
+`crds/observation.stacks.org_networktelemetries.yaml` with the intended context;
+`status.recording.sources` must allow 48 entries before the new recorder runs.
 Objects-only recordings create no node collectors. Log-enabled OTel collectors use
 host log mounts and UID-scoped node checkpoint directories;
 the node-local process runs as root to read container logs, drops all capabilities

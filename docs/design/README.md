@@ -153,7 +153,7 @@ when permissions, dependencies, or failure domains materially differ.
 | Decision | Status | Resolution |
 | --- | --- | --- |
 | Orchestration owner | Direction | External agent only. |
-| Generic faults | Implemented | Initial directed-delay and bidirectional-partition profile: native NetworkChaos, static admission and bounded agent access; broader kinds and passive correlation remain planned. |
+| Generic faults | Implemented | Direct native Chaos Mesh use with agent-granted Kubernetes authority; explicit observability watches and correlation labels. Effect qualification is per kind and platform. |
 | Forced Bitcoin reorganization | Recommended | Bounded action resource, not `StacksNetwork` state. |
 | Natural Bitcoin reorganization | Direction | Emergent behavior to observe; no action resource required. |
 | Baseline Bitcoin production | Implemented | A selected production participant separates timing from weighted neutral Bitcoin-node targets. |

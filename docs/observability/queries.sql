@@ -9,14 +9,12 @@ WHERE network_uid = '<network-uid>'
   AND source = 'stacksnetworkparticipants.network.stacks.org/v1alpha2'
 ORDER BY timestamp LIMIT 200;
 
--- Qualified native fault lifecycles and selected actor UIDs; inspect the redacted spec/status.
+-- Attributed native Chaos Mesh lifecycles; inspect redacted spec/status and selected Pods.
 SELECT timestamp, event_type, object_uid, body
 FROM <prefix>_objects
 WHERE network_uid = '<network-uid>'
   AND timestamp >= '<from>' AND timestamp < '<to>'
-  AND source IN ('networkchaos.chaos-mesh.org/v1alpha1',
-                 'podchaos.chaos-mesh.org/v1alpha1',
-                 'stresschaos.chaos-mesh.org/v1alpha1')
+  AND source LIKE '%.chaos-mesh.org/v1alpha1'
 ORDER BY timestamp LIMIT 200;
 
 -- Coverage failures are evidence, not assertions that the actor failed.

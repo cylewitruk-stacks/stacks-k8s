@@ -37,7 +37,7 @@ func (f *faultFixture) producerPod() *corev1.Pod {
 	return nil
 }
 
-// controlFault deliberately requires administrator authority outside the public actor-only profile.
+// controlFault deliberately targets a production worker rather than an actor Pod.
 func (f *faultFixture) controlFault(name, duration string) *unstructured.Unstructured {
 	fault := f.partition(name, "unused", "bitcoin", duration)
 	_ = unstructured.SetNestedStringMap(
@@ -57,7 +57,7 @@ func TestLiveProducerControlLoss(t *testing.T) {
 	if namespace == "" {
 		namespace = "partition-control"
 	}
-	f := newFaultFixture(t, namespace, "control", false)
+	f := newFaultFixture(t, namespace, "control")
 	f.pod("bitcoin")
 	ledger := func() *unstructured.Unstructured {
 		return f.object("bitcoin.stacks.org", "BitcoinProductionTarget", "control-bitcoin")

@@ -21,8 +21,6 @@ const (
 	conditionWorkloadsReady = "WorkloadsReady"
 	watchNamespaceOption    = "watch-namespace"
 	managerContainer        = "manager"
-	chaosProfileLabel       = "network.stacks.org/chaos-profile"
-	chaosProfileValue       = "network-faults-v1"
 	chaosInjectAnnotation   = "chaos-mesh.org/inject"
 	chaosInjectValue        = "enabled"
 	clockSkewTolerance      = 5 * time.Second
@@ -197,15 +195,14 @@ func checkChaos(ctx context.Context, c dynamic.Interface, r request, out *report
 	switch {
 	case e != nil:
 		out.add("chaos-enrollment", checkUnknown, "namespace read unavailable")
-	case ns.GetDeletionTimestamp() == nil && ns.GetLabels()[chaosProfileLabel] == chaosProfileValue &&
-		ns.GetAnnotations()[chaosInjectAnnotation] == chaosInjectValue:
+	case ns.GetDeletionTimestamp() == nil && ns.GetAnnotations()[chaosInjectAnnotation] == chaosInjectValue:
 		out.add(
 			"chaos-enrollment",
 			checkPass,
-			"namespace opted in; exact fault manifest still requires server-side dry-run",
+			"namespace opted in to Chaos Mesh injection; fault effect not asserted",
 		)
 	default:
-		out.add("chaos-enrollment", checkFail, "namespace fault label or injection annotation missing")
+		out.add("chaos-enrollment", checkFail, "Chaos Mesh injection annotation missing")
 	}
 }
 

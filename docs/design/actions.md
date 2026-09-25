@@ -9,9 +9,9 @@ This document is the normative lifecycle and API contract for custom
 compensated irreversible profile. Each implemented kind retains its own typed spec, controller package,
 RBAC slice, example, and reference page.
 
-Native Chaos Mesh resources keep their upstream schemas and status. The
-supported stacks-k8s profile applies the correlation and immutability
-conventions from this document without wrapping those resources.
+Native Chaos Mesh resources keep their upstream schemas and status. An agent may
+label a fault object with its network UID for journal attribution and a
+correlation ID for search; custom action immutability rules do not apply to it.
 
 Long-lived desired-operation resources also remain outside this contract.
 In particular, mutable `BitcoinBlockProduction` has its own API group,

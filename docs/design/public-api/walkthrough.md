@@ -212,17 +212,18 @@ experiment. Replace its `${NETWORK_UID}` placeholders with the current root UID.
 actions.stacks.org/v1alpha2 with immutable networkUID.
 Telemetry/export need the optional operator and administrator-provided observation-store
 Secret/backend, the one declared external dependency in that file. Update its sample
-absolute time window. Native Chaos Mesh uses the existing qualified profile adapted
-to exact network/participant UID selectors and control paths; the current profile requires
-an explicit compatibility update. See [Chaos integration](operations.md#chaos-mesh-interaction).
-No new fault-wrapper CRD is proposed.
+absolute time window. Native Chaos Mesh is optional and directly available to
+agents with Kubernetes authority. Prefer exact network/participant UID selectors
+for actor-only faults and label each fault object for network attribution. See
+[Chaos integration](operations.md#chaos-mesh-interaction). No fault-wrapper CRD is used.
 
 The baseline workerPlacement targets stacks-k8s-control-plane; actor placements use
 the two worker nodes. This makes worker location explicit, not host isolation.
 This complete example specifically targets that local three-node kind cluster;
 change the selectors before start elsewhere. Unschedulable workers report
 PlacementError with scheduler details, rather than unexplained Pending. Node-wide chaos
-must exclude the support node; all kind nodes still share the Docker host.
+should exclude the support node when the intervention is actor-only; all kind
+nodes still share the Docker host.
 
 Actor requests total 5.3 CPU and 13.25 GiB, with up to 60 GiB actor PVC requests;
 49 application Pods, shared controllers and transient Jobs need additional headroom.

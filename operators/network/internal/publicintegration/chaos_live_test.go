@@ -19,7 +19,6 @@ import (
 	"time"
 
 	api "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha2"
-	admissionv1 "k8s.io/api/admissionregistration/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -308,26 +307,14 @@ func (h *harness) chaosMedian(ctx context.Context, source, target chaosActor) (f
 	return samples[1], nil
 }
 
-// requireChaosProfile checks external enrollment and current native policy compilation without installing it.
-func (h *harness) requireChaosProfile(ctx context.Context, pair [2]chaosActor) error {
+// requireNativeChaos checks the namespace opt-in and exact native fault shape without installing Chaos Mesh.
+func (h *harness) requireNativeChaos(ctx context.Context, pair [2]chaosActor) error {
 	var ns corev1.Namespace
 	if err := h.c.Get(ctx, client.ObjectKey{Name: h.config.namespace}, &ns); err != nil {
 		return err
 	}
-	if ns.UID != h.namespaceUID || ns.Labels["network.stacks.org/chaos-profile"] != "network-faults-v1" ||
-		ns.Annotations["chaos-mesh.org/inject"] != "enabled" {
-		return fmt.Errorf(
-			"install compatible Chaos Mesh 2.8.4 and the delay+partition profile, then " +
-				"enroll the exact fixture namespace externally",
-		)
-	}
-	var policy admissionv1.ValidatingAdmissionPolicy
-	if err := h.c.Get(ctx, client.ObjectKey{Name: "stacks-network-faults-" + h.config.namespace}, &policy); err != nil {
-		return err
-	}
-	if policy.Status.ObservedGeneration != policy.Generation || policy.Status.TypeChecking == nil ||
-		len(policy.Status.TypeChecking.ExpressionWarnings) != 0 {
-		return fmt.Errorf("native Chaos admission policy is not currently compiled")
+	if ns.UID != h.namespaceUID || ns.Annotations["chaos-mesh.org/inject"] != "enabled" {
+		return fmt.Errorf("enable Chaos Mesh injection on the exact fixture namespace")
 	}
 	faults := &unstructured.UnstructuredList{}
 	faults.SetGroupVersionKind(chaosGVK.GroupVersion().WithKind("NetworkChaosList"))
@@ -340,23 +327,24 @@ func (h *harness) requireChaosProfile(ctx context.Context, pair [2]chaosActor) e
 	for _, kind := range []string{"delay", "partition"} {
 		valid := chaosRequest(h.config.namespace, h.rootUID, pair, kind)
 		if err := h.c.Create(ctx, valid, client.DryRunAll); err != nil {
-			return fmt.Errorf("native %s profile unavailable: %w", kind, err)
+			return fmt.Errorf("native %s dry-run unavailable: %w", kind, err)
 		}
-		invalid := chaosRequest(h.config.namespace, h.rootUID, pair, kind)
-		unstructured.RemoveNestedField(
-			invalid.Object,
-			"spec",
-			"target",
-			"selector",
-			"labelSelectors",
-			"network.stacks.org/participant-uid",
-		)
-		err := h.c.Create(ctx, invalid, client.DryRunAll)
-		if err == nil {
-			return fmt.Errorf("native Chaos admission did not reject a missing target participant UID")
-		}
-		if !apierrors.IsInvalid(err) && !apierrors.IsForbidden(err) {
-			return err
+	}
+	return nil
+}
+
+// restartChaosController exercises native fault continuity across an optional upstream rollout.
+func (h *harness) restartChaosController(ctx context.Context) error {
+	for _, args := range [][]string{
+		{"rollout", "restart", "deployment/chaos-controller-manager"},
+		{"rollout", "status", "deployment/chaos-controller-manager", "--timeout=40s"},
+	} {
+		command := exec.CommandContext(ctx, "kubectl", append([]string{
+			"--kubeconfig", h.config.kubeconfig, "--context", h.config.kubecontext,
+			"-n", "chaos-mesh",
+		}, args...)...) // #nosec G204 -- Fixed executable and separate arguments, no shell evaluation.
+		if output, err := command.CombinedOutput(); err != nil {
+			return fmt.Errorf("Chaos Mesh controller rollout: %w: %s", err, output)
 		}
 	}
 	return nil
@@ -469,7 +457,7 @@ func (h *harness) qualifyChaos(ctx context.Context, before snapshot) (snapshot, 
 	if err != nil {
 		return current, err
 	}
-	if err := h.requireChaosProfile(ctx, pair); err != nil {
+	if err := h.requireNativeChaos(ctx, pair); err != nil {
 		return current, err
 	}
 	baseline, err := h.chaosMedian(ctx, pair[0], pair[1])
@@ -583,6 +571,25 @@ func (h *harness) qualifyChaosFault(
 				baseline,
 				delayed,
 			)
+		}
+		if os.Getenv("STACKS_PUBLIC_CHAOS_RESTART") == "1" {
+			if err := h.restartChaosController(ctx); err != nil {
+				return injected, err
+			}
+			afterRestart, err := h.chaosMedian(ctx, pair[0], pair[1])
+			if err != nil {
+				return injected, err
+			}
+			if afterRestart < baseline+0.35 {
+				return injected, fmt.Errorf("native delay absent after controller rollout: median=%fs", afterRestart)
+			}
+			current, err := h.readChaosFault(ctx, fault)
+			if err != nil {
+				return injected, err
+			}
+			if !chaosCondition(current, "AllInjected") || chaosCondition(current, "AllRecovered") {
+				return injected, errors.New("native fault was not active after controller rollout")
+			}
 		}
 	} else {
 		for _, direction := range [][2]chaosActor{{pair[0], pair[1]}, {pair[1], pair[0]}} {

@@ -104,8 +104,10 @@ resource and namespace-scoped PodMetrics reads plus name-scoped telemetry status
 writes. Node collectors read Pod
 metadata only. No component reads actor Secrets; backend credentials are mounted by
 the kubelet from administrator-provisioned Secrets.
-The optional Chaos Mesh object allowlist covers `NetworkChaos`, `PodChaos` and
-`StressChaos`; each remains an independently reported source.
+The optional Chaos Mesh object allowlist covers the 21 namespaced fault and
+orchestration kinds in the [recorder inventory](../observability/README.md).
+Each API is an independently reported source; object rows still require exact
+network attribution through a metadata label or verified owner chain.
 
 Public-object projection removes annotations, configuration payloads, Pod environment
 and private field classes. A fixed text policy redacts recognized credential-bearing

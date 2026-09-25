@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"slices"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -45,6 +47,7 @@ type Recorder struct {
 	states            map[string]observation.SourceStatus
 	pendingGaps       map[string]bool
 	known             map[types.UID]bool
+	knownChaos        map[types.UID]bool
 	backendReady      bool
 	attributionFull   bool
 	collectorSessions map[string]float64
@@ -60,6 +63,7 @@ func (r *Recorder) Run(ctx context.Context) error {
 	r.collectorSessions = map[string]float64{}
 	r.pendingGaps = map[string]bool{}
 	r.known = map[types.UID]bool{r.Telemetry.Spec.NetworkUID: true}
+	r.knownChaos = map[types.UID]bool{}
 	r.resourceSamples = map[string]string{}
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -113,16 +117,12 @@ func (r *Recorder) observe(ctx context.Context, source schema.GroupVersionResour
 	resource := r.Dynamic.Resource(source).Namespace(r.Telemetry.Namespace)
 	rv := ""
 	relist := true
+	needsGap := true
 	var retry sourceRetry
 	for ctx.Err() == nil {
 		if relist {
-			r.gap(
-				ctx,
-				name,
-				"Source subscription starts or resource history is unavailable; intermediate writes may be absent",
-			)
 			var err error
-			rv, err = r.snapshot(ctx, resource, name)
+			rv, err = r.snapshotAfterGap(ctx, resource, name, &needsGap)
 			if err != nil {
 				r.sourceError(name, err)
 				waitSourceRetry(ctx, retry.next(err, false))
@@ -147,6 +147,7 @@ func (r *Recorder) observe(ctx context.Context, source schema.GroupVersionResour
 		}
 		if resourceHistoryUnavailable(err) {
 			relist = true
+			needsGap = true
 			waitSourceRetry(ctx, retry.next(err, false))
 			continue
 		}
@@ -155,6 +156,18 @@ func (r *Recorder) observe(ctx context.Context, source schema.GroupVersionResour
 		}
 		waitSourceRetry(ctx, retry.next(err, opened && (rv != cursor || time.Since(started) >= healthyWatchDuration)))
 	}
+}
+
+// snapshotAfterGap marks one coverage boundary per relist, not one per failed retry.
+func (r *Recorder) snapshotAfterGap(
+	ctx context.Context, resource dynamic.ResourceInterface, source string, needsGap *bool,
+) (string, error) {
+	if *needsGap {
+		const message = "Source subscription starts or resource history is unavailable; intermediate writes may be absent"
+		r.gap(ctx, source, message)
+		*needsGap = false
+	}
+	return r.snapshot(ctx, resource, source)
 }
 
 func resourceHistoryUnavailable(err error) bool {
@@ -218,13 +231,19 @@ func (r *Recorder) consume(ctx context.Context, stream watch.Interface, source, 
 
 // object filters exact network identity before redaction or persistence.
 func (r *Recorder) object(ctx context.Context, o *unstructured.Unstructured, source, event string) {
-	if !r.belongs(o) {
+	if !r.belongs(ctx, o) {
 		return
 	}
 	r.mu.Lock()
 	exhausted := false
 	if len(r.known) < 4096 {
 		r.known[o.GetUID()] = true
+		if o.GroupVersionKind().Group == telemetry.ChaosAPIGroup {
+			if r.knownChaos == nil {
+				r.knownChaos = map[types.UID]bool{}
+			}
+			r.knownChaos[o.GetUID()] = true
+		}
 	} else if !r.known[o.GetUID()] && !r.attributionFull {
 		r.attributionFull = true
 		exhausted = true
@@ -248,9 +267,14 @@ func (r *Recorder) object(ctx context.Context, o *unstructured.Unstructured, sou
 }
 
 // belongs distinguishes authority-derived Kubernetes identity from untrusted source payload fields.
-func (r *Recorder) belongs(o *unstructured.Unstructured) bool {
+func (r *Recorder) belongs(ctx context.Context, o *unstructured.Unstructured) bool {
+	return r.belongsWithin(ctx, o, 0)
+}
+
+// belongsWithin follows exact-UID, same-namespace Chaos Mesh or selected-Pod ownership.
+func (r *Recorder) belongsWithin(ctx context.Context, o *unstructured.Unstructured, depth int) bool {
 	uid := string(r.Telemetry.Spec.NetworkUID)
-	if o.GetNamespace() != r.Telemetry.Namespace {
+	if o.GetNamespace() != r.Telemetry.Namespace || depth > 4 {
 		return false
 	}
 	if o.GetKind() == api.KindStacksNetwork {
@@ -261,6 +285,14 @@ func (r *Recorder) belongs(o *unstructured.Unstructured) bool {
 		r.mu.Lock()
 		defer r.mu.Unlock()
 		return r.known[types.UID(involved)]
+	}
+	if o.GroupVersionKind().Group == telemetry.ChaosAPIGroup && o.GetUID() != "" {
+		r.mu.Lock()
+		known := r.knownChaos[o.GetUID()]
+		r.mu.Unlock()
+		if known {
+			return true
+		}
 	}
 	if o.GetLabels()[api.LabelNetworkUID] == uid {
 		return true
@@ -276,7 +308,64 @@ func (r *Recorder) belongs(o *unstructured.Unstructured) bool {
 			return true
 		}
 	}
+	if o.GroupVersionKind().Group != telemetry.ChaosAPIGroup || r.Dynamic == nil {
+		return false
+	}
+	for _, owner := range o.GetOwnerReferences() {
+		podOwner := owner.APIVersion == "v1" && owner.Kind == "Pod" && isPerPodChaos(o.GetKind())
+		var resource schema.GroupVersionResource
+		if podOwner {
+			resource = schema.GroupVersionResource{Version: "v1", Resource: "pods"}
+		} else {
+			groupVersion, err := schema.ParseGroupVersion(owner.APIVersion)
+			if err != nil || groupVersion.Group != telemetry.ChaosAPIGroup ||
+				groupVersion.Version != telemetry.ChaosAPIVersion {
+				continue
+			}
+			plural := strings.ToLower(owner.Kind)
+			switch owner.Kind {
+			case "Schedule", "StatusCheck", "Workflow", "WorkflowNode":
+				plural += "s"
+			}
+			if !slices.Contains(telemetry.ChaosResources(), plural) {
+				continue
+			}
+			resource = groupVersion.WithResource(plural)
+		}
+		r.mu.Lock()
+		known := r.knownChaos[owner.UID]
+		if podOwner {
+			known = r.known[owner.UID]
+		}
+		r.mu.Unlock()
+		if known {
+			return true
+		}
+		readCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+		parent, err := r.Dynamic.Resource(resource).Namespace(o.GetNamespace()).
+			Get(readCtx, owner.Name, metav1.GetOptions{})
+		cancel()
+		if err != nil || parent.GetUID() != owner.UID {
+			continue
+		}
+		if podOwner && parent.GetLabels()[api.LabelNetworkUID] == uid {
+			return true
+		}
+		if !podOwner && r.belongsWithin(ctx, parent, depth+1) {
+			return true
+		}
+	}
 	return false
+}
+
+// isPerPodChaos identifies the upstream intermediate kinds owned by selected Pods.
+func isPerPodChaos(kind string) bool {
+	switch kind {
+	case "PodHttpChaos", "PodIOChaos", "PodNetworkChaos":
+		return true
+	default:
+		return false
+	}
 }
 
 // gap retains a conservative discontinuity and retries its marker after backend failure.

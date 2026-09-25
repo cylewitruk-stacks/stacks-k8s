@@ -31,7 +31,7 @@ const (
 )
 
 const (
-	// RoleActor marks consensus participants selected by the native Chaos profile.
+	// RoleActor marks consensus participants for actor-targeted selectors.
 	RoleActor = "actor"
 	// RoleSupport marks control and initialization workloads excluded from actor faults.
 	RoleSupport = "support"

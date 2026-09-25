@@ -1,4 +1,4 @@
-package chaosprofile
+package chaosactors
 
 import (
 	"context"

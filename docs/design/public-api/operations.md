@@ -12,7 +12,7 @@ apply namespaced declarations.
 | Network operator chart | Installs network/Bitcoin/Stacks v1alpha2 CRDs, shared controller Deployment, service account, RBAC and profile defaults. Watches permitted namespaces; all-namespace installation is the local development default. |
 | Action operator chart, optional | Installs bounded action APIs and lifecycle controllers; observes executor records, never holds Bitcoin RPC mutation credentials. Installs independently and enables actions for selected namespaces. |
 | Observability operator chart, optional | Installs NetworkTelemetry/EvidenceExport APIs and passive controllers. Store credentials/retention are administrator inputs. No baseline dependency. |
-| Chaos Mesh plus stacks chaos profile, optional | Upstream fault controllers/daemon and validated actor selectors, durations and control-path exclusions. No scenario controller. |
+| Chaos Mesh, optional | Independently installed upstream fault controllers/daemon; agents use native CRDs under their granted Kubernetes authority. No stacks-k8s fault profile or scenario controller. |
 | Local cluster addons | Existing Headlamp and Metrics Server installation helpers. Development cluster-admin dashboard access is a local installation choice, not a workload permission. |
 
 CRD installation is cluster-scoped; resources are namespaced. Shared operator
@@ -368,36 +368,30 @@ configuration, not an operator lifecycle dependency or complete forensic archive
 
 ## Chaos Mesh interaction
 
-Chaos Mesh is optional and independently installed. Users create native NetworkChaos
-against instantiated actor Pods, never reusable descriptors. The network operator
-keeps reconciling declared topology during faults; degraded protocol observations do
-not themselves authorize deleting/reinitializing actors or resetting genesis. Normal
-StatefulSet process replacement remains part of actor behavior. Removing a participant
-withdraws its workload; a fault does not retain membership or recreate the actor.
+Chaos Mesh is optional and independently installed. Users or agents create native
+faults against selected runtime Pods or nodes; reusable descriptors are never the
+fault target. The network operator keeps reconciling declared topology during faults;
+degraded protocol observations do not themselves authorize deleting or
+reinitializing actors or resetting genesis. Normal StatefulSet process replacement
+remains part of actor behavior. Removing a participant withdraws its workload;
+a fault does not retain membership or recreate the actor.
 
-The profile requires spec.target and same-namespace selectors on both ends.
-Both the primary selector and target.selector must contain exact network-uid,
-participant-uid and role=actor labels under network.stacks.org/. participant-kind may
-further constrain selection; it never substitutes for participant-uid. Correlation
-metadata remains required. Names are display/search hints.
+For actor-only faults, prefer exact network/participant UID and `role=actor`
+selectors. Observe selected Pod UIDs and replacement gaps: a selector may match
+a replacement Pod, while a selector matching none has no effect. Namespace
+injection opt-in and native API validation do not enforce actor-only targeting.
+The agent may intentionally target control or observation paths and must account
+for the resulting operation uncertainty and evidence gaps.
 
-Creation validation rejects an omitted target or missing/wrong identity/role label
-on either endpoint, including partitions. A kind-only selector with mode: one is not
-admitted: random selection is not exact participant identity. Rendered CEL/API-server
-tests cover missing target, both endpoints independently and selector bypass alternatives. A native
-label selector may affect a replacement
-Pod for the same participant UID; it is not immutable Pod-UID fencing. Observe selected
-Pod UIDs and replacement gaps. Participant/root replacement must not match an old fault.
-A selector matching no current Pod is a no-op, not proof of complete network health;
-static admission does not validate live membership. See [upstream selector semantics](https://chaos-mesh.org/docs/define-chaos-experiment-scope/).
+Native selector choice, fault duration and control-path exposure belong to the
+experiment agent. [Implementation notes](implementation-notes.md#native-chaos-mesh-selection)
+cover identity and attribution conventions; the
+[operations guide](../../chaos/operations.md) covers native cleanup.
 
-The profile's selector admission, delay/partition bounds and control-path exclusions
-require joint qualification. [Implementation notes](implementation-notes.md#chaos-profile-validation)
-cover selector validation and legacy-object cleanup.
-
-Protocol partitions must preserve worker→actor RPC, worker→Kubernetes API and consensus
-support paths that are outside the intended fault. Separate Services do not isolate
-traffic to one Pod; qualify actual CNI/runtime paths. Broad Pod/node/IO faults may
+When an experiment needs production and observation to continue, its faults must
+preserve worker→actor RPC, worker→Kubernetes API and consensus support paths.
+Separate Services do not isolate traffic to one Pod; qualify actual CNI/runtime paths.
+Broad Pod/node/IO faults may
 remove that access; worker Pod loss still ends the experiment. Exclude worker-hosting
 nodes for actor-only host faults, while remembering kind nodes share a physical host.
 
@@ -406,7 +400,7 @@ its finalizers. Network paused does not pause a fault or its duration/cleanup cl
 For qualified teardown, delete faults and observe native recovery, collect evidence,
 then delete the network. Root deletion is not blocked on the presence of optional
 Chaos CRDs, nor does it automatically delete user-owned faults. Surviving faults keep
-the old UID selectors and may consume namespace quota until explicitly removed.
+the old UID selectors and remain active until explicitly removed or recovered.
 Network removal or native fault recovery is not evidence of protocol recovery;
 verify chain/transaction/signer progress separately. No fault wrapper or scenario CR
 is added to StacksNetwork. Observability records facts; the agent sequences experiments.

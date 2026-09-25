@@ -20,9 +20,10 @@ Three independently installed products provide:
 - [Read-only observation](charts/stacks-observability-operator/README.md): verified
   runtime identity and observations, without control of network behavior.
 
-The network operates without actions or observability. The optional
-[Chaos Mesh profile](docs/chaos/operations.md) supports bounded actor-to-actor
-network delay and partition while keeping management traffic separate.
+The network operates without actions, observability or Chaos Mesh. With the
+optional upstream installation, agents can use
+[native Chaos Mesh faults](docs/chaos/operations.md) directly and observe their
+effects independently.
 
 ## Local use
 

@@ -130,7 +130,7 @@ type RecordingStatus struct {
 	// Sources contains current-process source observations.
 	// +listType=map
 	// +listMapKey=name
-	// +kubebuilder:validation:MaxItems=24
+	// +kubebuilder:validation:MaxItems=48
 	Sources []SourceStatus `json:"sources,omitempty"`
 }
 

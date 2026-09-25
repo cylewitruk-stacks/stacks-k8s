@@ -31,7 +31,7 @@ jobs:
       - run: make -k lint fmt-check
 
   chart-policy:
-    name: Chart policy and native admission
+    name: Chart policy
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -41,7 +41,6 @@ jobs:
           cache-dependency-path: tools/chart-policy/go.sum
       - uses: azure/setup-helm@v5
       - run: make verify-chart-policy
-      - run: make -C charts/stacks-chaos-profile verify
 
   network:
     name: Network operator

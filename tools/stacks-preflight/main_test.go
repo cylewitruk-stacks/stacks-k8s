@@ -21,7 +21,7 @@ const networkUID = "12345678-1234-1234-1234-123456789abc"
 func TestReadOnlyPreflightChecksIdentityFreshnessAndEnrollment(t *testing.T) {
 	for _, mode := range []string{
 		"healthy", "wrong-uid", "stale-heartbeat", "stale-condition",
-		"scope", "chaos-label", "chaos-annotation", "denied", "source", "stale-recording", "sidecar-scope",
+		"scope", "chaos-annotation", "denied", "source", "stale-recording", "sidecar-scope",
 	} {
 		t.Run(mode, func(t *testing.T) {
 			requests := 0
@@ -109,11 +109,7 @@ func TestReadOnlyPreflightChecksIdentityFreshnessAndEnrollment(t *testing.T) {
 						ns,
 					)
 				case r.URL.Path == "/api/v1/namespaces/lab":
-					label := "network-faults-v1"
 					annotation := "enabled"
-					if mode == "chaos-label" {
-						label = ""
-					}
 					if mode == "chaos-annotation" {
 						annotation = ""
 					}
@@ -121,9 +117,7 @@ func TestReadOnlyPreflightChecksIdentityFreshnessAndEnrollment(t *testing.T) {
 						w,
 						`{"apiVersion":"v1",
 "kind":"Namespace",
-"metadata":{"labels":{"network.stacks.org/chaos-profile":%q},
-"annotations":{"chaos-mesh.org/inject":%q}}}`,
-						label,
+"metadata":{"annotations":{"chaos-mesh.org/inject":%q}}}`,
 						annotation,
 					)
 				default:

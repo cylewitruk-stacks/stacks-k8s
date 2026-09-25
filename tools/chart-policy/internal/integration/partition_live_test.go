@@ -12,8 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cylewitruk-stacks/stacks-k8s/tools/chart-policy/internal/chaosprofile"
-	admissionv1 "k8s.io/api/admissionregistration/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -32,13 +30,12 @@ type faultFixture struct {
 	kubeconfig, kubecontext, namespace, network string
 	username, password                          string
 	pods                                        map[string]*corev1.Pod
-	profileEnrolled                             bool
 	// onWaitTimeout collects optional best-effort evidence before a failed wait ends the test.
 	onWaitTimeout func(string)
 }
 
-// newFaultFixture checks opt-in, empty fault inventory, enrollment, and current CEL compilation.
-func newFaultFixture(t *testing.T, namespace, network string, enrolled bool) *faultFixture {
+// newFaultFixture checks native namespace opt-in and empty fault inventory.
+func newFaultFixture(t *testing.T, namespace, network string) *faultFixture {
 	t.Helper()
 	if os.Getenv("STACKS_CHAOS_PARTITION_LIVE") != "1" {
 		t.Skip("set STACKS_CHAOS_PARTITION_LIVE=1 for disposable partition fixtures")
@@ -51,7 +48,6 @@ func newFaultFixture(t *testing.T, namespace, network string, enrolled bool) *fa
 		kubecontext: os.Getenv("STACKS_CHAOS_CONTEXT"),
 		pods:        map[string]*corev1.Pod{},
 	}
-	f.profileEnrolled = enrolled
 	if f.kubeconfig == "" || f.kubecontext == "" {
 		t.Fatal("explicit kubeconfig and context required")
 	}
@@ -91,30 +87,6 @@ func newFaultFixture(t *testing.T, namespace, network string, enrolled bool) *fa
 	}
 	if ns.Annotations["chaos-mesh.org/inject"] != "enabled" {
 		t.Fatal("native namespace injection must be explicitly enabled")
-	}
-	if enrolled {
-		if ns.Labels["network.stacks.org/chaos-profile"] != "network-faults-v1" {
-			t.Fatal("fixture lacks bounded profile enrollment")
-		}
-		f.wait("current CEL compilation", 30*time.Second, func() bool {
-			policy := &admissionv1.ValidatingAdmissionPolicy{}
-			if err := f.admin.Get(
-				f.ctx,
-				client.ObjectKey{Name: "stacks-network-faults-" + namespace},
-				policy,
-			); err != nil {
-				t.Fatal(err)
-			}
-			if policy.Status.ObservedGeneration != policy.Generation || policy.Status.TypeChecking == nil {
-				return false
-			}
-			if len(policy.Status.TypeChecking.ExpressionWarnings) != 0 {
-				t.Fatalf("CEL warnings: %+v", policy.Status.TypeChecking.ExpressionWarnings)
-			}
-			return true
-		})
-	} else if ns.Labels["network.stacks.org/chaos-profile"] != "" {
-		t.Fatal("administrative control-loss fixture must not be agent-enrolled")
 	}
 	secret := &corev1.Secret{}
 	if err := f.admin.Get(
@@ -310,7 +282,7 @@ func (f *faultFixture) pause(paused bool, actors ...string) {
 	}
 }
 
-// partition constructs one native actor-to-actor fault within the public profile.
+// partition constructs one native actor-to-actor fault for the legacy live fixture.
 func (f *faultFixture) partition(name, source, target, duration string) *unstructured.Unstructured {
 	selector := func(_ string) map[string]any {
 		return map[string]any{"namespaces": []any{f.namespace}}
@@ -335,22 +307,15 @@ func (f *faultFixture) partition(name, source, target, duration string) *unstruc
 		"network.stacks.org/network":        f.network,
 		"actions.stacks.org/correlation-id": name,
 	})
-	if f.profileEnrolled {
-		if err := chaosprofile.BindActors(f.ctx, f.admin, o, source, target); err != nil {
-			f.t.Fatal(err)
+	for i, actor := range []string{source, target} {
+		path := []string{"spec", "selector", "labelSelectors"}
+		if i == 1 {
+			path = []string{"spec", "target", "selector", "labelSelectors"}
 		}
-	} else {
-		// Historical administrator-only control faults intentionally bypass the public profile.
-		for i, actor := range []string{source, target} {
-			path := []string{"spec", "selector", "labelSelectors"}
-			if i == 1 {
-				path = []string{"spec", "target", "selector", "labelSelectors"}
-			}
-			_ = unstructured.SetNestedStringMap(
-				o.Object,
-				map[string]string{"network.stacks.org/network": f.network, "network.stacks.org/actor": actor},
-				path...)
-		}
+		_ = unstructured.SetNestedStringMap(
+			o.Object,
+			map[string]string{"network.stacks.org/network": f.network, "network.stacks.org/actor": actor},
+			path...)
 	}
 	return o
 }
@@ -431,7 +396,7 @@ func TestLiveBitcoinPartition(t *testing.T) {
 	if namespace == "" {
 		namespace = "partition-bitcoin"
 	}
-	f := newFaultFixture(t, namespace, "chaos", true)
+	f := newFaultFixture(t, namespace, "chaos")
 	f.pod("bitcoin")
 	f.pod("bitcoin-2")
 	for _, expiry := range []bool{false, true} {
@@ -484,19 +449,6 @@ func TestLiveBitcoinPartition(t *testing.T) {
 			startB,
 			f.receipts("bitcoin-2"),
 		)
-		// Delay and partition consume the same existing-object quota.
-		extra := f.partition("quota-probe", "bitcoin", "bitcoin-2", "10s")
-		_ = unstructured.SetNestedField(extra.Object, "delay", "spec", "action")
-		_ = unstructured.SetNestedField(extra.Object, "to", "spec", "direction")
-		_ = unstructured.SetNestedField(extra.Object, map[string]any{"latency": "100ms"}, "spec", "delay")
-		if err := f.admin.Create(
-			f.ctx,
-			extra,
-			client.DryRunAll,
-		); err == nil ||
-			!strings.Contains(err.Error(), "exceeded quota") {
-			t.Fatalf("combined quota: %v", err)
-		}
 		f.recover(fault, expiry)
 		f.checkPeerRPC(true)
 		f.wait(
@@ -550,7 +502,7 @@ func TestLiveStacksBitcoinPartition(t *testing.T) {
 	if namespace == "" {
 		namespace = "partition-stacks"
 	}
-	f := newFaultFixture(t, namespace, "stacks", true)
+	f := newFaultFixture(t, namespace, "stacks")
 	f.onWaitTimeout = func(description string) { f.logCycleContext("timeout: " + description) }
 	confirmed := func() int64 {
 		return f.count("stacks.stacks.org", "StacksTransactionProduction", "stacks", "confirmed")

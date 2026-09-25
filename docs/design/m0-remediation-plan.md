@@ -323,64 +323,40 @@ workflow
 Tests must also assert that one resource continues to represent one bounded
 action.
 
-## Requirement 6: Static Chaos Mesh admission first
+## Requirement 6: Direct native Chaos Mesh faults
 
-**Slice:** M0.5. **Status:** Delay and actor partitions implemented; broader qualification open.
+**Slice:** M0.5. **Status:** Direct native use and read-only observation implemented;
+kind/platform effect qualification remains incremental.
 
-The [native fault profile](../chaos/operations.md) supplies a disabled-by-default
-chart with static CEL, exact agent RBAC, one-object quota, and a pinned external
-Chaos Mesh version. [Delay](../chaos/qualification.md) and
-[partition evidence](../chaos/partition-qualification.md) cover actor disruption,
-continued producer receipts, cancellation/expiry, Bitcoin chain reconvergence
-and an initial productive Stacks recovery. A later reward-cycle transition
-stalled after cleanup; general Stacks recovery remains unqualified.
-Separate administrator-only control-path loss
-checks preflight refusal and retained ambiguity after producer replacement.
-Other kinds, traffic/platform combinations and passive correlation remain open.
-
-The v1 ValidatingAdmissionPolicy enforces only static constraints:
-
-- label-based selectors;
-- request-namespace confinement;
-- enrolled namespaces;
-- bounded duration and target count; and
-- no raw Pod-name or expression selectors; and
-- no remote-cluster targeting.
+The upstream Chaos Mesh installation is optional. An experiment agent uses
+its granted Kubernetes authority to create native faults, with namespace
+injection opt-in when upstream filtering is enabled. stacks-k8s imposes no
+fault admission policy, quota or agent Role. Prefer network/participant UID
+selectors for actor-only interventions and fault metadata labels for journal
+attribution. Observe the selected Pod UIDs and measured effect; native status
+alone does not establish protocol behavior. See [operations](../chaos/operations.md)
+and the [delay](../chaos/qualification.md) and
+[partition](../chaos/partition-qualification.md) qualification boundaries.
 
 Qualify source/target/direction semantics separately for Bitcoin P2P,
-Stacks-to-Bitcoin RPC, and producer control RPC. Prove the supported protocol
-fault preserves the intended management path; separately test loss of that
-path. Separate Service names or port-only rules are not proof of isolation.
+Stacks-to-Bitcoin RPC and producer control RPC. An intervention that preserves
+the management path and one that removes it answer different questions.
+Separate Service names or port-only rules are not proof of isolation.
 
-Package the policy behind an explicit, disabled-by-default chart value. Its
-installation requires Chaos Mesh to be installed or explicitly declared as an
-external dependency. Bind each installed profile to its namespace name and require enrollment for
-new faults. De-enrollment must not remove validation or obstruct existing cleanup.
+## Requirement 7: Agent-owned fault scope
 
-## Requirement 7: Defer dynamic enrollment admission
+**Slice:** M0.5. **Status:** The agent chooses native fault scope under its
+Kubernetes credentials; there is no stacks-k8s dynamic enrollment admission.
 
-**Slice:** M0.5. **Status:** Explicitly deferred for the initial static profile.
-
-A parameterized admission policy may later compare the requested actor with a
-`StacksNetwork` inventory. The vacuous-success form for unrelated network
-parameters is viable, but it cannot prove that a matching named network exists
-when unrelated parameters are present.
-
-Treat this as defense in depth. Before adoption, test zero, one, and multiple
-network objects, absent networks, deleted networks, and stale inventories on
-kind. Runtime Pod-UID capture and identity-divergence handling remain
-authoritative.
-
-A webhook is the last resort. Any future webhook requires enrolled-namespace
-scoping, certificate lifecycle, availability analysis, and an explicit failure
-policy.
+Record the chosen authority, target selectors and side effects in experiment
+evidence. The observability operator attributes faults through their own
+network-UID metadata and reports source gaps without directing the experiment.
 
 ## Requirement 8: Action safety bounds
 
-**Slices:** M0.2–M0.5. **Status:** Conservative action bounds are designed;
-native delay/partition has fixed 1–120 s duration, delay latency 1–1000 ms, one actor per side,
-and one native object per namespace. Other Chaos Mesh limits and policy elevation
-remain deferred.
+**Slices:** M0.2–M0.5. **Status:** Bounded stacks-k8s action contracts are
+designed; native Chaos Mesh faults follow upstream validation and the agent's
+Kubernetes authority.
 
 Each numeric bound must be classified as either:
 
@@ -391,8 +367,7 @@ If policy elevation is supported, the policy needs explicit per-kind fields
 for offsets, rates, block counts, reorganization depths, and comparable
 parameters. Until that policy exists, conservative CRD bounds are absolute.
 
-Cross-kind aggregate admission remains deferred because it would introduce a
-coordination layer over otherwise independent actions.
+No stacks-k8s cross-kind aggregate admission is installed for native faults.
 
 ## Requirement 9: Consolidated Bitcoin generation API
 

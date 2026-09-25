@@ -24,7 +24,7 @@ M0: reviewed API, identity, execution, and packaging contracts
   -> M2: bootstrap primitives and steady transaction demand
   -> M3: multi-actor and independent-upgrade qualification
   -> M4: passive journal and initial telemetry
-  -> M5: native Chaos Mesh profile
+  -> M5: native Chaos Mesh integration
   -> M6: remaining Bitcoin lifecycle actions
   -> M7: evidence export and query
   -> M8: qualified instrumented actions and agent ergonomics
@@ -45,8 +45,8 @@ M0.4 have reviewed initial contracts and implementations for independent target
 admission, multi-target cadence, static authority separation, and bounded
 cleanup. Broader recovery and credential profiles remain explicitly deferred.
 
-M0.5 now has an initial [native delay/partition profile](../chaos/operations.md); broader
-kind/platform qualification and passive correlation remain open. M0.6 covers bootstrap, transaction
+M0.5 uses [native Chaos Mesh faults](../chaos/operations.md) directly; broader
+kind/platform effect qualification remains open. M0.6 covers bootstrap, transaction
 demand and actor capabilities; M0.7 covers observability/access; M0.8 covers
 packaging/release alignment.
 The final consistency/security/roadmap audit is **M0 closeout**, not M0.9.
@@ -190,21 +190,22 @@ MCP is low priority.
 correlated through restart/source outage, with bounded CRD status and explicit
 coverage.
 
-## M5: native Chaos Mesh profile
+## M5: native Chaos Mesh integration
 
 **Outcome:** clients directly use qualified upstream fault resources.
 
-- Pin and qualify the initial platform matrix and static admission profile.
-- Bound namespace/selector/duration scope; deny Workflow/Schedule.
+- Pin and qualify the initial platform matrix; install upstream Chaos Mesh separately.
+- Let the agent use native faults under its granted Kubernetes authority.
+- Document UID-scoped actor targeting and network correlation labels.
 - Record selected Pod identity and replacement without claiming UID-pinned
   native targeting.
 - Qualify protocol partitions separately from production control-path failure.
 - Test injection, expiry, cancellation, recovery, and telemetry gaps.
 - Qualify native `TimeChaos` before accepting a custom clock-control fallback.
 
-**Done:** [Chaos Mesh](chaos-mesh.md) acceptance passes without wrapper APIs or a
-baseline dependency on Chaos Mesh. Continuity claims state their traffic and
-platform assumptions.
+**Done:** [Chaos Mesh](chaos-mesh.md) operates without wrapper APIs or a baseline
+dependency. Continuity claims state their traffic and platform assumptions;
+each further fault kind needs effect and recovery evidence.
 
 ## M6: remaining Bitcoin lifecycle actions
 

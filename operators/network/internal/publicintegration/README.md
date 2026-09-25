@@ -175,12 +175,11 @@ namespace and evidence directory.
 
 ## Optional native Chaos qualification
 
-`STACKS_PUBLIC_CHAOS=1` requires external Chaos Mesh 2.8.4 and the compatible
-`stacks-chaos-profile` chart with delay and partition enabled in the fixture
-namespace. Enroll that exact namespace with label
-`network.stacks.org/chaos-profile=network-faults-v1` and annotation
-`chaos-mesh.org/inject=enabled` while initialization runs. The harness verifies
-current policy compilation and admission; it does not install or enroll anything.
+`STACKS_PUBLIC_CHAOS=1` requires external Chaos Mesh 2.8.4 with namespace
+filtering enabled. Annotate the exact fixture namespace
+`chaos-mesh.org/inject=enabled` while initialization runs. The harness checks
+namespace opt-in and server-dry-runs both native fault manifests; it does not
+install Chaos Mesh or annotate the namespace.
 
 The selected Stacks actor image must provide `curl`, and the test host must provide
 `kubectl` with permission to exec into the selected actors. A diagnostic image may
@@ -206,6 +205,10 @@ Delay expires after 90s with native `AllRecovered`; partition is cancelled throu
 normal UID-bound deletion. Both require finalized deletion and restored HTTP
 reachability/latency. A new recovery baseline is captured after cleanup, followed
 by newly advancing Stacks canonical heights and successful traffic inclusion.
+Set `STACKS_PUBLIC_CHAOS_RESTART=1` for an additional delay-path check that
+restarts the shared Chaos Mesh controller, waits for its rollout and verifies
+that the same fault still produces measured delay before expiry. Use this only
+when no unrelated fault depends on that controller during the test.
 Fault cleanup alone never counts as protocol recovery. Native fault/status and
 public probe/control snapshots remain in the evidence directory. Assertion failures
 attempt bounded fault cleanup before the harness disposes the network.

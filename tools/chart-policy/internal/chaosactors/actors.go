@@ -1,4 +1,5 @@
-package chaosprofile
+// Package chaosactors resolves current network actor identities for native fault fixtures.
+package chaosactors
 
 import (
 	"context"
@@ -25,7 +26,7 @@ type ActorIdentity struct {
 	PodUID  types.UID
 }
 
-// Labels returns the five required selector labels.
+// Labels returns a selector scoped to the current actor participant.
 func (a ActorIdentity) Labels() map[string]string {
 	return map[string]string{
 		"network.stacks.org/network":         a.NetworkName,
@@ -46,7 +47,7 @@ func ResolveActor(ctx context.Context, reader client.Reader, namespace, actor st
 	)
 	if err := reader.Get(ctx, client.ObjectKey{Namespace: namespace, Name: "network"}, root); err != nil {
 		return result, fmt.Errorf(
-			"current v1alpha2 network required; legacy live fixtures are incompatible with UID-scoped profile: %w",
+			"current v1alpha2 network required; legacy live fixtures are incompatible with UID-scoped selector: %w",
 			err,
 		)
 	}

@@ -170,3 +170,45 @@ operator remains installed. No failed fixture was retained.
 - The collector timestamp/identity canary is a separate synthetic exporter, not a
   modified consensus actor. It tests ingestion provenance, not protocol behavior.
 - M4 remains open for broader source/lifecycle coverage, audit and export contracts.
+
+## Direct Chaos recorder check — 2026-09-24
+
+On the shared three-node kind/Kubernetes 1.37.0 cluster, the candidate
+`stacks-observability-operator:chaos-followup-20260924` image
+(`sha256:48eaaf99940fb17565d3ced74f10c0bd086f5cff264344c7424e0d6a96401758`)
+recorded an objects-only disposable namespace. Its paused, empty network root
+had UID `70572262-70b6-4bac-abb5-797a57cd6e29`; it did not initialize protocol
+actors. The corrected recording UID was `0517bb9d-38f7-4288-8fdb-d9af34aef499`.
+An initial fixture used an incorrectly parsed Greptime password and was replaced
+before the checks below; no rows from that fixture support these results.
+
+HTTPChaos UID `29fdad02-c822-44ad-96d5-bfde01fff8cb` passed server dry-run and
+was created after recorder readiness. Greptime retained 15 rows, including
+`ADDED` and `DELETED`, under the exact UID and HTTPChaos source. None contained
+the synthetic `request_headers.X-API-Key` value. Schedule UID
+`d6411c65-b3e6-4bbd-878a-ee4ab16712f1` generated PodChaos UID
+`a3a1da58-ac0a-4a80-a0ea-3af4e45e526b` without a network-UID metadata label.
+Greptime retained eight parent and eleven child rows; both had `ADDED` and
+`DELETED`, and the child row retained the exact Schedule owner UID. The target
+synthetic `pause:3.10` Pod remained Running after deletion. The faults, recording,
+root and namespace were removed; the shared cluster and backend remained running
+with no experiment namespace enrolled.
+
+This checks live source watches, owner-chain attribution, bounded header
+redaction and cleanup. It does not establish HTTP packet effects, Pod-failure
+effects on a protocol actor, Workflow descendants, all 21 sources, or complete
+event capture. The image remains a local candidate, not a release tag.
+
+A second disposable namespace checked the upstream per-Pod ownership shape.
+Chaos Mesh 2.8.4 created unlabeled `PodNetworkChaos` UID
+`745e3c42-6e4e-43d3-ae85-7b8e19c18a22` and `PodHttpChaos` UID
+`26b9ed5c-e6f0-4aed-a4e5-d7fdf9f56f27`, each owned by target Pod UID
+`5e34337d-24b0-41dc-bf60-f44e888d71ed`, rather than by the top-level fault.
+The corrected candidate `stacks-observability-operator:chaos-followup-20260924b`
+(runtime image ID
+`sha256:bb9cefc5159aa0b788820ab13d3cc92020a0b49f73f49b877e86cb207bec5a2d`)
+recorded three exact-UID rows for each child in Greptime, including a snapshot
+and subsequent modifications. No queried child row contained the synthetic
+HTTP header value. Both faults and the second namespace were deleted; the shared
+release's enrolled namespace list is empty. This establishes the actual
+Pod-owner attribution path, not HTTP or network packet effects.

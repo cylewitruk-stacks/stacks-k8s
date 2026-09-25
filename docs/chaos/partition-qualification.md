@@ -1,9 +1,8 @@
 # Native partition qualification
 
-These are historical legacy-runtime results. The current profile additionally
-requires exact network and participant UIDs and `role=actor` on both selectors.
-The legacy fixture is incompatible with that profile and does not qualify the
-replacement runtime. See the [current selector checks](../../charts/stacks-chaos-profile/README.md#replacement-actor-identities).
+These are historical legacy-runtime results obtained with the now-retired
+stacks-k8s fault profile. The legacy fixture does not qualify the replacement
+runtime. Current experiments use [native Chaos Mesh](operations.md) directly.
 
 Tested 2026-09-07 on the fresh `kind-stacks-partition-20260907` cluster.
 Native injection/cleanup and Bitcoin recovery passed. Stacks recovery passed an
@@ -214,7 +213,7 @@ fault kinds, other CNI/runtime/architecture combinations, actor replacement,
 daemon/node loss, dynamic inventory admission, and passive journal/divergence/gap
 correlation remain open. Duration still depends on working native cleanup.
 
-Use the [fixture and opt-in instructions](operations.md#partition-qualification-fixtures).
+Use the [legacy live-suite instructions](operations.md#opt-in-live-checks).
 Task-local logs use `/tmp/stacks-partition-*.log`; they are review aids, not a
 shipped evidence-retention service. Productive fixtures need a valid signer lock
 when repeated. The control test always requires a fresh isolated environment.

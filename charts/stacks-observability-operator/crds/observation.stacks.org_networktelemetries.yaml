@@ -252,7 +252,7 @@ spec:
                       - observedAt
                       - reason
                       type: object
-                    maxItems: 24
+                    maxItems: 48
                     type: array
                     x-kubernetes-list-map-keys:
                     - name
