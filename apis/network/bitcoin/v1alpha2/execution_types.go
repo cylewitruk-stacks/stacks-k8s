@@ -39,8 +39,13 @@ type BitcoinExecutionSpec struct {
 	Offer *BitcoinBlockOffer `json:"offer,omitempty"`
 }
 
-// BitcoinBlockOffer specifies one block without a sequence of commands.
+// BitcoinBlockOffer specifies one bounded generation request without a sequence of commands.
 type BitcoinBlockOffer struct {
+	// Count is the number of blocks this opportunity generates in one request; omission is one.
+	// Only first-gate bootstrap opportunities of a batching network may exceed one.
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=500
+	Count int32 `json:"count,omitempty"`
 	// Override pins the active timing request, when this opportunity used one.
 	Override *common.Binding `json:"override,omitempty"`
 	// Mode distinguishes frozen bootstrap advancement from completed-initialization baseline authority.
@@ -137,7 +142,7 @@ type BitcoinRPCReceipt struct {
 	Request BitcoinArmedRPC `json:"request"`
 	// ReceivedAt is the original response time, preserved during accounting retries.
 	ReceivedAt metav1.Time `json:"receivedAt"`
-	// BlockHash identifies the single generated block, for Generate only.
+	// BlockHash identifies the last generated block, for Generate only.
 	BlockHash string `json:"blockHash,omitempty"`
 }
 
@@ -258,6 +263,8 @@ type BitcoinInitializationSpec struct {
 	// MatureOutputsPerMiner is the frozen per-miner funding requirement.
 	// +kubebuilder:validation:Minimum=1
 	MatureOutputsPerMiner int32 `json:"matureOutputsPerMiner"`
+	// BatchGeneration is the frozen first-gate batching choice; omission is single-block generation.
+	BatchGeneration bool `json:"batchGeneration,omitempty"`
 	// MinerWallets is the exact immutable initial funding cohort.
 	// +kubebuilder:validation:MaxItems=100
 	MinerWallets []FrozenBitcoinWallet `json:"minerWallets"`

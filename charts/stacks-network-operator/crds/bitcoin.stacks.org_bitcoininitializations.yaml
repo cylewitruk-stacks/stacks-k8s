@@ -40,6 +40,10 @@ spec:
           spec:
             description: Spec freezes the first Bitcoin gate and initial cohort.
             properties:
+              batchGeneration:
+                description: BatchGeneration is the frozen first-gate batching choice;
+                  omission is single-block generation.
+                type: boolean
               genesis:
                 description: Genesis binds the frozen requirements artifact.
                 properties:
@@ -758,6 +762,14 @@ spec:
                     description: Ceiling is the frozen gate's maximum permitted resulting
                       height.
                     format: int64
+                    minimum: 1
+                    type: integer
+                  count:
+                    description: |-
+                      Count is the number of blocks this opportunity generates in one request; omission is one.
+                      Only first-gate bootstrap opportunities of a batching network may exceed one.
+                    format: int32
+                    maximum: 500
                     minimum: 1
                     type: integer
                   expectedHeight:

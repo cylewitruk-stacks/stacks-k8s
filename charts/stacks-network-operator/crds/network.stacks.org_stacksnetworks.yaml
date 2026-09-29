@@ -496,6 +496,12 @@ spec:
                                   description: Initialization freezes initial funding
                                     behavior.
                                   properties:
+                                    batchGeneration:
+                                      description: |-
+                                        BatchGeneration funds each miner and reaches MinimumHeight in as few first-gate requests as
+                                        the bounded RPC receipt allows; omission or false generates one block per opportunity.
+                                        Later gates always generate one block per opportunity.
+                                      type: boolean
                                     matureOutputsPerMiner:
                                       description: MatureOutputsPerMiner is required
                                         for every bootstrap miner.
@@ -2232,6 +2238,12 @@ spec:
                               description: Initialization freezes initial funding
                                 behavior.
                               properties:
+                                batchGeneration:
+                                  description: |-
+                                    BatchGeneration funds each miner and reaches MinimumHeight in as few first-gate requests as
+                                    the bounded RPC receipt allows; omission or false generates one block per opportunity.
+                                    Later gates always generate one block per opportunity.
+                                  type: boolean
                                 matureOutputsPerMiner:
                                   description: MatureOutputsPerMiner is required for
                                     every bootstrap miner.

@@ -25,6 +25,8 @@ type RPC interface {
 	Check(context.Context, string, string) error
 	// Generate sends exactly one block-generation request.
 	Generate(context.Context, string, string, string) (string, error)
+	// GenerateBlocks sends one request for count blocks and returns the last block hash.
+	GenerateBlocks(context.Context, string, string, string, int) (string, error)
 }
 
 // WorkerInput is immutable per-Deployment control-worker enrollment.
@@ -257,7 +259,7 @@ func (w *Worker) arm(
 		}
 		height, tip, e := w.chain(ctx, fresh.target.Endpoint)
 		if e != nil || height != operation.Offer.ExpectedHeight || tip != operation.Offer.ExpectedTip ||
-			height >= operation.Offer.Ceiling {
+			height >= operation.Offer.Ceiling || offerBlocks(operation.Offer) > operation.Offer.Ceiling-height {
 			return fmt.Errorf("final generation ceiling preflight differs")
 		}
 	}
@@ -396,7 +398,7 @@ func (w *Worker) account(
 			return err
 		}
 	} else if receipt.Request.Method == bitcoin.RPCGenerate {
-		current.Status.BlocksGenerated++
+		current.Status.BlocksGenerated += offerBlocks(receipt.Request.Offer)
 		current.Status.CompletedOffer = receipt.Request.Offer.Number
 	}
 	return w.Client.Status().Update(ctx, current)

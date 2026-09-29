@@ -229,16 +229,19 @@ func verifyFrozenPolicyUpdates(
 	}
 	originalProduction := *production.Spec.DeepCopy()
 	priorProduction := participant(t, ctx, c, root, "blocks").Status.Admission
-	for _, field := range []string{"payout", "initialization"} {
+	for _, field := range []string{"payout", "initialization", "batch-generation"} {
 		t.Run(field, func(t *testing.T) {
 			if err := c.Get(ctx, productionKey, &production); err != nil {
 				t.Fatal(err)
 			}
 			production.Spec = *originalProduction.DeepCopy()
-			if field == "payout" {
+			switch field {
+			case "payout":
 				production.Spec.PayoutWalletRef = &common.NameRef{Name: "miner-wallet-01"}
-			} else {
+			case "initialization":
 				production.Spec.Initialization.MatureOutputsPerMiner++
+			default:
+				production.Spec.Initialization.BatchGeneration = ptr.To(true)
 			}
 			updateObject(t, ctx, c, &production)
 			for i := range root.Spec.Participants {

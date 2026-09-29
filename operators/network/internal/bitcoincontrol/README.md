@@ -16,7 +16,11 @@ persisted until unloading is acknowledged or native absence is observed.
 The scheduler owns cadence and target selection. It initializes watch-only
 public descriptor wallets, funds the complete captured miner cohort, checks
 coinbase maturity and all captured Core views, and initially holds at the frozen
-PrepareBitcoin ceiling (203). Its 120-second observation deadline survives
+PrepareBitcoin ceiling (203). A frozen `batchGeneration` lets one first-gate offer carry a
+`count` of blocks, bounded by the miner's remaining outputs or the blocks left to the ceiling and
+by the client's 500-block receipt limit; workers re-check that bound, send one
+`generatetoaddress` for the whole count and account it atomically. Later gates and baseline
+offers remain single-block. Its 120-second observation deadline survives
 pause. Later advancement requires the aggregate’s exact frozen gate index and
 ceiling, with all prior completions retained. After 203, captured Stacks actors
 must be currently verified and ready. Once PoX-4 activates, each legacy

@@ -104,6 +104,10 @@ type Initialization struct {
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=100
 	MatureOutputsPerMiner int32 `json:"matureOutputsPerMiner"`
+	// BatchGeneration funds each miner and reaches MinimumHeight in as few first-gate requests as
+	// the bounded RPC receipt allows; omission or false generates one block per opportunity.
+	// Later gates always generate one block per opportunity.
+	BatchGeneration *bool `json:"batchGeneration,omitempty"`
 }
 
 // BitcoinBlockProductionSpec defines ongoing baseline block production.

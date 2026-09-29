@@ -1,0 +1,391 @@
+# Smallest accepted cohort: one Bitcoin node, one mining Stacks node hosting the only signer,
+# one stacker and the required production, sBTC contract and traffic roles (7 participants).
+# Epochs start 100 Bitcoin blocks (five reward cycles) earlier than the built-in schedule, so
+# every gate window keeps its length, and batchGeneration mines the first gate in two requests.
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: lab-minimal
+---
+apiVersion: network.stacks.org/v1alpha2
+kind: StacksEpochSchedule
+metadata:
+  name: epochs
+  namespace: lab-minimal
+spec:
+  epochs:
+  - name: '1.0'
+    startHeight: 0
+  - name: '2.0'
+    startHeight: 0
+  - name: '2.05'
+    startHeight: 103
+  - name: '2.1'
+    startHeight: 104
+  - name: '2.2'
+    startHeight: 106
+  - name: '2.3'
+    startHeight: 107
+  - name: '2.4'
+    startHeight: 108
+  - name: '2.5'
+    startHeight: 109
+  - name: '3.0'
+    startHeight: 152
+  - name: '3.1'
+    startHeight: 153
+  - name: '3.2'
+    startHeight: 154
+  - name: '3.3'
+    startHeight: 155
+  - name: '3.4'
+    startHeight: 162
+  - name: '4.0'
+    startHeight: 182
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksAccount
+metadata:
+  name: holder-01
+  namespace: lab-minimal
+spec:
+  key:
+    generate: true
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksAccount
+metadata:
+  name: admin-01
+  namespace: lab-minimal
+spec:
+  key:
+    generate: true
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksAccount
+metadata:
+  name: consensus-01
+  namespace: lab-minimal
+spec:
+  key:
+    generate: true
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksAccount
+metadata:
+  name: miner-key-01
+  namespace: lab-minimal
+spec:
+  key:
+    generate: true
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksAccount
+metadata:
+  name: sbtc-deployer
+  namespace: lab-minimal
+spec:
+  key:
+    generate: true
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksAccount
+metadata:
+  name: traffic-account
+  namespace: lab-minimal
+spec:
+  key:
+    generate: true
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksAccount
+metadata:
+  name: traffic-recipient
+  namespace: lab-minimal
+spec:
+  key:
+    generate: true
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksAccount
+metadata:
+  name: bridge-key-01
+  namespace: lab-minimal
+spec:
+  key:
+    generate: true
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksAccount
+metadata:
+  name: bridge-key-02
+  namespace: lab-minimal
+spec:
+  key:
+    generate: true
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksAccount
+metadata:
+  name: bridge-aggregate
+  namespace: lab-minimal
+spec:
+  key:
+    generate: true
+---
+apiVersion: bitcoin.stacks.org/v1alpha2
+kind: BitcoinWallet
+metadata:
+  name: production-wallet
+  namespace: lab-minimal
+spec:
+  walletName: production
+  keySource:
+    generate: true
+  watchOnly: true
+---
+apiVersion: bitcoin.stacks.org/v1alpha2
+kind: BitcoinWallet
+metadata:
+  name: miner-wallet-01
+  namespace: lab-minimal
+spec:
+  walletName: miner-01
+  keySource:
+    stacksMinerAccountRef:
+      name: miner-key-01
+  watchOnly: true
+---
+apiVersion: bitcoin.stacks.org/v1alpha2
+kind: BitcoinNode
+metadata:
+  name: btc-01
+  namespace: lab-minimal
+spec:
+  peers:
+    discovery: Network
+  placement:
+    nodeSelector:
+      kubernetes.io/hostname: stacks-k8s-worker
+  walletRefs:
+  - name: production-wallet
+  - name: miner-wallet-01
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksNode
+metadata:
+  name: node-01
+  namespace: lab-minimal
+spec:
+  bitcoinNodeRef:
+    name: btc-01
+  identityAccountRef:
+    name: miner-key-01
+  mining:
+    enabled: true
+    bitcoinWalletRef:
+      name: miner-wallet-01
+    feeRateSatsPerVByte: 2
+  peers:
+    discovery: Network
+  placement:
+    nodeSelector:
+      kubernetes.io/hostname: stacks-k8s-worker
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksSigner
+metadata:
+  name: signer-01
+  namespace: lab-minimal
+spec:
+  nodeRef:
+    name: node-01
+  accountRef:
+    name: consensus-01
+  placement:
+    nodeSelector:
+      kubernetes.io/hostname: stacks-k8s-worker2
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksStacker
+metadata:
+  name: stacker-01
+  namespace: lab-minimal
+spec:
+  holderAccountRef:
+    name: holder-01
+  administratorAccountRef:
+    name: admin-01
+  signerRef:
+    name: signer-01
+  targetNodeRef:
+    name: node-01
+  amountMicroSTX: '1000000000000000'
+  lockCycles: 6
+  renewWhenRemainingCycles: 3
+---
+apiVersion: bitcoin.stacks.org/v1alpha2
+kind: BitcoinBlockSchedule
+metadata:
+  name: steady-blocks
+  namespace: lab-minimal
+spec:
+  cadence:
+    mode: Fixed
+    interval: 5s
+---
+apiVersion: bitcoin.stacks.org/v1alpha2
+kind: BitcoinBlockProduction
+metadata:
+  name: blocks
+  namespace: lab-minimal
+spec:
+  scheduleRef:
+    name: steady-blocks
+  targets:
+  - nodeRef:
+      name: btc-01
+    weight: 1
+  payoutWalletRef:
+    name: production-wallet
+  initialization:
+    targetNodeRef:
+      name: btc-01
+    minimumHeight: 103
+    minerWalletRefs:
+    - name: miner-wallet-01
+    matureOutputsPerMiner: 2
+    batchGeneration: true
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksTransactionProduction
+metadata:
+  name: traffic
+  namespace: lab-minimal
+spec:
+  accountRef:
+    name: traffic-account
+  targetNodeRef:
+    name: node-01
+  recipient:
+    accountRef:
+      name: traffic-recipient
+  amountMicroSTX: '1'
+  feeMicroSTX: '1000'
+  interval: 5s
+---
+apiVersion: stacks.stacks.org/v1alpha2
+kind: StacksContractSet
+metadata:
+  name: sbtc
+  namespace: lab-minimal
+spec:
+  deployerAccountRef:
+    name: sbtc-deployer
+  targetNodeRef:
+    name: node-01
+  bundle: sbtc-regtest-v1
+  initialization:
+    mode: ExplicitTestRegistry
+    signerAccountRefs:
+    - name: bridge-key-01
+    - name: bridge-key-02
+    aggregateKeyAccountRef:
+      name: bridge-aggregate
+    threshold: 2
+---
+apiVersion: network.stacks.org/v1alpha2
+kind: StacksNetwork
+metadata:
+  name: network
+  namespace: lab-minimal
+spec:
+  profile: regtest-pox4-pox5-v1
+  epochScheduleRef:
+    name: epochs
+  genesis:
+    allocations:
+    - accountRef:
+        name: holder-01
+      amountMicroSTX: '2000000000000000'
+    - accountRef:
+        name: admin-01
+      amountMicroSTX: '1000000000000'
+    - accountRef:
+        name: miner-key-01
+      amountMicroSTX: '1000000000000'
+    - accountRef:
+        name: sbtc-deployer
+      amountMicroSTX: '1000000000000'
+    - accountRef:
+        name: traffic-account
+      amountMicroSTX: '1000000000000'
+    pox:
+      rewardCycleLength: 20
+      prepareLength: 5
+  participants:
+  - name: btc-01
+    kind: BitcoinNode
+    definition:
+      ref:
+        name: btc-01
+  - name: node-01
+    kind: StacksNode
+    definition:
+      ref:
+        name: node-01
+  - name: signer-01
+    kind: StacksSigner
+    definition:
+      ref:
+        name: signer-01
+  - name: stacker-01
+    kind: StacksStacker
+    definition:
+      ref:
+        name: stacker-01
+  - name: blocks
+    kind: BitcoinBlockProduction
+    definition:
+      ref:
+        name: blocks
+  - name: traffic
+    kind: StacksTransactionProduction
+    definition:
+      ref:
+        name: traffic
+  - name: sbtc
+    kind: StacksContractSet
+    definition:
+      ref:
+        name: sbtc
+  defaults:
+    workerPlacement:
+      nodeSelector:
+        kubernetes.io/hostname: stacks-k8s-control-plane
+      tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+    images:
+      bitcoin: bitcoin/bitcoin:31.1
+      stacksNode: ghcr.io/stacks-network/stacks-core:4.0.3
+      stacksSigner: ghcr.io/stacks-network/stacks-signer:4.0.3
+    storage:
+      size: 2Gi
+      retainOnDelete: false
+    actorResources:
+      bitcoin:
+        requests:
+          cpu: 50m
+          memory: 128Mi
+      stacksNode:
+        requests:
+          cpu: 300m
+          memory: 768Mi
+      stacksSigner:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+  operation: Paused

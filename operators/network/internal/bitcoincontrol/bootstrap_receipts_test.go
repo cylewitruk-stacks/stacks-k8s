@@ -100,6 +100,9 @@ func TestBootstrapReceiptIdentityAndFunding(t *testing.T) {
 		"baseline": func(e *bitcoin.BitcoinExecution) {
 			e.Status.LastReceipt.Request.Offer.Mode = "Baseline"
 		},
+		"unbatched-count": func(e *bitcoin.BitcoinExecution) {
+			e.Status.LastReceipt.Request.Offer.Count = 2
+		},
 		"uncompleted": func(e *bitcoin.BitcoinExecution) { e.Status.CompletedOffer++ },
 		"no-receipt":  func(e *bitcoin.BitcoinExecution) { e.Status.LastReceipt = nil },
 	} {

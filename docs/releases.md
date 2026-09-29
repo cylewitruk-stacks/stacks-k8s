@@ -72,7 +72,8 @@ The observer pin is declared once in the network chart
 image or explicitly override `bitcoinObserverImage`, independently of the controller tag.
 
 Network changes include optional read-only Bitcoin observer sidecars, independent image
-selection and attributed burnchain diagnostic status. Observability changes include
+selection, attributed burnchain diagnostic status and opt-in first-gate Bitcoin generation
+batching (`initialization.batchGeneration`). Observability changes include
 mandatory actor resource samples, native fault sources, resilient watch reconnection and
 the larger local query profile. Apply generated CRD schema updates explicitly before
 upgrading; Helm does not upgrade bundled CRDs. These are prepared versions, not a claim

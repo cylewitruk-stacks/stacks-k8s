@@ -229,6 +229,7 @@ func (w *Worker) resolveActor(ctx context.Context, record *bitcoin.BitcoinExecut
 // authorizeOffer verifies current selection and the frozen ceiling independently of freshness snapshots.
 func (w *Worker) authorizeOffer(ctx context.Context, a admitted, offer *bitcoin.BitcoinBlockOffer) error {
 	if offer == nil || offer.Number < 1 || offer.ExpectedHeight >= offer.Ceiling ||
+		!offerCountAuthorized(a.initialization, offer) ||
 		!w.Now().Before(offer.ExpiresAt.Time) ||
 		offer.Initialization != objectref.BitcoinInitialization(a.initialization) ||
 		offer.Production != productionBinding(a.initialization) ||

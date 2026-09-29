@@ -56,6 +56,14 @@ spec:
                     format: int64
                     minimum: 1
                     type: integer
+                  count:
+                    description: |-
+                      Count is the number of blocks this opportunity generates in one request; omission is one.
+                      Only first-gate bootstrap opportunities of a batching network may exceed one.
+                    format: int32
+                    maximum: 500
+                    minimum: 1
+                    type: integer
                   expectedHeight:
                     description: ExpectedHeight is the converged pre-dispatch height.
                     format: int64
@@ -948,6 +956,14 @@ spec:
                         format: int64
                         minimum: 1
                         type: integer
+                      count:
+                        description: |-
+                          Count is the number of blocks this opportunity generates in one request; omission is one.
+                          Only first-gate bootstrap opportunities of a batching network may exceed one.
+                        format: int32
+                        maximum: 500
+                        minimum: 1
+                        type: integer
                       expectedHeight:
                         description: ExpectedHeight is the converged pre-dispatch
                           height.
@@ -1390,8 +1406,8 @@ spec:
                 description: LastReceipt retains the last atomically accounted success.
                 properties:
                   blockHash:
-                    description: BlockHash identifies the single generated block,
-                      for Generate only.
+                    description: BlockHash identifies the last generated block, for
+                      Generate only.
                     type: string
                   receivedAt:
                     description: ReceivedAt is the original response time, preserved
@@ -1465,6 +1481,14 @@ spec:
                             description: Ceiling is the frozen gate's maximum permitted
                               resulting height.
                             format: int64
+                            minimum: 1
+                            type: integer
+                          count:
+                            description: |-
+                              Count is the number of blocks this opportunity generates in one request; omission is one.
+                              Only first-gate bootstrap opportunities of a batching network may exceed one.
+                            format: int32
+                            maximum: 500
                             minimum: 1
                             type: integer
                           expectedHeight:

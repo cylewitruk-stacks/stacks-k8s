@@ -75,42 +75,11 @@ func TestFoundationSchemasAndFreeze(t *testing.T) {
 		t.Fatal(err)
 	}
 	verifyWalletProfileSchema(t, ctx, c)
+	verifyBatchGenerationSchema(t, ctx, c)
 	verifyManagerAndScopedJob(t, ctx, c, cfg, scheme)
-	// The complete proposed cohort must survive schema admission without silent field pruning.
-	path := filepath.Join("..", "..", "..", "..", "docs", "design", "public-api", "examples", "30-actors.yaml")
-	// #nosec G304 -- Path is derived from repository fixtures or a private test directory, not a remote request.
-	file, err := os.Open(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = file.Close() }() // Read/cleanup completion cannot change the operation's result.
-	decoder := yaml.NewYAMLOrJSONDecoder(file, 4096)
-	count := 0
-	for {
-		var raw json.RawMessage
-		err := decoder.Decode(&raw)
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		if err != nil {
-			t.Fatal(err)
-		}
-		if len(raw) == 0 {
-			continue
-		}
-		obj := &unstructured.Unstructured{}
-		if err := json.Unmarshal(raw, &obj.Object); err != nil {
-			t.Fatal(err)
-		}
-		if obj.GetKind() == "" {
-			continue
-		}
-		if err := c.Create(ctx, obj, client.FieldValidation("Strict")); err != nil {
-			t.Fatalf("create %s/%s: %v", obj.GetKind(), obj.GetName(), err)
-		}
-		count++
-	}
-	t.Logf("strictly admitted %d objects", count)
+	// Complete example cohorts must survive schema admission without silent field pruning.
+	t.Logf("strictly admitted %d minimal objects", admitExample(t, ctx, c, "minimal.yaml"))
+	t.Logf("strictly admitted %d objects", admitExample(t, ctx, c, "30-actors.yaml"))
 	ns := "lab-30"
 	key := types.NamespacedName{Namespace: ns, Name: "network"}
 	request := ctrl.Request{NamespacedName: key}
@@ -427,6 +396,44 @@ func TestFoundationSchemasAndFreeze(t *testing.T) {
 	var definitions stacks.StacksNodeList
 	if err := c.List(ctx, &definitions, client.InNamespace(ns)); err != nil || len(definitions.Items) == 0 {
 		t.Fatal("root deletion removed reusable definitions")
+	}
+}
+
+// admitExample strictly creates every object of one public API example and returns their count.
+func admitExample(t *testing.T, ctx context.Context, c client.Client, name string) int {
+	t.Helper()
+	path := filepath.Join("..", "..", "..", "..", "docs", "design", "public-api", "examples", name)
+	// #nosec G304 -- Path is derived from repository fixtures or a private test directory, not a remote request.
+	file, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = file.Close() }() // Read/cleanup completion cannot change the operation's result.
+	decoder := yaml.NewYAMLOrJSONDecoder(file, 4096)
+	count := 0
+	for {
+		var raw json.RawMessage
+		err := decoder.Decode(&raw)
+		if errors.Is(err, io.EOF) {
+			return count
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(raw) == 0 {
+			continue
+		}
+		obj := &unstructured.Unstructured{}
+		if err := json.Unmarshal(raw, &obj.Object); err != nil {
+			t.Fatal(err)
+		}
+		if obj.GetKind() == "" {
+			continue
+		}
+		if err := c.Create(ctx, obj, client.FieldValidation("Strict")); err != nil {
+			t.Fatalf("create %s %s/%s: %v", name, obj.GetKind(), obj.GetName(), err)
+		}
+		count++
 	}
 }
 

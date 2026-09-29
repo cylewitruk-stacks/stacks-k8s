@@ -355,6 +355,7 @@ func (s *Scheduler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.R
 		return report(bitcoin.InitializationPreparing, reasonCadenceWaiting)
 	}
 	wallet := record.Spec.PayoutWallet
+	remaining := int64(0) // Outputs the selected miner wallet still needs; zero for the payout wallet.
 	for _, candidate := range record.Spec.MinerWallets {
 		if record.Status.PreparedAt != nil {
 			break
@@ -367,8 +368,13 @@ func (s *Scheduler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.R
 		}
 		if count < record.Spec.MatureOutputsPerMiner {
 			wallet = candidate
+			remaining = int64(record.Spec.MatureOutputsPerMiner - count)
 			break
 		}
+	}
+	blocks := int32(0)
+	if authority.index == 0 {
+		blocks = bootstrapBatch(record, height, authority.gate.BitcoinCeiling, remaining)
 	}
 	number := max(record.Status.LastAccountedOffer, target.Status.CompletedOffer)
 	if record.Status.Offer != nil {
@@ -384,6 +390,7 @@ func (s *Scheduler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.R
 	next := metav1.NewTime(s.Now().Add(interval).UTC())
 	record.Status.NextOpportunityAt = &next
 	record.Status.Offer = &bitcoin.BitcoinBlockOffer{
+		Count:          blocks,
 		Override:       overrideBinding(record),
 		Initialization: objectref.BitcoinInitialization(record),
 		Production:     objectref.Participant(production),
