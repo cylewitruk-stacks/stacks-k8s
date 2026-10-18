@@ -4,8 +4,8 @@ go 1.27.2
 
 require (
 	github.com/cylewitruk-stacks/stacks-k8s/apis/network v0.1.0
-	k8s.io/api v0.37.0
-	k8s.io/apimachinery v0.37.0
+	k8s.io/api v0.37.1
+	k8s.io/apimachinery v0.37.1
 	k8s.io/client-go v0.37.0
 )
 
