@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.7
-FROM golang:1.27.1 AS builder
+FROM golang:1.27.2 AS builder
 WORKDIR /src
 COPY libs/bitcoin/go.mod ./libs/bitcoin/
 COPY libs/stacks/go.mod libs/stacks/go.sum ./libs/stacks/

@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Go 1.27.1
+- Go 1.27.2
 - Helm 3
 - Docker for container validation and local images
 - Network access when envtest assets or vulnerability data are not cached
@@ -102,7 +102,7 @@ The development target is Kubernetes **1.37.0**. API and runtime modules pin
 [controller-runtime v0.25.0](https://github.com/kubernetes-sigs/controller-runtime/releases/tag/v0.25.0).
 Generators remain at controller-tools **v0.22.0**, which already uses the
 Kubernetes 0.37 family. Keep these module families aligned when updating pins.
-Go 1.27.1 and the existing container build toolchain satisfy their requirements.
+Go 1.27.2 and the existing container build toolchain satisfy their requirements.
 
 All envtest suites download **1.37.0** API-server assets by default, including
 the native actor-selector checks. Their explicit download configuration selects
