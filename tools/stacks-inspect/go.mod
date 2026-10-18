@@ -1,6 +1,6 @@
 module github.com/cylewitruk-stacks/stacks-k8s/tools/stacks-inspect
 
-go 1.27.1
+go 1.27.2
 
 require (
 	github.com/cylewitruk-stacks/stacks-k8s/libs/bitcoin v0.1.0
