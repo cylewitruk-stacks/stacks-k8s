@@ -10,8 +10,10 @@ import (
 	bitcoin "github.com/cylewitruk-stacks/stacks-k8s/apis/network/bitcoin/v1alpha2"
 	common "github.com/cylewitruk-stacks/stacks-k8s/apis/network/common/v1alpha2"
 	api "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha2"
+	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/foundation"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // setBatch freezes the first-gate batching choice into the fixture's initialization record.
@@ -265,6 +267,49 @@ func TestFreezeInitializationCapturesBatchGeneration(t *testing.T) {
 			if spec.BatchGeneration != tc.want || spec.MinimumHeight != 103 || spec.MatureOutputsPerMiner != 2 ||
 				len(spec.MinerWallets) != 1 || spec.PayoutWallet.Address != testAddress {
 				t.Fatalf("unexpected frozen spec %+v", spec)
+			}
+		})
+	}
+}
+
+// TestReplacementProducerPreservesBatchGeneration checks both scheduler admission paths against frozen batching.
+func TestReplacementProducerPreservesBatchGeneration(t *testing.T) {
+	for name, tc := range map[string]struct {
+		frozen   bool
+		declared *bool
+		accepted bool
+	}{
+		"omitted-disabled":       {frozen: false, declared: nil, accepted: true},
+		"explicit-disabled":      {frozen: false, declared: ptr.To(false), accepted: true},
+		"enabled":                {frozen: true, declared: ptr.To(true), accepted: true},
+		"enable-frozen-disabled": {frozen: false, declared: ptr.To(true)},
+		"disable-frozen-enabled": {frozen: true, declared: ptr.To(false)},
+		"omit-frozen-enabled":    {frozen: true, declared: nil},
+	} {
+		t.Run(name, func(t *testing.T) {
+			f := baselineFixture(t)
+			f.setBatch(t, tc.frozen)
+			f.production.Status.Admission.Configuration.BitcoinBlockProduction.Initialization.BatchGeneration = tc.declared
+			f.production.Status.Admission.PolicyDigest = foundation.Digest(f.production.Status.Admission.Configuration)
+			replaceBootstrapProducer(t, f, "replacement")
+			if err := f.c.Get(t.Context(), client.ObjectKeyFromObject(f.root), f.root); err != nil {
+				t.Fatal(err)
+			}
+			var replacement api.StacksNetworkParticipant
+			if err := f.c.Get(t.Context(), client.ObjectKey{
+				Namespace: f.root.Namespace,
+				Name:      foundation.ParticipantName(string(f.root.UID), "replacement"),
+			}, &replacement); err != nil {
+				t.Fatal(err)
+			}
+			s := f.schedulerFor()
+			initial := f.readInitial(t)
+			_, productionErr := s.currentProduction(t.Context(), f.root, initial)
+			_, baselineErr := baselineInputs(t.Context(), s.Reader, f.root, initial, &replacement)
+			for path, err := range map[string]error{"production": productionErr, "baseline": baselineErr} {
+				if (err == nil) != tc.accepted {
+					t.Errorf("%s accepted=%t, want %t: %v", path, err == nil, tc.accepted, err)
+				}
 			}
 		})
 	}

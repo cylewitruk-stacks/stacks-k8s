@@ -88,7 +88,8 @@ func resolveBaselineInputs(
 	policy := p.Status.Admission.Configuration.BitcoinBlockProduction
 	if policy.Schedule == nil || policy.PayoutWalletRef == nil || policy.Initialization == nil ||
 		policy.Initialization.MinimumHeight != initial.Spec.MinimumHeight ||
-		policy.Initialization.MatureOutputsPerMiner != initial.Spec.MatureOutputsPerMiner {
+		policy.Initialization.MatureOutputsPerMiner != initial.Spec.MatureOutputsPerMiner ||
+		ptr.Deref(policy.Initialization.BatchGeneration, false) != initial.Spec.BatchGeneration {
 		return out, fmt.Errorf("baseline policy incomplete")
 	}
 	if err := foundation.ValidateAdmissionEligibility(ctx, reader, p); err != nil {
