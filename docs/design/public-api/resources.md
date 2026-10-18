@@ -874,6 +874,13 @@ be removed without changing initialization inputs or repeating funding; the reta
 production binding retains its provenance. Outstanding RPC/action obligations still retain
 their execution records. One output's maturity is established from its actual confirmations,
 not just a network-wide counter. All generation goes through the existing per-target executor.
+Optional `batchGeneration: true` (omission or false keeps one block per opportunity) lets one
+first-gate opportunity generate several blocks in a single `generatetoaddress` request: a miner
+wallet receives its remaining outputs and the payout wallet the blocks left to minimumHeight, at
+most 500 per request, so the resulting height never exceeds the frozen ceiling. Later gates and
+baseline production always generate one block per opportunity. An unknown batch outcome retains
+Armed and closes the target exactly like a single block; the receipt's `blockHash` identifies the
+last generated block. The value is frozen with the other initialization inputs.
 An already initialized network never repeats funding on a reconcile or pause/resume. This
 funding list covers bootstrap miners only. A later miner requires an explicit funding
 operation: create its account/wallet/node, read the resolved wallet address, request bounded

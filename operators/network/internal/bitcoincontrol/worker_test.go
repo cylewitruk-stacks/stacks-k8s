@@ -45,8 +45,17 @@ type fakeRPC struct {
 
 func (f *fakeRPC) Check(context.Context, string, string) error { return nil }
 func (f *fakeRPC) Generate(ctx context.Context, _, _, _ string) (string, error) {
+	return f.generate(ctx, "Generate", 1)
+}
+
+func (f *fakeRPC) GenerateBlocks(ctx context.Context, _, _, _ string, count int) (string, error) {
+	return f.generate(ctx, fmt.Sprintf("GenerateBlocks:%d", count), count)
+}
+
+// generate records one request and, unless it fails, advances the modeled chain by count blocks.
+func (f *fakeRPC) generate(ctx context.Context, call string, count int) (string, error) {
 	f.mu.Lock()
-	f.calls = append(f.calls, "Generate")
+	f.calls = append(f.calls, call)
 	fail, wait, after := f.fail, f.wait, f.after
 	f.mu.Unlock()
 	if wait != nil {
@@ -60,7 +69,7 @@ func (f *fakeRPC) Generate(ctx context.Context, _, _, _ string) (string, error) 
 		return "", fmt.Errorf("lost response")
 	}
 	f.mu.Lock()
-	f.height++
+	f.height += int64(count)
 	f.tip = ""
 	height := f.height
 	f.mu.Unlock()

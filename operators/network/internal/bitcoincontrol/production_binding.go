@@ -8,6 +8,7 @@ import (
 	common "github.com/cylewitruk-stacks/stacks-k8s/apis/network/common/v1alpha2"
 	api "github.com/cylewitruk-stacks/stacks-k8s/apis/network/v1alpha2"
 	"github.com/cylewitruk-stacks/stacks-k8s/operators/network/internal/foundation"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -64,7 +65,8 @@ func (s *Scheduler) currentProduction(
 	}
 	if initial := p.Status.Admission.Configuration.BitcoinBlockProduction.Initialization; initial != nil {
 		if initial.MinimumHeight != record.Spec.MinimumHeight ||
-			initial.MatureOutputsPerMiner != record.Spec.MatureOutputsPerMiner {
+			initial.MatureOutputsPerMiner != record.Spec.MatureOutputsPerMiner ||
+			ptr.Deref(initial.BatchGeneration, false) != record.Spec.BatchGeneration {
 			return nil, fmt.Errorf("replacement changes frozen initialization")
 		}
 		target := false

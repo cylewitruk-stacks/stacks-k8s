@@ -78,25 +78,42 @@ func (r *Client) Check(ctx context.Context, endpoint, address string) error {
 	return nil
 }
 
+// MaxGeneratedBlocks bounds one generation request so its hash list fits the response bound.
+const MaxGeneratedBlocks = 500
+
 // Generate requests exactly one block and requires an attributable success receipt.
 func (r *Client) Generate(ctx context.Context, endpoint, address, id string) (string, error) {
+	return r.GenerateBlocks(ctx, endpoint, address, id, 1)
+}
+
+// GenerateBlocks requests count blocks in one call and returns the last block hash only when
+// the receipt lists exactly count valid hashes. Any error leaves the number of generated blocks unknown.
+func (r *Client) GenerateBlocks(ctx context.Context, endpoint, address, id string, count int) (string, error) {
+	if count < 1 || count > MaxGeneratedBlocks {
+		return "", &CallError{Kind: FailureRequest, message: "unsupported generation count"}
+	}
 	var hashes []string
 	if err := r.Call(ctx, endpoint, id, MethodGenerateToAddress, []any{
-		1,
+		count,
 		address,
 		1000000,
 	}, &hashes); err != nil {
 		return "", err
 	}
-	if len(hashes) != 1 || len(hashes[0]) != 64 {
+	if len(hashes) != count {
 		return "", fmt.Errorf("incomplete generation receipt")
 	}
-	for _, c := range hashes[0] {
-		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
-			return "", fmt.Errorf("invalid block hash")
+	for _, hash := range hashes {
+		if len(hash) != 64 {
+			return "", fmt.Errorf("incomplete generation receipt")
+		}
+		for _, c := range hash {
+			if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+				return "", fmt.Errorf("invalid block hash")
+			}
 		}
 	}
-	return hashes[0], nil
+	return hashes[count-1], nil
 }
 
 // Call avoids replayable request bodies and bounds response memory; errors omit server response bodies.

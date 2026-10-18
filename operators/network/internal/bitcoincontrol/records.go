@@ -236,6 +236,8 @@ func freezeInitialization(
 	if spec.MinimumHeight != genesis.Spec.Bootstrap.Gates[0].BitcoinCeiling || initial.MatureOutputsPerMiner < 1 {
 		return spec, fmt.Errorf("initialization differs from frozen ceiling")
 	}
+	// Omission stays false so records frozen before batching existed keep an identical spec.
+	spec.BatchGeneration = ptr.Deref(initial.BatchGeneration, false)
 	resolve := func(ref common.Binding) (bitcoin.FrozenBitcoinWallet, error) {
 		wallet := &bitcoin.BitcoinWallet{}
 		if e := reader.Get(ctx, client.ObjectKey{Namespace: root.Namespace, Name: ref.Name}, wallet); e != nil {

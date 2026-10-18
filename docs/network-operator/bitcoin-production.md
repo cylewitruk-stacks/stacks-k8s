@@ -47,3 +47,21 @@ replace unsent stale offers subject to cadence, without waiting for their expiry
 Workers still check current policy, pause, exact target and chain identity, and
 the frozen gate ceiling before sending. Expiry does not cancel an Armed RPC.
 Completed-initialization baseline opportunities retain their next-tick expiry.
+
+Each first-gate opportunity waits for a fresh post-receipt observation, so funding and
+maturing miners takes roughly one observation round trip per block. Set
+`initialization.batchGeneration: true` to fund each miner and mature the outputs in as few
+requests as possible: one per miner and one for the remaining height, each up to 500 blocks.
+A `minimumHeight` of 103 with one miner needing two outputs takes two requests (2 and 101
+blocks). Only the first gate batches. Enrollment, contract and waterfall gates still advance
+one block per opportunity.
+
+```yaml
+initialization:
+  targetNodeRef: {name: btc-01}
+  minimumHeight: 103
+  minerWalletRefs:
+    - {name: miner-wallet-01}
+  matureOutputsPerMiner: 2
+  batchGeneration: true
+```

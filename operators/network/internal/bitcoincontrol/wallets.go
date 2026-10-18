@@ -355,6 +355,9 @@ func (w *Worker) mutate(ctx context.Context, request bitcoin.BitcoinArmedRPC) (s
 		if request.Offer == nil {
 			return "", fmt.Errorf("missing generation inputs")
 		}
+		if blocks := offerBlocks(request.Offer); blocks > 1 {
+			return w.RPC.GenerateBlocks(ctx, request.Target.Endpoint, request.Offer.Address, request.ID, int(blocks))
+		}
 		return w.RPC.Generate(ctx, request.Target.Endpoint, request.Offer.Address, request.ID)
 	}
 	if request.Wallet == nil {

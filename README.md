@@ -52,7 +52,13 @@ kubectl --context kind-stacks-k8s -n lab-30 get stacksnetwork,stacksnetworkparti
 
 Initialization waits for native protocol evidence, not merely Ready Pods or
 Bitcoin heights. At a five-second Bitcoin cadence, reaching height 300 takes
-at least 25 minutes, plus initialization holds. Follow
+at least 25 minutes, plus initialization holds.
+
+For a shorter first run, the [minimal example](docs/design/public-api/examples/minimal.yaml)
+declares the smallest accepted cohort in namespace `lab-minimal`: one Bitcoin node, one mining
+Stacks node hosting the only signer, one stacker, and the required production, sBTC and traffic
+roles. Its epochs start 100 blocks earlier and `batchGeneration` mines the first gate in two
+requests, so initialization ends near height 200; one local run took about 10 minutes. Follow
 [operations](docs/network-operator/operations.md) for pause, terminal stop,
 destructive removal and cleanup.
 

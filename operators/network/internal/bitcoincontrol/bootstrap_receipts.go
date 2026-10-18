@@ -38,9 +38,11 @@ func accountBootstrapReceipt(
 		offer.Number <= initial.Status.LastAccountedOffer ||
 		offer.Number != execution.Status.CompletedOffer ||
 		offer.ExpectedHeight < 0 ||
-		offer.ExpectedHeight >= offer.Ceiling {
+		offer.ExpectedHeight >= offer.Ceiling ||
+		!offerCountAuthorized(initial, offer) {
 		return false
 	}
+	blocks := max(offer.Count, 1) // offerCountAuthorized bounds Count; omission is one block.
 	known := offer.Wallet == initial.Spec.PayoutWallet.Wallet && offer.Address == initial.Spec.PayoutWallet.Address
 	funding := false
 	for _, wallet := range initial.Spec.MinerWallets {
@@ -57,10 +59,10 @@ func accountBootstrapReceipt(
 		for i := range initial.Status.Funded {
 			count := &initial.Status.Funded[i]
 			if count.WalletUID == offer.Wallet.UID {
-				if count.Outputs == math.MaxInt32 {
+				if count.Outputs > math.MaxInt32-blocks {
 					return false
 				}
-				count.Outputs++
+				count.Outputs += blocks
 				found = true
 				break
 			}
@@ -68,7 +70,7 @@ func accountBootstrapReceipt(
 		if !found {
 			initial.Status.Funded = append(
 				initial.Status.Funded,
-				bitcoin.BitcoinFundingCount{WalletUID: offer.Wallet.UID, Outputs: 1},
+				bitcoin.BitcoinFundingCount{WalletUID: offer.Wallet.UID, Outputs: blocks},
 			)
 		}
 	}
