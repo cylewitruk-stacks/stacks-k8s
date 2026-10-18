@@ -7,9 +7,9 @@ replace github.com/cylewitruk-stacks/stacks-k8s/apis/network => ../../apis/netwo
 // Keep controller-runtime v0.25 aligned with Kubernetes v0.37.
 require (
 	github.com/cylewitruk-stacks/stacks-k8s/apis/network v0.1.0
-	k8s.io/api v0.37.0
-	k8s.io/apimachinery v0.37.0
-	k8s.io/client-go v0.37.0
+	k8s.io/api v0.37.1
+	k8s.io/apimachinery v0.37.1
+	k8s.io/client-go v0.37.1
 	sigs.k8s.io/controller-runtime v0.25.0
 )
 
