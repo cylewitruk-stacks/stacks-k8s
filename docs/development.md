@@ -97,11 +97,11 @@ all string literals.
 
 ## Kubernetes compatibility
 
-The development target is Kubernetes **1.37.0**. API and runtime modules pin
-`k8s.io/*` release modules to **v0.37.0** and operators use
-[controller-runtime v0.25.0](https://github.com/kubernetes-sigs/controller-runtime/releases/tag/v0.25.0).
-Generators remain at controller-tools **v0.22.0**, which already uses the
-Kubernetes 0.37 family. Keep these module families aligned when updating pins.
+The development target is Kubernetes **1.37.0**. API and runtime modules use the
+`k8s.io/*` **v0.37** family and operators use
+[controller-runtime v0.25.2](https://github.com/kubernetes-sigs/controller-runtime/releases/tag/v0.25.2).
+Generators use controller-tools **v0.23.0**, which also uses the Kubernetes 0.37
+family. Keep these module families aligned when updating pins.
 Go 1.27.2 and the existing container build toolchain satisfy their requirements.
 
 All envtest suites download **1.37.0** API-server assets by default, including
