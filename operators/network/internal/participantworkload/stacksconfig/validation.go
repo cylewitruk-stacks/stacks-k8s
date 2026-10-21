@@ -22,7 +22,6 @@ const MaximumBytes = 900 * 1024
 
 var (
 	nodeProtected = []string{
-		"node.name",
 		"node.seed",
 		"node.local_peer_seed",
 		"node.miner",
@@ -47,7 +46,6 @@ var (
 		"burnchain.peer_host",
 		"burnchain.peer_port",
 		"burnchain.rpc_port",
-		"burnchain.rpc_ssl",
 		"burnchain.username",
 		"burnchain.password",
 		"burnchain.wallet_name",
