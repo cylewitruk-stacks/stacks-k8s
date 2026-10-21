@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.7
-FROM golang:1.27.2 AS builder
+FROM golang:1.27.3 AS builder
 WORKDIR /src
 COPY operators/observability/go.mod operators/observability/go.sum ./operators/observability/
 COPY apis/network/go.mod apis/network/go.sum ./apis/network/

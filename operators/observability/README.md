@@ -17,7 +17,7 @@ Configuration Secret UID and content fingerprint are attributed to public
 controller reports; mounted names and public Pod annotations are checked directly.
 Observation success does not authorize dispatch or imply global protocol health.
 
-Development requires Go 1.27.2; the matching generator toolchain is pinned in
+Development requires Go 1.27.3; the matching generator toolchain is pinned in
 `tools/go.mod`.
 
 Run development and chart checks from the repository root:
