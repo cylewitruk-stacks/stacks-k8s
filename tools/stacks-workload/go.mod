@@ -1,6 +1,6 @@
 module github.com/cylewitruk-stacks/stacks-k8s/tools/stacks-workload
 
-go 1.27.2
+go 1.27.3
 
 require github.com/cylewitruk-stacks/stacks-k8s/libs/stacks v0.1.0
 

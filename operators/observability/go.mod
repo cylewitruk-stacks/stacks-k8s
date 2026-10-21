@@ -1,6 +1,6 @@
 module github.com/cylewitruk-stacks/stacks-k8s/operators/observability
 
-go 1.27.2
+go 1.27.3
 
 // Keep controller-runtime v0.25 aligned with Kubernetes v0.37.
 require (

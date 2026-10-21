@@ -4,7 +4,7 @@ The Go module contains aggregate and actor controllers, capability workload
 controllers, and independently scoped execution workers. One installation serves
 network declarations across namespaces. See the chart's
 [architecture document](../../docs/network-operator/architecture.md).
-Development requires Go 1.27.2 and Node.js 24 or newer with npm. Network API
+Development requires Go 1.27.3 and Node.js 24 or newer with npm. Network API
 types and the matching isolated generator toolchain live under `../../apis/network`.
 
 The [Bitcoin baseline guide](../../docs/network-operator/bitcoin-production.md)

@@ -1,6 +1,6 @@
 module github.com/cylewitruk-stacks/stacks-k8s/operators/observability/tools
 
-go 1.27.2
+go 1.27.3
 
 require sigs.k8s.io/controller-tools v0.23.0
 

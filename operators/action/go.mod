@@ -1,6 +1,6 @@
 module github.com/cylewitruk-stacks/stacks-k8s/operators/action
 
-go 1.27.2
+go 1.27.3
 
 replace github.com/cylewitruk-stacks/stacks-k8s/apis/network => ../../apis/network
 
