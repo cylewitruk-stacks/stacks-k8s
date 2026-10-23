@@ -213,13 +213,13 @@ func Compose(root *api.StacksNetwork, entry api.Participant, source any) (api.Co
 	}
 	switch entry.Kind {
 	case api.ParticipantBitcoinNode, api.ParticipantStacksNode, api.ParticipantStacksSigner:
-		image := "ghcr.io/stacks-network/stacks-core:4.0.3"
+		image := "ghcr.io/stacks-network/stacks-core:4.0.5"
 		//nolint:exhaustive // The outer switch restricts this branch to actor kinds.
 		switch entry.Kind {
 		case api.ParticipantBitcoinNode:
 			image = "bitcoin/bitcoin:31.1"
 		case api.ParticipantStacksSigner:
-			image = "ghcr.io/stacks-network/stacks-signer:4.0.3"
+			image = "ghcr.io/stacks-network/stacks-signer:4.0.5"
 		}
 		fill(out, map[string]any{"image": image, "imagePullPolicy": string(corev1.PullIfNotPresent)})
 		storage, _ := out["storage"].(map[string]any)

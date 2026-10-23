@@ -370,8 +370,8 @@ spec:
         effect: NoSchedule
     images:
       bitcoin: bitcoin/bitcoin:31.1
-      stacksNode: ghcr.io/stacks-network/stacks-core:4.0.3
-      stacksSigner: ghcr.io/stacks-network/stacks-signer:4.0.3
+      stacksNode: ghcr.io/stacks-network/stacks-core:4.0.5
+      stacksSigner: ghcr.io/stacks-network/stacks-signer:4.0.5
     storage:
       size: 2Gi
       retainOnDelete: false

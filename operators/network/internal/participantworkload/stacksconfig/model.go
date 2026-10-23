@@ -69,8 +69,6 @@ type nodeDocument struct {
 type nodeSection struct {
 	// PrometheusBind exposes native metrics independently of collector installation.
 	PrometheusBind string `toml:"prometheus_bind"`
-	// Name identifies the actor.
-	Name string `toml:"name"`
 	// RPCBind is the fixed native RPC listener.
 	RPCBind string `toml:"rpc_bind"`
 	// P2PBind is the fixed native peer listener.
@@ -171,8 +169,6 @@ type burnchainSection struct {
 	PeerPort int32 `toml:"peer_port"`
 	// RPCPort selects native Bitcoin RPC.
 	RPCPort int32 `toml:"rpc_port"`
-	// RPCSSL describes the cluster transport.
-	RPCSSL bool `toml:"rpc_ssl"`
 	// Username selects restricted protocol credentials.
 	Username string `toml:"username"`
 	// Password authenticates that principal.
@@ -235,7 +231,6 @@ func Node(p NodeParameters, secrets NodeSecrets) ([]byte, error) {
 	d := nodeDocument{
 		Node: nodeSection{
 			PrometheusBind:   "0.0.0.0:9153",
-			Name:             p.Name,
 			RPCBind:          "0.0.0.0:20443",
 			P2PBind:          "0.0.0.0:20444",
 			DataURL:          "http://" + net.JoinHostPort(p.RPCHost, "20443"),

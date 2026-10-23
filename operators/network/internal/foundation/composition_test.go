@@ -57,8 +57,8 @@ func TestActorImageDefaultsUseCurrentOfficialReleases(t *testing.T) {
 		want string
 	}{
 		{api.ParticipantBitcoinNode, "bitcoin/bitcoin:31.1"},
-		{api.ParticipantStacksNode, "ghcr.io/stacks-network/stacks-core:4.0.3"},
-		{api.ParticipantStacksSigner, "ghcr.io/stacks-network/stacks-signer:4.0.3"},
+		{api.ParticipantStacksNode, "ghcr.io/stacks-network/stacks-core:4.0.5"},
+		{api.ParticipantStacksSigner, "ghcr.io/stacks-network/stacks-signer:4.0.5"},
 	} {
 		got, err := Compose(&api.StacksNetwork{}, api.Participant{Kind: tc.kind}, nil)
 		if err != nil {
